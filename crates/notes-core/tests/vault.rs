@@ -139,3 +139,20 @@ fn disk_cache_survives_restart() {
     assert_eq!(first.version, second.version);
     assert_eq!(first.rendered.as_ref().unwrap().body, second.rendered.as_ref().unwrap().body);
 }
+
+#[test]
+fn concurrent_requests_share_one_build() {
+    let notes = Notes::open(&NotesConfig {
+        vault: repo().join("examples/vault"),
+        library: LibrarySource::Dir(repo().join("konspekt")),
+        font_dirs: vec![],
+        cache: None,
+    })
+    .unwrap();
+    let (a, b) = std::thread::scope(|s| {
+        let a = s.spawn(|| notes.page(&id("демо/визуализация"), OPTS).unwrap());
+        let b = s.spawn(|| notes.page(&id("демо/визуализация"), OPTS).unwrap());
+        (a.join().unwrap(), b.join().unwrap())
+    });
+    assert!(std::sync::Arc::ptr_eq(&a, &b), "второй запрос дождался первой сборки, а не собрал заново");
+}

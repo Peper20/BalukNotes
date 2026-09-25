@@ -252,8 +252,13 @@ async function loadNote(id, { keepScroll = false } = {}) {
   const ctrl = new AbortController();
   state.pending = ctrl;
   if (state.current !== id) {
+    // Другая заметка: сразу убираем прежнюю — пока новая собирается, на
+    // экране не должно быть чужого текста под новым заголовком.
     state.version = null;
-    $("#backlinks").hidden = true;
+    clearNoteUi();
+    setHeader(id);
+    showLoading(id, ctrl);
+    scrollTo(0, 0);
   }
   state.current = id;
   markActive();
@@ -277,12 +282,7 @@ async function loadNote(id, { keepScroll = false } = {}) {
     state.headings = r?.headings ?? [];
     renderToc();
     loadBacklinks(id);
-    const note = state.notes.find((n) => n.id === id);
-    document.title = `${r?.title ?? note?.name ?? id} — Заметки`;
-    $("#crumbs").replaceChildren(
-      ...(note?.folder ? [document.createTextNode(`${note.folder} / `)] : []),
-      Object.assign(document.createElement("b"), { textContent: note?.name ?? id }),
-    );
+    setHeader(id, r?.title);
     markActive();
     if (keepScroll) scrollTo(0, y);
     else if (scrollToAnchor(location.hash)) holdAnchor(id);
@@ -302,20 +302,66 @@ async function loadNote(id, { keepScroll = false } = {}) {
   }
 }
 
+/** Убрать всё, что относится к показанной заметке. */
+function clearNoteUi() {
+  state.book = null;
+  state.headings = [];
+  renderToc();
+  for (const sel of ["#chapter-nav", "#pdf", "#backlinks", "#problems"]) $(sel).hidden = true;
+}
+
+/** Путь в верхней строке и заголовок вкладки. */
+function setHeader(id, title) {
+  const note = state.notes.find((n) => n.id === id);
+  document.title = `${title ?? note?.name ?? id} — Заметки`;
+  $("#crumbs").replaceChildren(
+    ...(note?.folder ? [document.createTextNode(`${note.folder} / `)] : []),
+    Object.assign(document.createElement("b"), { textContent: note?.name ?? id }),
+  );
+}
+
+/**
+ * Заглушка «собирается» на месте заметки. Появляется с задержкой (CSS),
+ * поэтому заметка из кэша сменяет её раньше, чем она станет видна; у долгой
+ * сборки — счётчик секунд и объяснение.
+ */
+function showLoading(id, ctrl) {
+  const note = state.notes.find((n) => n.id === id);
+  const box = Object.assign(document.createElement("div"), { className: "loading" });
+  box.setAttribute("role", "status");
+  const seconds = Object.assign(document.createElement("span"), { textContent: "" });
+  const hint = Object.assign(document.createElement("p"), {
+    className: "loading-hint",
+    textContent: note?.kind === "book"
+      ? "Книга собирается целиком в двух темах — первый раз это несколько секунд. Дальше она открывается сразу, даже после перезапуска."
+      : "Первая сборка заметки; дальше она открывается сразу.",
+  });
+  hint.hidden = true;
+  box.append(
+    Object.assign(document.createElement("div"), { className: "loading-name", textContent: note?.name ?? id }),
+    Object.assign(document.createElement("div"), { className: "loading-bar" }),
+    Object.assign(document.createElement("p"), { className: "loading-text", textContent: "Собирается… " }),
+    hint,
+  );
+  box.querySelector(".loading-text").append(seconds);
+  $("#note").replaceChildren(box);
+  const started = Date.now();
+  const timer = setInterval(() => {
+    if (state.pending !== ctrl) return clearInterval(timer);
+    const s = Math.round((Date.now() - started) / 1000);
+    seconds.textContent = `${s} с`;
+    hint.hidden = s < 2;
+  }, 500);
+}
+
 function showIndex() {
   cancelPending();
   state.current = null;
   state.version = null;
-  state.book = null;
-  $("#chapter-nav").hidden = true;
-  $("#pdf").hidden = true;
-  state.headings = [];
-  renderToc();
-  $("#backlinks").hidden = true;
+  clearNoteUi();
   delete root.dataset.kind;
   document.title = "Заметки";
   $("#crumbs").textContent = "";
-  $("#problems").hidden = true;
   markActive();
   const box = document.createElement("div");
   box.className = "welcome";

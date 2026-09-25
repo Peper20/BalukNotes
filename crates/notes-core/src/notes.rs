@@ -84,6 +84,8 @@ pub struct Notes {
     compiler: Compiler,
     themes: ThemeSet,
     cache: Mutex<HashMap<NoteId, Cached>>,
+    /// Держится на время сборки заметки (см. [`Notes::page`]).
+    building: Mutex<()>,
     disk: Option<DiskCache>,
     links: LinkIndex,
 }
@@ -102,7 +104,15 @@ impl Notes {
         let compiler = Compiler::new(vault.root(), library, fonts);
         let themes = ThemeSet::load(&compiler)?;
         let disk = config.cache.as_ref().map(|dir| DiskCache::new(dir, vault.root()));
-        Ok(Self { vault, compiler, themes, cache: Mutex::default(), disk, links: LinkIndex::default() })
+        Ok(Self {
+            vault,
+            compiler,
+            themes,
+            cache: Mutex::default(),
+            building: Mutex::new(()),
+            disk,
+            links: LinkIndex::default(),
+        })
     }
 
     pub fn vault(&self) -> &Vault {
@@ -128,34 +138,20 @@ impl Notes {
     }
 
     /// Страница заметки для сервера: из кэша, если её файлы не менялись.
+    ///
+    /// Сборки идут по одной (под `building`). Второй запрос той же заметки,
+    /// пришедший во время её сборки (пользователь ушёл и вернулся), ждёт
+    /// первую и берёт результат из кэша, а не собирает заново.
     pub fn page(&self, id: &NoteId, opts: FigureOptions) -> Result<Arc<NotePage>> {
         let entry = self.vault.entry(id)?;
-        let previous_raw = {
-            let cache = self.cache.lock();
-            match cache.get(id) {
-                Some(c) if version_of(&c.deps) == c.files => {
-                    if c.opts == opts {
-                        return Ok(c.page.clone());
-                    }
-                    // Файлы те же, настройки другие — только обработка рисунков.
-                    let (page, raw, deps, files) = (c.page.clone(), c.raw.clone(), c.deps.clone(), c.files.clone());
-                    drop(cache);
-                    let rendered = raw.as_deref().map(|r| Arc::new(self.finish(r, opts)));
-                    let page = Arc::new(NotePage {
-                        id: page.id.clone(),
-                        kind: page.kind,
-                        version: page_version(&files, opts),
-                        rendered,
-                        errors: page.errors.clone(),
-                        warnings: page.warnings.clone(),
-                    });
-                    self.cache.lock().insert(id.clone(), Cached { page: page.clone(), raw, opts, deps, files });
-                    return Ok(page);
-                }
-                Some(c) => c.raw.clone(),
-                None => None,
-            }
-        };
+        if let Some(page) = self.fresh(id, opts) {
+            return Ok(page);
+        }
+        let _building = self.building.lock();
+        if let Some(page) = self.fresh(id, opts) {
+            return Ok(page);
+        }
+        let previous_raw = self.cache.lock().get(id).and_then(|c| c.raw.clone());
         if previous_raw.is_none()
             && let Some(page) = self.load_from_disk(&entry, opts)
         {
@@ -176,6 +172,32 @@ impl Notes {
         let cached = Cached { page: page.clone(), raw, opts, deps: built.deps, files: built.files };
         self.cache.lock().insert(id.clone(), cached);
         Ok(page)
+    }
+
+    /// Страница из кэша в памяти, если файлы заметки не менялись (при
+    /// других настройках — только заново обработанные рисунки).
+    fn fresh(&self, id: &NoteId, opts: FigureOptions) -> Option<Arc<NotePage>> {
+        let cache = self.cache.lock();
+        let c = cache.get(id)?;
+        if version_of(&c.deps) != c.files {
+            return None;
+        }
+        if c.opts == opts {
+            return Some(c.page.clone());
+        }
+        let (page, raw, deps, files) = (c.page.clone(), c.raw.clone(), c.deps.clone(), c.files.clone());
+        drop(cache);
+        let rendered = raw.as_deref().map(|r| Arc::new(self.finish(r, opts)));
+        let page = Arc::new(NotePage {
+            id: page.id.clone(),
+            kind: page.kind,
+            version: page_version(&files, opts),
+            rendered,
+            errors: page.errors.clone(),
+            warnings: page.warnings.clone(),
+        });
+        self.cache.lock().insert(id.clone(), Cached { page: page.clone(), raw, opts, deps, files });
+        Some(page)
     }
 
     /// Страница из кэша на диске, если файлы заметки с тех пор не менялись.
