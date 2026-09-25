@@ -1,4 +1,4 @@
-//! API на тестовом хранилище `examples/vault`: коды ответов и проверка ввода.
+//! API на тестовом хранилище `tests/vault`: коды ответов и проверка ввода.
 
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
@@ -16,7 +16,7 @@ static NOTES: LazyLock<Arc<Notes>> = LazyLock::new(|| {
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     Arc::new(
         Notes::open(&NotesConfig {
-            vault: repo.join("examples/vault"),
+            vault: repo.join("tests/vault"),
             library: LibrarySource::Dir(repo.join("konspekt")),
             font_dirs: vec![],
             cache: None,
@@ -116,15 +116,15 @@ async fn links_and_graph() {
     let (app, _dir) = app();
     let (status, links) = call(app.clone(), "GET", &uri("/api/links/Сеть/SSH"), None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(links["backlinks"][0]["from"], "Сеть/UFW");
-    assert_eq!(links["backlinks"][0]["anchor"], "Смена порта");
+    let backlinks = links["backlinks"].as_array().unwrap();
+    assert!(backlinks.iter().any(|b| b["from"] == "Сеть/UFW" && b["anchor"] == "Смена порта"), "{backlinks:?}");
     assert!(links["outgoing"].as_array().unwrap().iter().any(|l| l["target"] == "Сеть/UFW" && l["exists"] == true));
 
     let (status, graph) = call(app.clone(), "GET", "/api/graph", None).await;
     assert_eq!(status, StatusCode::OK);
-    let missing: Vec<_> = graph["nodes"].as_array().unwrap().iter().filter(|n| n["kind"].is_null()).collect();
-    assert_eq!(missing.len(), 1);
-    assert_eq!(missing[0]["id"], "Сеть/Nginx");
+    let missing: Vec<_> =
+        graph["nodes"].as_array().unwrap().iter().filter(|n| n["kind"].is_null()).map(|n| &n["id"]).collect();
+    assert_eq!(missing, ["Нет/Такой заметки", "Сеть/Nginx"]);
     assert!(graph["edges"].as_array().unwrap().iter().any(|e| e["from"] == "Сеть/UFW" && e["to"] == "Сеть/SSH"));
 
     assert_eq!(call(app, "GET", &uri("/api/links/Нет/такой"), None).await.0, StatusCode::NOT_FOUND);

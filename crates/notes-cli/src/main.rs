@@ -6,7 +6,7 @@
 //!   notes pdf <заметка>    заметка в PDF (вид PDF из konspekt)
 //!
 //! Данные — в `--data` (по умолчанию `./data`): `vault/` и `settings.json`;
-//! хранилище можно указать отдельно: `--vault examples/vault`.
+//! хранилище можно указать отдельно: `--vault tests/vault`.
 
 mod build;
 
@@ -28,7 +28,7 @@ struct Cli {
     #[arg(long, global = true, env = "NOTES_DATA", default_value = "data")]
     data: PathBuf,
 
-    /// Хранилище, если не <data>/vault (например, examples/vault).
+    /// Хранилище, если не <data>/vault (например, tests/vault).
     #[arg(long, global = true, env = "NOTES_VAULT")]
     vault: Option<PathBuf>,
 

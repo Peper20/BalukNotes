@@ -1,0 +1,20 @@
+id: Сеть/UFW
+kind: Note
+title: UFW
+tags: сеть, безопасность
+headings:
+  2 #Порядок-правил [Порядок-правил] Порядок правил
+links:
+  Сеть/SSH / Смена порта
+  Сеть/Nginx
+styles: 0 байт, fnv cbf29ce484222325
+---
+<article class="k-doc" data-doc="заметка">
+<header class="k-title">
+<h1>UFW</h1>
+<ul class="k-tags">
+<li>сеть</li>
+<li>безопасность</li></ul></header>
+<p><strong>UFW</strong> — простая обёртка над межсетевым экраном Linux. Прежде чем включать, разрешите SSH (<a class="k-link" data-k-target="Сеть/SSH" data-k-anchor="Смена порта" href="/n/Сеть/SSH#Смена-порта">порт мог измениться</a>), иначе соединение оборвётся.</p>
+<h2 class="k-h k-h2" id="Порядок-правил" data-k-anchor="Порядок-правил"><span class="k-num">1</span>Порядок правил</h2>
+<p>Правила проверяются сверху вниз, срабатывает первое подходящее. Битая ссылка для проверки: <a class="k-link k-link-broken" data-k-target="Сеть/Nginx" title="нет заметки «Сеть/Nginx»">Nginx</a>.</p></article>

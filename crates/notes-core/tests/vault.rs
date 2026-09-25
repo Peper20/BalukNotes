@@ -1,4 +1,5 @@
-//! Сквозная проверка на тестовом хранилище `examples/vault`: настоящая
+//! Сквозная проверка на тестовом хранилище `tests/vault` (каталог случаев —
+//! `tests/vault/README.md`): настоящая
 //! компиляция Typst с библиотекой `konspekt/`. Нужен пакет cetz 0.4.2 в
 //! кэше Typst (или сеть — он скачается).
 
@@ -16,7 +17,7 @@ fn repo() -> PathBuf {
 /// Одно ядро на все тесты: загрузка шрифтов и тем — самое долгое.
 static NOTES: LazyLock<Notes> = LazyLock::new(|| {
     Notes::open(&NotesConfig {
-        vault: repo().join("examples/vault"),
+        vault: repo().join("tests/vault"),
         library: LibrarySource::Dir(repo().join("konspekt")),
         font_dirs: vec![],
         cache: None,
@@ -105,15 +106,73 @@ fn version_is_stable_without_changes() {
 }
 
 #[test]
-fn check_finds_broken_links_only() {
+fn check_finds_exactly_the_planted_problems() {
     let report = check(&NOTES).unwrap();
     let broken: Vec<_> = report
         .notes
         .iter()
-        .flat_map(|n| n.broken_links.iter().map(move |l| (n.id.as_str(), l.target.as_str())))
+        .flat_map(|n| n.broken_links.iter().map(move |l| (n.id.as_str(), l.target.as_str(), l.anchor.as_deref())))
         .collect();
-    assert_eq!(broken, [("Сеть/UFW", "Сеть/Nginx")]);
-    assert!(report.notes.iter().all(|n| n.errors.is_empty()), "заметки собираются");
+    assert_eq!(
+        broken,
+        [
+            ("Особые случаи/Ссылки", "Нет/Такой заметки", None),
+            ("Особые случаи/Ссылки", "Сеть/SSH", Some("Нет такого раздела")),
+            ("Сеть/UFW", "Сеть/Nginx", None),
+        ],
+        "якорь по метке («особый»), имена с + # % и глубокая вложенность — не битые"
+    );
+    let failing: Vec<_> = report.notes.iter().filter(|n| !n.errors.is_empty()).map(|n| n.id.as_str()).collect();
+    assert_eq!(failing, ["Особые случаи/Ошибка компиляции"]);
+    let warned: Vec<_> = report.notes.iter().filter(|n| !n.warnings.is_empty()).map(|n| n.id.as_str()).collect();
+    assert_eq!(warned, ["Особые случаи/Предупреждение"]);
+}
+
+#[test]
+fn service_files_are_hidden() {
+    let ids: Vec<_> = NOTES.entries().unwrap().into_iter().map(|e| e.id.as_str().to_owned()).collect();
+    assert!(ids.iter().all(|id| !id.contains("Скрыто") && !id.contains("черновик")), "{ids:?}");
+    assert!(ids.contains(&"Глубоко/а/б/в/г/Дно".to_owned()));
+    assert!(ids.contains(&"Имена/C++ и C#".to_owned()));
+}
+
+#[test]
+fn book_headings_are_unique_and_labels_are_ids() {
+    let page = NOTES.page(&id("Книга"), OPTS).unwrap();
+    assert_eq!(page.kind, NoteKind::Book);
+    let r = page.rendered.as_ref().unwrap();
+    let ids: Vec<_> = r.headings.iter().filter(|h| h.anchor == "Итоги").map(|h| h.id.as_str()).collect();
+    assert_eq!(ids, ["Итоги", "Итоги-2", "Итоги-3"], "одинаковые заголовки в главах");
+    let labelled = r.headings.iter().find(|h| h.text == "Особый раздел").unwrap();
+    assert_eq!(labelled.id, "особый", "метка <особый> становится id");
+    assert_eq!(labelled.anchor, "Особый-раздел", "и по тексту тоже находится");
+    assert!(r.body.contains("<img src=\"data:image/svg+xml"), "картинка из файла");
+}
+
+#[test]
+fn swallowed_semicolon_is_a_warning() {
+    let page = NOTES.page(&id("Особые случаи/Предупреждение"), OPTS).unwrap();
+    let lint = page.warnings.iter().find(|w| w.message.contains("«;»")).expect("предупреждение о «;»");
+    assert_eq!(lint.file.as_deref(), Some("/Особые случаи/Предупреждение.typ"));
+    assert_eq!(lint.line, Some(8));
+}
+
+#[test]
+fn theme_dependent_figure_keeps_variants() {
+    let page = NOTES.page(&id("Рисунки/Темы и градиент"), OPTS).unwrap();
+    assert!(page.errors.is_empty(), "{:?}", page.errors);
+    let body = &page.rendered.as_ref().unwrap().body;
+    assert!(body.contains("k-frame-v"), "форма зависит от темы — по варианту на тему");
+    assert!(body.contains("var(--kf"), "обычный рисунок рядом всё равно склеен");
+}
+
+#[test]
+fn note_without_library_renders() {
+    let page = NOTES.page(&id("Особые случаи/Без шаблона"), OPTS).unwrap();
+    assert!(page.errors.is_empty(), "{:?}", page.errors);
+    let r = page.rendered.as_ref().unwrap();
+    assert_eq!(r.headings.len(), 2);
+    assert!(r.body.contains("<math"));
 }
 
 #[test]
@@ -126,7 +185,7 @@ fn disk_cache_survives_restart() {
     let dir = tempfile::tempdir().unwrap();
     let open = || {
         Notes::open(&NotesConfig {
-            vault: repo().join("examples/vault"),
+            vault: repo().join("tests/vault"),
             library: LibrarySource::Dir(repo().join("konspekt")),
             font_dirs: vec![],
             cache: Some(dir.path().to_path_buf()),
@@ -143,7 +202,7 @@ fn disk_cache_survives_restart() {
 #[test]
 fn concurrent_requests_share_one_build() {
     let notes = Notes::open(&NotesConfig {
-        vault: repo().join("examples/vault"),
+        vault: repo().join("tests/vault"),
         library: LibrarySource::Dir(repo().join("konspekt")),
         font_dirs: vec![],
         cache: None,

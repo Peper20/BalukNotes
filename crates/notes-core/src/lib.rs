@@ -22,6 +22,7 @@ pub mod figures;
 pub mod fonts;
 mod fsutil;
 pub mod graph;
+pub mod lint;
 pub mod notes;
 pub mod render;
 pub mod settings;

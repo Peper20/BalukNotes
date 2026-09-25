@@ -1,0 +1,24 @@
+id: Формулы и теги
+kind: Note
+title: Формулы и теги
+tags: математика, фикстура, теги с пробелом
+headings:
+  2 #Скобки [Скобки] Скобки
+  2 #Матрицы-и-системы [Матрицы-и-системы] Матрицы и системы
+  2 #Десятичные-дроби-и-русские-операторы [Десятичные-дроби-и-русские-операторы] Десятичные дроби и русские операторы
+links:
+styles: 1509 байт, fnv 6df1eccb54ca6374
+---
+<article class="k-doc" data-doc="заметка">
+<header class="k-title">
+<h1>Формулы и теги</h1>
+<p class="k-description">Заметка в корне хранилища: теги, высокие скобки, матрицы, системы</p>
+<ul class="k-tags">
+<li>математика</li>
+<li>фикстура</li>
+<li>теги с пробелом</li></ul></header>
+<h2 class="k-h k-h2" id="Скобки" data-k-anchor="Скобки"><span class="k-num">1</span>Скобки</h2>
+<p>Простые скобки не растягиваются: <math><mi>𝑓</mi><mrow><mo stretchy="false">(</mo><mi>𝑥</mi><mo stretchy="false">)</mo></mrow><mo>=</mo><mi>𝑂</mi><mrow><mo stretchy="false">(</mo><msup><mi>𝑛</mi><mn>2</mn></msup><mo stretchy="false">)</mo></mrow></math>. Высокие — растягиваются:</p><math display="block"><mfrac><mrow><msubsup><mo lspace="0em">∑</mo><mrow><mi>𝑖</mi><mo lspace="0em" rspace="0em">=</mo><mn>1</mn></mrow><mi>𝑛</mi></msubsup><msub><mi>𝑥</mi><mi>𝑖</mi></msub></mrow><mrow><msubsup><mo lspace="0em">∏</mo><mrow><mi>𝑗</mi><mo lspace="0em" rspace="0em">=</mo><mn>1</mn></mrow><mi>𝑚</mi></msubsup><msub><mi>𝑦</mi><mi>𝑗</mi></msub></mrow></mfrac><mspace width="1em"/><msup><mrow><mo>(</mo><mfrac><mi>𝑎</mi><mi>𝑏</mi></mfrac><mo>)</mo></mrow><mn>2</mn></msup><mspace width="1em"/><mrow><mo>|</mo><mfrac><mi>𝑥</mi><mn>2</mn></mfrac><mo>|</mo></mrow></math>
+<h2 class="k-h k-h2" id="Матрицы-и-системы" data-k-anchor="Матрицы-и-системы"><span class="k-num">2</span>Матрицы и системы</h2><math display="block"><mrow><mo>(</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>2</mn></mtd></mtr><mtr><mtd><mn>3</mn></mtd><mtd><mn>4</mn></mtd></mtr></mtable><mo>)</mo></mrow><mrow><mo>(</mo><mtable><mtr><mtd><mi>𝑥</mi></mtd></mtr><mtr><mtd><mi>𝑦</mi></mtd></mtr></mtable><mo>)</mo></mrow><mo>=</mo><mrow><mo>(</mo><mtable><mtr><mtd><mn>5</mn></mtd></mtr><mtr><mtd><mn>6</mn></mtd></mtr></mtable><mo>)</mo></mrow><mspace width="1em"/><mi>𝑓</mi><mrow><mo stretchy="false">(</mo><mi>𝑥</mi><mo stretchy="false">)</mo></mrow><mo>=</mo><mrow><mo>{</mo><mtable class="cases"><mtr><mtd><msup><mi>𝑥</mi><mn>2</mn></msup><mspace width="0.2222em"/></mtd><mtd><mtext>если</mtext><mspace width="0.2222em"/><mi>𝑥</mi><mo>≥</mo><mn>0</mn></mtd></mtr><mtr><mtd><mo>−</mo><mi>𝑥</mi><mspace width="0.2222em"/></mtd><mtd><mtext>иначе</mtext></mtd></mtr></mtable></mrow></math>
+<h2 class="k-h k-h2" id="Десятичные-дроби-и-русские-операторы" data-k-anchor="Десятичные-дроби-и-русские-операторы"><span class="k-num">3</span>Десятичные дроби и русские операторы</h2>
+<p><math><mtext>0,5</mtext><mo>+</mo><mtext>0,25</mtext><mo>=</mo><mtext>0,75</mtext></math>, <math><mo lspace="0em" rspace="0.16666666666666666em">tg</mo><mi>𝑥</mi></math>, <math><mo lspace="0em" rspace="0.16666666666666666em">arctg</mo><mi>𝑥</mi></math>, <math><mo lspace="0em" rspace="0.16666666666666666em">sh</mo><mi>𝑥</mi></math>.</p></article>

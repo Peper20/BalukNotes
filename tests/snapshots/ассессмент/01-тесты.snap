@@ -1,0 +1,206 @@
+id: ассессмент/01-тесты
+kind: Note
+title: Проектирование тестов
+tags: 
+headings:
+  1 #Проектирование-тестов [Проектирование-тестов] Проектирование тестов
+  2 #sec-классы [Классы-эквивалентности] Классы эквивалентности
+  2 #Граничные-значения [Граничные-значения] Граничные значения
+  2 #Пустой-минимальный-и-некорректный-вход [Пустой-минимальный-и-некорректный-вход] Пустой, минимальный и некорректный вход
+  3 #Комбинации-ошибок [Комбинации-ошибок] Комбинации ошибок
+  2 #Ожидаемый-результат-независимый-расчёт [Ожидаемый-результат-независимый-расчёт] Ожидаемый результат: независимый расчёт
+  2 #Тестирование-переходов-состояний [Тестирование-переходов-состояний] Тестирование переходов состояний
+  2 #Повторные-запросы-и-идемпотентность [Повторные-запросы-и-идемпотентность] Повторные запросы и идемпотентность
+links:
+styles: 1944 байт, fnv 100d1ac138f0bd9e
+---
+<svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…63003 байт, fnv 38161e05139f248b…</svg>
+<article class="k-doc" data-k-figs="ed651b88" data-doc="книга">
+<header class="k-title">
+<div class="k-title-kind">Конспект</div>
+<h1>Проектирование тестов</h1></header>
+<h2 class="k-h k-h1" data-num="1" id="Проектирование-тестов" data-k-anchor="Проектирование-тестов"><span class="k-num">1</span>Проектирование тестов</h2>
+<div class="k-lead">Проверить программу на всех входах нельзя: у функции от одного <code>int</code> их больше четырёх миллиардов. Проектирование тестов отвечает на вопрос, какие десять входов выбрать, чтобы поймать как можно больше ошибок. Многие приёмы кажутся очевидными (пустой массив, один элемент, максимальный размер, сравнение с медленным решением), но у каждого есть название и правила, и именно их спрашивают на тесте.</div>
+<div class="k-plan">
+<div class="k-plan-head">В этой главе</div>
+<ul class="k-plan-list">
+<li>разбивать входы на классы эквивалентности и выбирать граничные значения</li>
+<li>тестировать пустые, минимальные и некорректные входы, не маскируя одну ошибку другой</li>
+<li>получать ожидаемый результат независимо от тестируемого кода</li>
+<li>тестировать объекты с состояниями и повторные запросы</li></ul></div>
+<h3 class="k-h k-h2" id="sec-классы" data-k-anchor="Классы-эквивалентности"><span class="k-num">1.1</span>Классы эквивалентности</h3>
+<p>Начнём со словаря. <strong>Тест-кейс</strong> — это вход, действия и <strong>ожидаемый результат</strong>, записанный <em>до</em> запуска. Тест, который подаёт на вход корректные данные и проверяет нормальную работу, называют <strong>позитивным</strong>; тест с некорректными данными, где проверяется правильная реакция на ошибку, — <strong>негативным</strong>.</p>
+<p>Весь раздел держится на одном требовании.</p>
+<div class="k-box k-remark"><span class="k-label">Замечание (Требование).</span> Функция <code>int price(int age)</code> возвращает цену билета: 0–6 лет — 0 ₽, 7–17 — 500 ₽, 18–64 — 1000 ₽, 65–120 — 700 ₽. При другом возрасте функция бросает <code>std::invalid_argument</code>.</div>
+<p>Возрасты 30 и 40 программа обрабатывает одной и той же веткой кода: если на 30 она ошибается, то почти наверняка ошибётся и на 40. Отсюда идея.</p>
+<div class="k-box k-def"><span class="k-label">Определение 1.1 (класс эквивалентности).</span> <strong>Класс эквивалентности</strong> — множество входов, на которых программа по требованию ведёт себя одинаково. Из каждого класса достаточно одного представителя. Классы бывают <strong>допустимые</strong> (корректные данные) и <strong>недопустимые</strong> (ошибка по требованию).</div>
+<p>Как искать классы: каждый диапазон, каждый вариант перечисления и каждое «если» в требовании дают свой класс, а всё, что требование запрещает, — классы недопустимые. У <code>price</code> шесть классов (рис. <a href="#рис-классы">1.1</a>, верхняя строка): четыре допустимых и два недопустимых, «меньше нуля» и «больше 120». Значит, хватит шести тестов, например <math><mo>−</mo><mn>5</mn><mo>,</mo><mn>3</mn><mo>,</mo><mn>12</mn><mo>,</mo><mn>40</mn><mo>,</mo><mn>90</mn><mo>,</mo><mn>200</mn></math>.</p>
+<figure id="рис-классы">
+<div class="k-frame k-layout">
+<svg style="overflow: visible; width: 41.746599857em; height: 7.367485712em; display: block" viewBox="0 0 459.212598425 81.042342827" width="459.212598425pt" height="81.042342827pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…26261 байт, fnv 1f52a2524e1133ee…</svg></div>
+<figcaption><span class="k-fig-num">Рис. 1.1.</span> Сверху: шесть классов, по одному тесту на класс. Снизу: на каждой из пяти границ проверяем два соседних значения — последнее значение одного класса и первое следующего, всего 10 тестов</figcaption></figure>
+<h3 class="k-h k-h2" id="Граничные-значения" data-k-anchor="Граничные-значения"><span class="k-num">1.2</span>Граничные значения</h3>
+<p>Классы говорят, <em>сколько</em> тестов нужно, но не говорят, <em>какие</em> значения брать. Ошибки программистов сосредоточены на границах: <code>&lt;</code> вместо <code>&lt;=</code>, цикл на одну итерацию длиннее, <code>size()</code> вместо <code>size() - 1</code>.</p>
+<div class="k-box k-def"><span class="k-label">Определение 1.2 (анализ граничных значений).</span> Для каждой границы между классами проверяем значение на самой границе и ближайшее значение по другую её сторону. Это <strong>двухточечный</strong> вариант. В <strong>трёхточечном</strong> добавляют третье значение, с другой стороны от границы: для границы 18 это 17, 18 и 19.</div>
+<div class="k-box k-example">
+<p><span class="k-label">Пример 1.1 (ошибку не видно по классам, но видно на границе).</span> Реализация <code>price</code>, в которой одна из границ записана неверно:</p>
+<div class="k-listing k-numbered">
+<pre><code data-lang="cpp"><span class="k-line"><span style="color: var(--k-code-type)">int</span> <span style="color: var(--k-code-function)">price</span>(<span style="color: var(--k-code-type)">int</span> age) {</span>
+<span class="k-line">    <strong><span style="color: var(--k-code-key)">if</span></strong> (age &lt; <span style="color: var(--k-code-number)">0</span> <strong>||</strong> age > <span style="color: var(--k-code-number)">120</span>) <strong><span style="color: var(--k-code-key)">throw</span></strong> <span style="color: var(--k-code-function)">invalid_argument</span>(<span style="color: var(--k-code-string)">"</span><span style="color: var(--k-code-string)">age</span><span style="color: var(--k-code-string)">"</span>);</span>
+<span class="k-line">    <strong><span style="color: var(--k-code-key)">if</span></strong> (age <strong>&lt;=</strong> <span style="color: var(--k-code-number)">6</span>)  <strong><span style="color: var(--k-code-key)">return</span></strong> <span style="color: var(--k-code-number)">0</span>;</span>
+<span class="k-line k-hl">    <strong><span style="color: var(--k-code-key)">if</span></strong> (age <strong>&lt;</strong> <span style="color: var(--k-code-number)">17</span>)  <strong><span style="color: var(--k-code-key)">return</span></strong> <span style="color: var(--k-code-number)">500</span>;    <em><span style="color: var(--k-code-comment)">//</span></em><em><span style="color: var(--k-code-comment)"> по требованию: age &lt;= 17</span></em><span class="k-mark">1</span></span>
+<span class="k-line">    <strong><span style="color: var(--k-code-key)">if</span></strong> (age <strong>&lt;=</strong> <span style="color: var(--k-code-number)">64</span>) <strong><span style="color: var(--k-code-key)">return</span></strong> <span style="color: var(--k-code-number)">1000</span>;</span>
+<span class="k-line">    <strong><span style="color: var(--k-code-key)">return</span></strong> <span style="color: var(--k-code-number)">700</span>;</span>
+<span class="k-line">}</span></code></pre></div>
+<p><span class="k-step">Шаг 1. Тесты по классам.</span> Возрасты <math><mo>−</mo><mn>5</mn><mo>,</mo><mn>3</mn><mo>,</mo><mn>12</mn><mo>,</mo><mn>40</mn><mo>,</mo><mn>90</mn><mo>,</mo><mn>200</mn></math> дают правильные ответы, все шесть тестов проходят.</p>
+<p><span class="k-step">Шаг 2. Граничные тесты.</span> Берём пары с рис. <a href="#рис-классы">1.1</a>: <math><mrow><mo stretchy="false">(</mo><mrow><mo>−</mo><mn>1</mn><mo>,</mo><mn>0</mn></mrow><mo stretchy="false">)</mo></mrow></math>, <math><mrow><mo stretchy="false">(</mo><mrow><mn>6</mn><mo>,</mo><mn>7</mn></mrow><mo stretchy="false">)</mo></mrow></math>, <math><mrow><mo stretchy="false">(</mo><mrow><mn>17</mn><mo>,</mo><mn>18</mn></mrow><mo stretchy="false">)</mo></mrow></math>, <math><mrow><mo stretchy="false">(</mo><mrow><mn>64</mn><mo>,</mo><mn>65</mn></mrow><mo stretchy="false">)</mo></mrow></math>, <math><mrow><mo stretchy="false">(</mo><mrow><mn>120</mn><mo>,</mo><mn>121</mn></mrow><mo stretchy="false">)</mo></mrow></math>. На 17 функция возвращает 1000 вместо 500: в строке <span class="k-mark">1</span> нужно <code>age &lt;= 17</code>.</p>
+<div class="k-answer"><span class="k-answer-label">Ответ:</span> Ошибку находит только граничный тест <code>age = 17</code></div></div>
+<p>Кроме границ из требования, у программы есть границы, которые дал язык: <code>INT_MAX</code> и <code>INT_MIN</code> (переполнение), размер 0 и 1 у контейнера, максимальный размер входа, первый и последний элемент.</p>
+<div class="k-box k-pitfall"><span class="k-label">Типичная ошибка.</span> Взять за границу «круглое» число из середины класса (например, 50) или проверить только одну сторону границы. Ошибка <code>&lt;</code> против <code>&lt;=</code> видна лишь на паре соседних значений.</div>
+<h3 class="k-h k-h2" id="Пустой-минимальный-и-некорректный-вход" data-k-anchor="Пустой-минимальный-и-некорректный-вход"><span class="k-num">1.3</span>Пустой, минимальный и некорректный вход</h3>
+<p>Вход-контейнер (массив, строку, файл, список запросов) проверяем по лестнице размеров и форм: <strong>пустой</strong>, <strong>из одного элемента</strong>, из двух, все элементы одинаковые, уже отсортирован, отсортирован в обратном порядке, максимальный размер. Пустой вход — отдельный класс, и требование обязано сказать, что на нём вернуть. Например, у <code>average(const vector&lt;int>&amp; a)</code> на пустом массиве произойдёт деление на ноль, если об этом случае никто не подумал.</p>
+<p><strong>Некорректные данные</strong> — всё, что требование запрещает: значение вне диапазона, неверный формат (<code>"12a"</code>, <code>"1e5"</code>, пустая строка), лишние пробелы, отсутствующее поле, слишком длинная строка, <code>nullptr</code>. Программа на них должна отвечать <strong>так, как написано в требовании</strong>: кодом ошибки, исключением, сообщением. Падение, зависание и неопределённое поведение — дефект, даже если «такого никто не введёт».</p>
+<h4 class="k-h k-h3" id="Комбинации-ошибок" data-k-anchor="Комбинации-ошибок"><span class="k-num">1.3.1</span>Комбинации ошибок</h4>
+<p>Пусть форма входа принимает логин и пароль и оба заполнены неправильно. Программа проверяет логин первым, отвечает «неверный логин» и до пароля не доходит. Если бы проверка пароля не работала вовсе, такой тест этого бы не показал: первая ошибка <strong>маскирует</strong> вторую.</p>
+<div class="k-box k-algo">
+<p><span class="k-label">Алгоритм (как комбинировать значения).</span></p>
+<ol>
+<li>Недопустимые значения — <strong>по одному на тест</strong>, остальные параметры корректны. Тогда падение теста однозначно указывает на причину.</li>
+<li>Отдельными тестами проверяем осознанные комбинации ошибок: «оба поля неверны → какое сообщение выдать?», если требование это оговаривает.</li>
+<li>Допустимые значения комбинируем <strong>попарно</strong> (ниже).</li></ol></div>
+<p>Если у программы несколько параметров, полный перебор всех их комбинаций быстро становится огромным: 4 параметра по 3 значения дают <math><msup><mn>3</mn><mn>4</mn></msup><mo>=</mo><mn>81</mn></math> тест. Опыт показывает, что большинство дефектов вызывает одно значение или <em>пара</em> значений. <strong>Попарное тестирование</strong> (pairwise) требует, чтобы любая пара значений любых двух параметров встретилась хотя бы в одном тесте. Для 4 параметров по 3 значения для этого хватает 9 тестов.</p>
+<div class="k-side" style="--k-side-w: 48%">
+<div class="k-side-text">Пример с тремя параметрами по два значения: ОС, браузер, язык. Полный перебор — <math><msup><mn>2</mn><mn>3</mn></msup><mo>=</mo><mn>8</mn></math> тестов, попарный — 4. Проверим пару «браузер — язык»: Chrome встречается с ru (тест 1) и с en (тест 3), Firefox — с en (2) и с ru (4). Остальные пары проверяются так же. Такие наборы строят утилиты (PICT, allpairs), вручную их не подбирают.</div>
+<div class="k-side-fig">
+<table class="k-table">
+<thead>
+<tr><th>№</th><th>ОС</th><th>браузер</th><th>язык</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Windows</td><td>Chrome</td><td>ru</td></tr>
+<tr><td>2</td><td>Windows</td><td>Firefox</td><td>en</td></tr>
+<tr><td>3</td><td>Linux</td><td>Chrome</td><td>en</td></tr>
+<tr><td>4</td><td>Linux</td><td>Firefox</td><td>ru</td></tr></tbody></table></div></div>
+<h3 class="k-h k-h2" id="Ожидаемый-результат-независимый-расчёт" data-k-anchor="Ожидаемый-результат-независимый-расчёт"><span class="k-num">1.4</span>Ожидаемый результат: независимый расчёт</h3>
+<p>Ожидаемый результат тест-кейса нельзя получать, запустив тестируемый код и переписав его ответ. Такой тест проверяет, что код совпадает сам с собой, и навсегда закрепляет ошибку, если она была. Источник ожидаемого результата называют <strong>оракулом</strong>. Он должен быть независим от проверяемой реализации.</p>
+<div class="k-box k-algo">
+<p><span class="k-label">Алгоритм (откуда брать ожидаемый результат).</span></p>
+<ol>
+<li>Посчитать вручную по требованию (не по коду!) на маленьком входе.</li>
+<li>Эталонная реализация: медленная, но очевидно правильная — перебор. Сравнение с ней на множестве случайных входов называют <strong>стресс-тестом</strong>.</li>
+<li>Свойства результата, которые проверяются проще, чем вычисляются: результат сортировки упорядочен и является перестановкой входа.</li>
+<li>Обратная операция: <code>decode(encode(x)) == x</code>, <code>parse(print(x)) == x</code>.</li>
+<li>Эталонные данные: опубликованные примеры, ответ другой программы.</li></ol></div>
+<div class="k-listing k-numbered">
+<div class="k-listing-cap"><span class="k-lang">C++</span> стресс-тест сортировки с двумя оракулами</div>
+<pre><code data-lang="cpp"><span class="k-line k-hl">mt19937 <span style="color: var(--k-code-function)">rng</span>(<span style="color: var(--k-code-number)">42</span>);                   <em><span style="color: var(--k-code-comment)">//</span></em><em><span style="color: var(--k-code-comment)"> фиксированный seed</span></em><span class="k-mark">1</span></span>
+<span class="k-line"><strong><span style="color: var(--k-code-key)">for</span></strong> (<span style="color: var(--k-code-type)">int</span> iter <strong>=</strong> <span style="color: var(--k-code-number)">0</span>; iter <strong>&lt;</strong> <span style="color: var(--k-code-number)">100000</span>; <strong>++</strong>iter) {</span>
+<span class="k-line">    <span style="color: var(--k-code-type)">int</span> n <strong>=</strong> <span style="color: var(--k-code-function)">rng</span>() <strong>%</strong> <span style="color: var(--k-code-number)">8</span>;             <em><span style="color: var(--k-code-comment)">//</span></em><em><span style="color: var(--k-code-comment)"> маленькие входы</span></em></span>
+<span class="k-line">    vector&lt;<span style="color: var(--k-code-type)">int</span>> <span style="color: var(--k-code-function)">a</span>(n);</span>
+<span class="k-line">    <strong><span style="color: var(--k-code-key)">for</span></strong> (<span style="color: var(--k-code-type)">int</span><strong>&amp;</strong> x <strong>:</strong> a) x <strong>=</strong> <span style="color: var(--k-code-type)">int</span>(<span style="color: var(--k-code-function)">rng</span>() <strong>%</strong> <span style="color: var(--k-code-number)">11</span>) <strong>-</strong> <span style="color: var(--k-code-number)">5</span>;  <em><span style="color: var(--k-code-comment)">//</span></em><em><span style="color: var(--k-code-comment)"> много повторов</span></em></span>
+<span class="k-line">    vector&lt;<span style="color: var(--k-code-type)">int</span>> got <strong>=</strong> a, want <strong>=</strong> a;</span>
+<span class="k-line">    <span style="color: var(--k-code-function)">my_sort</span>(got);</span>
+<span class="k-line k-hl">    <span style="color: var(--k-code-function)">sort</span>(want.<span style="color: var(--k-code-function)">begin</span>(), want.<span style="color: var(--k-code-function)">end</span>());          <em><span style="color: var(--k-code-comment)">//</span></em><em><span style="color: var(--k-code-comment)"> оракул 1: эталон</span></em><span class="k-mark">2</span></span>
+<span class="k-line k-hl">    <span style="color: var(--k-code-type)">bool</span> props <strong>=</strong> <span style="color: var(--k-code-function)">is_sorted</span>(got.<span style="color: var(--k-code-function)">begin</span>(), got.<span style="color: var(--k-code-function)">end</span>())  <em><span style="color: var(--k-code-comment)">//</span></em><em><span style="color: var(--k-code-comment)"> оракул 2</span></em><span class="k-mark">3</span></span>
+<span class="k-line k-hl">              <strong>&amp;&amp;</strong> <span style="color: var(--k-code-function)">is_permutation</span>(got.<span style="color: var(--k-code-function)">begin</span>(), got.<span style="color: var(--k-code-function)">end</span>(), a.<span style="color: var(--k-code-function)">begin</span>());</span>
+<span class="k-line">    <strong><span style="color: var(--k-code-key)">if</span></strong> (got <strong>!=</strong> want <strong>||</strong> <strong>!</strong>props) {</span>
+<span class="k-line">        cout <strong>&lt;&lt;</strong> <span style="color: var(--k-code-string)">"</span><span style="color: var(--k-code-string)">FAIL, iter </span><span style="color: var(--k-code-string)">"</span> <strong>&lt;&lt;</strong> iter <strong>&lt;&lt;</strong> <span style="color: var(--k-code-string)">"</span><span style="color: var(--k-code-string)">, input:</span><span style="color: var(--k-code-string)">"</span>;</span>
+<span class="k-line">        <strong><span style="color: var(--k-code-key)">for</span></strong> (<span style="color: var(--k-code-type)">int</span> x <strong>:</strong> a) cout <strong>&lt;&lt;</strong> <span style="color: var(--k-code-string)">'</span><span style="color: var(--k-code-string)"> </span><span style="color: var(--k-code-string)">'</span> <strong>&lt;&lt;</strong> x;</span>
+<span class="k-line">        <strong><span style="color: var(--k-code-key)">return</span></strong> <span style="color: var(--k-code-number)">1</span>;</span>
+<span class="k-line">    }</span>
+<span class="k-line">}</span></code></pre></div>
+<p>Строка <span class="k-mark">1</span> — фиксированный seed: упавший тест повторится при следующем запуске, то есть он <strong>воспроизводим</strong>. Строка <span class="k-mark">2</span> — эталон, <span class="k-mark">3</span> — проверка свойств. Проверка свойств пригодится там, где эталона нет: у задачи много правильных ответов (любой кратчайший путь) или перебор слишком медленный.</p>
+<h3 class="k-h k-h2" id="Тестирование-переходов-состояний" data-k-anchor="Тестирование-переходов-состояний"><span class="k-num">1.5</span>Тестирование переходов состояний</h3>
+<p>Многие объекты ведут себя по-разному в зависимости от истории вызовов: у заказа, соединения, документа есть <strong>состояния</strong>, а операции (<strong>события</strong>) переводят объект из одного состояния в другое. Входные данные здесь — это <em>последовательность</em> событий, и тестировать нужно диаграмму переходов (рис. <a href="#рис-заказ">1.2</a>).</p>
+<figure id="рис-заказ">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 32.727272727em; height: 6.652825027em; display: block" viewBox="0 0 360 73.181075295" width="360pt" height="73.181075295pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…16019 байт, fnv ae783791e18a8a33…</svg></div>
+<figcaption><span class="k-fig-num">Рис. 1.2.</span> Жизненный цикл заказа: пять допустимых переходов. Три цепочки событий (оплатить–отправить–вручить; отменить; оплатить–отменить) проходят каждый переход хотя бы раз</figcaption></figure>
+<p>Тесты строят по уровням строгости:</p>
+<ul>
+<li><strong>все состояния</strong> — каждое состояние достигнуто хотя бы раз;</li>
+<li><strong>все переходы</strong> — каждая стрелка пройдена хотя бы раз (три цепочки из подписи к рис. <a href="#рис-заказ">1.2</a>);</li>
+<li><strong>недопустимые переходы</strong> — событие, для которого стрелки нет. Ожидаемый результат — отказ, а состояние <em>не изменилось</em>. Удобнее всего перечислить их таблицей «состояние × событие».</li></ul>
+<table class="k-table">
+<thead>
+<tr><th>состояние</th><th>оплатить</th><th>отправить</th><th>вручить</th><th>отменить</th></tr></thead>
+<tbody>
+<tr><td>Создан</td><td class="k-hl k-hl-третий">→ Оплачен</td><td>отказ</td><td>отказ</td><td class="k-hl k-hl-третий">→ Отменён</td></tr>
+<tr><td>Оплачен</td><td>отказ</td><td class="k-hl k-hl-третий">→ Отправлен</td><td>отказ</td><td class="k-hl k-hl-третий">→ Отменён</td></tr>
+<tr><td>Отправлен</td><td>отказ</td><td>отказ</td><td class="k-hl k-hl-третий">→ Доставлен</td><td>отказ</td></tr>
+<tr><td>Доставлен</td><td>отказ</td><td>отказ</td><td>отказ</td><td>отказ</td></tr>
+<tr><td>Отменён</td><td>отказ</td><td>отказ</td><td>отказ</td><td>отказ</td></tr></tbody></table>
+<p>Из 20 клеток таблицы 5 допустимых (подсвечены) и 15 недопустимых. Самые ценные негативные тесты — «отправить неоплаченный заказ» и «оплатить заказ второй раз»: вторая оплата и есть повторный запрос, о котором следующий раздел.</p>
+<h3 class="k-h k-h2" id="Повторные-запросы-и-идемпотентность" data-k-anchor="Повторные-запросы-и-идемпотентность"><span class="k-num">1.6</span>Повторные запросы и идемпотентность</h3>
+<p>В сети ответ может потеряться. Клиент отправил «спиши 100 ₽», сервер списал, а ответ не дошёл. Клиент видит таймаут и не знает, выполнилась ли операция. Безопасно повторить запрос можно только тогда, когда повтор не наделает вреда.</p>
+<div class="k-box k-def"><span class="k-label">Определение 1.3 (идемпотентность).</span> Операция <strong>идемпотентна</strong>, если её повторное выполнение с теми же аргументами даёт тот же эффект, что и однократное. Для функций это <math><mi>𝑓</mi><mrow><mo stretchy="false">(</mo><mrow><mi>𝑓</mi><mrow><mo stretchy="false">(</mo><mi>𝑥</mi><mo stretchy="false">)</mo></mrow></mrow><mo stretchy="false">)</mo></mrow><mo>=</mo><mi>𝑓</mi><mrow><mo stretchy="false">(</mo><mi>𝑥</mi><mo stretchy="false">)</mo></mrow></math>: <code>abs</code>, <code>sort</code>, «установить поле в 5». Не идемпотентны «прибавить 5» и «добавить в конец». В HTTP методы <code>GET</code>, <code>PUT</code> и <code>DELETE</code> идемпотентны, <code>POST</code> — нет.</div>
+<figure id="рис-повтор">
+<div class="k-row">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 19.848011084em; height: 10.277982675em; display: block" viewBox="0 0 218.328121924 113.057809424" width="218.328121924pt" height="113.057809424pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…13599 байт, fnv d188d011df70aa8c…</svg></div>
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 18.109852151em; height: 10.277982675em; display: block" viewBox="0 0 199.20837366 113.057809424" width="199.20837366pt" height="113.057809424pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…14157 байт, fnv d3ccdbd7e667aa95…</svg></div></div>
+<figcaption><span class="k-fig-num">Рис. 1.3.</span> Ответ на первый запрос потерян, клиент повторяет. Слева операция не идемпотентна, и деньги списаны дважды. Справа сервер узнаёт ключ k1 и возвращает сохранённый ответ вместо второго списания</figcaption></figure>
+<p>Неидемпотентную операцию делают идемпотентной <strong>ключом идемпотентности</strong> (рис. <a href="#рис-повтор">1.3</a>): клиент генерирует уникальный идентификатор операции и повторяет запрос с тем же ключом, а сервер запоминает, какие ключи уже выполнил.</p>
+<div class="k-listing k-numbered">
+<div class="k-listing-cap"><span class="k-lang">C++</span> оплата с ключом идемпотентности</div>
+<pre><code data-lang="cpp"><span class="k-line"><span style="color: var(--k-code-type)">struct</span> Result { <span style="color: var(--k-code-type)">bool</span> ok; <span style="color: var(--k-code-type)">long</span> <span style="color: var(--k-code-type)">long</span> balance; };</span>
+<span class="k-line"></span>
+<span class="k-line"><span style="color: var(--k-code-type)">class</span> <span style="color: var(--k-code-type)">Wallet</span> {</span>
+<span class="k-line">    <span style="color: var(--k-code-type)">long</span> <span style="color: var(--k-code-type)">long</span> balance_ <strong>=</strong> <span style="color: var(--k-code-number)">1000</span>;</span>
+<span class="k-line">    unordered_map&lt;string, Result> done_;       <em><span style="color: var(--k-code-comment)">//</span></em><em><span style="color: var(--k-code-comment)"> ключ запроса → ответ</span></em></span>
+<span class="k-line"><strong><span style="color: var(--k-code-key)">public</span></strong>:</span>
+<span class="k-line">    Result <span style="color: var(--k-code-function)">pay</span>(<strong><span style="color: var(--k-code-key)">const</span></strong> string<strong>&amp;</strong> key, <span style="color: var(--k-code-type)">long</span> <span style="color: var(--k-code-type)">long</span> amount) {</span>
+<span class="k-line k-hl">        <strong><span style="color: var(--k-code-key)">if</span></strong> (<span style="color: var(--k-code-type)">auto</span> it <strong>=</strong> done_.<span style="color: var(--k-code-function)">find</span>(key); it <strong>!=</strong> done_.<span style="color: var(--k-code-function)">end</span>())<span class="k-mark">1</span></span>
+<span class="k-line k-hl">            <strong><span style="color: var(--k-code-key)">return</span></strong> it->second;          <em><span style="color: var(--k-code-comment)">//</span></em><em><span style="color: var(--k-code-comment)"> повтор: без списания</span></em></span>
+<span class="k-line">        Result <span style="color: var(--k-code-function)">r</span>{amount <strong>&lt;=</strong> balance_, balance_};</span>
+<span class="k-line">        <strong><span style="color: var(--k-code-key)">if</span></strong> (r.ok) r.balance <strong>=</strong> balance_ <strong>-=</strong> amount;</span>
+<span class="k-line">        done_[key] <strong>=</strong> r;<span class="k-mark">2</span></span>
+<span class="k-line">        <strong><span style="color: var(--k-code-key)">return</span></strong> r;</span>
+<span class="k-line">    }</span>
+<span class="k-line">};</span></code></pre></div>
+<p>Строка <span class="k-mark">1</span> — повтор ключа: тот же ответ, баланс не меняется. Строка <span class="k-mark">2</span> — запоминается и отказ тоже: повторный запрос на слишком большую сумму должен получить тот же отказ.</p>
+<div class="k-box k-algo">
+<p><span class="k-label">Алгоритм (тесты на повторные запросы).</span></p>
+<ol>
+<li>Тот же запрос дважды: состояние и ответ как после одного запроса.</li>
+<li>Два запроса с разными ключами: выполняются оба.</li>
+<li>Повтор неуспешного запроса: тот же отказ, без побочных эффектов.</li>
+<li>Тот же ключ с другими параметрами: по требованию — отказ, а не молчаливый старый ответ.</li>
+<li>Повторы с задержкой (после таймаута) и одновременные повторы.</li></ol></div>
+<table class="k-table k-pitfalls">
+<thead>
+<tr><th class="k-bad">✗ Ошибка</th><th class="k-good">✓ Как избежать</th></tr></thead>
+<tbody>
+<tr><td>Ожидаемый результат взят из вывода программы</td><td>считать по требованию, перебором или через свойства</td></tr>
+<tr><td>Два некорректных поля в одном тесте</td><td>по одному недопустимому значению на тест</td></tr>
+<tr><td>Проверена одна сторона границы</td><td>пара «последнее значение класса — первое следующего»</td></tr>
+<tr><td>Недопустимый переход проверен только по ответу «отказ»</td><td>проверить ещё, что состояние не изменилось</td></tr>
+<tr><td>Повтор POST-запроса «на всякий случай»</td><td>ключ идемпотентности или проверка статуса операции</td></tr></tbody></table>
+<div class="k-summary">
+<div class="k-summary-head">Коротко о главном</div>
+<ol class="k-summary-list">
+<li>Классы эквивалентности определяют, <em>сколько</em> тестов нужно: по одному на класс, включая недопустимые.</li>
+<li>Граничные значения определяют, <em>какие</em> входы брать: пару соседних значений на каждой границе.</li>
+<li>Пустой вход, один элемент и максимальный размер — отдельные классы; реакцию на некорректные данные задаёт требование.</li>
+<li>Недопустимые значения — по одному на тест; допустимые комбинируют попарно.</li>
+<li>Ожидаемый результат получают независимо от кода: вручную, эталоном, свойствами, обратной операцией.</li>
+<li>У объектов с состояниями тестируют все переходы и недопустимые события; повтор запроса не должен менять результат.</li></ol></div>
+<div class="k-quiz">
+<div class="k-quiz-head">Проверь себя</div>
+<ol class="k-quiz-list">
+<li>Длина пароля должна быть от 8 до 64 символов. Какие длины даёт двухточечный анализ границ?</li>
+<li>Сколько классов эквивалентности у требования «оценка — целое число от 1 до 5»?</li>
+<li>Почему нельзя в одном негативном тесте указать неверные и логин, и пароль?</li>
+<li>Какой из методов HTTP не идемпотентен: GET, PUT, DELETE, POST?</li>
+<li>Идемпотентна ли функция <math><mi>𝑓</mi><mrow><mo stretchy="false">(</mo><mi>𝑥</mi><mo stretchy="false">)</mo></mrow><mo>=</mo><mn>2</mn><mi>𝑥</mi></math>? А <math><mi>𝑓</mi><mrow><mo stretchy="false">(</mo><mi>𝑥</mi><mo stretchy="false">)</mo></mrow><mo>=</mo><mo form="prefix" lspace="0em" rspace="0em">max</mo><mrow><mo stretchy="false">(</mo><mrow><mi>𝑥</mi><mo>,</mo><mn>0</mn></mrow><mo stretchy="false">)</mo></mrow></math>?</li>
+<li>Сколько тестов попарного набора нужно для трёх параметров по два значения?</li>
+<li>Тест <code>sort</code> сравнивает результат с сохранённым выводом той же <code>sort</code>. Что не так?</li></ol>
+<details class="k-quiz-answers"><summary>Ответы</summary>
+<ol class="k-quiz-list">
+<li>7, 8, 64, 65</li>
+<li>три: меньше 1, от 1 до 5, больше 5 (плюс «не число», если вход — строка)</li>
+<li>первая ошибка замаскирует вторую</li>
+<li>POST</li>
+<li>нет; да</li>
+<li>4 (из 8 полного перебора)</li>
+<li>нет независимого оракула — тест закрепит ошибку</li></ol></details></div></article>

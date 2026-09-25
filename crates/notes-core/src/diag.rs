@@ -42,6 +42,18 @@ impl Diagnostic {
         }
     }
 
+    /// Предупреждение приложения (не Typst) о месте в файле хранилища.
+    pub(crate) fn warning_at(message: &str, file: String, line: usize, column: usize, hint: &str) -> Self {
+        Self {
+            severity: DiagSeverity::Warning,
+            message: message.to_owned(),
+            file: Some(file),
+            line: Some(line),
+            column: Some(column),
+            hints: vec![hint.to_owned()],
+        }
+    }
+
     pub(crate) fn from_typst(world: &dyn World, diag: &SourceDiagnostic) -> Self {
         let severity = match diag.severity {
             Severity::Error => DiagSeverity::Error,

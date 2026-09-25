@@ -1,0 +1,16 @@
+id: Особые случаи/Без шаблона
+kind: Note
+title: —
+tags: 
+headings:
+  2 #Заметка-без-шаблона [Заметка-без-шаблона] Заметка без шаблона
+  3 #Список [Список] Список
+links:
+styles: 1509 байт, fnv 6df1eccb54ca6374
+---
+<h2 id="Заметка-без-шаблона" data-k-anchor="Заметка-без-шаблона">Заметка без шаблона</h2>
+<p>Обычный абзац с <strong>жирным</strong>, <em>курсивом</em> и формулой <math><msup><mi>𝑒</mi><mrow><mi>𝑖</mi><mi>𝜋</mi></mrow></msup><mo>+</mo><mn>1</mn><mo>=</mo><mn>0</mn></math>.</p>
+<h3 id="Список" data-k-anchor="Список">Список</h3>
+<ul>
+<li>первый пункт</li>
+<li>второй пункт</li></ul><math display="block"><msubsup><mo lspace="0em">∫</mo><mn>0</mn><mn>1</mn></msubsup><msup><mi>𝑥</mi><mn>2</mn></msup><mspace width="0.1667em"/><mo form="prefix" lspace="0em" rspace="0em">d</mo><mi>𝑥</mi><mo>=</mo><mfrac><mn>1</mn><mn>3</mn></mfrac></math>

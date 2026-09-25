@@ -1,0 +1,57 @@
+id: Книга
+kind: Book
+title: Тестовая книга
+tags: книга, фикстура
+headings:
+  1 #гл-основы [Основы] Основы
+  2 #Определения [Определения] Определения
+  2 #Итоги [Итоги] Итоги
+  1 #Продолжение [Продолжение] Продолжение
+  2 #Код-из-файла [Код-из-файла] Код из файла
+  2 #особый [Особый-раздел] Особый раздел
+  2 #Итоги-2 [Итоги] Итоги
+  1 #Приложение [Приложение] Приложение
+  2 #Картинка-из-файла [Картинка-из-файла] Картинка из файла
+  2 #Итоги-3 [Итоги] Итоги
+links:
+  Книга / Продолжение
+  Книга / особый
+styles: 0 байт, fnv cbf29ce484222325
+---
+<article class="k-doc" data-doc="книга">
+<header class="k-title">
+<div class="k-title-kind">Конспект</div>
+<h1>Тестовая книга</h1>
+<p class="k-subtitle">Фикстура: книга из нескольких глав</p>
+<p class="k-description">Главы, одинаковые заголовки в разных главах, код из файла, картинка.</p>
+<p class="k-byline">baluk notes · тесты</p>
+<ul class="k-tags">
+<li>книга</li>
+<li>фикстура</li></ul></header>
+<h2 class="k-h k-h1" data-num="1" id="гл-основы" data-k-anchor="Основы"><span class="k-num">1</span>Основы</h2>
+<div class="k-lead">Первая глава. Проверяет главу книги, лид и раздел с одинаковым с другими главами названием («Итоги» есть в каждой главе).</div>
+<h3 class="k-h k-h2" id="Определения" data-k-anchor="Определения"><span class="k-num">1.1</span>Определения</h3>
+<div class="k-box k-def"><span class="k-label">Определение 1.1 (фикстуры).</span> <strong>Фикстура</strong> — заранее подготовленные данные для теста.</div>
+<p>Ссылка внутри книги на следующую главу: <a class="k-link" data-k-target="Книга" data-k-anchor="Продолжение" href="/n/Книга#Продолжение">вторая глава</a>; на раздел по метке: <a class="k-link" data-k-target="Книга" data-k-anchor="особый" href="/n/Книга#особый">особый раздел</a>.</p>
+<h3 class="k-h k-h2" id="Итоги" data-k-anchor="Итоги"><span class="k-num">1.2</span>Итоги</h3>
+<p>Итоги первой главы.</p>
+<h2 class="k-h k-h1" data-num="2" id="Продолжение" data-k-anchor="Продолжение"><span class="k-num">2</span>Продолжение</h2>
+<h3 class="k-h k-h2" id="Код-из-файла" data-k-anchor="Код-из-файла"><span class="k-num">2.1</span>Код из файла</h3>
+<div class="k-listing k-numbered">
+<div class="k-listing-cap"><span class="k-lang">Rust</span> регион файла; строки 2 и 3 выделены</div>
+<pre><code data-lang="rs"><span class="k-line"><span style="color: var(--k-code-type)">fn</span> <span style="color: var(--k-code-function)">сумма</span>(xs: <strong>&amp;</strong>[<span style="color: var(--k-code-type)">i64</span>]) -> <span style="color: var(--k-code-type)">i64</span> {</span>
+<span class="k-line k-hl">    <span style="color: var(--k-code-type)">let</span> s <strong>=</strong> xs.<span style="color: var(--k-code-function)">iter</span>().<span style="color: var(--k-code-function)">sum</span>();</span>
+<span class="k-line k-hl">    s<span class="k-mark">1</span></span>
+<span class="k-line">}</span></code></pre></div>
+<p>Строка <span class="k-mark">1</span> возвращает результат.</p>
+<h3 class="k-h k-h2" id="особый" data-k-anchor="Особый-раздел"><span class="k-num">2.2</span>Особый раздел</h3>
+<p>На этот раздел ссылаются по метке <code>особый</code>, а не по тексту.</p>
+<h3 class="k-h k-h2" id="Итоги-2" data-k-anchor="Итоги"><span class="k-num">2.3</span>Итоги</h3>
+<p>Итоги второй главы — такой же заголовок, как в первой: <code>id</code> должны различаться.</p>
+<h2 class="k-h k-h1" data-num="3" id="Приложение" data-k-anchor="Приложение"><span class="k-num">3</span>Приложение</h2>
+<h3 class="k-h k-h2" id="Картинка-из-файла" data-k-anchor="Картинка-из-файла"><span class="k-num">3.1</span>Картинка из файла</h3>
+<figure>
+<img src="data:image/svg+xml;634 байт, fnv fd7c9b0246d5b06c" width="200" height="80" style="display: block; width: 60%">
+<figcaption><span class="k-fig-num">Рис. 3.1.</span> SVG-картинка из папки книги</figcaption></figure>
+<h3 class="k-h k-h2" id="Итоги-3" data-k-anchor="Итоги"><span class="k-num">3.2</span>Итоги</h3>
+<p>Итоги третьей главы.</p></article>

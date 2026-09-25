@@ -17,7 +17,7 @@ cargo run -p notes-cli -- serve             # http://127.0.0.1:8421, храни�
 cargo run -p notes-cli -- check             # ошибки компиляции и битые ссылки
 cargo run -p notes-cli -- build site/       # статический сайт
 cargo run -p notes-cli -- pdf Конспекты/Матан --theme ночь   # PDF заметки или книги
-cargo run -p notes-cli -- --vault examples/vault serve   # тестовое хранилище
+tools/test-env.sh                                     # тестовое окружение (tests/vault, :8432)
 ```
 
 Заметки — файлы `.typ` в `data/vault/` (каталог в git не входит). Пишет их
@@ -36,8 +36,11 @@ cargo run -p notes-cli -- --vault examples/vault serve   # тестовое хр
 | `crates/notes-cli/` | команда `notes`: serve, check, build, pdf |
 | `web/` | клиент: `app.js` + `app.css` (интерфейс), `konspekt.css` (вид заметок) |
 | `konspekt/` | библиотека оформления: форк konspekt-style + HTML-ветка, `заметка`, `см` |
-| `examples/vault/` | тестовое хранилище (фикстуры тестов и проверки глазами) |
-| `tools/shot.mjs` | снимок страницы headless Chromium — проверять вид глазами |
+| `tests/vault/` | хранилище-фикстура: каждый случай отрисовки, каталог — его `README.md` |
+| `tests/snapshots/` | эталонные снимки HTML фикстур (`UPDATE_SNAPSHOTS=1` — обновить) |
+| `tools/test-env.sh` | тестовое окружение: сервер на `tests/vault`, данные в `tests/.data/` |
+| `tools/visual.mjs` | альбом снимков всех фикстур: светлая, тёмная, узкий экран |
+| `tools/shot.mjs` | снимок одной страницы headless Chromium |
 
 ## Проверка
 

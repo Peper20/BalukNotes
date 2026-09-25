@@ -163,6 +163,8 @@
       // data-num у главы — для крупной бледной цифры справа (CSS ::after).
       let глава = it.level == 1 and вид-док == "книга"
       let атр = if глава and номер != none { ("data-num": str(counter(heading).get().first())) } else { (:) }
+      // Метка `= Раздел <метка>` — это id: по нему ведут ссылки #см(якорь: "метка").
+      if it.has("label") { атр.insert("id", str(it.label)) }
       эл(тег, "k-h k-h" + str(calc.min(it.level + сдвиг, 4)), ..атр, {
         if номер != none { эл("span", "k-num", номер) }
         it.body

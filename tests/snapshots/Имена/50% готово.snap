@@ -1,0 +1,14 @@
+id: Имена/50% готово
+kind: Note
+title: 50% готово
+tags: имена
+headings:
+links:
+styles: 0 байт, fnv cbf29ce484222325
+---
+<article class="k-doc" data-doc="заметка">
+<header class="k-title">
+<h1>50% готово</h1>
+<ul class="k-tags">
+<li>имена</li></ul></header>
+<p>Имя файла с <code>%</code>: без кодирования браузер примет «%20» за пробел.</p></article>

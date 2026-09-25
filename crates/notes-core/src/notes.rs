@@ -256,15 +256,36 @@ impl Notes {
         let rendered = raw.as_deref().map(|r| Arc::new(self.finish(r, opts)));
         tracing::debug!(id = %entry.id, ms = started.elapsed().as_millis(), errors = errors.len(), "собрана");
         let files = version_of(&compilation.deps);
+        let mut warnings = compilation.warnings;
+        warnings.extend(self.lint(&compilation.deps));
         let page = NotePage {
             id: entry.id.clone(),
             kind: entry.kind,
             version: page_version(&files, opts),
             rendered: None,
             errors,
-            warnings: compilation.warnings,
+            warnings,
         };
         Built { page, rendered, raw, deps: compilation.deps, files }
+    }
+
+    /// Предупреждения [`lint`](crate::lint) для файлов хранилища, из которых
+    /// собрана заметка (библиотеку и пакеты не проверяем).
+    fn lint(&self, deps: &[PathBuf]) -> Vec<Diagnostic> {
+        let root = self.vault.root();
+        let mut out = Vec::new();
+        for path in deps {
+            let Ok(rel) = path.strip_prefix(root) else { continue };
+            if path.extension().is_none_or(|e| e != "typ") {
+                continue;
+            }
+            let Ok(text) = fs::read_to_string(path) else { continue };
+            for l in crate::lint::lint(&text) {
+                let (line, column) = crate::lint::line_column(&text, l.offset);
+                out.push(Diagnostic::warning_at(l.message, format!("/{}", rel.display()), line, column, l.hint));
+            }
+        }
+        out
     }
 
     /// Обработка рисунков: общие глифы, один SVG на темы, округление.

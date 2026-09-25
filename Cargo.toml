@@ -14,7 +14,7 @@ notes-core = { path = "crates/notes-core" }
 notes-server = { path = "crates/notes-server" }
 
 # Typst закреплён точно: HTML-экспорт экспериментальный, API меняется между
-# версиями. Обновлять осознанно, с прогоном examples/vault (docs/tech-debt.md).
+# версиями. Обновлять осознанно, с прогоном tests/vault (docs/tech-debt.md).
 typst = "=0.15.1"
 typst-html = "=0.15.1"
 typst-layout = "=0.15.1"

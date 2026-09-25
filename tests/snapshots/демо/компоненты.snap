@@ -1,0 +1,140 @@
+id: демо/компоненты
+kind: Note
+title: Компоненты
+tags: 
+headings:
+  1 #Витрина-компонентов [Витрина-компонентов] Витрина компонентов
+  2 #Врезки [Врезки] Врезки
+  2 #Листинги [Листинги] Листинги
+  2 #Алгоритм-кадрами [Алгоритм-кадрами] Алгоритм кадрами
+  2 #Таблица-ДП-и-графы [Таблица-ДП-и-графы] Таблица ДП и графы
+  2 #3D-и-2D [3D-и-2D] 3D и 2D
+  2 #Таблицы-и-итоги [Таблицы-и-итоги] Таблицы и итоги
+links:
+styles: 18891 байт, fnv d1d58ca4b56d266f
+---
+<svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…60799 байт, fnv fbe547b33d998037…</svg>
+<article class="k-doc" data-k-figs="24e3add6" data-doc="книга">
+<header class="k-title">
+<div class="k-title-kind">Конспект</div>
+<h1>Компоненты</h1></header>
+<h2 class="k-h k-h1" data-num="1" id="Витрина-компонентов" data-k-anchor="Витрина-компонентов"><span class="k-num">1</span>Витрина компонентов</h2>
+<div class="k-lead">Все блоки, листинги и рисунки библиотеки на нескольких страницах — чтобы видеть, как они выглядят, и проверять, что ничего не сломалось. Эта глава — заглушка: её содержимое заменяется текстом конспекта.</div>
+<div class="k-plan">
+<div class="k-plan-head">В этой главе</div>
+<ul class="k-plan-list">
+<li>врезки и пример по шагам</li>
+<li>листинги и код из файла</li>
+<li>рисунки: 2D, 3D, массивы, таблицы, графы</li></ul></div>
+<h3 class="k-h k-h2" id="Врезки" data-k-anchor="Врезки"><span class="k-num">1.1</span>Врезки</h3>
+<div class="k-box k-def"><span class="k-label">Определение 1.1 (сходимости).</span> Последовательность <math><msub><mi>𝑥</mi><mi>𝑛</mi></msub></math> сходится к <math><mi>𝑎</mi></math>, если для любого <math><mi>𝜀</mi><mo>></mo><mn>0</mn></math> найдётся <math><mi>𝑁</mi></math>, начиная с которого <math><mo stretchy="false">|</mo><msub><mi>𝑥</mi><mi>𝑛</mi></msub><mo>−</mo><mi>𝑎</mi><mo lspace="0em" rspace="0em">|</mo><mo>&lt;</mo><mi>𝜀</mi></math>.</div>
+<div class="k-box k-thm"><span class="k-label">Теорема 1.2 (о двух милиционерах).</span> Если <math><msub><mi>𝑎</mi><mi>𝑛</mi></msub><mo>≤</mo><msub><mi>𝑥</mi><mi>𝑛</mi></msub><mo>≤</mo><msub><mi>𝑏</mi><mi>𝑛</mi></msub></math> и <math><msub><mi>𝑎</mi><mi>𝑛</mi></msub><mo>,</mo><msub><mi>𝑏</mi><mi>𝑛</mi></msub><mo stretchy="false">→</mo><mi>𝑎</mi></math>, то и <math><msub><mi>𝑥</mi><mi>𝑛</mi></msub><mo stretchy="false">→</mo><mi>𝑎</mi></math>.</div>
+<div class="k-proof"><span class="k-proof-head">Почему это верно.</span> Для <math><mi>𝜀</mi><mo>></mo><mn>0</mn></math> с некоторого номера <math><mi>𝑎</mi><mo>−</mo><mi>𝜀</mi><mo>&lt;</mo><msub><mi>𝑎</mi><mi>𝑛</mi></msub><mo>≤</mo><msub><mi>𝑥</mi><mi>𝑛</mi></msub><mo>≤</mo><msub><mi>𝑏</mi><mi>𝑛</mi></msub><mo>&lt;</mo><mi>𝑎</mi><mo>+</mo><mi>𝜀</mi></math>. <span class="k-qed">∎</span></div>
+<div class="k-box k-idea"><span class="k-label">Идея.</span> Неизвестное зажимают между двумя известными — и оно «вынуждено» сходиться туда же.</div>
+<div class="k-box k-example">
+<p><span class="k-label">Пример 1.1 (зажим синусом).</span> Найти <math><msub><mo lspace="0em" rspace="0.16666666666666666em">lim</mo><mrow><mi>𝑛</mi><mo lspace="0em" rspace="0em" stretchy="false">→</mo><mi>∞</mi></mrow></msub><mfrac><mrow><mo lspace="0em" rspace="0.16666666666666666em">sin</mo><mi>𝑛</mi></mrow><mi>𝑛</mi></mfrac></math>.</p>
+<p><span class="k-step">Шаг 1. Оценка.</span> <math><mo>−</mo><mfrac><mn>1</mn><mi>𝑛</mi></mfrac><mo>≤</mo><mfrac><mrow><mo lspace="0em" rspace="0.16666666666666666em">sin</mo><mi>𝑛</mi></mrow><mi>𝑛</mi></mfrac><mo>≤</mo><mfrac><mn>1</mn><mi>𝑛</mi></mfrac></math>.</p>
+<p><span class="k-step">Шаг 2. Пределы границ.</span> Обе границы стремятся к нулю.</p>
+<div class="k-answer"><span class="k-answer-label">Ответ:</span> <math><mn>0</mn></math></div></div>
+<div class="k-box k-algo">
+<p><span class="k-label">Алгоритм (как расставлять пределы).</span></p>
+<ol>
+<li>Нарисовать область.</li>
+<li>Выбрать направление «спицы».</li>
+<li>Прочитать, через какие кривые спица входит и выходит.</li></ol></div>
+<div class="k-box k-remark"><span class="k-label">Замечание.</span> Десятичные дроби в формулах — через <code>dc</code>: <math><mtext>0,5</mtext><mo>+</mo><mtext>0,25</mtext><mo>=</mo><mtext>0,75</mtext></math>.</div>
+<div class="k-box k-pitfall"><span class="k-label">Типичная ошибка.</span> Забыть, что <math><mi>𝜀</mi></math> выбирается <strong>до</strong> <math><mi>𝑁</mi></math>, а не после.</div>
+<div class="k-formula">
+<div class="k-formula-label">главное</div><math display="block"><munder><mo lspace="0em" rspace="0.16666666666666666em">lim</mo><mrow><mi>𝑥</mi><mo lspace="0em" rspace="0em" stretchy="false">→</mo><mn>0</mn></mrow></munder><mfrac><mrow><mo lspace="0em" rspace="0.16666666666666666em">sin</mo><mi>𝑥</mi></mrow><mi>𝑥</mi></mfrac><mo>=</mo><mn>1</mn></math></div>
+<aside class="k-aside">Заметка сбоку: то, что полезно знать, но что прервало бы рассказ.</aside>
+<p>Абзац рядом с заметкой. Термины при первом появлении — <strong>жирным</strong>; встроенный код — <code>a[i] += 1</code>; операторы в русской традиции: <math><mo lspace="0em" rspace="0.16666666666666666em">tg</mo><mi>𝑥</mi></math>, <math><mo lspace="0em" rspace="0.16666666666666666em">arctg</mo><mi>𝑥</mi></math>, <math><mo lspace="0em" rspace="0.16666666666666666em">sh</mo><mi>𝑥</mi></math>.</p>
+<h3 class="k-h k-h2" id="Листинги" data-k-anchor="Листинги"><span class="k-num">1.2</span>Листинги</h3>
+<div class="k-listing k-numbered">
+<div class="k-listing-cap"><span class="k-lang">Python</span> сортировка вставками</div>
+<pre><code data-lang="python"><span class="k-line"><strong><span style="color: var(--k-code-key)">def</span></strong> <span style="color: var(--k-code-function)">insertion_sort</span>(a):</span>
+<span class="k-line">    <strong><span style="color: var(--k-code-key)">for</span></strong> i <strong><span style="color: var(--k-code-key)">in</span></strong> <span style="color: var(--k-code-function)">range</span>(<span style="color: var(--k-code-number)">1</span>, <span style="color: var(--k-code-function)">len</span>(a)):</span>
+<span class="k-line">        j <strong>=</strong> i</span>
+<span class="k-line k-hl">        <strong><span style="color: var(--k-code-key)">while</span></strong> j <strong>></strong> <span style="color: var(--k-code-number)">0</span> <strong>and</strong> a[j <strong>-</strong> <span style="color: var(--k-code-number)">1</span>] <strong>></strong> a[j]:<span class="k-mark">1</span></span>
+<span class="k-line">            a[j <strong>-</strong> <span style="color: var(--k-code-number)">1</span>], a[j] <strong>=</strong> a[j], a[j <strong>-</strong> <span style="color: var(--k-code-number)">1</span>]</span>
+<span class="k-line">            j <strong>-=</strong> <span style="color: var(--k-code-number)">1</span></span>
+<span class="k-line">    <strong><span style="color: var(--k-code-key)">return</span></strong> a</span></code></pre>
+<div class="k-listing-cx">Сложность: <math><mi>𝑂</mi><mrow><mo stretchy="false">(</mo><msup><mi>𝑛</mi><mn>2</mn></msup><mo stretchy="false">)</mo></mrow></math> в худшем случае</div></div>
+<p>Строка <span class="k-mark">1</span> — сравнение соседей, пока элемент не встанет на место.</p>
+<div class="k-listing k-numbered">
+<div class="k-listing-cap"><span class="k-lang">C++</span> два указателя — из проверяемого файла</div>
+<pre><code data-lang="cpp"><span class="k-line"><em><span style="color: var(--k-code-comment)">//</span></em><em><span style="color: var(--k-code-comment)"> индексы пары с суммой s или (-1, -1); a отсортирован по возрастанию</span></em></span>
+<span class="k-line">pair&lt;<span style="color: var(--k-code-type)">int</span>, <span style="color: var(--k-code-type)">int</span>> <span style="color: var(--k-code-function)">find_pair</span>(<strong><span style="color: var(--k-code-key)">const</span></strong> vector&lt;<span style="color: var(--k-code-type)">int</span>><strong>&amp;</strong> a, <span style="color: var(--k-code-type)">int</span> s) {</span>
+<span class="k-line">    <span style="color: var(--k-code-type)">int</span> l <strong>=</strong> <span style="color: var(--k-code-number)">0</span>, r <strong>=</strong> (<span style="color: var(--k-code-type)">int</span>)a.<span style="color: var(--k-code-function)">size</span>() <strong>-</strong> <span style="color: var(--k-code-number)">1</span>;</span>
+<span class="k-line">    <strong><span style="color: var(--k-code-key)">while</span></strong> (l <strong>&lt;</strong> r) {</span>
+<span class="k-line">        <span style="color: var(--k-code-type)">int</span> cur <strong>=</strong> a[l] <strong>+</strong> a[r];</span>
+<span class="k-line">        <strong><span style="color: var(--k-code-key)">if</span></strong> (cur <strong>==</strong> s) <strong><span style="color: var(--k-code-key)">return</span></strong> {l, r};</span>
+<span class="k-line k-hl">        <strong><span style="color: var(--k-code-key)">if</span></strong> (cur <strong>&lt;</strong> s) <strong>++</strong>l;   <em><span style="color: var(--k-code-comment)">//</span></em><em><span style="color: var(--k-code-comment)"> нужна сумма больше — двигаем левый</span></em><span class="k-mark">1</span></span>
+<span class="k-line k-hl">        <strong><span style="color: var(--k-code-key)">else</span></strong> <strong>--</strong>r;           <em><span style="color: var(--k-code-comment)">//</span></em><em><span style="color: var(--k-code-comment)"> нужна меньше — двигаем правый</span></em><span class="k-mark">2</span></span>
+<span class="k-line">    }</span>
+<span class="k-line">    <strong><span style="color: var(--k-code-key)">return</span></strong> {<strong>-</strong><span style="color: var(--k-code-number)">1</span>, <strong>-</strong><span style="color: var(--k-code-number)">1</span>};</span>
+<span class="k-line">}</span></code></pre>
+<div class="k-listing-cx">Сложность: <math><mi>𝑂</mi><mrow><mo stretchy="false">(</mo><mi>𝑛</mi><mo stretchy="false">)</mo></mrow></math></div></div>
+<h3 class="k-h k-h2" id="Алгоритм-кадрами" data-k-anchor="Алгоритм-кадрами"><span class="k-num">1.3</span>Алгоритм кадрами</h3>
+<p>Поиск пары с суммой <math><mn>14</mn></math> в массиве двумя указателями: каждая строка — один шаг.</p>
+<figure>
+<div class="k-frame k-layout">
+<svg style="overflow: visible; width: 41.746599857em; height: 20.769789406em; display: block" viewBox="0 0 459.212598425 228.467683465" width="459.212598425pt" height="228.467683465pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…38672 байт, fnv 8c264c9c105a8878…</svg></div>
+<figcaption><span class="k-fig-num">Рис. 1.1.</span> Кадры работы двух указателей: указатель двигается в сторону, которая приближает сумму к цели; пар, которые мы пропускаем, ответ содержать не может</figcaption></figure>
+<figure>
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 12.781675018em; height: 5.90256801em; display: block" viewBox="0 0 140.598425197 64.928248115" width="140.598425197pt" height="64.928248115pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…9395 байт, fnv c12b225c3e23dfae…</svg></div>
+<figcaption><span class="k-fig-num">Рис. 1.2.</span> Массив с отрезком и указателем: окно <math><mrow><mo stretchy="false">[</mo><mrow><mn>2</mn><mo>,</mo><mn>5</mn></mrow><mo stretchy="false">]</mo></mrow></math> и его правый конец</figcaption></figure>
+<h3 class="k-h k-h2" id="Таблица-ДП-и-графы" data-k-anchor="Таблица-ДП-и-графы"><span class="k-num">1.4</span>Таблица ДП и графы</h3>
+<div class="k-side" style="--k-side-w: 42%">
+<div class="k-side-text">Число путей из левого верхнего угла, если ходить только вправо и вниз: клетка равна сумме соседа сверху и соседа слева. Для угла <math><mrow><mo stretchy="false">(</mo><mrow><mn>4</mn><mo>,</mo><mn>5</mn></mrow><mo stretchy="false">)</mo></mrow></math>: <math><mn>35</mn><mo>=</mo><mn>15</mn><mo>+</mo><mn>20</mn></math>. Таблицы ДП всегда рисуем с подсветкой переходов для клетки, которую разбираем в тексте.</div>
+<div class="k-side-fig">
+<figure>
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 7.227498529em; height: 5.978847139em; display: block" viewBox="0 0 79.502483821 65.767318529" width="79.502483821pt" height="65.767318529pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…13743 байт, fnv cae5dbfd8112c162…</svg></div>
+<figcaption><span class="k-fig-num">Рис. 1.3.</span> Переход в клетку <math><mrow><mo stretchy="false">(</mo><mrow><mn>4</mn><mo>,</mo><mn>5</mn></mrow><mo stretchy="false">)</mo></mrow></math></figcaption></figure></div></div>
+<figure>
+<div class="k-row">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 10.900108757em; height: 7.090173121em; display: block" viewBox="0 0 119.901196325 77.991904331" width="119.901196325pt" height="77.991904331pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…8113 байт, fnv 6b0b6cfd7cd156c9…</svg></div>
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 7.060844667em; height: 7.060844667em; display: block" viewBox="0 0 77.669291339 77.669291339" width="77.669291339pt" height="77.669291339pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…7511 байт, fnv 3a5bd9125b193c00…</svg></div></div>
+<figcaption><span class="k-fig-num">Рис. 1.4.</span> Слева — дерево обхода в ширину (раскладка по уровням) и рёбра вне дерева пунктиром. Справа — ориентированный цикл с весами; встречные рёбра <math><mi>𝑎</mi><mo stretchy="false">→</mo><mi>𝑏</mi></math> и <math><mi>𝑏</mi><mo stretchy="false">→</mo><mi>𝑎</mi></math> разведены</figcaption></figure>
+<h3 class="k-h k-h2" id="3D-и-2D" data-k-anchor="3D-и-2D"><span class="k-num">1.5</span>3D и 2D</h3>
+<figure>
+<div class="k-row">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 14.412638511em; height: 8.144813457em; display: block" viewBox="0 0 158.539023622 89.592948031" width="158.539023622pt" height="89.592948031pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…55280 байт, fnv a91414cbfa8eb9f3…</svg></div>
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 14.412638511em; height: 8.144813457em; display: block" viewBox="0 0 158.539023622 89.592948031" width="158.539023622pt" height="89.592948031pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…14913 байт, fnv 2fe79cfedee17370…</svg></div>
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 8.220472441em; height: 7.653543307em; display: block" viewBox="0 0 90.42519685 84.188976378" width="90.42519685pt" height="84.188976378pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…5832 байт, fnv 94c9caa454bdb347…</svg></div></div>
+<figcaption><span class="k-fig-num">Рис. 1.5.</span> Седло <math><mi>𝑧</mi><mo>=</mo><msup><mi>𝑥</mi><mn>2</mn></msup><mo>−</mo><msup><mi>𝑦</mi><mn>2</mn></msup></math> (сдвинутое): светотень и прозрачный каркас; справа — круг, окружность радиуса <math><mi>𝑟</mi></math> и горизонтальная спица</figcaption></figure>
+<h3 class="k-h k-h2" id="Таблицы-и-итоги" data-k-anchor="Таблицы-и-итоги"><span class="k-num">1.6</span>Таблицы и итоги</h3>
+<table>
+<thead>
+<tr><th>Структура</th><th>Операция</th><th>Время</th></tr></thead>
+<tbody>
+<tr><td>Массив</td><td>доступ по индексу</td><td><math><mi>𝑂</mi><mrow><mo stretchy="false">(</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math></td></tr>
+<tr><td>Префиксные суммы</td><td>сумма на отрезке</td><td><math><mi>𝑂</mi><mrow><mo stretchy="false">(</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></math></td></tr>
+<tr><td>Дерево отрезков</td><td>сумма + изменение</td><td><math><mi>𝑂</mi><mrow><mo stretchy="false">(</mo><mrow><mo lspace="0em" rspace="0.16666666666666666em">log</mo><mi>𝑛</mi></mrow><mo stretchy="false">)</mo></mrow></math></td></tr></tbody></table>
+<table class="k-table k-pitfalls">
+<thead>
+<tr><th class="k-bad">✗ Ошибка</th><th class="k-good">✓ Как избежать</th></tr></thead>
+<tbody>
+<tr><td>Выбрать <math><mi>𝑁</mi></math>, не зафиксировав <math><mi>𝜀</mi></math></td><td>сначала «для любого <math><mi>𝜀</mi></math>», потом «найдётся <math><mi>𝑁</mi></math>»</td></tr>
+<tr><td>Сдвинуть оба указателя сразу</td><td>за шаг двигается ровно один</td></tr></tbody></table>
+<div class="k-summary">
+<div class="k-summary-head">Коротко о главном</div>
+<ol class="k-summary-list">
+<li>Врезки различаются тоном — тип узнаётся до чтения подписи.</li>
+<li>Алгоритм показываем кадрами, таблицу ДП — с подсвеченным переходом.</li>
+<li>Код — после идеи, короткий, с метками и сложностью.</li></ol></div>
+<div class="k-quiz">
+<div class="k-quiz-head">Проверь себя</div>
+<ol class="k-quiz-list">
+<li>Почему в двух указателях можно не рассматривать пропущенные пары?</li>
+<li>Чему равно число путей в клетку <math><mrow><mo stretchy="false">(</mo><mrow><mn>3</mn><mo>,</mo><mn>4</mn></mrow><mo stretchy="false">)</mo></mrow></math>?</li></ol>
+<details class="k-quiz-answers"><summary>Ответы</summary>
+<ol class="k-quiz-list">
+<li>сумма с ними заведомо дальше от цели</li>
+<li><math><mn>10</mn></math></li></ol></details></div></article>

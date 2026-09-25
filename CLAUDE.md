@@ -16,20 +16,32 @@
 
 ## Проверка после изменений
 
+Тестовое окружение отделено от демонстрационного (`data/`): хранилище-фикстура
+`tests/vault/` (каталог случаев — его `README.md`), данные тестов —
+`tests/.data/` (не в git, можно удалять).
+
 ```sh
 cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --check
-cargo run -p notes-cli -- --vault examples/vault check     # ожидается одна битая ссылка (Сеть/Nginx) — это фикстура
+cargo run -p notes-cli -- --vault tests/vault check   # ровно намеренные проблемы из tests/vault/README.md
 ```
 
+- **Эталонные снимки** `tests/snapshots/*.snap` — HTML каждой фикстуры. Тест
+  упал — прочитать дифф (`git diff tests/snapshots`) и, если изменение
+  задумано, обновить: `UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test snapshots`.
+- Новый случай отрисовки → новая фикстура в `tests/vault/` + строка в его README.
+
 После правок библиотеки, CSS или клиента — **посмотреть глазами** обе темы и
-узкий экран (снимки — в scratchpad, не в репозиторий):
+узкий экран (снимки — в scratchpad или `tests/.data/`, не в репозиторий):
 
 ```sh
-cargo run -p notes-cli -- --vault examples/vault serve --addr 127.0.0.1:8431 &   # в фоне
-tools/shot.mjs "http://127.0.0.1:8431/n/демо/компоненты" out.png [--dark] [--size 400x800] [--full]
+tools/test-env.sh [--fresh] &          # сервер на tests/vault, данные tests/.data, порт 8432
+tools/visual.mjs [--only Книга]         # все фикстуры × (светлая, тёмная, узкий) → tests/.data/visual/index.html
+tools/shot.mjs "http://127.0.0.1:8432/n/демо/компоненты" out.png [--dark] [--size 400x800] [--full]
 tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то в странице
 ```
 
+- Клиент ставит `<html data-state="loading|ready">`; инструменты ждут `ready`.
+  Любой клиент (и будущий Svelte) обязан это соблюдать.
 - `chromium --screenshot` не использовать: он рисует страницу с нуля без
   учёта прокрутки — якоря и липкие панели на снимке «ломаются».
 - Сервер берёт `web/` с диска (отладочная сборка) — правки клиента видны после
@@ -50,7 +62,7 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
 - Страница заметки: `render.rs` (дерево typst-html: склейка тем, якоря,
   ссылки) → `figures.rs` (текст SVG: один SVG на темы, общие глифы,
   округление). Замер веса — `RUST_LOG=notes_core=debug`, строка «рисунки».
-- Тесты: модульные рядом с кодом; сквозные — `crates/*/tests/` на `examples/vault`.
+- Тесты: модульные рядом с кодом; сквозные — `crates/*/tests/` на `tests/vault`.
 
 ## Клиент `web/`
 
@@ -81,6 +93,8 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
 - Рисунки наследуют `set text` HTML-ветки шаблона (шрифт, кегль, **цвет**): без
   них подписи на SVG чёрные и не видны в тёмной теме. Проверять рисунки в «ночи».
 - `return` в блоке отбрасывает стоящие перед ним `show`/`set` — оборачивай в `{ … }`.
+- В тексте заметки `;` сразу после `#вызова(…)` Typst съедает (конец
+  выражения) — писать `\;`. `notes check` предупреждает (`notes-core::lint`).
 - Именованный аргумент с дефисом: `эл("div", "k-x", ..("data-x": v), тело)`.
 - Цвета тем — только в `theme.typ`; для HTML их выгружает `css-цвета` → `css.typ`.
   Новая тема = словарь в `темы`, CSS-переменные появятся сами.

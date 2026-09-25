@@ -12,6 +12,8 @@ import { renderGraph } from "./graph.js";
 
 const $ = (sel) => document.querySelector(sel);
 const root = document.documentElement;
+// <html data-state="loading|ready">: заметка или главная дорисована. По нему
+// ждут tools/visual.mjs и e2e-тесты — договорённость для любого клиента.
 
 const state = {
   schema: null,
@@ -263,6 +265,7 @@ async function loadNote(id, { keepScroll = false } = {}) {
     scrollTo(0, 0);
   }
   state.current = id;
+  root.dataset.state = "loading";
   markActive();
   setStatus("собираю…", true);
   try {
@@ -290,6 +293,7 @@ async function loadNote(id, { keepScroll = false } = {}) {
     else if (scrollToAnchor(location.hash)) holdAnchor(id);
     else scrollTo(0, 0);
     setStatus(`собрано ${time()}`);
+    root.dataset.state = "ready";
   } catch (e) {
     if (state.pending !== ctrl) return; // отменена или устарела
     state.version = null;
@@ -299,6 +303,7 @@ async function loadNote(id, { keepScroll = false } = {}) {
     }));
     $("#problems").hidden = true;
     setStatus("");
+    root.dataset.state = "ready";
   } finally {
     if (state.pending === ctrl) state.pending = null;
   }
@@ -362,6 +367,7 @@ function showIndex() {
   state.version = null;
   clearNoteUi();
   delete root.dataset.kind;
+  root.dataset.state = "loading";
   document.title = "Заметки";
   $("#crumbs").textContent = "";
   markActive();
@@ -371,6 +377,7 @@ function showIndex() {
   if (!state.notes.length) {
     home.append(h("p", "Хранилище пусто: положите .typ-файлы в data/vault/."));
     $("#note").replaceChildren(home);
+    root.dataset.state = "ready";
     return;
   }
   const lead = h("p", "", "home-lead");
@@ -404,7 +411,10 @@ function showIndex() {
       if (state.current !== null || !graph.isConnected) return;
       renderGraph(graph, g, { onOpen: (id) => navigate(`/n/${encodeId(id)}`) });
     })
-    .catch(() => graph.remove());
+    .catch(() => graph.remove())
+    .finally(() => {
+      if (state.current === null) root.dataset.state = "ready";
+    });
 }
 
 /** Перейти внутри клиента (как по ссылке). */

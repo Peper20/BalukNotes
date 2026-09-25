@@ -173,7 +173,10 @@ crates/notes-cli/    notes serve | build | check — работает без GUI
 apps/desktop/        Tauri 2 (Linux, Windows, macOS, Android)
 web/                 интерфейс, общий для всех платформ
 konspekt/            библиотека оформления (Typst), в хранилище — виртуально
-examples/vault/      тестовое хранилище (фикстуры для тестов и проверки глазами)
+tests/vault/         хранилище-фикстура: каждый случай отрисовки (каталог — README)
+tests/snapshots/     эталонные снимки HTML фикстур
+tests/.data/         данные тестового окружения (не в git)
+tools/               test-env.sh, visual.mjs, shot.mjs — проверка глазами
 data/                данные приложения: vault/, settings.json (не в git)
 docs/                архитектура, план, технический долг
 ```

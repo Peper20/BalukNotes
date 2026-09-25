@@ -1,0 +1,49 @@
+id: Особые случаи/Ссылки
+kind: Note
+title: Ссылки
+tags: ссылки, фикстура
+headings:
+  2 #Рабочие [Рабочие] Рабочие
+  2 #Битые [Битые] Битые
+  2 #Одинаковые-заголовки [Одинаковые-заголовки] Одинаковые заголовки
+  3 #Повтор [Повтор] Повтор
+  3 #Повтор-2 [Повтор] Повтор
+links:
+  Сеть/SSH
+  Сеть/SSH / Смена порта
+  Книга / Код из файла
+  Книга / особый
+  Имена/C++ и C#
+  Имена/50% готово
+  Глубоко/а/б/в/г/Дно
+  Сеть/UFW
+  Нет/Такой заметки
+  Сеть/SSH / Нет такого раздела
+styles: 0 байт, fnv cbf29ce484222325
+---
+<article class="k-doc" data-doc="заметка">
+<header class="k-title">
+<h1>Ссылки</h1>
+<ul class="k-tags">
+<li>ссылки</li>
+<li>фикстура</li></ul></header>
+<p>Все виды ссылок <code>#см</code>. Две последние — битые намеренно: их находит <code>notes check</code>, а в интерфейсе они помечены.</p>
+<h2 class="k-h k-h2" id="Рабочие" data-k-anchor="Рабочие"><span class="k-num">1</span>Рабочие</h2>
+<ul>
+<li>на заметку: <a class="k-link" data-k-target="Сеть/SSH" href="/n/Сеть/SSH">SSH</a>;</li>
+<li>на раздел по тексту заголовка: <a class="k-link" data-k-target="Сеть/SSH" data-k-anchor="Смена порта" href="/n/Сеть/SSH#Смена-порта">Смена порта</a>;</li>
+<li>на раздел книги во второй главе: <a class="k-link" data-k-target="Книга" data-k-anchor="Код из файла" href="/n/Книга#Код-из-файла">Код из файла</a>;</li>
+<li>на раздел по метке: <a class="k-link" data-k-target="Книга" data-k-anchor="особый" href="/n/Книга#особый">особый</a>;</li>
+<li>на имя с пробелами, <code>+</code> и <code>#</code>: <a class="k-link" data-k-target="Имена/C++ и C#" href="/n/Имена/C++%20и%20C%23">C++ и C#</a>;</li>
+<li>на имя с <code>%</code>: <a class="k-link" data-k-target="Имена/50% готово" href="/n/Имена/50%25%20готово">50% готово</a>;</li>
+<li>на глубоко вложенную: <a class="k-link" data-k-target="Глубоко/а/б/в/г/Дно" href="/n/Глубоко/а/б/в/г/Дно">Дно</a>;</li>
+<li>своя подпись: <a class="k-link" data-k-target="Сеть/UFW" href="/n/Сеть/UFW">межсетевой экран</a>.</li></ul>
+<h2 class="k-h k-h2" id="Битые" data-k-anchor="Битые"><span class="k-num">2</span>Битые</h2>
+<ul>
+<li>нет заметки: <a class="k-link k-link-broken" data-k-target="Нет/Такой заметки" title="нет заметки «Нет/Такой заметки»">Такой заметки</a>;</li>
+<li>нет раздела: <a class="k-link" data-k-target="Сеть/SSH" data-k-anchor="Нет такого раздела" href="/n/Сеть/SSH#Нет-такого-раздела">Нет такого раздела</a>.</li></ul>
+<h2 class="k-h k-h2" id="Одинаковые-заголовки" data-k-anchor="Одинаковые-заголовки"><span class="k-num">3</span>Одинаковые заголовки</h2>
+<h3 class="k-h k-h3" id="Повтор" data-k-anchor="Повтор"><span class="k-num">3.1</span>Повтор</h3>
+<p>Первый.</p>
+<h3 class="k-h k-h3" id="Повтор-2" data-k-anchor="Повтор"><span class="k-num">3.2</span>Повтор</h3>
+<p>Второй — <code>id</code> должен получить суффикс.</p></article>

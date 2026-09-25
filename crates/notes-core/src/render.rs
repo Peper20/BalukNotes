@@ -148,7 +148,8 @@ impl State<'_> {
     fn visit(&mut self, el: &mut HtmlElement) {
         if has_class(el, "k-frame") {
             self.theme_frame(el);
-        } else if is_heading(el) && has_class(el, "k-h") {
+        } else if is_heading(el) && (has_class(el, "k-h") || el.attrs.get(attr::class).is_none()) {
+            // k-h — заголовок konspekt; без классов — обычный `=` чистого Typst.
             self.heading(el);
         } else if el.tag == tag::a && has_class(el, "k-link") {
             self.link(el);
@@ -206,7 +207,7 @@ impl State<'_> {
         };
         el.attrs.push(*DATA_ANCHOR, anchor.as_str());
         // Класс k-hN — уровень оформления (глава, раздел, …), не тег.
-        let level = class_level(el).unwrap_or(2);
+        let level = class_level(el).or_else(|| tag_level(el)).unwrap_or(2);
         self.out_headings.push(Heading { level, id, anchor, text });
     }
 
@@ -296,6 +297,14 @@ fn has_class(el: &HtmlElement, class: &str) -> bool {
 
 fn is_heading(el: &HtmlElement) -> bool {
     [tag::h2, tag::h3, tag::h4, tag::h5, tag::h6].contains(&el.tag)
+}
+
+/// `<h3>` → 3: у чистого Typst `=` — это `<h2>`, раздел (как `k-h2` заметки).
+fn tag_level(el: &HtmlElement) -> Option<u8> {
+    [tag::h2, tag::h3, tag::h4, tag::h5, tag::h6]
+        .iter()
+        .position(|t| *t == el.tag)
+        .and_then(|i| u8::try_from(i + 2).ok())
 }
 
 /// `k-h2` → 2.
