@@ -19,7 +19,7 @@ pub fn build(notes: &Notes, out: &Path, opts: FigureOptions) -> Result<()> {
     let assets = out.join("assets");
     fs::create_dir_all(&assets)?;
     for name in ASSETS {
-        let data = notes_server::web_asset(name).with_context(|| format!("нет web/{name}"))?;
+        let data = notes_server::web_asset(name).with_context(|| format!("нет {name} в сборке клиента app/dist"))?;
         fs::write(assets.join(name), data)?;
     }
     fs::write(assets.join("themes.css"), notes.themes().css())?;

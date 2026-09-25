@@ -11,6 +11,7 @@ use typst::{World, WorldExt};
 const NOISE: &[&str] = &["html export is under active development"];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Diagnostic {
     pub severity: DiagSeverity,
     pub message: String,
@@ -23,6 +24,7 @@ pub struct Diagnostic {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum DiagSeverity {
     Error,

@@ -171,7 +171,7 @@ crates/notes-core/   ядро: хранилище, компиляция, скл�
 crates/notes-server/ HTTP API и раздача клиента (axum)
 crates/notes-cli/    notes serve | build | check — работает без GUI
 apps/desktop/        Tauri 2 (Linux, Windows, macOS, Android)
-web/                 интерфейс, общий для всех платформ
+app/                 интерфейс (Svelte 5 + TS + Vite), общий для всех платформ
 konspekt/            библиотека оформления (Typst), в хранилище — виртуально
 tests/vault/         хранилище-фикстура: каждый случай отрисовки (каталог — README)
 tests/snapshots/     эталонные снимки HTML фикстур

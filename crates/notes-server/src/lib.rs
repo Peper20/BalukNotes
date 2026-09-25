@@ -12,7 +12,7 @@
 //! | Путь                         | Что                                          |
 //! |------------------------------|----------------------------------------------|
 //! | `GET /`, `GET /n/{*id}`      | клиент (одна страница, маршрутизация в JS)   |
-//! | `GET /assets/{*path}`        | файлы клиента из `web/`                      |
+//! | `GET /assets/{*path}`        | файлы клиента (сборка `app/dist/assets`)     |
 //! | `GET /api/notes`             | список заметок и книг                        |
 //! | `GET /api/notes/{*id}`       | заметка: HTML, заголовки, ссылки, ошибки     |
 //! | `GET /api/version/{*id}`     | версия заметки — дёшево, без компиляции      |
@@ -26,6 +26,8 @@
 //! | `GET /api/fonts.css`         | `@font-face` для шрифтов оформления          |
 //! | `GET /fonts/{family}/{style}`| файл шрифта                                  |
 
+pub mod api;
+
 use std::fmt::Write as _;
 use std::sync::Arc;
 
@@ -35,20 +37,32 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use notes_core::fonts::WebVariant;
+use notes_core::graph::Graph;
 use notes_core::settings::SettingsStore;
+use notes_core::themes::Theme;
 use notes_core::{NoteId, Notes};
+
+use crate::api::{ErrorResponse, LinksResponse, NoteListItem, OutgoingLink, SettingsResponse, VersionResponse};
 use rust_embed::RustEmbed;
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 use tower_http::compression::CompressionLayer;
 
 /// Шрифты оформления, которые нужны браузеру (из `konspekt/theme.typ`).
 const WEB_FONTS: &[&str] = &["Gentium Plus", "JetBrains Mono", "New Computer Modern Math"];
 
-/// Файлы клиента. В отладочной сборке читаются с диска (правка без
-/// пересборки), в релизной — встроены в бинарник.
+/// Клиент — сборка `app/` (`npm run build` → `app/dist`). В отладочной
+/// сборке читается с диска (пересобрали клиент — перезагрузите страницу), в
+/// релизной — встроен в бинарник (без `app/dist` её не собрать, см. build.rs).
 #[derive(RustEmbed)]
-#[folder = "../../web/"]
+#[folder = "../../app/dist/"]
+#[allow_missing = true]
 struct WebAssets;
+
+/// Страница вместо клиента, если он не собран.
+const NO_CLIENT: &str = "<!doctype html><meta charset=utf-8><title>Клиент не собран</title>\
+<p>Клиент не собран. Выполните в каталоге проекта:</p>\
+<pre>npm --prefix app ci &amp;&amp; npm --prefix app run build</pre>\
+<p>и обновите страницу. Для разработки клиента — <code>npm --prefix app run dev</code>.</p>";
 
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -85,9 +99,9 @@ pub async fn serve(
     axum::serve(listener, router(state)).with_graceful_shutdown(shutdown).await
 }
 
-/// Файл клиента из `web/` — для статической сборки.
-pub fn web_asset(path: &str) -> Option<Vec<u8>> {
-    WebAssets::get(path).map(|f| f.data.into_owned())
+/// Файл клиента (`konspekt.css`, `static.js`, …) — для статической сборки.
+pub fn web_asset(name: &str) -> Option<Vec<u8>> {
+    WebAssets::get(&format!("assets/{name}")).map(|f| f.data.into_owned())
 }
 
 /// Шрифты оформления, которые нужны браузеру.
@@ -101,7 +115,7 @@ struct ApiError(StatusCode, String);
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.0, Json(json!({ "error": self.1 }))).into_response()
+        (self.0, Json(ErrorResponse { error: self.1, errors: Vec::new() })).into_response()
     }
 }
 
@@ -132,27 +146,41 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> notes_core::Result<T> +
 
 async fn shell() -> Response {
     match WebAssets::get("index.html") {
-        Some(file) => Html(file.data).into_response(),
-        None => (StatusCode::INTERNAL_SERVER_ERROR, "нет web/index.html").into_response(),
+        Some(file) => ([(header::CACHE_CONTROL, "no-cache")], Html(file.data)).into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Html(NO_CLIENT)).into_response(),
     }
 }
 
 async fn asset(Path(path): Path<String>) -> Response {
-    let Some(file) = WebAssets::get(&path) else {
+    let Some(file) = WebAssets::get(&format!("assets/{path}")) else {
         return StatusCode::NOT_FOUND.into_response();
     };
     let mime = file.metadata.mimetype().to_owned();
-    ([(header::CONTENT_TYPE, mime), (header::CACHE_CONTROL, "no-cache".into())], file.data).into_response()
+    // Файлы сборки с хэшем в имени (index-CX38oHQo.js) не меняются никогда.
+    let cache = if is_hashed(&path) { "public, max-age=31536000, immutable" } else { "no-cache" };
+    ([(header::CONTENT_TYPE, mime), (header::CACHE_CONTROL, cache.into())], file.data).into_response()
 }
 
-async fn list_notes(State(s): State<AppState>) -> ApiResult<Json<Value>> {
+/// `name-XXXXXXXX.ext`: Vite ставит в имя 8 символов хэша содержимого.
+fn is_hashed(path: &str) -> bool {
+    let stem = path.rsplit_once('.').map_or(path, |(s, _)| s);
+    stem.rsplit_once('-')
+        .is_some_and(|(_, h)| h.len() == 8 && h.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'))
+}
+
+async fn list_notes(State(s): State<AppState>) -> ApiResult<Json<Vec<NoteListItem>>> {
     let notes = s.notes.clone();
     let entries = blocking(move || notes.entries()).await?;
-    let list: Vec<Value> = entries
-        .iter()
-        .map(|e| json!({ "id": e.id, "kind": e.kind, "name": e.id.name(), "folder": e.id.parent() }))
+    let list = entries
+        .into_iter()
+        .map(|e| NoteListItem {
+            name: e.id.name().to_owned(),
+            folder: e.id.parent().to_owned(),
+            kind: e.kind,
+            id: e.id,
+        })
         .collect();
-    Ok(Json(Value::Array(list)))
+    Ok(Json(list))
 }
 
 async fn note(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Response> {
@@ -162,33 +190,37 @@ async fn note(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Re
     Ok(Json(page).into_response())
 }
 
-async fn version(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+async fn version(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<VersionResponse>> {
     let id = NoteId::new(id)?;
     let (notes, opts) = (s.notes.clone(), s.settings.figure_options());
     let version = blocking(move || notes.version(&id, opts)).await?;
-    Ok(Json(json!({ "version": version })))
+    Ok(Json(VersionResponse { version }))
 }
 
-async fn links(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+async fn links(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<LinksResponse>> {
     let id = NoteId::new(id)?;
     let notes = s.notes.clone();
     blocking(move || {
         notes.vault().entry(&id)?;
         let snap = notes.links()?;
-        let outgoing: Vec<Value> = snap
+        let outgoing = snap
             .outgoing(&id)
             .iter()
-            .map(|l| json!({ "target": l.target, "anchor": l.anchor, "exists": snap.exists(&l.target) }))
+            .map(|l| OutgoingLink {
+                target: l.target.clone(),
+                anchor: l.anchor.clone(),
+                exists: snap.exists(&l.target),
+            })
             .collect();
-        Ok(Json(json!({ "outgoing": outgoing, "backlinks": snap.backlinks(&id) })))
+        Ok(Json(LinksResponse { outgoing, backlinks: snap.backlinks(&id) }))
     })
     .await
 }
 
-async fn graph(State(s): State<AppState>) -> ApiResult<Json<Value>> {
+async fn graph(State(s): State<AppState>) -> ApiResult<Json<Graph>> {
     let notes = s.notes.clone();
     let graph = blocking(move || Ok(notes.links()?.graph())).await?;
-    Ok(Json(json!(graph)))
+    Ok(Json(graph))
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -209,7 +241,7 @@ async fn pdf(State(s): State<AppState>, Path(id): Path<String>, Query(q): Query<
             ([(header::CONTENT_TYPE, "application/pdf".to_owned()), (header::CONTENT_DISPOSITION, disposition)], bytes)
                 .into_response()
         }
-        Err(errors) => (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({ "error": "не собралось", "errors": errors })))
+        Err(errors) => (StatusCode::UNPROCESSABLE_ENTITY, Json(ErrorResponse { error: "не собралось".into(), errors }))
             .into_response(),
     })
 }
@@ -227,8 +259,8 @@ fn percent(s: &str) -> String {
         .collect()
 }
 
-async fn get_settings(State(s): State<AppState>) -> Json<Value> {
-    Json(json!({ "schema": s.settings.schema(), "values": s.settings.values() }))
+async fn get_settings(State(s): State<AppState>) -> Json<SettingsResponse> {
+    Json(SettingsResponse { schema: s.settings.schema().clone(), values: s.settings.values() })
 }
 
 async fn put_settings(State(s): State<AppState>, Json(patch): Json<Map<String, Value>>) -> ApiResult<Json<Value>> {
@@ -237,8 +269,8 @@ async fn put_settings(State(s): State<AppState>, Json(patch): Json<Map<String, V
     Ok(Json(Value::Object(values)))
 }
 
-async fn themes(State(s): State<AppState>) -> Json<Value> {
-    Json(json!(s.notes.themes().themes()))
+async fn themes(State(s): State<AppState>) -> Json<Vec<Theme>> {
+    Json(s.notes.themes().themes().to_vec())
 }
 
 async fn themes_css(State(s): State<AppState>) -> Response {

@@ -8,3 +8,7 @@ __pycache__/
 /data/
 # Тестовое окружение: настройки, кэш, альбом снимков
 /tests/.data/
+# Клиент: сборка и отчёты тестов
+/app/dist/
+/app/test-results/
+/app/playwright-report/

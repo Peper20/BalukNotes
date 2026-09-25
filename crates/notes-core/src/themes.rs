@@ -21,6 +21,7 @@ const CSS_FILE: &str = "css.typ";
 const CSS_LABEL: &str = "k-css";
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Theme {
     pub name: String,
     /// Тёмная ли тема (по светлоте фона) — для выбора «как в системе».

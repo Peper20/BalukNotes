@@ -55,6 +55,7 @@ pub enum LinkStyle {
 
 /// Заметка, готовая к показу.
 #[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct NotePage {
     pub id: NoteId,
     pub kind: NoteKind,

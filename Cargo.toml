@@ -39,6 +39,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal
 tower-http = { version = "0.6", features = ["compression-gzip", "compression-br"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Типы API для клиента на TypeScript: фича `ts` у notes-core и notes-server.
+ts-rs = { version = "12", features = ["serde-json-impl", "no-serde-warnings"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

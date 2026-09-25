@@ -59,6 +59,7 @@ const CODE_COLORS: [(&str, &str); 8] = [
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Heading {
     /// Уровень оформления: 1 — глава книги, 2 — раздел, …
     pub level: u8,
@@ -70,12 +71,14 @@ pub struct Heading {
 
 /// Ссылка из заметки, как она написана в `#см(…)`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct LinkRef {
     pub target: String,
     pub anchor: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Rendered {
     pub title: Option<String>,
     /// `<style>` из `<head>` (стили MathML от Typst).

@@ -29,12 +29,14 @@ const ANCHOR_ARG: &str = "якорь";
 
 /// Ссылка на заметку из другой заметки.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Backlink {
     pub from: NoteId,
     pub anchor: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Node {
     pub id: String,
     /// `None` — заметки нет (на неё ссылаются, но её не написали).
@@ -42,6 +44,7 @@ pub struct Node {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Edge {
     pub from: String,
     pub to: String,
@@ -50,6 +53,7 @@ pub struct Edge {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Graph {
     pub nodes: Vec<Node>,
     pub edges: Vec<Edge>,

@@ -162,6 +162,9 @@ button.icon:hover { color: var(--k-accent); border-color: var(--k-line); backgro
   small { display: block; color: var(--k-muted); font-size: 0.85em; margin-bottom: 0.2em; }
 }
 .chapter-nav + .backlinks { margin-top: 0; }
+/* Панели заходят на нижнее поле заметки (отрицательный отступ), а .k-note —
+ * свой слой (isolation): без этого заметка перекрывает их и они не нажимаются. */
+.chapter-nav, .backlinks { position: relative; z-index: 1; }
 
 /* ── Ссылаются сюда ─────────────────────────────────────────────────── */
 .backlinks {

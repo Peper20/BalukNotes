@@ -2,7 +2,7 @@
 //!
 //! Схема описана здесь, а клиент рисует форму **по схеме** — новая настройка
 //! добавляется одной записью в [`Schema::new`] и её применением в клиенте
-//! (`web/app.js`). Значения хранятся в JSON-файле плоским словарём
+//! (`app/src/lib/appearance.ts`). Значения хранятся в JSON-файле плоским словарём
 //! «ключ → значение»; неизвестные ключи и неверные значения при загрузке
 //! отбрасываются (с предупреждением в журнал), вместо них — значения по умолчанию.
 
@@ -20,11 +20,13 @@ use crate::{Error, Result};
 
 /// Описание одной настройки.
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SettingDef {
     /// `группа.имя`, например `view.numbering`.
     pub key: &'static str,
     pub label: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
     pub help: Option<&'static str>,
     #[serde(flatten)]
     pub kind: Kind,
@@ -32,6 +34,7 @@ pub struct SettingDef {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Kind {
     Bool,
@@ -40,18 +43,21 @@ pub enum Kind {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Choice {
     pub value: String,
     pub label: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Group {
     pub key: &'static str,
     pub label: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Schema {
     pub groups: Vec<Group>,
     pub settings: Vec<SettingDef>,

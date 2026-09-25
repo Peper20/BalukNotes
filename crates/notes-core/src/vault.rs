@@ -22,6 +22,7 @@ pub const BOOK_MAIN: &str = "main.typ";
 /// получить путь внутри хранилища (без `..`, абсолютных путей и служебных
 /// каталогов).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(transparent)]
 pub struct NoteId(String);
 
@@ -74,6 +75,7 @@ impl fmt::Display for NoteId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum NoteKind {
     Note,
@@ -82,6 +84,7 @@ pub enum NoteKind {
 
 /// Заметка или книга в хранилище.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Entry {
     pub id: NoteId,
     pub kind: NoteKind,

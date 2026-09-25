@@ -10,9 +10,11 @@
 
 ## Запуск
 
-Нужны Rust ≥ 1.92 и пакет `@preview/cetz:0.4.2` (скачается сам, если нет в кэше).
+Нужны Rust ≥ 1.92, Node.js ≥ 22 и пакет `@preview/cetz:0.4.2` (скачается
+сам, если нет в кэше). Клиент собирается один раз (и после его правок):
 
 ```sh
+npm --prefix app ci && npm --prefix app run build   # клиент → app/dist
 cargo run -p notes-cli -- serve             # http://127.0.0.1:8421, хранилище data/vault
 cargo run -p notes-cli -- check             # ошибки компиляции и битые ссылки
 cargo run -p notes-cli -- build site/       # статический сайт
@@ -34,7 +36,7 @@ tools/test-env.sh                                     # тестовое окр�
 | `crates/notes-core/` | ядро: хранилище, компилятор Typst, склейка тем, рисунки, индекс ссылок, настройки, проверка |
 | `crates/notes-server/` | HTTP API и раздача клиента (axum) |
 | `crates/notes-cli/` | команда `notes`: serve, check, build, pdf |
-| `web/` | клиент: `app.js` + `app.css` (интерфейс), `konspekt.css` (вид заметок) |
+| `app/` | клиент: Svelte 5 + TypeScript + Vite; `public/assets/konspekt.css` — вид заметок |
 | `konspekt/` | библиотека оформления: форк konspekt-style + HTML-ветка, `заметка`, `см` |
 | `tests/vault/` | хранилище-фикстура: каждый случай отрисовки, каталог — его `README.md` |
 | `tests/snapshots/` | эталонные снимки HTML фикстур (`UPDATE_SNAPSHOTS=1` — обновить) |

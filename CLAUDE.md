@@ -23,6 +23,7 @@
 ```sh
 cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --check
 cargo run -p notes-cli -- --vault tests/vault check   # ровно намеренные проблемы из tests/vault/README.md
+cd app && npm run check && npm test && npm run build && npm run e2e   # клиент: типы, Vitest, сборка, Playwright
 ```
 
 - **Эталонные снимки** `tests/snapshots/*.snap` — HTML каждой фикстуры. Тест
@@ -40,12 +41,14 @@ tools/shot.mjs "http://127.0.0.1:8432/n/демо/компоненты" out.png [
 tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то в странице
 ```
 
-- Клиент ставит `<html data-state="loading|ready">`; инструменты ждут `ready`.
-  Любой клиент (и будущий Svelte) обязан это соблюдать.
+- Клиент ставит `<html data-state="loading|ready">`; инструменты и e2e ждут
+  `ready`. Новый экран/состояние — соблюдать то же.
 - `chromium --screenshot` не использовать: он рисует страницу с нуля без
   учёта прокрутки — якоря и липкие панели на снимке «ломаются».
-- Сервер берёт `web/` с диска (отладочная сборка) — правки клиента видны после
-  перезагрузки страницы; правки Rust — после перезапуска `notes serve`.
+- Сервер (отладочная сборка) берёт клиент из `app/dist` с диска: после
+  `npm run build` достаточно перезагрузить страницу; правки Rust — после
+  перезапуска `notes serve`. С горячей заменой — `npm run dev` (:5173, прокси
+  на :8432).
 - Останавливать сервер — `kill $(pgrep -x notes)`, **не** `pkill -f …`: шаблон
   совпадает с командной строкой самой оболочки и убивает её.
 
@@ -64,14 +67,25 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   округление). Замер веса — `RUST_LOG=notes_core=debug`, строка «рисунки».
 - Тесты: модульные рядом с кодом; сквозные — `crates/*/tests/` на `tests/vault`.
 
-## Клиент `web/`
+## Клиент `app/`
 
-- Временный клиент M1: ES-модуль без сборки. Настройки применяются
-  атрибутами на `<html>` (`data-numbering`, `data-header-*`, …), правила — в
-  `konspekt.css`. Новая настройка = запись в `notes-core::settings::Schema` +
-  применение в `applySettings()` + CSS.
-- Стили заметки — только внутри `.k-note { … }` (вложенность CSS), чтобы не
-  задевать интерфейс.
+- Svelte 5 (руны) + TypeScript + Vite; без SvelteKit. Состояние —
+  `src/lib/app.svelte.ts` (маршрут, заметка, настройки, обновление) и
+  `ui.svelte.ts` (панели, глава, оглавление); чистая логика — `src/lib/*.ts`
+  с тестами Vitest рядом (`*.test.ts`); компоненты — `src/components/`.
+- **Типы API — из Rust** (`ts-rs`, фича `ts`): `npm run types` выгружает их в
+  `src/lib/api/types/` (в git). Поменял структуру ответа — выгрузи и закоммить;
+  руками файлы не править. Ответ сервера — именованная структура
+  (`notes-server/src/api.rs` или тип ядра), не `json!`.
+- HTML заметки вставляется в DOM напрямую (`NoteView.svelte`), не шаблоном.
+- Настройки вида — атрибутами на `<html>` (`data-numbering`, `data-header-*`,
+  …), правила — в `konspekt.css`. Новая настройка = запись в
+  `notes-core::settings::Schema` + строка в `src/lib/appearance.ts` + CSS.
+- Стили заметки — только внутри `.k-note { … }` (`public/assets/konspekt.css`,
+  общий со статическим сайтом); интерфейс — `src/app.css`.
+- Сквозные сценарии — `e2e/*.spec.ts` (Playwright на системном chromium,
+  сервер на копии `tests/vault` в `tests/.data/e2e`). Новая возможность
+  интерфейса — новый сценарий.
 
 ## Библиотека `konspekt/`
 
@@ -84,7 +98,7 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   `=` — глава). В HTML весь документ — `<article class="k-doc" data-doc>`.
 - У каждого блока две ветки: `context if веб() { … HTML … } else { … PDF … }`.
   В HTML — только разметка с классами `k-…` (помощник `эл` из `web.typ`),
-  без цветов и размеров: их задаёт `web/konspekt.css`.
+  без цветов и размеров: их задаёт `app/public/assets/konspekt.css`.
 - В HTML-экспорте `grid`, `stack`, `align`, `place` **выбрасываются вместе с
   содержимым**. В HTML-ветке их не использовать; для чужой вёрстки шаблон
   ставит страховку (SVG-кадр `k-layout`).
