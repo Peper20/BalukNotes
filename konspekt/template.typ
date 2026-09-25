@@ -2,7 +2,7 @@
 // подписи, титул и оглавление. Вся «вёрстка» живёт здесь; главы содержат
 // только текст и вызовы блоков.
 
-#import "theme.typ": _тема, темы, тема, бледный
+#import "theme.typ": _тема, _вид, темы, тема, бледный
 #import "code.typ": tm-тема, тема-кода
 #import "blocks.typ": капитель
 #import "web.typ": веб, эл, кадр
@@ -122,47 +122,58 @@
 // Страниц, колонтитулов, титула и оглавления нет: оглавление строит
 // приложение. Размеры и цвета задаёт CSS, здесь — только разметка.
 
-// Ссылки на заголовки и рисунки: только номер, как в PDF.
-#let _ссылка(it) = {
+// Ссылки на заголовки и рисунки: только номер, как в PDF. В заметке номера
+// заголовков по умолчанию скрыты — ссылка на раздел показывает его название.
+#let _ссылка(вид-док, it) = {
   let el = it.element
   if el == none { return it }
   if el.func() == heading {
-    link(el.location(), numbering(el.numbering, ..counter(heading).at(el.location())))
+    if вид-док == "заметка" { link(el.location(), el.body) }
+    else { link(el.location(), numbering(el.numbering, ..counter(heading).at(el.location()))) }
   } else if el.func() == figure {
-    let гл = counter(heading).at(el.location()).first()
     let n = el.counter.at(el.location()).first()
-    link(el.location(), [#гл.#n])
+    if вид-док == "заметка" { link(el.location(), str(n)) }
+    else { link(el.location(), [#counter(heading).at(el.location()).first().#n]) }
   } else { it }
 }
 
-#let _веб-шаблон(т, вид, название, подзаголовок, автор, дата, описание, тело) = {
+// Номер рисунка: в книге «глава.n», в заметке — сквозной.
+#let _нумерация-рисунков(вид-док) = if вид-док == "заметка" { "1" } else {
+  n => numbering("1.1", counter(heading).get().first(), n)
+}
+
+#let _веб-шаблон(т, вид-док, вид, название, подзаголовок, автор, дата, описание, теги, тело) = {
   // Шрифт, кегль и цвет в HTML-разметку не попадают (их задаёт CSS), но их
   // наследуют рисунки: html.frame верстается как страница PDF. Без этого
   // подписи на рисунках — чёрные (не видно в тёмной теме) и чужим шрифтом.
   set text(font: т.шрифт.текст, size: т.кегль.текст, lang: "ru", fill: т.цвет.текст)
   show math.equation: set text(font: т.шрифт.матем)
   show raw: set text(font: т.шрифт.код)
+  // Номера заголовков выдаются всегда (span.k-num): показывать ли их, решает
+  // настройка клиента, без перекомпиляции.
   set heading(numbering: "1.1")
-  // Заголовок: <h2…h6> с номером отдельным span — CSS рисует его по-своему.
-  // Уровень 1 (глава) — <h2>: <h1> занят названием заметки.
+  // Заголовок: <h2…h6>; <h1> занят названием. Класс k-hN — уровень
+  // оформления: в книге `=` — глава (k-h1), в заметке `=` — раздел (k-h2).
+  let сдвиг = if вид-док == "заметка" { 1 } else { 0 }
   show heading: it => {
-    if it.level == 1 { _сброс() }
+    if it.level == 1 and вид-док == "книга" { _сброс() }
     let тег = "h" + str(calc.min(it.level + 1, 6))
     context {
       let номер = if it.numbering != none { counter(heading).display(it.numbering) }
       // data-num у главы — для крупной бледной цифры справа (CSS ::after).
-      let атр = if it.level == 1 and номер != none { ("data-num": str(counter(heading).get().first())) } else { (:) }
-      эл(тег, "k-h k-h" + str(it.level), ..атр, {
+      let глава = it.level == 1 and вид-док == "книга"
+      let атр = if глава and номер != none { ("data-num": str(counter(heading).get().first())) } else { (:) }
+      эл(тег, "k-h k-h" + str(calc.min(it.level + сдвиг, 4)), ..атр, {
         if номер != none { эл("span", "k-num", номер) }
         it.body
       })
     }
   }
-  show ref: _ссылка
+  show ref: _ссылка.with(вид-док)
 
   set raw(theme: tm-тема(тема-кода(т)))
 
-  set figure(numbering: n => numbering("1.1", counter(heading).get().first(), n))
+  set figure(numbering: _нумерация-рисунков(вид-док))
   show figure.caption: it => html.elem("figcaption", {
     эл("span", "k-fig-num")[#it.supplement #context it.counter.display(it.numbering).]
     [ ]
@@ -182,6 +193,9 @@
   show stack: it => context if веб() { кадр(it, вид: "вёрстка") } else { it }
   show place: it => context if веб() { кадр(it.body, вид: "вёрстка") } else { it }
 
+  // Весь документ — в <article data-doc>: по виду документа (а не по месту
+  // файла в хранилище) CSS решает, показывать ли номера и «Главу N».
+  эл("article", "k-doc", ..("data-doc": вид-док), {
   if название != none {
     эл("header", "k-title", {
       if вид != none { эл("div", "k-title-kind", вид) }
@@ -191,59 +205,24 @@
       if автор != none or дата != none {
         эл("p", "k-byline", [#автор#if автор != none and дата != none [ · ]#дата])
       }
+      if теги.len() > 0 {
+        эл("ul", "k-tags", теги.map(x => html.elem("li", x)).join())
+      }
     })
   }
   тело
+  })
 }
 
-// ═════════════════════════════════════════════════════════════════════════
-// PDF: страницы, колонтитулы, титул и оглавление
-// ═════════════════════════════════════════════════════════════════════════
-#let _pdf-шаблон(т, вид, название, подзаголовок, автор, дата, описание, титул, оглавление, глубина, тело) = {
+// Общее для книги и заметки в PDF: ссылки, списки, код, таблицы, рисунки,
+// титул. Заголовки уже настроены в _pdf-шаблон.
+#let _pdf-тело(т, вид-док, вид, название, подзаголовок, автор, дата, описание, титул, оглавление, глубина, тело) = {
   let а = т.цвет.акцент
-  set page(
-    paper: "a4",
-    margin: т.страница.поля,
-    fill: т.цвет.фон,
-    header: _верхний(т),
-    footer: _нижний(т),
-    header-ascent: 35%,
-  )
-  set text(font: т.шрифт.текст, size: т.кегль.текст, lang: "ru", fill: т.цвет.текст, hyphenate: auto)
-  show math.equation: set text(font: т.шрифт.матем)
-  set par(
-    justify: т.абзац.выключка,
-    leading: т.абзац.интерлиньяж,
-    first-line-indent: т.абзац.отступ,
-    spacing: т.абзац.интервал,
-  )
-  set block(spacing: т.абзац.интервал + 0.25em)
-
-  // Заголовки
-  set heading(numbering: "1.1")
-  show heading.where(level: 1): it => {
-    pagebreak(weak: true)
-    _сброс()
-    context _глава(т, it)
-  }
-  show heading.where(level: 2): it => context _раздел(т, it)
-  show heading.where(level: 3): it => context _подраздел(т, it)
-  show heading.where(level: 4): it => block(above: 1em, below: 0.5em, sticky: true, text(weight: "bold", it.body))
 
   // Ссылки: только номер, падежное слово пишется в тексте руками
   // («в разделе @sec-x»): typst ставит слово в именительном падеже.
   // То же для рисунков: пишем «на рис. @метка», получаем «на рис. 2.3».
-  show ref: it => {
-    let el = it.element
-    if el == none { return it }
-    if el.func() == heading {
-      link(el.location(), numbering(el.numbering, ..counter(heading).at(el.location())))
-    } else if el.func() == figure {
-      let гл = counter(heading).at(el.location()).first()
-      let n = el.counter.at(el.location()).first()
-      link(el.location(), [#гл.#n])
-    } else { it }
-  }
+  show ref: _ссылка.with(вид-док)
   show link: set text(fill: а)
 
   // Списки
@@ -284,7 +263,7 @@
     stroke: (top: 1pt + т.цвет.текст.transparentize(20%), bottom: 1pt + т.цвет.текст.transparentize(20%)), it)
 
   // Рисунки и подписи: нумерация «глава.n»
-  set figure(numbering: n => numbering("1.1", counter(heading).get().first(), n), gap: 0.7em)
+  set figure(numbering: _нумерация-рисунков(вид-док), gap: 0.7em)
   set figure.caption(separator: [. ])
   show figure: set block(above: 1.3em, below: 1.3em, breakable: false)
   show figure.caption: it => context {
@@ -292,6 +271,15 @@
     set par(justify: false, first-line-indent: 0em)
     let номер = [#it.supplement #it.counter.display(it.numbering)]
     block(width: 90%, [#text(weight: "bold", fill: а, номер). #it.body])
+  }
+
+  // Заметка: название строкой сверху, без титульного листа.
+  if вид-док == "заметка" and название != none {
+    block(below: 1.4em, {
+      text(font: т.шрифт.заголовки, size: т.кегль.глава, weight: "bold", fill: а, hyphenate: false, название)
+      v(0.3em)
+      line(length: 100%, stroke: 0.8pt + а)
+    })
   }
 
   // Титул и оглавление
@@ -310,37 +298,105 @@
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// Главный шаблон
+// PDF: страницы, колонтитулы, титул и оглавление
 // ═════════════════════════════════════════════════════════════════════════
+#let _pdf-шаблон(т, вид-док, вид, название, подзаголовок, автор, дата, описание, титул, оглавление, глубина, тело) = {
+  let а = т.цвет.акцент
+  set page(
+    paper: "a4",
+    margin: т.страница.поля,
+    fill: т.цвет.фон,
+    header: _верхний(т),
+    footer: _нижний(т),
+    header-ascent: 35%,
+  )
+  set text(font: т.шрифт.текст, size: т.кегль.текст, lang: "ru", fill: т.цвет.текст, hyphenate: auto)
+  show math.equation: set text(font: т.шрифт.матем)
+  set par(
+    justify: т.абзац.выключка,
+    leading: т.абзац.интерлиньяж,
+    first-line-indent: т.абзац.отступ,
+    spacing: т.абзац.интервал,
+  )
+  set block(spacing: т.абзац.интервал + 0.25em)
+
+  // Заголовки. В книге `=` — глава с новой страницы, в заметке — раздел:
+  // заметка короткая и без нумерации (как в Obsidian).
+  if вид-док == "заметка" {
+    show heading.where(level: 1): it => context _раздел(т, it)
+    show heading.where(level: 2): it => context _подраздел(т, it)
+    show heading: it => block(above: 1em, below: 0.5em, sticky: true, text(weight: "bold", it.body))
+    _pdf-тело(т, вид-док, вид, название, подзаголовок, автор, дата, описание, титул, оглавление, глубина, тело)
+  } else {
+    set heading(numbering: "1.1")
+    show heading.where(level: 1): it => {
+      pagebreak(weak: true)
+      _сброс()
+      context _глава(т, it)
+    }
+    show heading.where(level: 2): it => context _раздел(т, it)
+    show heading.where(level: 3): it => context _подраздел(т, it)
+    show heading.where(level: 4): it => block(above: 1em, below: 0.5em, sticky: true, text(weight: "bold", it.body))
+    _pdf-тело(т, вид-док, вид, название, подзаголовок, автор, дата, описание, титул, оглавление, глубина, тело)
+  }
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════
+// Главные шаблоны
+// ═════════════════════════════════════════════════════════════════════════
+// Тема по умолчанию — из `--input тема=…` (приложение собирает заметку по
+// разу на тему), иначе «классика». Имя темы, которой нет, — ошибка.
+#let _тема-из-входа() = {
+  let имя = sys.inputs.at("тема", default: "классика")
+  assert(имя in темы, message: "нет темы «" + имя + "»; есть: " + темы.keys().join(", "))
+  темы.at(имя)
+}
+
+#let _документ(вид-док, т, вид, название, подзаголовок, автор, дата, описание, теги, титул, оглавление, глубина, тело) = {
+  let т = if т == auto { _тема-из-входа() } else { т }
+  _тема.update(т)
+  _вид.update(вид-док)
+
+  set document(title: название, author: if автор == none { () } else if type(автор) == str { автор } else { () })
+  show: it => context if веб() {
+    _веб-шаблон(т, вид-док, вид, название, подзаголовок, автор, дата, описание, теги, it)
+  } else {
+    _pdf-шаблон(т, вид-док, вид, название, подзаголовок, автор, дата, описание, титул, оглавление, глубина, it)
+  }
+  тело
+}
+
+/// Книга — большой конспект из глав: `=` — глава с номером.
 /// #show: конспект.with(
-///   тема: темы.классика,     // классика | ночь | своя
+///   тема: auto,               // auto — из --input тема=…; или темы.ночь, своя
 ///   вид: [Конспект],          // надпись над названием: Задачник, Шпаргалка…
 ///   название: [...], подзаголовок: [...], автор: [...], дата: [...],
 ///   описание: [...],          // 2–3 фразы на титул: для кого и как читать
-///   титул: true, оглавление: true, глубина: 2,
+///   титул: true, оглавление: true, глубина: 2,   // только PDF
 /// )
 #let конспект(
-  тема: темы.классика,
+  тема: auto,
   вид: [Конспект],
   название: none,
   подзаголовок: none,
   автор: none,
   дата: none,
   описание: none,
+  теги: (),
   титул: true,
   оглавление: true,
   глубина: 2,
   тело,
-) = {
-  let т = тема
-  let а = т.цвет.акцент
-  _тема.update(т)
+) = _документ("книга", тема, вид, название, подзаголовок, автор, дата, описание, теги, титул, оглавление, глубина, тело)
 
-  set document(title: название, author: if автор == none { () } else if type(автор) == str { автор } else { () })
-  show: it => context if веб() {
-    _веб-шаблон(т, вид, название, подзаголовок, автор, дата, описание, it)
-  } else {
-    _pdf-шаблон(т, вид, название, подзаголовок, автор, дата, описание, титул, оглавление, глубина, it)
-  }
-  тело
-}
+/// Заметка — одна тема целиком: `=` — раздел, нумерация сквозная.
+///   #import "/_konspekt/lib.typ": *
+///   #show: заметка.with(название: [SSH], теги: ("безопасность",))
+#let заметка(
+  тема: auto,
+  название: none,
+  описание: none,
+  теги: (),
+  тело,
+) = _документ("заметка", тема, none, название, none, none, none, описание, теги, false, false, 2, тело)

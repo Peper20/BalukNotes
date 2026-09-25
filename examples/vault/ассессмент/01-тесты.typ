@@ -1,8 +1,5 @@
 #import "/_konspekt/lib.typ": *
-#show: конспект.with(
-  тема: темы.at(sys.inputs.at("тема", default: "классика")),
-  название: [Проектирование тестов], титул: false, оглавление: false,
-)
+#show: конспект.with(название: [Проектирование тестов], титул: false, оглавление: false)
 #import "/_konspekt/theme.typ": бледный
 
 = Проектирование тестов

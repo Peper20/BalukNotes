@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Заметки</title>
+  <link rel="stylesheet" href="/api/fonts.css">
+  <link rel="stylesheet" href="/assets/konspekt.css">
+  <link rel="stylesheet" href="/api/themes.css">
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+  <div class="app" id="app">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-head"><a href="/" class="brand">Заметки</a></div>
+      <nav class="tree" id="tree" aria-label="Заметки"></nav>
+    </aside>
+    <div class="backdrop" id="backdrop"></div>
+    <div class="main">
+      <header class="topbar">
+        <button type="button" id="toggle-sidebar" class="icon" title="Список заметок" aria-label="Список заметок">☰</button>
+        <div class="crumbs" id="crumbs"></div>
+        <span class="status" id="status" role="status"></span>
+        <button type="button" id="refresh" class="icon" title="Обновить (R)" aria-label="Обновить">⟳</button>
+        <button type="button" id="theme" class="icon" title="Тема" aria-label="Тема">◐</button>
+        <button type="button" id="open-settings" class="icon" title="Настройки" aria-label="Настройки">⚙</button>
+      </header>
+      <section class="problems" id="problems" hidden></section>
+      <main class="k-note" id="note"></main>
+    </div>
+  </div>
+
+  <dialog class="settings" id="settings">
+    <form method="dialog">
+      <header><h2>Настройки</h2><button class="icon" value="close" aria-label="Закрыть">✕</button></header>
+      <div id="settings-body"></div>
+      <p class="settings-error" id="settings-error" hidden></p>
+    </form>
+  </dialog>
+</body>
+</html>

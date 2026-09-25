@@ -1,0 +1,57 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.92"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+notes-core = { path = "crates/notes-core" }
+notes-server = { path = "crates/notes-server" }
+
+# Typst закреплён точно: HTML-экспорт экспериментальный, API меняется между
+# версиями. Обновлять осознанно, с прогоном examples/vault (docs/tech-debt.md).
+typst = "=0.15.1"
+typst-html = "=0.15.1"
+typst-kit = { version = "=0.15.1", features = [
+    "embedded-fonts", "scan-fonts", "system-files", "system-downloader", "datetime",
+] }
+# Версии — как у самого typst (см. Cargo.lock): иначе две копии кэша comemo.
+comemo = "0.5.1"
+ecow = "0.2.6"
+
+anyhow = "1"
+axum = "0.8"
+clap = { version = "4.6", features = ["derive", "env"] }
+parking_lot = "0.12"
+rust-embed = { version = "8", features = ["mime-guess"] }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tempfile = "3"
+thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Pedantic слишком шумный в этих местах:
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+doc_markdown = "allow"
+non_ascii_literal = "allow"
+
+[profile.dev.package."*"]
+# Typst в отладочной сборке компилирует заметки в разы медленнее.
+opt-level = 2

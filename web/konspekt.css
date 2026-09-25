@@ -1,10 +1,14 @@
 /* Оформление заметок konspekt в HTML.
  *
  * Разметку выдаёт библиотека konspekt/ (HTML-ветка, классы k-…), цвета —
- * переменные --k-* из тем konspekt/theme.typ (их пишет сборщик в themes.css).
- * Размеры переведены из PDF: 1em = кегль текста (11pt), поэтому 9.2pt → 0.84em,
- * 14pt → 1.27em и т. д. Рисунки (SVG) заданы в em того же кегля и
- * масштабируются вместе с текстом.
+ * переменные --k-* из тем konspekt/theme.typ (сервер отдаёт их как
+ * /api/themes.css). Размеры переведены из PDF: 1em = кегль текста (11pt),
+ * поэтому 9.2pt → 0.84em, 14pt → 1.27em и т. д. Рисунки (SVG) заданы в em
+ * того же кегля и масштабируются вместе с текстом.
+ *
+ * Всё, кроме переменных, — внутри .k-note (контейнер заметки), чтобы не
+ * задевать интерфейс приложения. Настройки клиента приходят атрибутами на
+ * <html> (data-numbering, data-header-title, …) — см. раздел в конце.
  */
 
 :root {
@@ -15,283 +19,325 @@
   --k-measure: 40em;
 }
 
-@media (max-width: 640px) {
-  :root { --k-size: 17px; }
-}
-
 html {
   background: var(--k-bg);
   color: var(--k-text);
-  font-family: var(--k-font-text);
-  font-size: var(--k-size);
-  line-height: 1.5;
   -webkit-text-size-adjust: 100%;
 }
 
-body {
+.k-note {
+  box-sizing: border-box;
   margin: 0 auto;
   max-width: var(--k-measure);
   padding: 2.5em 1.2em 5em;
+  font-family: var(--k-font-text);
+  font-size: var(--k-size);
+  line-height: 1.5;
   hyphens: auto;
   text-rendering: optimizeLegibility;
+  /* Своя стопка слоёв: бледная цифра главы (z-index: -1) не уходит под фон страницы. */
+  isolation: isolate;
+
+  @media (max-width: 640px) { font-size: calc(var(--k-size) * 0.9); padding-inline: 0.9em; }
+
+  /* ── Текст ─────────────────────────────────────────────────────────────── */
+
+  p { margin: 0.55em 0; text-align: justify; }
+  p + p { text-indent: 1.2em; margin-top: 0; }
+  strong { font-weight: bold; }
+  a { color: var(--k-accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  math { font-family: var(--k-font-math); font-size: 1.05em; }
+  math[display="block"] { margin: 0.7em 0; }
+
+  ul, ol { padding-left: 1.4em; margin: 0.55em 0; }
+  li { margin: 0.2em 0; }
+  li::marker { color: var(--k-accent); font-weight: bold; }
+  dl { margin: 0.55em 0; }
+  dt { display: inline; font-weight: bold; color: var(--k-accent); }
+  dt::after { content: ": "; }
+  dd { display: inline; margin: 0; }
+  dd::after { content: ""; display: block; margin-bottom: 0.4em; }
+
+  /* ── Шапка заметки ─────────────────────────────────────────────────────── */
+
+  .k-title { margin: 1em 0 2.4em; text-align: center; }
+  .k-title-kind {
+    font-size: 0.82em; letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--k-accent);
+  }
+  .k-title h1 {
+    margin: 0.3em 0 0.25em; font-size: 2.4em; line-height: 1.15;
+    color: var(--k-accent); hyphens: manual;
+  }
+  .k-title::after {
+    content: ""; display: block; width: 40%; margin: 1.1em auto 0;
+    border-top: 0.6pt solid var(--k-accent);
+  }
+  .k-subtitle { font-size: 1.2em; text-align: center; margin: 0; text-indent: 0; }
+  .k-description, .k-byline { color: var(--k-muted); text-align: center; text-indent: 0; }
+  .k-description { font-style: italic; font-size: 0.92em; max-width: 80%; margin: 0.8em auto 0; }
+  .k-byline { font-size: 0.9em; }
+
+  /* ── Заголовки ─────────────────────────────────────────────────────────── */
+
+  .k-h { font-weight: bold; hyphens: manual; text-align: left; line-height: 1.25; }
+  .k-h .k-num { margin-right: 0.35em; }
+
+  /* Глава: надпись разрядкой, название, линейка, бледная крупная цифра. */
+  .k-h1 {
+    position: relative;
+    margin: 2.2em 0 1.1em; padding-bottom: 0.35em;
+    font-size: 2.27em; color: var(--k-accent);
+    border-bottom: 0.8pt solid var(--k-accent);
+  }
+  .k-h1 .k-num {
+    display: block; margin: 0 0 0.3em;
+    font-size: 0.36em; font-weight: normal; letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+  .k-h1 .k-num::before { content: "Глава "; }
+  .k-h1[data-num]::after {
+    content: attr(data-num);
+    position: absolute; right: 0; top: -0.45em; z-index: -1;
+    font-size: 2.9em; line-height: 1; color: var(--k-accent-pale);
+  }
+  .k-h2 { margin: 1.6em 0 0.6em; font-size: 1.27em; color: var(--k-accent); }
+  .k-h3 { margin: 1.3em 0 0.5em; font-size: 1.05em; }
+  .k-h4 { margin: 1em 0 0.4em; font-size: 1em; }
+  .k-h1 + p, .k-h2 + p, .k-h3 + p, .k-h4 + p { text-indent: 0; }
+
+  /* ── Врезки ────────────────────────────────────────────────────────────── */
+
+  .k-box {
+    --c: var(--k-box-def); --c-bg: var(--k-box-def-bg);
+    margin: 1.1em 0; padding: 0.75em 0.9em;
+    background: var(--c-bg);
+    border-left: 2.5pt solid var(--c);
+    border-radius: 0 2pt 2pt 0;
+    text-align: justify;
+  }
+  .k-box.k-thm { --c: var(--k-box-thm); --c-bg: var(--k-box-thm-bg); }
+  .k-box.k-example { --c: var(--k-box-example); --c-bg: var(--k-box-example-bg); }
+  .k-box.k-remark { --c: var(--k-box-remark); --c-bg: var(--k-box-remark-bg); }
+  .k-box.k-pitfall { --c: var(--k-box-pitfall); --c-bg: var(--k-box-pitfall-bg); }
+  .k-box.k-idea { --c: var(--k-box-idea); --c-bg: var(--k-box-idea-bg); }
+  .k-box.k-algo { --c: var(--k-box-algo); --c-bg: var(--k-box-algo-bg); }
+  .k-box > :first-child { margin-top: 0; }
+  .k-box > :last-child { margin-bottom: 0; }
+  .k-box p + p { text-indent: 0; margin-top: 0.45em; }
+  .k-label { font-weight: bold; color: var(--c); }
+  .k-step { font-weight: bold; color: var(--k-step); }
+
+  .k-answer {
+    width: fit-content; margin: 0.6em 0 0 auto; padding: 0.3em 0.7em;
+    border: 0.7pt solid var(--k-box-example); border-radius: 3pt;
+    background: var(--k-box-example-bg);
+  }
+  .k-answer-label { font-weight: bold; color: var(--k-box-example); }
+
+  .k-proof {
+    margin: 0.8em 0 1em; padding: 0.1em 0 0.1em 0.9em;
+    border-left: 0.6pt solid var(--k-line); font-size: 0.94em;
+    text-align: justify;
+  }
+  .k-proof-head { font-style: italic; color: var(--k-muted); }
+  .k-qed { float: right; color: var(--k-muted); font-family: var(--k-font-math); } /* ∎ нет в Gentium */
+
+  .k-formula {
+    margin: 1.1em 0; padding: 0.8em 0.9em;
+    background: var(--k-accent-bg); border: 0.7pt solid var(--k-accent); border-radius: 3pt;
+    text-align: center;
+  }
+  .k-formula-label {
+    text-align: left; margin-bottom: 0.2em;
+    font-size: 0.72em; font-weight: bold; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--k-accent);
+  }
+  .k-formula math[display="block"] { margin: 0.2em 0; }
+
+  .k-aside {
+    margin: 0.8em 0; padding: 0.05em 0 0.05em 0.9em;
+    border-left: 0.5pt solid var(--k-line);
+    font-size: 0.84em; line-height: 1.4; color: var(--k-muted);
+  }
+
+  .k-side { display: grid; grid-template-columns: 1fr var(--k-side-w, 40%); gap: 1.2em; align-items: center; }
+  @media (max-width: 640px) { .k-side { grid-template-columns: 1fr; } }
+
+  .k-caps { font-size: 0.8em; letter-spacing: 0.07em; text-transform: uppercase; }
+
+  /* ── Начало и конец главы ──────────────────────────────────────────────── */
+
+  .k-lead { margin: 0.4em 0 1.2em; font-size: 1.07em; color: var(--k-lead); text-align: justify; }
+
+  .k-plan {
+    margin: 0.8em 0 1.4em; padding: 0.75em 0;
+    border-top: 0.5pt solid var(--k-line); border-bottom: 0.5pt solid var(--k-line);
+  }
+  .k-plan-head, .k-quiz-head {
+    font-size: 0.74em; font-weight: bold; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--k-accent); margin-bottom: 0.4em;
+  }
+  .k-plan-list { list-style: none; padding: 0; margin: 0; }
+  .k-plan-list li { margin: 0.3em 0; }
+  .k-plan-list li::before { content: "→"; color: var(--k-accent); margin-right: 0.55em; }
+
+  .k-summary {
+    margin: 1.4em 0 1.2em; padding: 1em;
+    background: var(--k-surface); border-top: 1.5pt solid var(--k-accent);
+  }
+  .k-summary-head { font-weight: bold; font-size: 1.05em; color: var(--k-accent); margin-bottom: 0.5em; }
+  .k-summary-list { margin: 0; padding-left: 1.6em; }
+  .k-summary-list li { margin: 0.45em 0; padding-left: 0.2em; }
+
+  .k-quiz {
+    margin: 1.2em 0; padding: 0.8em 1em;
+    border: 0.8pt solid var(--k-quiz-border); border-radius: 6pt;
+  }
+  .k-quiz-head { color: var(--k-box-idea); }
+  .k-quiz-list { margin: 0; padding-left: 1.5em; }
+  .k-quiz-list li::marker { color: var(--k-box-idea); }
+  .k-quiz-answers {
+    margin-top: 0.6em; padding-top: 0.5em;
+    border-top: 0.5pt dashed var(--k-line);
+    font-size: 0.84em; color: var(--k-muted);
+  }
+  .k-quiz-answers summary { cursor: pointer; font-weight: bold; user-select: none; }
+  .k-quiz-answers summary:hover { color: var(--k-box-idea); }
+
+  /* ── Таблицы ───────────────────────────────────────────────────────────── */
+
+  table {
+    width: 100%; margin: 1em 0 1.2em; border-collapse: collapse;
+    font-size: 0.94em; line-height: 1.35;
+    border-top: 1pt solid var(--k-table-rule); border-bottom: 1pt solid var(--k-table-rule);
+  }
+  th, td { padding: 0.3em 0.6em; text-align: left; vertical-align: middle; }
+  th { font-weight: bold; border-bottom: 0.5pt solid var(--k-table-head-rule); }
+  tbody tr + tr td { border-top: 0.3pt solid var(--k-line); }
+  .k-hl { background: var(--k-hl-линия); }
+  .k-hl-второй { background: var(--k-hl-второй); }
+  .k-hl-третий { background: var(--k-hl-третий); }
+  .k-pitfalls td { width: 50%; vertical-align: top; }
+  .k-bad { color: var(--k-box-pitfall); }
+  .k-good { color: var(--k-box-example); }
+  /* Широкая таблица на телефоне прокручивается сама, а не страница. */
+  @media (max-width: 640px) { table { display: block; overflow-x: auto; } }
+
+  /* ── Код ───────────────────────────────────────────────────────────────── */
+
+  code { font-family: var(--k-font-code); font-variant-ligatures: none; font-feature-settings: "calt" 0; }
+  :not(pre) > code {
+    font-size: 0.86em; padding: 0.05em 0.25em; border-radius: 2pt;
+    background: var(--k-surface); color: var(--k-code-text);
+  }
+  pre {
+    margin: 0.9em 0; padding: 0.6em 0.8em; overflow-x: auto;
+    background: var(--k-surface); border-radius: 3pt;
+    font-size: 0.8em; line-height: 1.5; color: var(--k-code-text);
+    hyphens: none; text-align: left;
+  }
+  pre code strong { font-weight: 700; }
+
+  .k-listing { margin: 0.9em 0; }
+  .k-listing pre { margin: 0; counter-reset: k-line; }
+  .k-listing-cap, .k-listing-cx { font-size: 0.84em; color: var(--k-muted); }
+  .k-listing-cap { margin-bottom: 0.35em; }
+  .k-listing-cx { margin-top: 0.35em; }
+  .k-lang { font-weight: bold; color: var(--k-accent); margin-right: 0.3em; }
+  .k-line { display: inline-block; min-width: 100%; box-sizing: border-box; padding: 0 0.3em; margin: 0 -0.3em; }
+  .k-line.k-hl { background: var(--k-code-hl); }
+  .k-numbered .k-line { counter-increment: k-line; }
+  .k-numbered .k-line::before {
+    content: counter(k-line); display: inline-block; width: 1.6em; margin-right: 1em;
+    text-align: right; color: var(--k-muted); opacity: 0.75;
+  }
+  .k-mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.25em; height: 1.25em; margin-left: 0.5em; vertical-align: 0.05em;
+    border-radius: 50%; background: var(--k-accent); color: var(--k-bg);
+    font-family: var(--k-font-text); font-size: 0.72em; font-weight: bold; line-height: 1;
+  }
+  pre .k-mark { float: right; margin-top: 0.15em; }
+
+  /* ── Рисунки ───────────────────────────────────────────────────────────── */
+
+  figure { margin: 1.3em 0; }
+  figcaption {
+    width: fit-content; max-width: 90%; margin: 0.7em auto 0;
+    font-size: 0.84em; line-height: 1.4; text-align: left;
+  }
+  .k-fig-num { font-weight: bold; color: var(--k-accent); }
+  .k-frame { display: flex; justify-content: center; max-width: 100%; }
+  /* Подписи рисунков в PDF — 9.2pt при тексте 11pt; с экрана это мелко,
+   * поэтому рисунок крупнее на 15% (SVG задан в em — растёт целиком). */
+  .k-fig { font-size: 1.15em; }
+  .k-layout { justify-content: flex-start; }
+  /* Размер SVG задан инлайн в em: на узком экране ужимаем по ширине. */
+  .k-frame svg { max-width: 100% !important; height: auto !important; }
+  .k-row {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.8em;
+  }
+  .k-row-sep { font-size: 1.4em; }
+  .k-center { text-align: center; }
+  .k-right { text-align: right; }
+  .k-center > .k-frame { justify-content: center; }
+
+  /* Варианты рисунка по темам: видим только вариант текущей темы. */
+  .k-frame-v { display: none; }
+
+  /* ── Телефон ───────────────────────────────────────────────────────────── */
+  /* Выключка по ширине в узкой колонке без переносов даёт дыры между словами;
+   * ужатый рисунок нечитаем — пусть лучше прокручивается пальцем. */
+  @media (max-width: 640px) {
+    p, .k-box, .k-proof, .k-lead { text-align: left; }
+    .k-frame { overflow-x: auto; justify-content: flex-start; }
+    .k-frame svg { max-width: none !important; }
+    .k-fig { font-size: 1em; }
+    .k-h1 { font-size: 1.9em; }
+    .k-title h1 { font-size: 2em; }
+  }
+
+  /* ── Настройки клиента ──────────────────────────────────────────────── */
+  /* По умолчанию номера заголовков видны только в книгах (вид документа
+     ставит библиотека: <article class="k-doc" data-doc="книга|заметка">). */
+  :root:not([data-numbering="all"]) & .k-doc:not([data-doc="книга"]) .k-num,
+  :root[data-numbering="none"] & .k-num { display: none; }
+
+  :root[data-chapters="plain"] & {
+    .k-h1 { border-bottom: none; font-size: 1.6em; margin-top: 1.8em; }
+    .k-h1::after { content: none; }
+    .k-h1 .k-num { display: inline; margin: 0 0.35em 0 0; font-size: inherit; font-weight: bold; letter-spacing: 0; text-transform: none; }
+    .k-h1 .k-num::before { content: none; }
+  }
+
+  :root[data-header-title="false"] & .k-title h1,
+  :root[data-header-title="false"] & .k-title::after { display: none; }
+  :root[data-header-kind="false"] & .k-title-kind,
+  :root[data-header-description="false"] & .k-description,
+  :root[data-header-byline="false"] & .k-byline,
+  :root[data-header-tags="false"] & .k-tags { display: none; }
+
+  /* ── Ссылки между заметками и теги ──────────────────────────────────── */
+  .k-link { border-bottom: 1px solid color-mix(in srgb, var(--k-accent) 35%, transparent); }
+  .k-link:hover { text-decoration: none; border-bottom-color: var(--k-accent); }
+  .k-link-broken { color: var(--k-box-pitfall); border-bottom: 1px dashed var(--k-box-pitfall); cursor: help; }
+
+  .k-tags { list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4em; padding: 0; margin: 0.9em 0 0; }
+  .k-tags li {
+    margin: 0; padding: 0.1em 0.6em; border-radius: 1em; font-size: 0.8em;
+    background: var(--k-surface); color: var(--k-muted); border: 1px solid var(--k-line);
+  }
+  .k-tags li::before { content: "#"; opacity: 0.6; }
 }
 
-/* ── Текст ─────────────────────────────────────────────────────────────── */
-
-p { margin: 0.55em 0; text-align: justify; }
-p + p { text-indent: 1.2em; margin-top: 0; }
-strong { font-weight: bold; }
-a { color: var(--k-accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
-math { font-family: var(--k-font-math); font-size: 1.05em; }
-math[display="block"] { margin: 0.7em 0; }
-
-ul, ol { padding-left: 1.4em; margin: 0.55em 0; }
-li { margin: 0.2em 0; }
-li::marker { color: var(--k-accent); font-weight: bold; }
-dl { margin: 0.55em 0; }
-dt { display: inline; font-weight: bold; color: var(--k-accent); }
-dt::after { content: ": "; }
-dd { display: inline; margin: 0; }
-dd::after { content: ""; display: block; margin-bottom: 0.4em; }
-
-/* ── Шапка заметки ─────────────────────────────────────────────────────── */
-
-.k-title { margin: 1em 0 2.4em; text-align: center; }
-.k-title-kind {
-  font-size: 0.82em; letter-spacing: 0.3em; text-transform: uppercase;
-  color: var(--k-accent);
+/* ── Статический сайт (notes build) ─────────────────────────────────── */
+.k-static { margin: 0; }
+.k-toolbar { position: fixed; top: 0.6rem; right: 0.8rem; z-index: 10; display: flex; gap: 0.5rem; font: 13px/1 var(--k-font-code); }
+.k-toolbar a, .k-toolbar button {
+  color: var(--k-muted); background: var(--k-surface); border: 1px solid var(--k-line);
+  border-radius: 4px; padding: 0.35rem 0.6rem; cursor: pointer; font: inherit; text-decoration: none;
 }
-.k-title h1 {
-  margin: 0.3em 0 0.25em; font-size: 2.4em; line-height: 1.15;
-  color: var(--k-accent); hyphens: manual;
-}
-.k-title::after {
-  content: ""; display: block; width: 40%; margin: 1.1em auto 0;
-  border-top: 0.6pt solid var(--k-accent);
-}
-.k-subtitle { font-size: 1.2em; text-align: center; margin: 0; text-indent: 0; }
-.k-description, .k-byline { color: var(--k-muted); text-align: center; text-indent: 0; }
-.k-description { font-style: italic; font-size: 0.92em; max-width: 80%; margin: 0.8em auto 0; }
-.k-byline { font-size: 0.9em; }
-
-/* ── Заголовки ─────────────────────────────────────────────────────────── */
-
-.k-h { font-weight: bold; hyphens: manual; text-align: left; line-height: 1.25; }
-.k-h .k-num { margin-right: 0.35em; }
-
-/* Глава: надпись разрядкой, название, линейка, бледная крупная цифра. */
-.k-h1 {
-  position: relative;
-  margin: 2.2em 0 1.1em; padding-bottom: 0.35em;
-  font-size: 2.27em; color: var(--k-accent);
-  border-bottom: 0.8pt solid var(--k-accent);
-}
-.k-h1 .k-num {
-  display: block; margin: 0 0 0.3em;
-  font-size: 0.36em; font-weight: normal; letter-spacing: 0.22em;
-  text-transform: uppercase;
-}
-.k-h1 .k-num::before { content: "Глава "; }
-.k-h1[data-num]::after {
-  content: attr(data-num);
-  position: absolute; right: 0; top: -0.45em; z-index: -1;
-  font-size: 2.9em; line-height: 1; color: var(--k-accent-pale);
-}
-.k-h2 { margin: 1.6em 0 0.6em; font-size: 1.27em; color: var(--k-accent); }
-.k-h3 { margin: 1.3em 0 0.5em; font-size: 1.05em; }
-.k-h4 { margin: 1em 0 0.4em; font-size: 1em; }
-.k-h1 + p, .k-h2 + p, .k-h3 + p, .k-h4 + p { text-indent: 0; }
-
-/* ── Врезки ────────────────────────────────────────────────────────────── */
-
-.k-box {
-  --c: var(--k-box-def); --c-bg: var(--k-box-def-bg);
-  margin: 1.1em 0; padding: 0.75em 0.9em;
-  background: var(--c-bg);
-  border-left: 2.5pt solid var(--c);
-  border-radius: 0 2pt 2pt 0;
-  text-align: justify;
-}
-.k-box.k-thm { --c: var(--k-box-thm); --c-bg: var(--k-box-thm-bg); }
-.k-box.k-example { --c: var(--k-box-example); --c-bg: var(--k-box-example-bg); }
-.k-box.k-remark { --c: var(--k-box-remark); --c-bg: var(--k-box-remark-bg); }
-.k-box.k-pitfall { --c: var(--k-box-pitfall); --c-bg: var(--k-box-pitfall-bg); }
-.k-box.k-idea { --c: var(--k-box-idea); --c-bg: var(--k-box-idea-bg); }
-.k-box.k-algo { --c: var(--k-box-algo); --c-bg: var(--k-box-algo-bg); }
-.k-box > :first-child { margin-top: 0; }
-.k-box > :last-child { margin-bottom: 0; }
-.k-box p + p { text-indent: 0; margin-top: 0.45em; }
-.k-label { font-weight: bold; color: var(--c); }
-.k-step { font-weight: bold; color: var(--k-step); }
-
-.k-answer {
-  width: fit-content; margin: 0.6em 0 0 auto; padding: 0.3em 0.7em;
-  border: 0.7pt solid var(--k-box-example); border-radius: 3pt;
-  background: var(--k-box-example-bg);
-}
-.k-answer-label { font-weight: bold; color: var(--k-box-example); }
-
-.k-proof {
-  margin: 0.8em 0 1em; padding: 0.1em 0 0.1em 0.9em;
-  border-left: 0.6pt solid var(--k-line); font-size: 0.94em;
-  text-align: justify;
-}
-.k-proof-head { font-style: italic; color: var(--k-muted); }
-.k-qed { float: right; color: var(--k-muted); }
-
-.k-formula {
-  margin: 1.1em 0; padding: 0.8em 0.9em;
-  background: var(--k-accent-bg); border: 0.7pt solid var(--k-accent); border-radius: 3pt;
-  text-align: center;
-}
-.k-formula-label {
-  text-align: left; margin-bottom: 0.2em;
-  font-size: 0.72em; font-weight: bold; letter-spacing: 0.1em; text-transform: uppercase;
-  color: var(--k-accent);
-}
-.k-formula math[display="block"] { margin: 0.2em 0; }
-
-.k-aside {
-  margin: 0.8em 0; padding: 0.05em 0 0.05em 0.9em;
-  border-left: 0.5pt solid var(--k-line);
-  font-size: 0.84em; line-height: 1.4; color: var(--k-muted);
-}
-
-.k-side { display: grid; grid-template-columns: 1fr var(--k-side-w, 40%); gap: 1.2em; align-items: center; }
-@media (max-width: 640px) { .k-side { grid-template-columns: 1fr; } }
-
-.k-caps { font-size: 0.8em; letter-spacing: 0.07em; text-transform: uppercase; }
-
-/* ── Начало и конец главы ──────────────────────────────────────────────── */
-
-.k-lead { margin: 0.4em 0 1.2em; font-size: 1.07em; color: var(--k-lead); text-align: justify; }
-
-.k-plan {
-  margin: 0.8em 0 1.4em; padding: 0.75em 0;
-  border-top: 0.5pt solid var(--k-line); border-bottom: 0.5pt solid var(--k-line);
-}
-.k-plan-head, .k-quiz-head {
-  font-size: 0.74em; font-weight: bold; letter-spacing: 0.12em; text-transform: uppercase;
-  color: var(--k-accent); margin-bottom: 0.4em;
-}
-.k-plan-list { list-style: none; padding: 0; margin: 0; }
-.k-plan-list li { margin: 0.3em 0; }
-.k-plan-list li::before { content: "→"; color: var(--k-accent); margin-right: 0.55em; }
-
-.k-summary {
-  margin: 1.4em 0 1.2em; padding: 1em;
-  background: var(--k-surface); border-top: 1.5pt solid var(--k-accent);
-}
-.k-summary-head { font-weight: bold; font-size: 1.05em; color: var(--k-accent); margin-bottom: 0.5em; }
-.k-summary-list { margin: 0; padding-left: 1.6em; }
-.k-summary-list li { margin: 0.45em 0; padding-left: 0.2em; }
-
-.k-quiz {
-  margin: 1.2em 0; padding: 0.8em 1em;
-  border: 0.8pt solid var(--k-quiz-border); border-radius: 6pt;
-}
-.k-quiz-head { color: var(--k-box-idea); }
-.k-quiz-list { margin: 0; padding-left: 1.5em; }
-.k-quiz-list li::marker { color: var(--k-box-idea); }
-.k-quiz-answers {
-  margin-top: 0.6em; padding-top: 0.5em;
-  border-top: 0.5pt dashed var(--k-line);
-  font-size: 0.84em; color: var(--k-muted);
-}
-.k-quiz-answers summary { cursor: pointer; font-weight: bold; user-select: none; }
-.k-quiz-answers summary:hover { color: var(--k-box-idea); }
-
-/* ── Таблицы ───────────────────────────────────────────────────────────── */
-
-table {
-  width: 100%; margin: 1em 0 1.2em; border-collapse: collapse;
-  font-size: 0.94em; line-height: 1.35;
-  border-top: 1pt solid var(--k-table-rule); border-bottom: 1pt solid var(--k-table-rule);
-}
-th, td { padding: 0.3em 0.6em; text-align: left; vertical-align: middle; }
-th { font-weight: bold; border-bottom: 0.5pt solid var(--k-table-head-rule); }
-tbody tr + tr td { border-top: 0.3pt solid var(--k-line); }
-.k-hl { background: var(--k-hl-линия); }
-.k-hl-второй { background: var(--k-hl-второй); }
-.k-hl-третий { background: var(--k-hl-третий); }
-.k-pitfalls td { width: 50%; vertical-align: top; }
-.k-bad { color: var(--k-box-pitfall); }
-.k-good { color: var(--k-box-example); }
-/* Широкая таблица на телефоне прокручивается сама, а не страница. */
-@media (max-width: 640px) { table { display: block; overflow-x: auto; } }
-
-/* ── Код ───────────────────────────────────────────────────────────────── */
-
-code { font-family: var(--k-font-code); font-variant-ligatures: none; font-feature-settings: "calt" 0; }
-:not(pre) > code {
-  font-size: 0.86em; padding: 0.05em 0.25em; border-radius: 2pt;
-  background: var(--k-surface); color: var(--k-code-text);
-}
-pre {
-  margin: 0.9em 0; padding: 0.6em 0.8em; overflow-x: auto;
-  background: var(--k-surface); border-radius: 3pt;
-  font-size: 0.8em; line-height: 1.5; color: var(--k-code-text);
-  hyphens: none; text-align: left;
-}
-pre code strong { font-weight: 700; }
-
-.k-listing { margin: 0.9em 0; }
-.k-listing pre { margin: 0; counter-reset: k-line; }
-.k-listing-cap, .k-listing-cx { font-size: 0.84em; color: var(--k-muted); }
-.k-listing-cap { margin-bottom: 0.35em; }
-.k-listing-cx { margin-top: 0.35em; }
-.k-lang { font-weight: bold; color: var(--k-accent); margin-right: 0.3em; }
-.k-line { display: inline-block; min-width: 100%; box-sizing: border-box; padding: 0 0.3em; margin: 0 -0.3em; }
-.k-line.k-hl { background: var(--k-code-hl); }
-.k-numbered .k-line { counter-increment: k-line; }
-.k-numbered .k-line::before {
-  content: counter(k-line); display: inline-block; width: 1.6em; margin-right: 1em;
-  text-align: right; color: var(--k-muted); opacity: 0.75;
-}
-.k-mark {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 1.25em; height: 1.25em; margin-left: 0.5em; vertical-align: 0.05em;
-  border-radius: 50%; background: var(--k-accent); color: var(--k-bg);
-  font-family: var(--k-font-text); font-size: 0.72em; font-weight: bold; line-height: 1;
-}
-pre .k-mark { float: right; margin-top: 0.15em; }
-
-/* ── Рисунки ───────────────────────────────────────────────────────────── */
-
-figure { margin: 1.3em 0; }
-figcaption {
-  width: fit-content; max-width: 90%; margin: 0.7em auto 0;
-  font-size: 0.84em; line-height: 1.4; text-align: left;
-}
-.k-fig-num { font-weight: bold; color: var(--k-accent); }
-.k-frame { display: flex; justify-content: center; max-width: 100%; }
-/* Подписи рисунков в PDF — 9.2pt при тексте 11pt; с экрана это мелко,
- * поэтому рисунок крупнее на 15% (SVG задан в em — растёт целиком). */
-.k-fig { font-size: 1.15em; }
-.k-layout { justify-content: flex-start; }
-/* Размер SVG задан инлайн в em: на узком экране ужимаем по ширине. */
-.k-frame svg { max-width: 100% !important; height: auto !important; }
-.k-row {
-  display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.8em;
-}
-.k-row-sep { font-size: 1.4em; }
-.k-center { text-align: center; }
-.k-right { text-align: right; }
-.k-center > .k-frame { justify-content: center; }
-
-/* Варианты рисунка по темам: видим только вариант текущей темы. */
-.k-frame-v { display: none; }
-
-/* ── Телефон ───────────────────────────────────────────────────────────── */
-/* Выключка по ширине в узкой колонке без переносов даёт дыры между словами;
- * ужатый рисунок нечитаем — пусть лучше прокручивается пальцем. */
-@media (max-width: 640px) {
-  p, .k-box, .k-proof, .k-lead { text-align: left; }
-  body { padding-inline: 0.9em; }
-  .k-frame { overflow-x: auto; justify-content: flex-start; }
-  .k-frame svg { max-width: none !important; }
-  .k-fig { font-size: 1em; }
-  .k-h1 { font-size: 1.9em; }
-  .k-title h1 { font-size: 2em; }
-}
+.k-toolbar a:hover, .k-toolbar button:hover { color: var(--k-accent); }
+.k-index { columns: 2 16rem; }

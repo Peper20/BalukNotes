@@ -1,0 +1,104 @@
+/* Интерфейс приложения вокруг заметки: боковая панель, верхняя строка,
+ * ошибки, настройки. Цвета — те же переменные тем, что у заметок. */
+
+body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text); background: var(--k-bg); }
+
+.app { display: grid; grid-template-columns: 17rem 1fr; min-height: 100vh; }
+.app.sidebar-hidden { grid-template-columns: 0 1fr; }
+.app.sidebar-hidden .sidebar { visibility: hidden; }
+
+/* ── Боковая панель ─────────────────────────────────────────────────── */
+.sidebar {
+  position: sticky; top: 0; height: 100vh; overflow-y: auto; box-sizing: border-box;
+  border-right: 1px solid var(--k-line); background: var(--k-surface);
+}
+.sidebar-head { padding: 0.9rem 1rem 0.5rem; }
+.brand { font-weight: 600; color: var(--k-text); text-decoration: none; letter-spacing: 0.02em; }
+.tree { padding: 0 0.5rem 2rem; }
+.tree details { margin-left: 0.4rem; }
+.tree summary {
+  cursor: pointer; padding: 0.2rem 0.4rem; border-radius: 4px; color: var(--k-muted);
+  list-style: none; user-select: none;
+}
+.tree summary::before { content: "▸"; display: inline-block; width: 1em; transition: transform 0.1s; }
+.tree details[open] > summary::before { transform: rotate(90deg); }
+.tree summary:hover { color: var(--k-text); }
+.tree .items { margin-left: 0.8rem; border-left: 1px solid var(--k-line); padding-left: 0.2rem; }
+.tree a {
+  display: block; padding: 0.2rem 0.5rem; border-radius: 4px;
+  color: var(--k-text); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tree a:hover { background: color-mix(in srgb, var(--k-accent) 10%, transparent); }
+.tree a.active { background: color-mix(in srgb, var(--k-accent) 18%, transparent); color: var(--k-accent); font-weight: 600; }
+.tree a.book::after { content: "книга"; margin-left: 0.5em; font-size: 0.75em; color: var(--k-muted); }
+
+/* ── Верхняя строка ─────────────────────────────────────────────────── */
+.main { min-width: 0; }
+.topbar {
+  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.4rem 0.6rem; background: color-mix(in srgb, var(--k-bg) 88%, transparent);
+  backdrop-filter: blur(6px); border-bottom: 1px solid var(--k-line);
+}
+.crumbs { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--k-muted); }
+.crumbs b { color: var(--k-text); font-weight: 600; }
+.status { color: var(--k-muted); font-size: 0.85em; white-space: nowrap; }
+.status.busy::before { content: "● "; color: var(--k-accent); }
+button.icon {
+  font: inherit; font-size: 1.05rem; line-height: 1; width: 2rem; height: 2rem; border-radius: 6px;
+  border: 1px solid transparent; background: none; color: var(--k-muted); cursor: pointer;
+}
+button.icon:hover { color: var(--k-accent); border-color: var(--k-line); background: var(--k-surface); }
+
+/* ── Ошибки компиляции ──────────────────────────────────────────────── */
+.problems { margin: 0.8rem auto 0; max-width: 52rem; padding: 0 1rem; }
+.problems .errors {
+  border: 1px solid var(--k-box-pitfall); border-left-width: 4px; border-radius: 4px;
+  background: var(--k-box-pitfall-bg); padding: 0.6rem 0.9rem;
+}
+.problems h3 { margin: 0 0 0.3rem; font-size: 1em; color: var(--k-box-pitfall); }
+.problems ul { margin: 0; padding-left: 1.1rem; }
+.problems li { margin: 0.25rem 0; }
+.problems code { font: 0.9em/1.4 var(--k-font-code); white-space: pre-wrap; }
+.problems .where { color: var(--k-muted); font-family: var(--k-font-code); font-size: 0.85em; }
+.problems details { margin-top: 0.5rem; color: var(--k-muted); }
+.problems summary { cursor: pointer; }
+
+/* ── Пустое состояние и список ──────────────────────────────────────── */
+.welcome { color: var(--k-muted); }
+.welcome ul { columns: 2 16rem; }
+
+/* ── Настройки ──────────────────────────────────────────────────────── */
+.settings {
+  width: min(34rem, 94vw); max-height: 88vh; padding: 0; border: 1px solid var(--k-line); border-radius: 10px;
+  background: var(--k-bg); color: var(--k-text); box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
+}
+.settings::backdrop { background: rgb(0 0 0 / 0.35); }
+.settings header {
+  display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0;
+  padding: 0.7rem 1rem; background: var(--k-bg); border-bottom: 1px solid var(--k-line);
+}
+.settings h2 { margin: 0; font-size: 1.1rem; }
+.settings fieldset { border: none; margin: 0; padding: 0.6rem 1rem; }
+.settings legend { font-weight: 600; color: var(--k-accent); padding: 0.4rem 0 0.2rem; }
+.setting { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0.2rem 1rem; padding: 0.35rem 0; }
+.setting .help { grid-column: 1 / -1; color: var(--k-muted); font-size: 0.85em; }
+.setting select, .setting input[type="number"] {
+  font: inherit; padding: 0.2rem 0.4rem; border-radius: 5px;
+  border: 1px solid var(--k-line); background: var(--k-surface); color: var(--k-text);
+}
+.setting input[type="number"] { width: 5.5rem; }
+.setting input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: var(--k-accent); }
+.settings-error { margin: 0 1rem 1rem; color: var(--k-box-pitfall); }
+
+/* ── Телефон: панель поверх заметки ─────────────────────────────────── */
+.backdrop { display: none; }
+@media (max-width: 800px) {
+  .app, .app.sidebar-hidden { grid-template-columns: 1fr; }
+  .sidebar { position: fixed; z-index: 20; left: 0; top: 0; width: min(20rem, 85vw); transition: transform 0.15s; }
+  .app:not(.sidebar-open) .sidebar { transform: translateX(-100%); }
+  .app.sidebar-open .backdrop { display: block; position: fixed; inset: 0; z-index: 15; background: rgb(0 0 0 / 0.4); }
+  .status { display: none; }
+}
+
+/* Якорь не прячется под липкой верхней строкой. */
+.k-note [id] { scroll-margin-top: 3.5rem; }
