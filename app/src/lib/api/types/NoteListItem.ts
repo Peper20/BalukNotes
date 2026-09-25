@@ -13,4 +13,8 @@ name: string,
 /**
  * Папка: `Сеть`; для корня — пустая строка.
  */
-folder: string, };
+folder: string, 
+/**
+ * Название из шаблона (`название: […]`), если есть.
+ */
+title: string | null, tags: Array<string>, };

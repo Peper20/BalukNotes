@@ -8,6 +8,7 @@
   import { app } from "../lib/app.svelte";
   import { showChapter, splitBook } from "../lib/book";
   import type { NotePage } from "../lib/api";
+  import { tagHref } from "../lib/ids";
   import { ui } from "../lib/ui.svelte";
   import Loading from "./Loading.svelte";
 
@@ -28,8 +29,11 @@
     untrack(() => {
       if (!app.page) return;
       if (scrollToAnchor(app.anchor)) return;
-      if (ui.book) setChapter(0);
-      scrollTo(0, 0);
+      // «Назад» к месту без якоря — туда, где были; иначе — к началу.
+      const place = app.restore;
+      app.restore = null;
+      if (ui.book) setChapter(place?.chapter ?? 0);
+      scrollTo(0, place?.y ?? 0);
     });
   });
 
@@ -40,17 +44,27 @@
     const book = r && app.settings["books.pages"] === "chapters" ? splitBook(html) : null;
     ui.book = book;
     if (book) {
+      for (const n of book.intro) if (n instanceof Element) linkTags(n);
       el.replaceChildren(book.fragment);
       const byHash = app.anchor != null ? book.byAnchor.get(app.anchor) : undefined;
       setChapter(intent.mode === "keep" && intent.chapter != null ? intent.chapter : (byHash ?? 0));
     } else {
       el.innerHTML = html;
+      linkTags(el);
       app.chapter = null;
     }
     if (intent.mode === "keep") scrollTo(0, intent.y);
     else if (intent.mode === "anchor" && scrollToAnchor(app.anchor)) holdAnchor(page.id);
     else scrollTo(0, 0);
     document.documentElement.dataset.state = "ready";
+  }
+
+  /** Теги в шапке заметки — ссылки на страницу тега. */
+  function linkTags(root: Element) {
+    for (const li of root.querySelectorAll(".k-tags li")) {
+      const tag = li.textContent?.trim();
+      if (tag) li.replaceChildren(Object.assign(document.createElement("a"), { href: tagHref(tag), textContent: tag }));
+    }
   }
 
   function setChapter(k: number) {

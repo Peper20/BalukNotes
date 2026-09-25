@@ -7,7 +7,10 @@ export const encodeId = (id: string): string => id.split("/").map(encodeURICompo
 export const noteHref = (id: string, anchor?: string | null): string =>
   `/n/${encodeId(id)}${anchor ? `#${encodeURIComponent(anchor)}` : ""}`;
 
-export type Route = { kind: "home" } | { kind: "note"; id: string };
+export type Route = { kind: "home" } | { kind: "note"; id: string } | { kind: "tags"; tag: string | null };
+
+/** Адрес страницы тегов (или одного тега). */
+export const tagHref = (tag?: string | null): string => (tag ? `/tags/${encodeURIComponent(tag)}` : "/tags");
 
 /** Маршрут по адресу страницы. Неверное кодирование — главная. */
 export function parseRoute(pathname: string): Route {
@@ -17,6 +20,7 @@ export function parseRoute(pathname: string): Route {
   } catch {
     return { kind: "home" };
   }
+  if (path === "/tags" || path.startsWith("/tags/")) return { kind: "tags", tag: path.slice(6) || null };
   const id = path.startsWith("/n/") ? path.slice(3).replace(/\/+$/, "") : "";
   return id ? { kind: "note", id } : { kind: "home" };
 }

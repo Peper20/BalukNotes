@@ -215,3 +215,50 @@ fn concurrent_requests_share_one_build() {
     });
     assert!(std::sync::Arc::ptr_eq(&a, &b), "второй запрос дождался первой сборки, а не собрал заново");
 }
+
+#[test]
+fn search_finds_sections_with_exact_anchors() {
+    let hits = NOTES.search("итоги второй", 10).unwrap();
+    let first = &hits[0];
+    assert_eq!(first.id.as_str(), "Книга");
+    assert_eq!(first.heading.as_deref(), Some("Итоги"));
+    assert_eq!(first.anchor.as_deref(), Some("Итоги-2"), "повтор заголовка — id как у отрисовки");
+
+    let hits = NOTES.search("ОСОБЫЙ раздел", 10).unwrap();
+    assert_eq!(hits[0].anchor.as_deref(), Some("особый"), "метка заголовка — его id");
+
+    let hits = NOTES.search("ssh-keygen", 10).unwrap();
+    assert!(hits.iter().any(|h| h.id.as_str() == "Сеть/SSH"), "код в тексте ищется");
+    assert!(hits[0].snippet.iter().any(|f| f.hit && f.text == "ssh-keygen"));
+
+    assert!(NOTES.search("нетакогословавхранилище", 10).unwrap().is_empty());
+    assert!(NOTES.search("   ", 10).unwrap().is_empty());
+}
+
+#[test]
+fn index_has_titles_and_tags() {
+    let index = NOTES.index().unwrap();
+    let book = index.outline(&id("Книга")).unwrap();
+    assert_eq!(book.title.as_deref(), Some("Тестовая книга"));
+    assert_eq!(book.tags, ["книга", "фикстура"]);
+    let plain = index.outline(&id("Особые случаи/Без шаблона")).unwrap();
+    assert_eq!(plain.title, None);
+}
+
+#[test]
+fn preview_of_note_and_section() {
+    let p = NOTES.preview(&id("Сеть/SSH"), None).unwrap();
+    assert_eq!(p.title, "SSH");
+    assert_eq!(p.heading, None);
+    assert!(p.text.starts_with("SSH — протокол"), "{}", p.text);
+    // Якорь — как в ссылке: текст заголовка, его слаг или метка.
+    for anchor in ["Смена порта", "Смена-порта"] {
+        let p = NOTES.preview(&id("Сеть/SSH"), Some(anchor)).unwrap();
+        assert_eq!(p.heading.as_deref(), Some("Смена порта"), "{anchor}");
+    }
+    let p = NOTES.preview(&id("Книга"), Some("особый")).unwrap();
+    assert_eq!(p.heading.as_deref(), Some("Особый раздел"));
+    let p = NOTES.preview(&id("Книга"), Some("Итоги-2")).unwrap();
+    assert!(p.text.contains("второй главы"), "{}", p.text);
+    assert!(NOTES.preview(&id("Нет/такой"), None).is_err());
+}

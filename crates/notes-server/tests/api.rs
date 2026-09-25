@@ -150,3 +150,31 @@ async fn pdf_export() {
         StatusCode::BAD_REQUEST
     );
 }
+
+#[tokio::test]
+async fn search_preview_and_note_meta() {
+    let (app, _dir) = app();
+    let (status, hits) = call(app.clone(), "GET", &format!("/api/search?q={}", uri("итоги второй")), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(hits[0]["id"], "Книга");
+    assert_eq!(hits[0]["anchor"], "Итоги-2");
+
+    let (status, p) =
+        call(app.clone(), "GET", &format!("{}?anchor={}", uri("/api/preview/Сеть/SSH"), uri("Смена порта")), None)
+            .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(p["heading"], "Смена порта");
+    assert_eq!(call(app.clone(), "GET", &uri("/api/preview/Нет/такой"), None).await.0, StatusCode::NOT_FOUND);
+
+    let (_, list) = call(app.clone(), "GET", "/api/notes", None).await;
+    let book = list.as_array().unwrap().iter().find(|n| n["id"] == "Книга").unwrap();
+    assert_eq!(book["title"], "Тестовая книга");
+    assert_eq!(book["tags"][0], "книга");
+
+    // Страница тегов — тот же клиент.
+    let res = app.oneshot(Request::get(uri("/tags/сеть")).body(Body::empty()).unwrap()).await.unwrap();
+    assert!(
+        res.status() == StatusCode::OK || res.status() == StatusCode::SERVICE_UNAVAILABLE,
+        "клиент или «не собран»"
+    );
+}

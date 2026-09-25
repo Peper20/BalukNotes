@@ -283,7 +283,7 @@ pub fn slug(text: &str) -> String {
     if out.is_empty() { "раздел".into() } else { out }
 }
 
-fn unique(base: &str, used: &mut HashSet<String>) -> String {
+pub(crate) fn unique(base: &str, used: &mut HashSet<String>) -> String {
     let mut id = base.to_owned();
     let mut n = 2;
     while used.contains(&id) {

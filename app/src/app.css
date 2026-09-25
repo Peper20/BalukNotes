@@ -217,3 +217,104 @@ button.icon:hover { color: var(--k-accent); border-color: var(--k-line); backgro
 
 /* Якорь не прячется под липкой верхней строкой. */
 .k-note [id] { scroll-margin-top: 3.5rem; }
+
+/* ── Палитра: быстрый переход, команды, поиск ───────────────────────── */
+.palette-backdrop { position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / 0.25); }
+.palette {
+  position: fixed; top: 12vh; left: 50%; transform: translateX(-50%); width: min(40rem, 94vw);
+  display: flex; flex-direction: column; max-height: 70vh; overflow: hidden;
+  background: var(--k-bg); color: var(--k-text); border: 1px solid var(--k-line); border-radius: 10px;
+  box-shadow: 0 16px 50px rgb(0 0 0 / 0.35);
+}
+.palette input {
+  font: inherit; font-size: 1.05rem; padding: 0.8rem 1rem; border: none; border-bottom: 1px solid var(--k-line);
+  background: transparent; color: var(--k-text); outline: none;
+}
+.palette-list { list-style: none; margin: 0; padding: 0.3rem; overflow-y: auto; }
+.palette-list li[role="option"] {
+  display: grid; grid-template-columns: auto auto 1fr; align-items: baseline; gap: 0 0.6rem;
+  padding: 0.4rem 0.7rem; border-radius: 6px; cursor: pointer;
+}
+.palette-list li.selected { background: color-mix(in srgb, var(--k-accent) 14%, transparent); }
+.palette-group { padding: 0.5rem 0.7rem 0.2rem; font-size: 0.75em; letter-spacing: 0.06em; text-transform: uppercase; color: var(--k-muted); }
+.palette-empty { padding: 0.8rem; color: var(--k-muted); }
+.p-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-heading { color: var(--k-muted); font-weight: 400; }
+.p-path { color: var(--k-muted); font-size: 0.85em; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-badge { font-size: 0.7em; color: var(--k-muted); border: 1px solid var(--k-line); border-radius: 1em; padding: 0 0.5em; }
+.p-snippet { grid-column: 1 / -1; color: var(--k-muted); font-size: 0.85em; line-height: 1.35; }
+.palette-list li kbd { grid-column: 3; justify-self: end; }
+.palette mark, .p-snippet mark { background: none; color: var(--k-accent); font-weight: 700; }
+.palette-help {
+  display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; padding: 0.45rem 0.9rem; border-top: 1px solid var(--k-line);
+  font-size: 0.78em; color: var(--k-muted);
+}
+kbd {
+  font: 0.85em/1 var(--k-font-code); padding: 0.15em 0.4em; border-radius: 4px;
+  border: 1px solid var(--k-line); border-bottom-width: 2px; background: var(--k-surface); color: var(--k-text);
+}
+
+/* ── Вкладки ────────────────────────────────────────────────────────── */
+.tabbar {
+  position: sticky; top: 2.9rem; z-index: 4; display: flex; gap: 2px; overflow-x: auto; padding: 0.25rem 0.5rem 0;
+  background: var(--k-surface); border-bottom: 1px solid var(--k-line); scrollbar-width: thin;
+}
+.tab {
+  display: flex; align-items: center; gap: 0.3rem; max-width: 14rem; padding: 0.3rem 0.4rem 0.3rem 0.8rem;
+  border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; cursor: pointer; color: var(--k-muted);
+}
+.tab:hover { color: var(--k-text); }
+.tab.active { background: var(--k-bg); color: var(--k-text); border-color: var(--k-line); margin-bottom: -1px; }
+.tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-close, .tab-new {
+  font: inherit; line-height: 1; border: none; background: none; color: var(--k-muted); cursor: pointer;
+  width: 1.3rem; height: 1.3rem; border-radius: 4px;
+}
+.tab-close:hover, .tab-new:hover { background: color-mix(in srgb, var(--k-accent) 14%, transparent); color: var(--k-text); }
+.tab-new { align-self: center; margin-left: 0.2rem; }
+
+/* ── Справка ────────────────────────────────────────────────────────── */
+.help { width: min(46rem, 94vw); }
+.help-body { padding: 0.4rem 1rem 1rem; columns: 2 18rem; column-gap: 2rem; }
+.help section { break-inside: avoid; margin-bottom: 0.8rem; }
+.help h3 { margin: 0.6rem 0 0.3rem; font-size: 0.8em; letter-spacing: 0.06em; text-transform: uppercase; color: var(--k-accent); }
+.help dl { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.8rem; margin: 0; }
+.help dt { white-space: nowrap; }
+.help dd { margin: 0; color: var(--k-muted); }
+.help .or { color: var(--k-muted); font-size: 0.8em; }
+
+/* ── Теги ───────────────────────────────────────────────────────────── */
+.k-note .k-tags li:has(a) { cursor: pointer; }
+.k-note .k-tags li a { color: inherit; text-decoration: none; border: none; }
+.k-note .k-tags li:has(a):hover { border-color: var(--k-accent); color: var(--k-accent); }
+.k-note .tag-cloud { display: flex; flex-wrap: wrap; gap: 0.5em; }
+.k-note .tag-chip {
+  display: inline-block; padding: 0.15em 0.7em; border-radius: 1em; font-size: 0.85em;
+  background: var(--k-surface); color: var(--k-muted); border: 1px solid var(--k-line); text-decoration: none;
+}
+.k-note .tag-chip:hover { color: var(--k-accent); border-color: var(--k-accent); }
+.k-note .tag-chip small { opacity: 0.7; }
+.k-note .tag-notes { list-style: none; padding: 0; }
+.k-note .tag-notes li { margin: 0.5em 0; }
+.k-note .tag-others { display: inline-flex; gap: 0.3em; margin-left: 0.5em; }
+.k-note .tag-others .tag-chip { font-size: 0.7em; }
+.k-note .tags-back a { color: var(--k-muted); }
+
+/* ── Превью ссылки ──────────────────────────────────────────────────── */
+.link-preview {
+  position: fixed; z-index: 25; width: min(24rem, 90vw); padding: 0.7rem 0.9rem; box-sizing: border-box;
+  background: var(--k-bg); color: var(--k-text); border: 1px solid var(--k-line); border-radius: 8px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25); font-size: 13px; line-height: 1.45;
+  animation: preview-in 0.12s ease;
+}
+@keyframes preview-in { from { opacity: 0; transform: translateY(3px); } }
+.lp-title { font-weight: 600; color: var(--k-accent); display: flex; gap: 0.4rem; align-items: baseline; flex-wrap: wrap; }
+.lp-heading { color: var(--k-text); font-weight: 500; }
+.lp-text { margin: 0.4rem 0 0; color: var(--k-text); font-family: var(--k-font-text); font-size: 14px; }
+.lp-tags { margin-top: 0.4rem; display: flex; gap: 0.5rem; color: var(--k-muted); font-size: 0.9em; }
+
+/* ── Режим чтения: только текст ─────────────────────────────────────── */
+.app.reading { grid-template-columns: 0 1fr; }
+.app.reading .sidebar, .app.reading .tabbar, .app.reading .toc:not(.open) { display: none !important; }
+.app.reading .topbar { opacity: 0; transition: opacity 0.2s; }
+.app.reading .topbar:hover, .app.reading .topbar:focus-within { opacity: 1; }

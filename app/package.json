@@ -8,7 +8,7 @@
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "test": "vitest run",
     "e2e": "playwright test",
-    "types": "cd .. && cargo test -q -p notes-server --features ts export_bindings"
+    "types": "cd .. && cargo test -q -p notes-core -p notes-server --features ts export_bindings"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

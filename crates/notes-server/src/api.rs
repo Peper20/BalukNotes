@@ -20,6 +20,9 @@ pub struct NoteListItem {
     pub name: String,
     /// Папка: `Сеть`; для корня — пустая строка.
     pub folder: String,
+    /// Название из шаблона (`название: […]`), если есть.
+    pub title: Option<String>,
+    pub tags: Vec<String>,
 }
 
 /// `GET /api/version/{id}`.

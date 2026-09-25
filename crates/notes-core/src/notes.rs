@@ -25,7 +25,7 @@ use crate::cache::DiskCache;
 use crate::diag::Diagnostic;
 use crate::figures::{self, FigureOptions};
 use crate::fonts::Fonts;
-use crate::graph::{LinkIndex, Snapshot};
+use crate::graph::{Snapshot, SourceIndex};
 use crate::render::{self, LinkResolver, Rendered};
 use crate::themes::ThemeSet;
 use crate::vault::{Entry, NoteId, NoteKind, Vault};
@@ -88,7 +88,7 @@ pub struct Notes {
     /// Держится на время сборки заметки (см. [`Notes::page`]).
     building: Mutex<()>,
     disk: Option<DiskCache>,
-    links: LinkIndex,
+    links: SourceIndex,
 }
 
 impl Notes {
@@ -112,7 +112,7 @@ impl Notes {
             cache: Mutex::default(),
             building: Mutex::new(()),
             disk,
-            links: LinkIndex::default(),
+            links: SourceIndex::default(),
         })
     }
 
@@ -132,10 +132,20 @@ impl Notes {
         self.vault.entries()
     }
 
-    /// Ссылки всех заметок из исходников (без компиляции) — для обратных
-    /// ссылок и графа.
-    pub fn links(&self) -> Result<Snapshot> {
+    /// Индекс исходников (без компиляции): ссылки, граф, названия и теги,
+    /// разделы для поиска.
+    pub fn index(&self) -> Result<Snapshot> {
         self.links.snapshot(&self.vault)
+    }
+
+    /// Превью заметки (и раздела) для подсказки при наведении на ссылку.
+    pub fn preview(&self, id: &NoteId, anchor: Option<&str>) -> Result<crate::search::Preview> {
+        crate::search::preview(&self.index()?, id, anchor).ok_or_else(|| Error::NotFound(id.to_string()))
+    }
+
+    /// Поиск по тексту всех заметок.
+    pub fn search(&self, query: &str, limit: usize) -> Result<Vec<crate::search::SearchHit>> {
+        Ok(crate::search::search(&self.index()?, query, limit))
     }
 
     /// Страница заметки для сервера: из кэша, если её файлы не менялись.

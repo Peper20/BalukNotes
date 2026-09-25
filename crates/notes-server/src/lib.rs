@@ -11,13 +11,15 @@
 //!
 //! | Путь                         | Что                                          |
 //! |------------------------------|----------------------------------------------|
-//! | `GET /`, `GET /n/{*id}`      | клиент (одна страница, маршрутизация в JS)   |
+//! | `GET /`, `/n/{*id}`, `/tags…`| клиент (одна страница, маршрутизация в JS)   |
 //! | `GET /assets/{*path}`        | файлы клиента (сборка `app/dist/assets`)     |
 //! | `GET /api/notes`             | список заметок и книг                        |
 //! | `GET /api/notes/{*id}`       | заметка: HTML, заголовки, ссылки, ошибки     |
 //! | `GET /api/version/{*id}`     | версия заметки — дёшево, без компиляции      |
 //! | `GET /api/links/{*id}`       | ссылки заметки и обратные ссылки на неё      |
 //! | `GET /api/graph`             | граф заметок: узлы и рёбра                   |
+//! | `GET /api/search?q=&limit=`  | поиск по тексту всех заметок                 |
+//! | `GET /api/preview/{*id}?anchor=` | превью заметки/раздела (без компиляции)  |
 //! | `GET /api/pdf/{*id}?theme=`  | заметка в PDF (по умолчанию — первая тема)   |
 //! | `GET /api/settings`          | схема и значения настроек                    |
 //! | `PUT /api/settings`          | изменить настройки (частично)                |
@@ -38,6 +40,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use notes_core::fonts::WebVariant;
 use notes_core::graph::Graph;
+use notes_core::search::{Preview, SearchHit};
 use notes_core::settings::SettingsStore;
 use notes_core::themes::Theme;
 use notes_core::{NoteId, Notes};
@@ -74,12 +77,16 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(shell))
         .route("/n/{*id}", get(shell))
+        .route("/tags", get(shell))
+        .route("/tags/{*tag}", get(shell))
         .route("/assets/{*path}", get(asset))
         .route("/api/notes", get(list_notes))
         .route("/api/notes/{*id}", get(note))
         .route("/api/version/{*id}", get(version))
         .route("/api/links/{*id}", get(links))
         .route("/api/graph", get(graph))
+        .route("/api/search", get(search))
+        .route("/api/preview/{*id}", get(preview))
         .route("/api/pdf/{*id}", get(pdf))
         .route("/api/settings", get(get_settings).put(put_settings))
         .route("/api/themes", get(themes))
@@ -170,17 +177,49 @@ fn is_hashed(path: &str) -> bool {
 
 async fn list_notes(State(s): State<AppState>) -> ApiResult<Json<Vec<NoteListItem>>> {
     let notes = s.notes.clone();
-    let entries = blocking(move || notes.entries()).await?;
-    let list = entries
-        .into_iter()
-        .map(|e| NoteListItem {
-            name: e.id.name().to_owned(),
-            folder: e.id.parent().to_owned(),
-            kind: e.kind,
-            id: e.id,
-        })
-        .collect();
+    let list = blocking(move || {
+        let index = notes.index()?;
+        Ok(index
+            .outlines()
+            .map(|(e, o)| NoteListItem {
+                id: e.id.clone(),
+                kind: e.kind,
+                name: e.id.name().to_owned(),
+                folder: e.id.parent().to_owned(),
+                title: o.title.clone(),
+                tags: o.tags.clone(),
+            })
+            .collect())
+    })
+    .await?;
     Ok(Json(list))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct PreviewQuery {
+    anchor: Option<String>,
+}
+
+async fn preview(
+    State(s): State<AppState>,
+    Path(id): Path<String>,
+    Query(q): Query<PreviewQuery>,
+) -> ApiResult<Json<Preview>> {
+    let id = NoteId::new(id)?;
+    let notes = s.notes.clone();
+    Ok(Json(blocking(move || notes.preview(&id, q.anchor.as_deref())).await?))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct SearchQuery {
+    q: String,
+    limit: Option<usize>,
+}
+
+async fn search(State(s): State<AppState>, Query(q): Query<SearchQuery>) -> ApiResult<Json<Vec<SearchHit>>> {
+    let notes = s.notes.clone();
+    let limit = q.limit.unwrap_or(30).min(200);
+    Ok(Json(blocking(move || notes.search(&q.q, limit)).await?))
 }
 
 async fn note(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Response> {
@@ -202,7 +241,7 @@ async fn links(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<J
     let notes = s.notes.clone();
     blocking(move || {
         notes.vault().entry(&id)?;
-        let snap = notes.links()?;
+        let snap = notes.index()?;
         let outgoing = snap
             .outgoing(&id)
             .iter()
@@ -219,7 +258,7 @@ async fn links(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<J
 
 async fn graph(State(s): State<AppState>) -> ApiResult<Json<Graph>> {
     let notes = s.notes.clone();
-    let graph = blocking(move || Ok(notes.links()?.graph())).await?;
+    let graph = blocking(move || Ok(notes.index()?.graph())).await?;
     Ok(Json(graph))
 }
 

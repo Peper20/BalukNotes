@@ -17,6 +17,15 @@ class Ui {
   sidebarOpen = $state(false);
   sidebarHidden = $state(false);
   settingsOpen = $state(false);
+  /** Палитра: быстрый переход, команды (`>`), поиск (`/`), теги (`#`). */
+  palette = $state<{ query: string } | null>(null);
+  helpOpen = $state(false);
+  /** Режим чтения: только текст — без панелей, вкладок и оглавления. */
+  reading = $state(false);
+
+  openPalette(query = ""): void {
+    this.palette = { query };
+  }
 }
 
 export const ui = new Ui();

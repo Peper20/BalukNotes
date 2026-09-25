@@ -6,6 +6,8 @@ import type { Graph } from "./types/Graph";
 import type { LinksResponse } from "./types/LinksResponse";
 import type { NoteListItem } from "./types/NoteListItem";
 import type { NotePage } from "./types/NotePage";
+import type { Preview } from "./types/Preview";
+import type { SearchHit } from "./types/SearchHit";
 import type { SettingsResponse } from "./types/SettingsResponse";
 import type { Theme } from "./types/Theme";
 import type { VersionResponse } from "./types/VersionResponse";
@@ -16,7 +18,9 @@ export type { Heading } from "./types/Heading";
 export type { LinksResponse } from "./types/LinksResponse";
 export type { NoteListItem } from "./types/NoteListItem";
 export type { NotePage } from "./types/NotePage";
+export type { Preview } from "./types/Preview";
 export type { Rendered } from "./types/Rendered";
+export type { SearchHit } from "./types/SearchHit";
 export type { Schema } from "./types/Schema";
 export type { SettingDef } from "./types/SettingDef";
 export type { Theme } from "./types/Theme";
@@ -50,6 +54,10 @@ export const api = {
   version: (id: string) => request<VersionResponse>(`/api/version/${encodeId(id)}`),
   links: (id: string) => request<LinksResponse>(`/api/links/${encodeId(id)}`),
   graph: () => request<Graph>("/api/graph"),
+  search: (q: string, signal?: AbortSignal, limit = 30) =>
+    request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`, { signal }),
+  preview: (id: string, anchor?: string | null, signal?: AbortSignal) =>
+    request<Preview>(`/api/preview/${encodeId(id)}${anchor ? `?anchor=${encodeURIComponent(anchor)}` : ""}`, { signal }),
   themes: () => request<Theme[]>("/api/themes"),
   settings: () => request<SettingsResponse>("/api/settings"),
   saveSettings: (patch: SettingValues) =>

@@ -4,7 +4,7 @@ import { ancestors, buildTree } from "./tree";
 
 const note = (id: string, kind: "note" | "book" = "note"): NoteListItem => {
   const i = id.lastIndexOf("/");
-  return { id, kind, name: id.slice(i + 1), folder: i < 0 ? "" : id.slice(0, i) };
+  return { id, kind, name: id.slice(i + 1), folder: i < 0 ? "" : id.slice(0, i), title: null, tags: [] };
 };
 
 it("папки по алфавиту, вложенность, заметки в корне", () => {

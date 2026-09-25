@@ -1,4 +1,6 @@
-//! Индекс ссылок по хранилищу: обратные ссылки и граф заметок.
+//! Индекс исходников хранилища: ссылки (обратные ссылки, граф) и
+//! содержание заметок ([`crate::outline`]: название, теги, разделы — для
+//! быстрого перехода и поиска).
 //!
 //! Ссылки берутся **из исходников, без компиляции**: парсер Typst находит
 //! вызовы `#см("путь", якорь: "…")` с буквальными строками. Так весь граф
@@ -19,6 +21,7 @@ use parking_lot::Mutex;
 use serde::Serialize;
 use typst::syntax::{SyntaxNode, ast};
 
+use crate::outline::{Outline, parse_outline};
 use crate::render::LinkRef;
 use crate::vault::{Entry, NoteId, NoteKind, Vault};
 use crate::{Error, Result};
@@ -64,10 +67,11 @@ pub struct Graph {
 struct Parsed {
     stamp: (Option<SystemTime>, u64),
     links: Vec<LinkRef>,
+    outline: Outline,
 }
 
 #[derive(Debug, Default)]
-pub struct LinkIndex {
+pub struct SourceIndex {
     files: Mutex<HashMap<PathBuf, Parsed>>,
 }
 
@@ -77,9 +81,11 @@ pub struct Snapshot {
     entries: Vec<Entry>,
     /// Заметка → её ссылки (без повторов, в порядке появления).
     links: BTreeMap<NoteId, Vec<LinkRef>>,
+    /// Заметка → содержание (у книги — всех файлов по порядку).
+    outlines: BTreeMap<NoteId, Outline>,
 }
 
-impl LinkIndex {
+impl SourceIndex {
     /// Обходит хранилище и возвращает ссылки всех заметок. Разбираются
     /// только изменившиеся файлы.
     pub fn snapshot(&self, vault: &Vault) -> Result<Snapshot> {
@@ -87,32 +93,53 @@ impl LinkIndex {
         let mut files = self.files.lock();
         let mut seen = BTreeSet::new();
         let mut links = BTreeMap::new();
+        let mut outlines = BTreeMap::new();
         for entry in &entries {
             let mut own: Vec<LinkRef> = Vec::new();
+            let mut outline = Outline::default();
             for rel in vault.files_of(entry)? {
                 let path = vault.root().join(&rel);
                 let meta = fs::metadata(&path).map_err(|e| Error::io(&path, e))?;
                 let stamp = (meta.modified().ok(), meta.len());
                 if files.get(&path).is_none_or(|p| p.stamp != stamp) {
                     let text = fs::read_to_string(&path).map_err(|e| Error::io(&path, e))?;
-                    files.insert(path.clone(), Parsed { stamp, links: parse_links(&text) });
+                    let parsed = Parsed { stamp, links: parse_links(&text), outline: parse_outline(&text) };
+                    files.insert(path.clone(), parsed);
                 }
-                for link in &files[&path].links {
+                let parsed = &files[&path];
+                for link in &parsed.links {
                     if !own.contains(link) {
                         own.push(link.clone());
                     }
                 }
+                // Книга: название и теги — из главного файла (где шаблон), разделы — всех глав.
+                outline.title = outline.title.or_else(|| parsed.outline.title.clone());
+                if outline.tags.is_empty() {
+                    outline.tags.clone_from(&parsed.outline.tags);
+                }
+                outline.sections.extend(parsed.outline.sections.iter().cloned());
                 seen.insert(path);
             }
             links.insert(entry.id.clone(), own);
+            outlines.insert(entry.id.clone(), outline);
         }
         // Удалённые файлы — из кэша вон.
         files.retain(|path, _| seen.contains(path));
-        Ok(Snapshot { entries, links })
+        Ok(Snapshot { entries, links, outlines })
     }
 }
 
 impl Snapshot {
+    /// Содержание заметки: название, теги, разделы.
+    pub fn outline(&self, id: &NoteId) -> Option<&Outline> {
+        self.outlines.get(id)
+    }
+
+    /// Все заметки с содержанием.
+    pub fn outlines(&self) -> impl Iterator<Item = (&Entry, &Outline)> {
+        self.entries.iter().filter_map(|e| self.outlines.get(&e.id).map(|o| (e, o)))
+    }
+
     /// Ссылки заметки (как написаны в исходнике).
     pub fn outgoing(&self, id: &NoteId) -> &[LinkRef] {
         self.links.get(id).map_or(&[], Vec::as_slice)
@@ -238,7 +265,7 @@ mod tests {
         write("Книга/01.typ", r#"#см("B")"#);
 
         let vault = Vault::open(root).unwrap();
-        let index = LinkIndex::default();
+        let index = SourceIndex::default();
         let snap = index.snapshot(&vault).unwrap();
         let b = NoteId::new("B").unwrap();
         let from: Vec<_> = snap.backlinks(&b).into_iter().map(|l| (l.from.to_string(), l.anchor)).collect();
