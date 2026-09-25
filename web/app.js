@@ -16,16 +16,22 @@ const state = {
   settings: {},
   themes: [], // [{name, dark}]
   notes: [], // [{id, kind, name, folder}]
-  current: null, // id открытой заметки
-  version: null,
+  current: null, // id выбранной заметки (показана или ещё собирается)
+  version: null, // версия показанной заметки
   timer: null,
-  loading: false,
+  pending: null, // AbortController загрузки, которая сейчас идёт
 };
 
 // ── API ──────────────────────────────────────────────────────────────────
 
 /** Путь заметки в URL: сегменты кодируются, «/» остаётся. */
 const encodeId = (id) => id.split("/").map(encodeURIComponent).join("/");
+
+/** Отменить загрузку заметки, если она идёт: пользователь ушёл дальше. */
+function cancelPending() {
+  state.pending?.abort();
+  state.pending = null;
+}
 
 async function api(path, options) {
   const res = await fetch(path, options);
@@ -224,12 +230,22 @@ function holdAnchor(id) {
   setTimeout(() => document.fonts.removeEventListener("loadingdone", again), 2000);
 }
 
+/**
+ * Показать заметку. Большая заметка собирается секунды; если за это время
+ * выбрали другую, прежний запрос отменяется, а его ответ (если успел)
+ * отбрасывается — иначе клиент «перепрыгнул» бы назад.
+ */
 async function loadNote(id, { keepScroll = false } = {}) {
-  state.loading = true;
+  cancelPending();
+  const ctrl = new AbortController();
+  state.pending = ctrl;
+  if (state.current !== id) state.version = null;
+  state.current = id;
+  markActive();
   setStatus("собираю…", true);
   try {
-    const page = await api(`/api/notes/${encodeId(id)}`);
-    state.current = id;
+    const page = await api(`/api/notes/${encodeId(id)}`, { signal: ctrl.signal });
+    if (state.pending !== ctrl) return;
     state.version = page.version;
     const y = scrollY;
     root.dataset.kind = page.kind;
@@ -248,7 +264,7 @@ async function loadNote(id, { keepScroll = false } = {}) {
     else scrollTo(0, 0);
     setStatus(`собрано ${time()}`);
   } catch (e) {
-    state.current = id;
+    if (state.pending !== ctrl) return; // отменена или устарела
     state.version = null;
     $("#note").replaceChildren(Object.assign(document.createElement("p"), {
       className: "welcome",
@@ -257,11 +273,12 @@ async function loadNote(id, { keepScroll = false } = {}) {
     $("#problems").hidden = true;
     setStatus("");
   } finally {
-    state.loading = false;
+    if (state.pending === ctrl) state.pending = null;
   }
 }
 
 function showIndex() {
+  cancelPending();
   state.current = null;
   state.version = null;
   delete root.dataset.kind;
@@ -288,11 +305,13 @@ function showIndex() {
 
 /** Изменились ли файлы заметки — и если да, перезагрузить её. */
 async function check({ force = false } = {}) {
-  if (!state.current || state.loading) return;
-  if (force) return loadNote(state.current, { keepScroll: true });
+  const id = state.current;
+  if (!id || state.pending) return;
+  if (force) return loadNote(id, { keepScroll: true });
   try {
-    const { version } = await api(`/api/version/${encodeId(state.current)}`);
-    if (version !== state.version) await loadNote(state.current, { keepScroll: true });
+    const { version } = await api(`/api/version/${encodeId(id)}`);
+    // Пока ждали ответ, могли перейти на другую заметку.
+    if (state.current === id && !state.pending && version !== state.version) await loadNote(id, { keepScroll: true });
   } catch {
     // сервер недоступен — попробуем в следующий раз
   }

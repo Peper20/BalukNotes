@@ -104,6 +104,9 @@ try {
   writeFileSync(out, Buffer.from(shot.data, "base64"));
 } finally {
   ws.close();
+  // Профиль удаляем после выхода браузера: до этого он ещё пишет в каталог.
+  const exited = new Promise((r) => browser.once("exit", r));
   browser.kill();
-  rmSync(profile, { recursive: true, force: true });
+  await exited;
+  rmSync(profile, { recursive: true, force: true, maxRetries: 3 });
 }
