@@ -84,6 +84,40 @@ button.icon:hover { color: var(--k-accent); border-color: var(--k-line); backgro
 .k-note .loading-hint { color: var(--k-muted); font-size: 0.8em; text-align: center; margin-top: 1em; }
 @media (prefers-reduced-motion: reduce) { .k-note .loading-bar::after { animation: none; width: 100%; } }
 
+/* ── Главная: граф и список ─────────────────────────────────────────── */
+.k-note .home {
+  h1 { margin: 0 0 0.3em; color: var(--k-accent); }
+  h2 { margin-top: 1.6em; font-size: 1.15em; color: var(--k-accent); }
+  h3 { margin: 0 0 0.3em; font-size: 0.8em; letter-spacing: 0.06em; text-transform: uppercase; color: var(--k-muted); }
+  ul { margin: 0; padding: 0; list-style: none; }
+  li { margin: 0.15em 0; }
+  a { color: var(--k-text); text-decoration: none; border-bottom: 1px solid var(--k-line); }
+  a:hover { color: var(--k-accent); border-color: var(--k-accent); }
+}
+.k-note .home-lead { color: var(--k-muted); text-align: left; }
+.k-note .home-lead a { color: var(--k-accent); }
+.k-note .home-kind { color: var(--k-muted); font-size: 0.75em; }
+.k-note .home-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(12em, 1fr)); gap: 1.2em 2em; font-size: 0.9em; }
+.k-note .graph {
+  margin: 1em -0.9em 0; border: 1px solid var(--k-line); border-radius: 10px; background: var(--k-surface);
+  min-height: 3em; overflow: hidden;
+}
+.k-note .graph-hint { font-size: 0.75em; color: var(--k-muted); text-align: left; margin-top: 0.5em; }
+.graph-svg { display: block; width: 100%; height: auto; max-height: 70vh; font-family: system-ui, sans-serif; }
+.graph-edge { stroke: var(--k-muted); opacity: 0.45; transition: opacity 0.15s; }
+.graph-node { cursor: pointer; transition: opacity 0.15s; }
+.graph-node circle { stroke-width: 1.5; }
+.graph-node.missing { cursor: default; }
+.graph-node.missing circle { stroke-dasharray: 3 2; }
+.graph-node text { font-size: 11px; fill: var(--k-text); paint-order: stroke; stroke: var(--k-surface); stroke-width: 3px; }
+.graph-node.book text { font-weight: 600; font-size: 12px; }
+.graph-node:hover circle { stroke: var(--k-text) !important; stroke-width: 2.5; }
+.graph-svg.focused .graph-node:not(.near) { opacity: 0.2; }
+.graph-svg.focused .graph-edge { opacity: 0.08; }
+.graph-svg.focused .graph-edge.near { opacity: 0.9; stroke: var(--k-accent); }
+.graph-legend { display: flex; flex-wrap: wrap; gap: 0.3em 1em; padding: 0.4em 0.8em 0.6em; font: 12px system-ui, sans-serif; color: var(--k-muted); }
+.graph-legend i { display: inline-block; width: 0.7em; height: 0.7em; border-radius: 50%; margin-right: 0.35em; vertical-align: -0.05em; }
+
 /* ── Пустое состояние и список ──────────────────────────────────────── */
 .welcome { color: var(--k-muted); }
 .welcome ul { columns: 2 16rem; }

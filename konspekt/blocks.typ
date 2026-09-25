@@ -174,18 +174,19 @@
   })
 }
 
-/// «В этой главе»: что читатель научится делать (глаголами).
+/// «В этой главе» («В этой заметке»): что читатель научится делать (глаголами).
 #let план(..пункты) = context {
   let т = тема()
   let а = т.цвет.акцент
   let п = пункты.pos()
+  let надпись = if _вид.get() == "заметка" [В этой заметке] else [В этой главе]
   if веб() {
     return эл("div", "k-plan", {
-      эл("div", "k-plan-head")[В этой главе]
+      эл("div", "k-plan-head", надпись)
       эл("ul", "k-plan-list", п.map(x => html.elem("li", x)).join())
     })
   }
-  let заголовок = text(font: т.шрифт.подписи, size: 0.74em, weight: "bold", tracking: 0.12em, fill: а, upper[В этой главе])
+  let заголовок = text(font: т.шрифт.подписи, size: 0.74em, weight: "bold", tracking: 0.12em, fill: а, upper(надпись))
   let строки = п.map(x => [#text(fill: а)[→] #h(0.3em) #x])
   let тело = { block(below: 6pt, заголовок); set par(first-line-indent: 0em); stack(spacing: 0.55em, ..строки) }
   block(width: 100%, above: 0.8em, below: 1.4em,

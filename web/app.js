@@ -8,6 +8,8 @@
 //
 // Временный клиент вехи M1 без сборки и фреймворка; интерфейс M2 его заменит.
 
+import { renderGraph } from "./graph.js";
+
 const $ = (sel) => document.querySelector(sel);
 const root = document.documentElement;
 
@@ -363,19 +365,70 @@ function showIndex() {
   document.title = "Заметки";
   $("#crumbs").textContent = "";
   markActive();
-  const box = document.createElement("div");
-  box.className = "welcome";
-  box.append(Object.assign(document.createElement("p"), {
-    textContent: state.notes.length ? "Выберите заметку:" : "Хранилище пусто: положите .typ-файлы в data/vault/.",
-  }));
-  const ul = document.createElement("ul");
-  for (const n of state.notes) {
-    const li = document.createElement("li");
-    li.append(Object.assign(document.createElement("a"), { href: `/n/${encodeId(n.id)}`, textContent: n.id }));
-    ul.append(li);
+  const home = Object.assign(document.createElement("div"), { className: "home" });
+  const h = (tag, text, cls) => Object.assign(document.createElement(tag), { textContent: text, className: cls ?? "" });
+  home.append(h("h1", "Заметки"));
+  if (!state.notes.length) {
+    home.append(h("p", "Хранилище пусто: положите .typ-файлы в data/vault/."));
+    $("#note").replaceChildren(home);
+    return;
   }
-  box.append(ul);
-  $("#note").replaceChildren(box);
+  const lead = h("p", "", "home-lead");
+  const books = state.notes.filter((n) => n.kind === "book").length;
+  lead.append(`${state.notes.length - books} заметок и ${books} книг${books === 1 ? "а" : books > 1 && books < 5 ? "и" : ""}.`);
+  if (state.notes.some((n) => n.id === "Начало")) {
+    lead.append(" Начните с ", Object.assign(document.createElement("a"), { href: "/n/Начало", textContent: "экскурсии по возможностям" }), ".");
+  }
+  const graph = Object.assign(document.createElement("section"), { className: "graph" });
+  const hint = h("p", "Наведите на узел — подсветятся его связи; нажмите — откроется заметка. Крупные узлы — книги, пустой — заметка, на которую ссылаются, но её ещё нет.", "graph-hint");
+  home.append(lead, graph, hint, h("h2", "Все заметки"));
+  const byFolder = Map.groupBy(state.notes, (n) => n.folder || "—");
+  const list = Object.assign(document.createElement("div"), { className: "home-list" });
+  for (const [folder, notes] of byFolder) {
+    const group = document.createElement("div");
+    group.append(h("h3", folder));
+    const ul = document.createElement("ul");
+    for (const n of notes) {
+      const li = document.createElement("li");
+      li.append(Object.assign(document.createElement("a"), { href: `/n/${encodeId(n.id)}`, textContent: n.name }));
+      if (n.kind === "book") li.append(h("span", " книга", "home-kind"));
+      ul.append(li);
+    }
+    group.append(ul);
+    list.append(group);
+  }
+  home.append(list);
+  $("#note").replaceChildren(home);
+  api("/api/graph")
+    .then((g) => {
+      if (state.current !== null || !graph.isConnected) return;
+      renderGraph(graph, g, { onOpen: (id) => navigate(`/n/${encodeId(id)}`) });
+    })
+    .catch(() => graph.remove());
+}
+
+/** Перейти внутри клиента (как по ссылке). */
+function navigate(url) {
+  history.pushState(null, "", url);
+  closeSidebarOnMobile();
+  route();
+}
+
+/**
+ * Список заметок с сервера. Заметки создаёт Claude Code в любой момент —
+ * дерево обновляется при каждой проверке, без перезагрузки страницы.
+ */
+async function refreshNotes() {
+  let notes;
+  try {
+    notes = await api("/api/notes");
+  } catch {
+    return;
+  }
+  if (JSON.stringify(notes) === JSON.stringify(state.notes)) return;
+  state.notes = notes;
+  renderTree();
+  if (state.current === null && !state.pending) showIndex();
 }
 
 // ── Книга по главам ──────────────────────────────────────────────────────
@@ -557,6 +610,7 @@ async function loadBacklinks(id) {
 
 /** Изменились ли файлы заметки — и если да, перезагрузить её. */
 async function check({ force = false } = {}) {
+  refreshNotes();
   const id = state.current;
   if (!id || state.pending) return;
   if (force) return loadNote(id, { keepScroll: true });
