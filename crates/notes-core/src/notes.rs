@@ -24,6 +24,7 @@ use serde::Serialize;
 use crate::diag::Diagnostic;
 use crate::figures::{self, FigureOptions};
 use crate::fonts::Fonts;
+use crate::graph::{LinkIndex, Snapshot};
 use crate::render::{self, LinkResolver, Rendered};
 use crate::themes::ThemeSet;
 use crate::vault::{Entry, NoteId, NoteKind, Vault};
@@ -80,6 +81,7 @@ pub struct Notes {
     compiler: Compiler,
     themes: ThemeSet,
     cache: Mutex<HashMap<NoteId, Cached>>,
+    links: LinkIndex,
 }
 
 impl Notes {
@@ -92,7 +94,7 @@ impl Notes {
         let fonts = Arc::new(Fonts::load(&config.font_dirs));
         let compiler = Compiler::new(vault.root(), &library, fonts);
         let themes = ThemeSet::load(&compiler)?;
-        Ok(Self { vault, compiler, themes, cache: Mutex::default() })
+        Ok(Self { vault, compiler, themes, cache: Mutex::default(), links: LinkIndex::default() })
     }
 
     pub fn vault(&self) -> &Vault {
@@ -109,6 +111,12 @@ impl Notes {
 
     pub fn entries(&self) -> Result<Vec<Entry>> {
         self.vault.entries()
+    }
+
+    /// Ссылки всех заметок из исходников (без компиляции) — для обратных
+    /// ссылок и графа.
+    pub fn links(&self) -> Result<Snapshot> {
+        self.links.snapshot(&self.vault)
     }
 
     /// Страница заметки для сервера: из кэша, если её файлы не менялись.

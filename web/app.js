@@ -20,6 +20,8 @@ const state = {
   version: null, // версия показанной заметки
   timer: null,
   pending: null, // AbortController загрузки, которая сейчас идёт
+  headings: [], // заголовки показанной заметки [{level, id, anchor, text}]
+  tocLinks: [], // [[заголовок в заметке, ссылка в оглавлении]] — для подсветки
 };
 
 // ── API ──────────────────────────────────────────────────────────────────
@@ -65,6 +67,9 @@ function applySettings() {
   for (const part of ["title", "kind", "description", "byline", "tags"]) {
     root.dataset[`header${part[0].toUpperCase()}${part.slice(1)}`] = String(v[`header.${part}`]);
   }
+  root.dataset.toc = String(v["panels.toc"]);
+  root.dataset.backlinks = String(v["panels.backlinks"]);
+  renderToc();
   $("#theme").title = `Тема: ${v["appearance.theme"] === "auto" ? `как в системе (${root.dataset.theme})` : root.dataset.theme}`;
   schedule();
 }
@@ -241,7 +246,10 @@ async function loadNote(id, { keepScroll = false } = {}) {
   cancelPending();
   const ctrl = new AbortController();
   state.pending = ctrl;
-  if (state.current !== id) state.version = null;
+  if (state.current !== id) {
+    state.version = null;
+    $("#backlinks").hidden = true;
+  }
   state.current = id;
   markActive();
   setStatus("собираю…", true);
@@ -254,6 +262,9 @@ async function loadNote(id, { keepScroll = false } = {}) {
     const r = page.rendered;
     $("#note").innerHTML = r ? r.styles + r.body : "";
     renderProblems(page);
+    state.headings = r?.headings ?? [];
+    renderToc();
+    loadBacklinks(id);
     const note = state.notes.find((n) => n.id === id);
     document.title = `${r?.title ?? note?.name ?? id} — Заметки`;
     $("#crumbs").replaceChildren(
@@ -283,6 +294,9 @@ function showIndex() {
   cancelPending();
   state.current = null;
   state.version = null;
+  state.headings = [];
+  renderToc();
+  $("#backlinks").hidden = true;
   delete root.dataset.kind;
   document.title = "Заметки";
   $("#crumbs").textContent = "";
@@ -301,6 +315,106 @@ function showIndex() {
   }
   box.append(ul);
   $("#note").replaceChildren(box);
+}
+
+// ── Оглавление и обратные ссылки ─────────────────────────────────────────
+
+/** Оглавление по заголовкам заметки: `panels.toc_depth` уровней от верхнего. */
+function renderToc() {
+  const toc = $("#toc");
+  const depth = Number(state.settings["panels.toc_depth"] ?? 2);
+  const top = Math.min(...state.headings.map((h) => h.level));
+  const shown = state.headings.filter((h) => h.level - top < depth);
+  $("#toggle-toc").hidden = shown.length < 2;
+  if (shown.length < 2) {
+    toc.replaceChildren();
+    toc.classList.remove("open");
+    state.tocLinks = [];
+    return;
+  }
+  const title = Object.assign(document.createElement("div"), { className: "toc-title", textContent: "Содержание" });
+  state.tocLinks = [];
+  const links = shown.map((h) => {
+    const a = Object.assign(document.createElement("a"), { href: `#${encodeURIComponent(h.id)}`, textContent: h.text });
+    a.dataset.depth = h.level - top;
+    const target = document.getElementById(h.id);
+    if (target) state.tocLinks.push([target, a]);
+    return a;
+  });
+  toc.replaceChildren(title, ...links);
+  layoutToc();
+  markCurrentHeading();
+}
+
+/** Хватает ли места справа от колонки заметки для оглавления. */
+function layoutToc() {
+  const note = $("#note").getBoundingClientRect();
+  const room = innerWidth - note.right;
+  const fits = room >= 200;
+  $("#app").classList.toggle("toc-room", fits);
+  if (fits) root.style.setProperty("--toc-w", `${Math.min(room - 32, 300)}px`);
+  if (fits && state.settings["panels.toc"]) $("#toc").classList.remove("open");
+}
+
+/** Подсветить в оглавлении раздел, который сейчас читают. */
+function markCurrentHeading() {
+  let current = null;
+  // Докрутили до конца — последние разделы до верха окна не доедут.
+  if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2) current = state.tocLinks.at(-1)?.[1];
+  else {
+    for (const [heading, link] of state.tocLinks) {
+      if (heading.getBoundingClientRect().top > 90) break;
+      current = link;
+    }
+  }
+  current ??= state.tocLinks[0]?.[1];
+  for (const [, link] of state.tocLinks) link.classList.toggle("current", link === current);
+  if (current && $("#app").classList.contains("toc-room")) current.scrollIntoView({ block: "nearest" });
+}
+
+let scrollFrame = 0;
+function onScroll() {
+  if (scrollFrame) return;
+  scrollFrame = requestAnimationFrame(() => {
+    scrollFrame = 0;
+    markCurrentHeading();
+  });
+}
+
+/** § — на широком экране прячет/показывает боковое оглавление (настройка), на узком — всплывающее. */
+function toggleToc() {
+  const toc = $("#toc");
+  if (!state.tocLinks.length) return;
+  if ($("#app").classList.contains("toc-room") && !toc.classList.contains("open")) {
+    saveSettings({ "panels.toc": !state.settings["panels.toc"] });
+  } else {
+    toc.classList.toggle("open");
+    if (toc.classList.contains("open")) toc.querySelector("a.current")?.scrollIntoView({ block: "nearest" });
+  }
+}
+
+/** Кто ссылается на заметку — из индекса ссылок (без компиляции). */
+async function loadBacklinks(id) {
+  const box = $("#backlinks");
+  let links;
+  try {
+    links = await api(`/api/links/${encodeId(id)}`);
+  } catch {
+    return;
+  }
+  if (state.current !== id) return;
+  box.hidden = !links.backlinks.length;
+  if (box.hidden) return;
+  const ul = document.createElement("ul");
+  for (const b of links.backlinks) {
+    const li = document.createElement("li");
+    const note = state.notes.find((n) => n.id === b.from);
+    li.append(Object.assign(document.createElement("a"), { href: `/n/${encodeId(b.from)}`, textContent: note?.name ?? b.from }));
+    if (note?.folder) li.append(Object.assign(document.createElement("span"), { className: "anchor", textContent: ` · ${note.folder}` }));
+    if (b.anchor) li.append(Object.assign(document.createElement("span"), { className: "anchor", textContent: ` → «${b.anchor}»` }));
+    ul.append(li);
+  }
+  box.replaceChildren(Object.assign(document.createElement("h2"), { textContent: `Ссылаются сюда · ${links.backlinks.length}` }), ul);
 }
 
 // ── Обновление ───────────────────────────────────────────────────────────
@@ -385,8 +499,13 @@ async function init() {
   $("#theme").onclick = cycleTheme;
   $("#open-settings").onclick = openSettings;
   $("#toggle-sidebar").onclick = toggleSidebar;
+  $("#toggle-toc").onclick = toggleToc;
+  $("#toc").addEventListener("click", (e) => e.target.closest("a") && !$("#app").classList.contains("toc-room") && $("#toc").classList.remove("open"));
+  addEventListener("scroll", onScroll, { passive: true });
+  new ResizeObserver(layoutToc).observe($(".main"));
   $("#backdrop").onclick = closeSidebarOnMobile;
   addEventListener("keydown", (e) => {
+    if (e.key === "Escape") $("#toc").classList.remove("open");
     if (e.key === "r" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.target.closest("input, select, textarea")) check({ force: true });
   });
 }

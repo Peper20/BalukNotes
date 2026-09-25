@@ -16,6 +16,8 @@
 //! | `GET /api/notes`             | список заметок и книг                        |
 //! | `GET /api/notes/{*id}`       | заметка: HTML, заголовки, ссылки, ошибки     |
 //! | `GET /api/version/{*id}`     | версия заметки — дёшево, без компиляции      |
+//! | `GET /api/links/{*id}`       | ссылки заметки и обратные ссылки на неё      |
+//! | `GET /api/graph`             | граф заметок: узлы и рёбра                   |
 //! | `GET /api/settings`          | схема и значения настроек                    |
 //! | `PUT /api/settings`          | изменить настройки (частично)                |
 //! | `GET /api/themes`            | темы: имя, тёмная ли                         |
@@ -61,6 +63,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/notes", get(list_notes))
         .route("/api/notes/{*id}", get(note))
         .route("/api/version/{*id}", get(version))
+        .route("/api/links/{*id}", get(links))
+        .route("/api/graph", get(graph))
         .route("/api/settings", get(get_settings).put(put_settings))
         .route("/api/themes", get(themes))
         .route("/api/themes.css", get(themes_css))
@@ -161,6 +165,28 @@ async fn version(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult
     let (notes, opts) = (s.notes.clone(), s.settings.figure_options());
     let version = blocking(move || notes.version(&id, opts)).await?;
     Ok(Json(json!({ "version": version })))
+}
+
+async fn links(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    let id = NoteId::new(id)?;
+    let notes = s.notes.clone();
+    blocking(move || {
+        notes.vault().entry(&id)?;
+        let snap = notes.links()?;
+        let outgoing: Vec<Value> = snap
+            .outgoing(&id)
+            .iter()
+            .map(|l| json!({ "target": l.target, "anchor": l.anchor, "exists": snap.exists(&l.target) }))
+            .collect();
+        Ok(Json(json!({ "outgoing": outgoing, "backlinks": snap.backlinks(&id) })))
+    })
+    .await
+}
+
+async fn graph(State(s): State<AppState>) -> ApiResult<Json<Value>> {
+    let notes = s.notes.clone();
+    let graph = blocking(move || Ok(notes.links()?.graph())).await?;
+    Ok(Json(json!(graph)))
 }
 
 async fn get_settings(State(s): State<AppState>) -> Json<Value> {

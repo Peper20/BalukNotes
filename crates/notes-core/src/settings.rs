@@ -62,6 +62,8 @@ fn choice(value: &str, label: &str) -> Choice {
 
 impl Schema {
     /// Схема для набора тем (тема — выбор из того, что есть в `theme.typ`).
+    // Длинная, потому что это таблица настроек, а не логика.
+    #[allow(clippy::too_many_lines)]
     pub fn new(themes: &[Theme]) -> Self {
         let mut theme_options = vec![choice("auto", "как в системе")];
         theme_options.extend(themes.iter().map(|t| choice(&t.name, &t.name)));
@@ -79,6 +81,7 @@ impl Schema {
                 Group { key: "header", label: "Шапка заметки" },
                 Group { key: "headings", label: "Заголовки" },
                 Group { key: "figures", label: "Рисунки" },
+                Group { key: "panels", label: "Панели" },
                 Group { key: "refresh", label: "Обновление" },
             ],
             settings: vec![
@@ -147,6 +150,15 @@ impl Schema {
                     },
                     default: json!("2"),
                 },
+                bool_def("panels.toc", "Оглавление сбоку, если хватает места", true),
+                SettingDef {
+                    key: "panels.toc_depth",
+                    label: "Уровней в оглавлении",
+                    help: Some("1 — только главы книги или разделы заметки"),
+                    kind: Kind::Number { min: 1.0, max: 4.0, step: 1.0 },
+                    default: json!(2),
+                },
+                bool_def("panels.backlinks", "«Ссылаются сюда» под заметкой", true),
                 SettingDef {
                     key: "refresh.interval",
                     label: "Проверять изменения, раз в N секунд",

@@ -134,6 +134,40 @@ impl Vault {
         Err(Error::NotFound(id.to_string()))
     }
 
+    /// Исходники заметки относительно корня: у заметки — её файл, у книги —
+    /// все `.typ` в папке (кроме служебных `_*` и `.*`), по алфавиту.
+    pub fn files_of(&self, entry: &Entry) -> Result<Vec<PathBuf>> {
+        match entry.kind {
+            NoteKind::Note => Ok(vec![entry.main.clone()]),
+            NoteKind::Book => {
+                let mut out = Vec::new();
+                let dir = entry.main.parent().expect("main.typ книги лежит в её папке");
+                self.typ_files(dir, &mut out)?;
+                out.sort();
+                Ok(out)
+            }
+        }
+    }
+
+    fn typ_files(&self, rel: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+        let dir = self.root.join(rel);
+        for item in fs::read_dir(&dir).map_err(|e| Error::io(&dir, e))? {
+            let item = item.map_err(|e| Error::io(&dir, e))?;
+            let name = item.file_name();
+            let Some(name) = name.to_str() else { continue };
+            if name.starts_with('_') || name.starts_with('.') {
+                continue;
+            }
+            let child = rel.join(name);
+            if item.file_type().map_err(|e| Error::io(item.path(), e))?.is_dir() {
+                self.typ_files(&child, out)?;
+            } else if child.extension().is_some_and(|e| e == "typ") {
+                out.push(child);
+            }
+        }
+        Ok(())
+    }
+
     fn scan(&self, dir: &Path, out: &mut Vec<Entry>) -> Result<()> {
         let read = fs::read_dir(dir).map_err(|e| Error::io(dir, e))?;
         for item in read {
@@ -215,6 +249,7 @@ mod tests {
         );
         let book = vault.entry(&NoteId::new("Матан").unwrap()).unwrap();
         assert_eq!(book.main, Path::new("Матан/main.typ"));
+        assert_eq!(vault.files_of(&book).unwrap(), [Path::new("Матан/01-глава.typ"), Path::new("Матан/main.typ")]);
         assert!(matches!(vault.entry(&NoteId::new("Нет").unwrap()), Err(Error::NotFound(_))));
     }
 }
