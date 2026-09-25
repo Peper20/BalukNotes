@@ -3,13 +3,17 @@
   import { app } from "../lib/app.svelte";
   import { noteHref } from "../lib/ids";
   import type { Folder } from "../lib/tree";
+  import { ui } from "../lib/ui.svelte";
   import TreeFolder from "./TreeFolder.svelte";
 
   let { folder }: { folder: Folder } = $props();
 </script>
 
 {#each folder.folders as f (f.path)}
-  <details open>
+  <details
+    open={!ui.collapsed.includes(f.path)}
+    ontoggle={(e) => ui.setCollapsed(f.path, !e.currentTarget.open)}
+  >
     <summary>{f.name}</summary>
     <div class="items"><TreeFolder folder={f} /></div>
   </details>

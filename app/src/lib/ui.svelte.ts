@@ -1,6 +1,7 @@
 // Состояние интерфейса вокруг заметки: главы книги, оглавление, панели.
 
 import type { Book } from "./book";
+import { load, save } from "./storage";
 
 class Ui {
   /** Показанная книга по главам (DOM глав — вне страницы) или null. */
@@ -22,6 +23,16 @@ class Ui {
   helpOpen = $state(false);
   /** Режим чтения: только текст — без панелей, вкладок и оглавления. */
   reading = $state(false);
+
+  /** Свёрнутые папки дерева (пути) — запоминаются. */
+  collapsed = $state<string[]>(load<string[]>("k-collapsed", []));
+
+  setCollapsed(path: string, closed: boolean): void {
+    const has = this.collapsed.includes(path);
+    if (closed === has) return;
+    this.collapsed = closed ? [...this.collapsed, path] : this.collapsed.filter((p) => p !== path);
+    save("k-collapsed", this.collapsed);
+  }
 
   openPalette(query = ""): void {
     this.palette = { query };
