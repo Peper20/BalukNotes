@@ -14,11 +14,13 @@
 //!
 //! Решения и их причины — `docs/architecture.md`.
 
+pub mod cache;
 pub mod check;
 pub mod diag;
 mod error;
 pub mod figures;
 pub mod fonts;
+mod fsutil;
 pub mod graph;
 pub mod notes;
 pub mod render;

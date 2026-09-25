@@ -7,13 +7,14 @@
 //! отбрасываются (с предупреждением в журнал), вместо них — значения по умолчанию.
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use parking_lot::RwLock;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 use crate::figures::FigureOptions;
+use crate::fsutil::write_atomic;
 use crate::themes::Theme;
 use crate::{Error, Result};
 
@@ -80,6 +81,7 @@ impl Schema {
                 Group { key: "appearance", label: "Внешний вид" },
                 Group { key: "header", label: "Шапка заметки" },
                 Group { key: "headings", label: "Заголовки" },
+                Group { key: "books", label: "Книги" },
                 Group { key: "figures", label: "Рисунки" },
                 Group { key: "panels", label: "Панели" },
                 Group { key: "refresh", label: "Обновление" },
@@ -135,6 +137,15 @@ impl Schema {
                         ],
                     },
                     default: json!("konspekt"),
+                },
+                SettingDef {
+                    key: "books.pages",
+                    label: "Показывать книгу",
+                    help: Some("По главам — быстрее открывается, но Ctrl+F ищет только в открытой главе"),
+                    kind: Kind::Choice {
+                        options: vec![choice("chapters", "по главам"), choice("whole", "целиком")]
+                    },
+                    default: json!("chapters"),
                 },
                 SettingDef {
                     key: "figures.precision",
@@ -273,15 +284,6 @@ impl SettingsStore {
         *values = next;
         Ok(values.clone())
     }
-}
-
-fn write_atomic(path: &Path, data: &[u8]) -> Result<()> {
-    if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
-    }
-    let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, data).map_err(|e| Error::io(&tmp, e))?;
-    fs::rename(&tmp, path).map_err(|e| Error::io(path, e))
 }
 
 #[cfg(test)]

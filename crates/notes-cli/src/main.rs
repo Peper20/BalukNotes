@@ -93,8 +93,13 @@ fn run(cli: Cli) -> Result<ExitCode> {
         tracing::info!("создано пустое хранилище {}", vault.display());
     }
     let started = std::time::Instant::now();
-    let notes = Notes::open(&NotesConfig { vault, library: cli.library.clone(), font_dirs: cli.font_paths.clone() })
-        .context("открыть хранилище")?;
+    let config = NotesConfig {
+        vault,
+        library: cli.library.clone(),
+        font_dirs: cli.font_paths.clone(),
+        cache: Some(notes_core::cache::default_dir(&cli.data)),
+    };
+    let notes = Notes::open(&config).context("открыть хранилище")?;
     tracing::info!(ms = started.elapsed().as_millis(), "хранилище {}", notes.vault().root().display());
 
     match cli.command {

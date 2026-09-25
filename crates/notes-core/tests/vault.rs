@@ -19,6 +19,7 @@ static NOTES: LazyLock<Notes> = LazyLock::new(|| {
         vault: repo().join("examples/vault"),
         library: repo().join("konspekt"),
         font_dirs: vec![],
+        cache: None,
     })
     .expect("тестовое хранилище открывается")
 });
@@ -118,4 +119,23 @@ fn check_finds_broken_links_only() {
 #[test]
 fn missing_note_is_not_found() {
     assert!(matches!(NOTES.page(&id("Нет/такой"), OPTS), Err(notes_core::Error::NotFound(_))));
+}
+
+#[test]
+fn disk_cache_survives_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let open = || {
+        Notes::open(&NotesConfig {
+            vault: repo().join("examples/vault"),
+            library: repo().join("konspekt"),
+            font_dirs: vec![],
+            cache: Some(dir.path().to_path_buf()),
+        })
+        .unwrap()
+    };
+    let first = open().page(&id("Сеть/UFW"), OPTS).unwrap();
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1, "страница записана в кэш");
+    let second = open().page(&id("Сеть/UFW"), OPTS).unwrap();
+    assert_eq!(first.version, second.version);
+    assert_eq!(first.rendered.as_ref().unwrap().body, second.rendered.as_ref().unwrap().body);
 }

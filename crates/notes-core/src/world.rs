@@ -101,9 +101,9 @@ pub struct Compilation {
 }
 
 pub struct Compiler {
-    /// Компиляции идут по одной: `FileStore` сбрасывается перед каждой, чтобы
-    /// увидеть изменения файлов и собрать список зависимостей именно этой
-    /// заметки. Внутри компиляции Typst сам распараллеливает работу.
+    /// Заметки собираются по одной: `FileStore` сбрасывается перед каждой,
+    /// чтобы увидеть изменения файлов и собрать список зависимостей именно
+    /// этой заметки. Темы одной заметки — параллельно.
     files: Mutex<FileStore<Loader>>,
     fonts: Arc<Fonts>,
     /// Стандартная библиотека Typst на каждую тему ("" — без темы).
@@ -142,24 +142,43 @@ impl Compiler {
         let mut files = self.files.lock();
         files.reset();
         let time = Time::system();
+        // Темы собираются параллельно: у каждой свой мир, кэш файлов общий.
+        // Typst и сам распараллеливает вёрстку, но рисунки CeTZ считаются
+        // в основном в одном потоке — две темы параллельно почти вдвое быстрее.
+        let store = &*files;
+        let results: Vec<ThemeResult> = std::thread::scope(|scope| {
+            let handles: Vec<_> = themes
+                .iter()
+                .map(|theme| {
+                    let library = self.library(theme);
+                    let (fonts, time) = (&*self.fonts, &time);
+                    std::thread::Builder::new()
+                        .name(format!("typst-{theme}"))
+                        .stack_size(COMPILE_STACK)
+                        .spawn_scoped(scope, move || {
+                            let world = CompileWorld { files: store, fonts, library: &library, main, time };
+                            compile_theme(&world, theme)
+                        })
+                        .expect("поток компиляции запускается")
+                })
+                .collect();
+            handles.into_iter().map(|h| h.join().expect("компиляция темы не паникует")).collect()
+        });
+
         let mut docs = Vec::with_capacity(themes.len());
         let mut errors = None;
         let mut warnings: Vec<Diagnostic> = Vec::new();
-        for theme in themes {
-            let library = self.library(theme);
-            let world = CompileWorld { files: &files, fonts: &self.fonts, library: &library, main, time: &time };
-            let result = typst::compile::<HtmlDocument>(&world);
-            for w in result.warnings.iter().filter(|w| !Diagnostic::is_noise(w)) {
-                let d = Diagnostic::from_typst(&world, w);
-                if !warnings.contains(&d) {
-                    warnings.push(d);
+        for r in results {
+            for w in r.warnings {
+                if !warnings.contains(&w) {
+                    warnings.push(w);
                 }
             }
-            match result.output {
-                Ok(doc) => docs.push((theme.clone(), doc)),
+            match r.doc {
+                Ok(doc) => docs.push((r.theme, doc)),
+                // В других темах ошибка та же — показываем первую.
                 Err(errs) => {
-                    errors = Some(errs.iter().map(|e| Diagnostic::from_typst(&world, e)).collect());
-                    break; // в других темах ошибка та же
+                    errors.get_or_insert(errs);
                 }
             }
         }
@@ -187,6 +206,23 @@ impl Compiler {
             Library::builder().with_inputs(inputs).with_features(Features::from_iter([Feature::Html])).build();
         self.libraries.write().entry(theme.to_owned()).or_insert_with(|| Arc::new(LazyHash::new(library))).clone()
     }
+}
+
+/// Стек потока компиляции: глубокая вложенность разметки рекурсивна.
+const COMPILE_STACK: usize = 64 << 20;
+
+struct ThemeResult {
+    theme: String,
+    doc: Result<HtmlDocument, Vec<Diagnostic>>,
+    warnings: Vec<Diagnostic>,
+}
+
+fn compile_theme(world: &CompileWorld, theme: &str) -> ThemeResult {
+    let result = typst::compile::<HtmlDocument>(world);
+    let warnings =
+        result.warnings.iter().filter(|w| !Diagnostic::is_noise(w)).map(|w| Diagnostic::from_typst(world, w)).collect();
+    let doc = result.output.map_err(|errs| errs.iter().map(|e| Diagnostic::from_typst(world, e)).collect());
+    ThemeResult { theme: theme.to_owned(), doc, warnings }
 }
 
 fn main_id(main: &Path) -> Result<FileId, String> {

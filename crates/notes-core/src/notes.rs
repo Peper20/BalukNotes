@@ -21,6 +21,7 @@ use std::time::SystemTime;
 use parking_lot::Mutex;
 use serde::Serialize;
 
+use crate::cache::DiskCache;
 use crate::diag::Diagnostic;
 use crate::figures::{self, FigureOptions};
 use crate::fonts::Fonts;
@@ -39,6 +40,8 @@ pub struct NotesConfig {
     pub library: PathBuf,
     /// Дополнительные каталоги шрифтов (к системным и встроенным в Typst).
     pub font_dirs: Vec<PathBuf>,
+    /// Кэш отрисовки на диске (`None` — только в памяти).
+    pub cache: Option<PathBuf>,
 }
 
 /// Куда ведут ссылки между заметками.
@@ -81,6 +84,7 @@ pub struct Notes {
     compiler: Compiler,
     themes: ThemeSet,
     cache: Mutex<HashMap<NoteId, Cached>>,
+    disk: Option<DiskCache>,
     links: LinkIndex,
 }
 
@@ -94,7 +98,8 @@ impl Notes {
         let fonts = Arc::new(Fonts::load(&config.font_dirs));
         let compiler = Compiler::new(vault.root(), &library, fonts);
         let themes = ThemeSet::load(&compiler)?;
-        Ok(Self { vault, compiler, themes, cache: Mutex::default(), links: LinkIndex::default() })
+        let disk = config.cache.as_ref().map(|dir| DiskCache::new(dir, vault.root()));
+        Ok(Self { vault, compiler, themes, cache: Mutex::default(), disk, links: LinkIndex::default() })
     }
 
     pub fn vault(&self) -> &Vault {
@@ -148,6 +153,11 @@ impl Notes {
                 None => None,
             }
         };
+        if previous_raw.is_none()
+            && let Some(page) = self.load_from_disk(&entry, opts)
+        {
+            return Ok(page);
+        }
         let built = self.build(&entry, LinkStyle::Server, opts);
         let (rendered, raw) = match built.raw {
             Some(raw) => (built.rendered, Some(raw)),
@@ -155,9 +165,32 @@ impl Notes {
             None => (previous_raw.as_deref().map(|r| Arc::new(self.finish(r, opts))), previous_raw),
         };
         let page = Arc::new(NotePage { rendered, ..built.page });
+        if page.errors.is_empty()
+            && let (Some(disk), Some(raw)) = (&self.disk, &raw)
+        {
+            disk.store(id, &built.files, &built.deps, raw, &page.warnings);
+        }
         let cached = Cached { page: page.clone(), raw, opts, deps: built.deps, files: built.files };
         self.cache.lock().insert(id.clone(), cached);
         Ok(page)
+    }
+
+    /// Страница из кэша на диске, если файлы заметки с тех пор не менялись.
+    fn load_from_disk(&self, entry: &Entry, opts: FigureOptions) -> Option<Arc<NotePage>> {
+        let stored = self.disk.as_ref()?.load(&entry.id, version_of)?;
+        tracing::debug!(id = %entry.id, "из кэша на диске");
+        let raw = Arc::new(stored.raw);
+        let page = Arc::new(NotePage {
+            id: entry.id.clone(),
+            kind: entry.kind,
+            version: page_version(&stored.files, opts),
+            rendered: Some(Arc::new(self.finish(&raw, opts))),
+            errors: vec![],
+            warnings: stored.warnings,
+        });
+        let cached = Cached { page: page.clone(), raw: Some(raw), opts, deps: stored.deps, files: stored.files };
+        self.cache.lock().insert(entry.id.clone(), cached);
+        Some(page)
     }
 
     /// Текущая версия заметки. Для уже собранной — только `stat` её файлов,

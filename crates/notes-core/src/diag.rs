@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use typst::diag::{Severity, SourceDiagnostic};
 use typst::syntax::VirtualRoot;
 use typst::{World, WorldExt};
@@ -10,7 +10,7 @@ use typst::{World, WorldExt};
 /// Шум, который приходит при каждой HTML-компиляции и ничего не сообщает.
 const NOISE: &[&str] = &["html export is under active development"];
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Diagnostic {
     pub severity: DiagSeverity,
     pub message: String,
@@ -22,7 +22,7 @@ pub struct Diagnostic {
     pub hints: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DiagSeverity {
     Error,

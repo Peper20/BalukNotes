@@ -22,6 +22,7 @@ const state = {
   pending: null, // AbortController загрузки, которая сейчас идёт
   headings: [], // заголовки показанной заметки [{level, id, anchor, text}]
   tocLinks: [], // [[заголовок в заметке, ссылка в оглавлении]] — для подсветки
+  book: null, // книга по главам: см. splitBook()
 };
 
 // ── API ──────────────────────────────────────────────────────────────────
@@ -84,8 +85,10 @@ async function saveSettings(patch) {
     });
     error.hidden = true;
     applySettings();
-    // Настройки отрисовки (figures.*) меняют версию страницы на сервере.
+    // Настройки отрисовки (figures.*) меняют версию страницы на сервере,
+    // вид книги (books.*) — раскладку уже полученной страницы.
     if (Object.keys(patch).some((k) => k.startsWith("figures."))) check();
+    else if (state.current && Object.keys(patch).some((k) => k.startsWith("books."))) loadNote(state.current);
   } catch (e) {
     error.textContent = e.message;
     error.hidden = false;
@@ -219,6 +222,8 @@ function renderProblems(page) {
 function scrollToAnchor(hash) {
   if (!hash || hash.length < 2) return false;
   const name = decodeURIComponent(hash.slice(1));
+  const chapter = state.book?.byAnchor.get(name);
+  if (chapter != null && chapter !== state.book.current) showChapter(chapter);
   const el = document.getElementById(name) ?? $("#note").querySelector(`[data-k-anchor="${CSS.escape(name)}"]`);
   el?.scrollIntoView();
   return Boolean(el);
@@ -260,7 +265,13 @@ async function loadNote(id, { keepScroll = false } = {}) {
     const y = scrollY;
     root.dataset.kind = page.kind;
     const r = page.rendered;
-    $("#note").innerHTML = r ? r.styles + r.body : "";
+    const chapter = keepScroll ? state.book?.current : null;
+    state.book = r && state.settings["books.pages"] === "chapters" ? splitBook(r.styles + r.body) : null;
+    if (state.book) showChapter(chapter ?? chapterOfHash() ?? 0);
+    else {
+      $("#note").innerHTML = r ? r.styles + r.body : "";
+      $("#chapter-nav").hidden = true;
+    }
     renderProblems(page);
     state.headings = r?.headings ?? [];
     renderToc();
@@ -294,6 +305,8 @@ function showIndex() {
   cancelPending();
   state.current = null;
   state.version = null;
+  state.book = null;
+  $("#chapter-nav").hidden = true;
   state.headings = [];
   renderToc();
   $("#backlinks").hidden = true;
@@ -317,6 +330,65 @@ function showIndex() {
   $("#note").replaceChildren(box);
 }
 
+// ── Книга по главам ──────────────────────────────────────────────────────
+//
+// Сервер отдаёт книгу целиком (по сети это ~0,2 МБ), а в страницу
+// вставляется одна глава: вёрстка всей книги — сотни миллисекунд на ПК и
+// секунды на телефоне. Главы — прямые потомки <article class="k-doc"> от
+// одного h2.k-h1 до следующего; всё до первой главы (титул) идёт с первой.
+
+/** HTML книги → {article, intro, chapters: [{heading, nodes}], byAnchor, current}; не книга — null. */
+function splitBook(html) {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
+  const article = tpl.content.querySelector('article.k-doc[data-doc="книга"]');
+  if (!article) return null;
+  const kids = [...article.childNodes];
+  const starts = kids.flatMap((n, i) => (n.nodeType === 1 && n.matches("h2.k-h1") ? [i] : []));
+  if (starts.length < 2) return null;
+  const chapters = starts.map((start, k) => ({ heading: kids[start], nodes: kids.slice(start, starts[k + 1] ?? kids.length) }));
+  // Якорь (id или слаг заголовка) → номер главы: для ссылок и оглавления.
+  const byAnchor = new Map();
+  chapters.forEach((c, k) => {
+    for (const n of c.nodes) {
+      if (n.nodeType !== 1) continue;
+      for (const el of [n, ...n.querySelectorAll("[id], [data-k-anchor]")]) {
+        if (el.id) byAnchor.set(el.id, k);
+        if (el.dataset.kAnchor) byAnchor.set(el.dataset.kAnchor, k);
+      }
+    }
+  });
+  const intro = kids.slice(0, starts[0]);
+  article.replaceChildren();
+  $("#note").replaceChildren(tpl.content);
+  return { article, intro, chapters, byAnchor, current: null };
+}
+
+function chapterOfHash() {
+  return location.hash.length > 1 ? state.book.byAnchor.get(decodeURIComponent(location.hash.slice(1))) : undefined;
+}
+
+function showChapter(k) {
+  const book = state.book;
+  book.current = k;
+  book.article.replaceChildren(...(k === 0 ? book.intro : []), ...book.chapters[k].nodes);
+  const nav = $("#chapter-nav");
+  const link = (i, cls, label) => {
+    const h = book.chapters[i].heading;
+    const a = Object.assign(document.createElement("a"), { className: cls, href: `#${encodeURIComponent(h.id)}` });
+    const num = h.dataset.num ? `${h.dataset.num}. ` : "";
+    const title = [...h.childNodes].filter((n) => !n.classList?.contains("k-num")).map((n) => n.textContent).join("");
+    a.append(Object.assign(document.createElement("small"), { textContent: label }), `${num}${title}`);
+    return a;
+  };
+  nav.replaceChildren(
+    ...(k > 0 ? [link(k - 1, "prev", "← предыдущая глава")] : []),
+    ...(k + 1 < book.chapters.length ? [link(k + 1, "next", "следующая глава →")] : []),
+  );
+  nav.hidden = false;
+  markCurrentHeading();
+}
+
 // ── Оглавление и обратные ссылки ─────────────────────────────────────────
 
 /** Оглавление по заголовкам заметки: `panels.toc_depth` уровней от верхнего. */
@@ -337,13 +409,26 @@ function renderToc() {
   const links = shown.map((h) => {
     const a = Object.assign(document.createElement("a"), { href: `#${encodeURIComponent(h.id)}`, textContent: h.text });
     a.dataset.depth = h.level - top;
-    const target = document.getElementById(h.id);
+    const target = document.getElementById(h.id) ?? findInBook(h.id);
     if (target) state.tocLinks.push([target, a]);
     return a;
   });
   toc.replaceChildren(title, ...links);
   layoutToc();
   markCurrentHeading();
+}
+
+/** Элемент с id в невидимой главе книги. */
+function findInBook(id) {
+  const k = state.book?.byAnchor.get(id);
+  if (k == null) return null;
+  for (const n of state.book.chapters[k].nodes) {
+    if (n.nodeType !== 1) continue;
+    if (n.id === id) return n;
+    const el = n.querySelector(`[id="${CSS.escape(id)}"]`);
+    if (el) return el;
+  }
+  return null;
 }
 
 /** Хватает ли места справа от колонки заметки для оглавления. */
@@ -360,14 +445,17 @@ function layoutToc() {
 function markCurrentHeading() {
   let current = null;
   // Докрутили до конца — последние разделы до верха окна не доедут.
-  if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2) current = state.tocLinks.at(-1)?.[1];
+  if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2) {
+    current = state.tocLinks.findLast(([heading]) => heading.isConnected)?.[1];
+  }
   else {
     for (const [heading, link] of state.tocLinks) {
+      if (!heading.isConnected) continue; // другая глава книги
       if (heading.getBoundingClientRect().top > 90) break;
       current = link;
     }
   }
-  current ??= state.tocLinks[0]?.[1];
+  current ??= state.tocLinks.find(([heading]) => heading.isConnected)?.[1];
   for (const [, link] of state.tocLinks) link.classList.toggle("current", link === current);
   if (current && $("#app").classList.contains("toc-room")) current.scrollIntoView({ block: "nearest" });
 }
@@ -443,7 +531,15 @@ function schedule() {
 
 function route() {
   const path = decodeURIComponent(location.pathname);
-  if (path.startsWith("/n/")) loadNote(path.slice(3));
+  const id = path.startsWith("/n/") ? path.slice(3) : null;
+  // «Назад» по якорям той же заметки — без перезагрузки (у книги — смена главы).
+  if (id && id === state.current && !state.pending) {
+    if (scrollToAnchor(location.hash)) return;
+    if (state.book) showChapter(0);
+    scrollTo(0, 0);
+    return;
+  }
+  if (id) loadNote(id);
   else showIndex();
 }
 

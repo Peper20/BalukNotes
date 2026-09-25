@@ -23,7 +23,7 @@ use std::collections::HashSet;
 use std::sync::LazyLock;
 
 use ecow::EcoVec;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use typst::model::Document as _;
 use typst_html::tag::mathml;
 use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlFrame, HtmlNode, HtmlOptions, HtmlTag, attr, tag};
@@ -58,7 +58,7 @@ const CODE_COLORS: [(&str, &str); 8] = [
     ("#010107", "hl"),
 ];
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Heading {
     /// Уровень оформления: 1 — глава книги, 2 — раздел, …
     pub level: u8,
@@ -69,13 +69,13 @@ pub struct Heading {
 }
 
 /// Ссылка из заметки, как она написана в `#см(…)`.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct LinkRef {
     pub target: String,
     pub anchor: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Rendered {
     pub title: Option<String>,
     /// `<style>` из `<head>` (стили MathML от Typst).

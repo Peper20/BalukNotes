@@ -19,6 +19,7 @@ static NOTES: LazyLock<Arc<Notes>> = LazyLock::new(|| {
             vault: repo.join("examples/vault"),
             library: repo.join("konspekt"),
             font_dirs: vec![],
+            cache: None,
         })
         .unwrap(),
     )
