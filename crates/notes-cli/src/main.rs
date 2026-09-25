@@ -100,13 +100,21 @@ fn run(cli: Cli) -> Result<ExitCode> {
     match cli.command {
         Command::Serve { addr } => serve(notes, &cli.data, addr),
         Command::Check { json } => run_check(&notes, json),
-        Command::Build { out } => build::build(&notes, &out).map(|()| ExitCode::SUCCESS),
+        Command::Build { out } => {
+            // Рисунки — с той же точностью, что выбрана в приложении.
+            let opts = open_settings(&notes, &cli.data)?.figure_options();
+            build::build(&notes, &out, opts).map(|()| ExitCode::SUCCESS)
+        }
     }
 }
 
-fn serve(notes: Notes, data: &std::path::Path, addr: SocketAddr) -> Result<ExitCode> {
+fn open_settings(notes: &Notes, data: &std::path::Path) -> Result<SettingsStore> {
     let schema = Schema::new(notes.themes().themes());
-    let settings = SettingsStore::open(data.join("settings.json"), schema).context("настройки")?;
+    SettingsStore::open(data.join("settings.json"), schema).context("настройки")
+}
+
+fn serve(notes: Notes, data: &std::path::Path, addr: SocketAddr) -> Result<ExitCode> {
+    let settings = open_settings(&notes, data)?;
     let state = notes_server::AppState { notes: Arc::new(notes), settings: Arc::new(settings) };
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async move {

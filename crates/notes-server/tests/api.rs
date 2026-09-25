@@ -99,3 +99,13 @@ async fn client_and_fonts_are_served() {
     let res = app.oneshot(Request::get("/fonts/Comic%20Sans/regular").body(Body::empty()).unwrap()).await.unwrap();
     assert_eq!(res.status(), StatusCode::NOT_FOUND, "раздаются только шрифты оформления");
 }
+
+#[tokio::test]
+async fn responses_are_compressed() {
+    let (app, _dir) = app();
+    let req =
+        Request::get(uri("/api/notes/демо/визуализация")).header("accept-encoding", "br, gzip").body(Body::empty());
+    let res = app.oneshot(req.unwrap()).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()["content-encoding"], "br");
+}

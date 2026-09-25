@@ -4,6 +4,11 @@
 //! localhost). Компиляция — блокирующая работа, она уходит в
 //! `spawn_blocking`, чтобы не держать поток асинхронного рантайма.
 //!
+//! Ответы сжимаются (brotli или gzip — что примет клиент): HTML заметок с
+//! формулами и рисунками сжимается в 7–13 раз («Матан»: 3,7 МБ → 0,28 МБ
+//! brotli, 0,54 МБ gzip; уровни по умолчанию — быстрее «лучших» при почти том же
+//! размере).
+//!
 //! | Путь                         | Что                                          |
 //! |------------------------------|----------------------------------------------|
 //! | `GET /`, `GET /n/{*id}`      | клиент (одна страница, маршрутизация в JS)   |
@@ -31,6 +36,7 @@ use notes_core::settings::SettingsStore;
 use notes_core::{NoteId, Notes};
 use rust_embed::RustEmbed;
 use serde_json::{Map, Value, json};
+use tower_http::compression::CompressionLayer;
 
 /// Шрифты оформления, которые нужны браузеру (из `konspekt/theme.typ`).
 const WEB_FONTS: &[&str] = &["Gentium Plus", "JetBrains Mono", "New Computer Modern Math"];
@@ -60,6 +66,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/themes.css", get(themes_css))
         .route("/api/fonts.css", get(fonts_css))
         .route("/fonts/{family}/{style}", get(font))
+        .layer(CompressionLayer::new())
         .with_state(state)
 }
 
@@ -144,15 +151,15 @@ async fn list_notes(State(s): State<AppState>) -> ApiResult<Json<Value>> {
 
 async fn note(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Response> {
     let id = NoteId::new(id)?;
-    let notes = s.notes.clone();
-    let page = blocking(move || notes.page(&id)).await?;
+    let (notes, opts) = (s.notes.clone(), s.settings.figure_options());
+    let page = blocking(move || notes.page(&id, opts)).await?;
     Ok(Json(page).into_response())
 }
 
 async fn version(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<Value>> {
     let id = NoteId::new(id)?;
-    let notes = s.notes.clone();
-    let version = blocking(move || notes.version(&id)).await?;
+    let (notes, opts) = (s.notes.clone(), s.settings.figure_options());
+    let version = blocking(move || notes.version(&id, opts)).await?;
     Ok(Json(json!({ "version": version })))
 }
 

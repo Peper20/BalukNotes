@@ -6,6 +6,10 @@
 //! изменения и размеров этих файлов: узнать, изменилась ли заметка, стоит
 //! нескольких `stat`, без компиляции. Никаких фоновых наблюдателей: см.
 //! `docs/architecture.md`, «Обновление — по запросу».
+//!
+//! Обработка рисунков ([`crate::figures`]) зависит от настроек, поэтому в
+//! кэше лежит и сырая отрисовка: смена точности не перекомпилирует заметку.
+//! Настройки входят в версию страницы — клиент перезапросит её сам.
 
 use std::collections::HashMap;
 use std::fs;
@@ -18,6 +22,7 @@ use parking_lot::Mutex;
 use serde::Serialize;
 
 use crate::diag::Diagnostic;
+use crate::figures::{self, FigureOptions};
 use crate::fonts::Fonts;
 use crate::render::{self, LinkResolver, Rendered};
 use crate::themes::ThemeSet;
@@ -49,6 +54,7 @@ pub enum LinkStyle {
 pub struct NotePage {
     pub id: NoteId,
     pub kind: NoteKind,
+    /// Версия файлов заметки и настроек отрисовки.
     pub version: String,
     /// Последняя удачная отрисовка. При ошибке компиляции — предыдущая
     /// удачная (если была): читатель видит заметку и ошибку поверх неё.
@@ -60,7 +66,12 @@ pub struct NotePage {
 #[derive(Debug)]
 struct Cached {
     page: Arc<NotePage>,
+    /// Отрисовка до обработки рисунков (последняя удачная).
+    raw: Option<Arc<Rendered>>,
+    opts: FigureOptions,
     deps: Vec<PathBuf>,
+    /// Версия файлов, по которой собрана страница.
+    files: String,
 }
 
 #[derive(Debug)]
@@ -101,58 +112,121 @@ impl Notes {
     }
 
     /// Страница заметки для сервера: из кэша, если её файлы не менялись.
-    pub fn page(&self, id: &NoteId) -> Result<Arc<NotePage>> {
+    pub fn page(&self, id: &NoteId, opts: FigureOptions) -> Result<Arc<NotePage>> {
         let entry = self.vault.entry(id)?;
-        let previous = {
+        let previous_raw = {
             let cache = self.cache.lock();
             match cache.get(id) {
-                Some(c) if version_of(&c.deps) == c.page.version => return Ok(c.page.clone()),
-                Some(c) => c.page.rendered.clone(),
+                Some(c) if version_of(&c.deps) == c.files => {
+                    if c.opts == opts {
+                        return Ok(c.page.clone());
+                    }
+                    // Файлы те же, настройки другие — только обработка рисунков.
+                    let (page, raw, deps, files) = (c.page.clone(), c.raw.clone(), c.deps.clone(), c.files.clone());
+                    drop(cache);
+                    let rendered = raw.as_deref().map(|r| Arc::new(self.finish(r, opts)));
+                    let page = Arc::new(NotePage {
+                        id: page.id.clone(),
+                        kind: page.kind,
+                        version: page_version(&files, opts),
+                        rendered,
+                        errors: page.errors.clone(),
+                        warnings: page.warnings.clone(),
+                    });
+                    self.cache.lock().insert(id.clone(), Cached { page: page.clone(), raw, opts, deps, files });
+                    return Ok(page);
+                }
+                Some(c) => c.raw.clone(),
                 None => None,
             }
         };
-        let (page, deps) = self.build(&entry, LinkStyle::Server, previous);
-        let page = Arc::new(page);
-        self.cache.lock().insert(id.clone(), Cached { page: page.clone(), deps });
+        let built = self.build(&entry, LinkStyle::Server, opts);
+        let (rendered, raw) = match built.raw {
+            Some(raw) => (built.rendered, Some(raw)),
+            // Ошибка — показываем прежнюю удачную отрисовку.
+            None => (previous_raw.as_deref().map(|r| Arc::new(self.finish(r, opts))), previous_raw),
+        };
+        let page = Arc::new(NotePage { rendered, ..built.page });
+        let cached = Cached { page: page.clone(), raw, opts, deps: built.deps, files: built.files };
+        self.cache.lock().insert(id.clone(), cached);
         Ok(page)
     }
 
     /// Текущая версия заметки. Для уже собранной — только `stat` её файлов,
     /// без компиляции; для новой — собирает.
-    pub fn version(&self, id: &NoteId) -> Result<String> {
+    pub fn version(&self, id: &NoteId, opts: FigureOptions) -> Result<String> {
         if let Some(c) = self.cache.lock().get(id) {
-            return Ok(version_of(&c.deps));
+            return Ok(page_version(&version_of(&c.deps), opts));
         }
-        Ok(self.page(id)?.version.clone())
+        Ok(self.page(id, opts)?.version.clone())
     }
 
     /// Страница для статического сайта: без кэша, относительные ссылки.
-    pub fn page_static(&self, entry: &Entry) -> NotePage {
-        self.build(entry, LinkStyle::Static, None).0
+    pub fn page_static(&self, entry: &Entry, opts: FigureOptions) -> NotePage {
+        let built = self.build(entry, LinkStyle::Static, opts);
+        NotePage { rendered: built.rendered, ..built.page }
     }
 
-    fn build(&self, entry: &Entry, style: LinkStyle, previous: Option<Arc<Rendered>>) -> (NotePage, Vec<PathBuf>) {
+    fn build(&self, entry: &Entry, style: LinkStyle, opts: FigureOptions) -> Built {
         let started = std::time::Instant::now();
         let compilation = self.compiler.compile_html(&entry.main, &self.themes.names());
         let links = VaultLinks { vault: &self.vault, style, from: &entry.id };
-        let (rendered, errors) = match compilation.docs {
+        let (raw, errors) = match compilation.docs {
             Ok(docs) => match render::render(docs, &links) {
                 Ok(r) => (Some(Arc::new(r)), vec![]),
-                Err(message) => (previous, vec![Diagnostic::error(message)]),
+                Err(message) => (None, vec![Diagnostic::error(message)]),
             },
-            Err(errors) => (previous, errors),
+            Err(errors) => (None, errors),
         };
+        let rendered = raw.as_deref().map(|r| Arc::new(self.finish(r, opts)));
         tracing::debug!(id = %entry.id, ms = started.elapsed().as_millis(), errors = errors.len(), "собрана");
+        let files = version_of(&compilation.deps);
         let page = NotePage {
             id: entry.id.clone(),
             kind: entry.kind,
-            version: version_of(&compilation.deps),
-            rendered,
+            version: page_version(&files, opts),
+            rendered: None,
             errors,
             warnings: compilation.warnings,
         };
-        (page, compilation.deps)
+        Built { page, rendered, raw, deps: compilation.deps, files }
     }
+
+    /// Обработка рисунков: общие глифы, один SVG на темы, округление.
+    fn finish(&self, raw: &Rendered, opts: FigureOptions) -> Rendered {
+        let o = figures::optimize(&raw.body, &self.themes.names(), opts);
+        tracing::debug!(
+            before = raw.body.len(),
+            after = o.body.len(),
+            figures = o.stats.figures,
+            merged = o.stats.merged,
+            glyphs = o.stats.glyphs,
+            colors = o.stats.colors,
+            "рисунки"
+        );
+        Rendered {
+            title: raw.title.clone(),
+            styles: format!("{}{}", raw.styles, o.styles),
+            body: o.body,
+            headings: raw.headings.clone(),
+            links: raw.links.clone(),
+            tags: raw.tags.clone(),
+        }
+    }
+}
+
+/// Результат сборки: страница без отрисовки (её кладёт вызывающий —
+/// свежую или прежнюю), отрисовка, сырая отрисовка, файлы.
+struct Built {
+    page: NotePage,
+    rendered: Option<Arc<Rendered>>,
+    raw: Option<Arc<Rendered>>,
+    deps: Vec<PathBuf>,
+    files: String,
+}
+
+fn page_version(files: &str, opts: FigureOptions) -> String {
+    format!("{files}-{}", opts.key())
 }
 
 /// Хэш (путь, время изменения, размер) по всем файлам. Пропавший файл тоже

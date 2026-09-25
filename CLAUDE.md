@@ -46,6 +46,9 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   не ошибки, а `Diagnostic` в `NotePage`.
 - Пути заметок — только через `NoteId` (проверяет `..`, служебные `_`/`.`).
 - Линты — `[workspace.lints]` (clippy pedantic); `#[allow]` — точечно и с причиной.
+- Страница заметки: `render.rs` (дерево typst-html: склейка тем, якоря,
+  ссылки) → `figures.rs` (текст SVG: один SVG на темы, общие глифы,
+  округление). Замер веса — `RUST_LOG=notes_core=debug`, строка «рисунки».
 - Тесты: модульные рядом с кодом; сквозные — `crates/*/tests/` на `examples/vault`.
 
 ## Клиент `web/`

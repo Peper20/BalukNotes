@@ -17,6 +17,7 @@
 pub mod check;
 pub mod diag;
 mod error;
+pub mod figures;
 pub mod fonts;
 pub mod notes;
 pub mod render;

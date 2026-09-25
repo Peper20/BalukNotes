@@ -79,6 +79,8 @@ async function saveSettings(patch) {
     });
     error.hidden = true;
     applySettings();
+    // Настройки отрисовки (figures.*) меняют версию страницы на сервере.
+    if (Object.keys(patch).some((k) => k.startsWith("figures."))) check();
   } catch (e) {
     error.textContent = e.message;
     error.hidden = false;

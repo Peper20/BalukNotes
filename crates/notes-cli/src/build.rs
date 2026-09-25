@@ -7,13 +7,14 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
+use notes_core::figures::FigureOptions;
 use notes_core::fonts::WebVariant;
 use notes_core::notes::{encode, static_path};
 use notes_core::{NoteKind, Notes};
 
 const ASSETS: &[&str] = &["konspekt.css", "static.js"];
 
-pub fn build(notes: &Notes, out: &Path) -> Result<()> {
+pub fn build(notes: &Notes, out: &Path, opts: FigureOptions) -> Result<()> {
     fs::create_dir_all(out).with_context(|| format!("создать {}", out.display()))?;
     let assets = out.join("assets");
     fs::create_dir_all(&assets)?;
@@ -30,7 +31,7 @@ pub fn build(notes: &Notes, out: &Path) -> Result<()> {
     let mut index = String::new();
     let entries = notes.entries()?;
     for entry in &entries {
-        let page = notes.page_static(entry);
+        let page = notes.page_static(entry, opts);
         for e in &page.errors {
             eprintln!("{}: {e}", entry.id);
         }

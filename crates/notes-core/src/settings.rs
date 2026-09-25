@@ -13,6 +13,7 @@ use parking_lot::RwLock;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
+use crate::figures::FigureOptions;
 use crate::themes::Theme;
 use crate::{Error, Result};
 
@@ -77,6 +78,7 @@ impl Schema {
                 Group { key: "appearance", label: "Внешний вид" },
                 Group { key: "header", label: "Шапка заметки" },
                 Group { key: "headings", label: "Заголовки" },
+                Group { key: "figures", label: "Рисунки" },
                 Group { key: "refresh", label: "Обновление" },
             ],
             settings: vec![
@@ -130,6 +132,20 @@ impl Schema {
                         ],
                     },
                     default: json!("konspekt"),
+                },
+                SettingDef {
+                    key: "figures.precision",
+                    label: "Точность координат",
+                    help: Some("Грубее — страница легче. Вид при 0,01 pt не отличить от точного"),
+                    kind: Kind::Choice {
+                        options: vec![
+                            choice("full", "как в Typst (без округления)"),
+                            choice("3", "0,001 pt"),
+                            choice("2", "0,01 pt"),
+                            choice("1", "0,1 pt — самая лёгкая"),
+                        ],
+                    },
+                    default: json!("2"),
                 },
                 SettingDef {
                     key: "refresh.interval",
@@ -222,6 +238,16 @@ impl SettingsStore {
         self.values.read().clone()
     }
 
+    /// Обработка рисунков по настройкам `figures.*`.
+    pub fn figure_options(&self) -> FigureOptions {
+        let values = self.values.read();
+        match values.get("figures.precision").and_then(Value::as_str) {
+            Some("full") => FigureOptions { precision: None },
+            Some(p) => p.parse().map_or_else(|_| FigureOptions::default(), |p| FigureOptions { precision: Some(p) }),
+            None => FigureOptions::default(),
+        }
+    }
+
     /// Меняет несколько настроек разом: либо все верны и записаны, либо ни одна.
     pub fn update(&self, patch: &Map<String, Value>) -> Result<Map<String, Value>> {
         let mut checked = Vec::with_capacity(patch.len());
@@ -300,5 +326,11 @@ mod tests {
         store.update(&changes).unwrap();
         let reopened = SettingsStore::open(&path, schema()).unwrap();
         assert_eq!(reopened.values()["refresh.interval"], json!(0));
+        assert_eq!(reopened.figure_options(), FigureOptions::default());
+
+        let mut changes = Map::new();
+        changes.insert("figures.precision".into(), json!("full"));
+        store.update(&changes).unwrap();
+        assert_eq!(store.figure_options(), FigureOptions { precision: None });
     }
 }

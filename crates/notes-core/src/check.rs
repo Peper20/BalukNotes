@@ -6,6 +6,7 @@
 use serde::Serialize;
 
 use crate::diag::Diagnostic;
+use crate::figures::FigureOptions;
 use crate::notes::Notes;
 use crate::render::slug;
 use crate::vault::NoteId;
@@ -41,7 +42,7 @@ impl Report {
 pub fn check(notes: &Notes) -> Result<Report> {
     let mut out = Vec::new();
     for entry in notes.entries()? {
-        let page = notes.page(&entry.id)?;
+        let page = notes.page(&entry.id, FigureOptions::default())?;
         let mut broken = Vec::new();
         // При ошибке компиляции ссылки берутся из прошлой удачной сборки —
         // в свежем процессе её нет, и ссылки не проверяются (видна ошибка).
@@ -69,7 +70,7 @@ fn link_problem(notes: &Notes, target: &str, anchor: Option<&str>) -> Result<Opt
     let Ok(id) = NoteId::new(target) else {
         return Ok(Some("недопустимый путь".into()));
     };
-    let page = match notes.page(&id) {
+    let page = match notes.page(&id, FigureOptions::default()) {
         Ok(page) => page,
         Err(Error::NotFound(_)) => return Ok(Some("нет такой заметки".into())),
         Err(e) => return Err(e),

@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 
 use notes_core::check::check;
+use notes_core::figures::FigureOptions;
 use notes_core::{NoteId, NoteKind, Notes, NotesConfig};
 
 fn repo() -> PathBuf {
@@ -22,6 +23,8 @@ static NOTES: LazyLock<Notes> = LazyLock::new(|| {
     .expect("тестовое хранилище открывается")
 });
 
+const OPTS: FigureOptions = FigureOptions { precision: Some(2) };
+
 fn id(s: &str) -> NoteId {
     NoteId::new(s).unwrap()
 }
@@ -36,7 +39,7 @@ fn themes_come_from_library() {
 
 #[test]
 fn note_renders_with_anchors_links_and_tags() {
-    let page = NOTES.page(&id("Сеть/SSH")).unwrap();
+    let page = NOTES.page(&id("Сеть/SSH"), OPTS).unwrap();
     assert!(page.errors.is_empty(), "{:?}", page.errors);
     assert_eq!(page.kind, NoteKind::Note);
     let r = page.rendered.as_ref().unwrap();
@@ -57,17 +60,28 @@ fn note_renders_with_anchors_links_and_tags() {
 }
 
 #[test]
-fn figures_have_a_variant_per_theme() {
-    let page = NOTES.page(&id("Сеть/SSH")).unwrap();
-    let body = &page.rendered.as_ref().unwrap().body;
-    assert_eq!(body.matches(r#"class="k-frame k-fig""#).count(), 1);
-    assert!(body.contains(r#"<div class="k-frame-v" data-theme="классика"><svg"#));
-    assert!(body.contains(r#"<div class="k-frame-v" data-theme="ночь"><svg"#));
+fn figures_share_one_svg_across_themes() {
+    let page = NOTES.page(&id("Сеть/SSH"), OPTS).unwrap();
+    let r = page.rendered.as_ref().unwrap();
+    assert_eq!(r.body.matches(r#"class="k-frame k-fig""#).count(), 1);
+    assert!(!r.body.contains("k-frame-v"), "темы различаются только цветами — один SVG");
+    assert!(r.body.contains("var(--kf"));
+    assert!(r.styles.contains(r#":root[data-theme="ночь"] [data-k-figs=""#));
+}
+
+#[test]
+fn figure_precision_changes_version_not_content() {
+    let rounded = NOTES.page(&id("демо/визуализация"), OPTS).unwrap();
+    let exact = NOTES.page(&id("демо/визуализация"), FigureOptions { precision: None }).unwrap();
+    assert_ne!(rounded.version, exact.version, "клиент должен перезапросить страницу");
+    let (rounded, exact) = (rounded.rendered.as_ref().unwrap(), exact.rendered.as_ref().unwrap());
+    assert!(rounded.body.len() < exact.body.len());
+    assert_eq!(rounded.headings, exact.headings);
 }
 
 #[test]
 fn code_uses_theme_variables() {
-    let page = NOTES.page(&id("демо/компоненты")).unwrap();
+    let page = NOTES.page(&id("демо/компоненты"), OPTS).unwrap();
     assert!(page.errors.is_empty(), "{:?}", page.errors);
     let body = &page.rendered.as_ref().unwrap().body;
     assert!(body.contains("var(--k-code-key)"));
@@ -76,7 +90,7 @@ fn code_uses_theme_variables() {
 
 #[test]
 fn simple_parentheses_do_not_stretch() {
-    let page = NOTES.page(&id("демо/компоненты")).unwrap();
+    let page = NOTES.page(&id("демо/компоненты"), OPTS).unwrap();
     let body = &page.rendered.as_ref().unwrap().body;
     // O(n^2): внутри нет высокого — скобки обычные, плотные.
     assert!(body.contains(r#"<mo stretchy="false">(</mo>"#));
@@ -84,9 +98,9 @@ fn simple_parentheses_do_not_stretch() {
 
 #[test]
 fn version_is_stable_without_changes() {
-    let v1 = NOTES.version(&id("Сеть/UFW")).unwrap();
-    assert_eq!(v1, NOTES.version(&id("Сеть/UFW")).unwrap());
-    assert_eq!(v1, NOTES.page(&id("Сеть/UFW")).unwrap().version);
+    let v1 = NOTES.version(&id("Сеть/UFW"), OPTS).unwrap();
+    assert_eq!(v1, NOTES.version(&id("Сеть/UFW"), OPTS).unwrap());
+    assert_eq!(v1, NOTES.page(&id("Сеть/UFW"), OPTS).unwrap().version);
 }
 
 #[test]
@@ -103,5 +117,5 @@ fn check_finds_broken_links_only() {
 
 #[test]
 fn missing_note_is_not_found() {
-    assert!(matches!(NOTES.page(&id("Нет/такой")), Err(notes_core::Error::NotFound(_))));
+    assert!(matches!(NOTES.page(&id("Нет/такой"), OPTS), Err(notes_core::Error::NotFound(_))));
 }
