@@ -1,0 +1,8 @@
+# Сборка сайта (tools/build.py, потом notes build)
+/build/
+# Копию библиотеки в хранилище кладёт сборщик: оригинал — konspekt/
+/examples/vault/_konspekt/
+# Rust, Node
+/target/
+node_modules/
+__pycache__/
