@@ -17,6 +17,8 @@ notes-server = { path = "crates/notes-server" }
 # версиями. Обновлять осознанно, с прогоном examples/vault (docs/tech-debt.md).
 typst = "=0.15.1"
 typst-html = "=0.15.1"
+typst-layout = "=0.15.1"
+typst-pdf = "=0.15.1"
 typst-kit = { version = "=0.15.1", features = [
     "embedded-fonts", "scan-fonts", "system-files", "system-downloader", "datetime",
 ] }
@@ -28,7 +30,7 @@ anyhow = "1"
 axum = "0.8"
 clap = { version = "4.6", features = ["derive", "env"] }
 parking_lot = "0.12"
-rust-embed = { version = "8", features = ["mime-guess"] }
+rust-embed = { version = "8", features = ["mime-guess", "include-exclude"] }
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 tempfile = "3"

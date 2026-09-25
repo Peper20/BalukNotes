@@ -7,7 +7,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use notes_core::settings::{Schema, SettingsStore};
-use notes_core::{Notes, NotesConfig};
+use notes_core::{LibrarySource, Notes, NotesConfig};
 use notes_server::{AppState, router};
 use serde_json::Value;
 use tower::ServiceExt;
@@ -17,7 +17,7 @@ static NOTES: LazyLock<Arc<Notes>> = LazyLock::new(|| {
     Arc::new(
         Notes::open(&NotesConfig {
             vault: repo.join("examples/vault"),
-            library: repo.join("konspekt"),
+            library: LibrarySource::Dir(repo.join("konspekt")),
             font_dirs: vec![],
             cache: None,
         })
@@ -128,4 +128,25 @@ async fn links_and_graph() {
     assert!(graph["edges"].as_array().unwrap().iter().any(|e| e["from"] == "Сеть/UFW" && e["to"] == "Сеть/SSH"));
 
     assert_eq!(call(app, "GET", &uri("/api/links/Нет/такой"), None).await.0, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn pdf_export() {
+    let (app, _dir) = app();
+    let res = app
+        .clone()
+        .oneshot(
+            Request::get(format!("{}?theme={}", uri("/api/pdf/Сеть/SSH"), uri("ночь"))).body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()["content-type"], "application/pdf");
+    assert!(res.headers()["content-disposition"].to_str().unwrap().contains("SSH.pdf"));
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    assert!(bytes.starts_with(b"%PDF-"));
+    assert_eq!(
+        call(app, "GET", &format!("{}?theme={}", uri("/api/pdf/Сеть/SSH"), uri("нет")), None).await.0,
+        StatusCode::BAD_REQUEST
+    );
 }

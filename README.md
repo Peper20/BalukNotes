@@ -16,6 +16,7 @@
 cargo run -p notes-cli -- serve             # http://127.0.0.1:8421, хранилище data/vault
 cargo run -p notes-cli -- check             # ошибки компиляции и битые ссылки
 cargo run -p notes-cli -- build site/       # статический сайт
+cargo run -p notes-cli -- pdf Конспекты/Матан --theme ночь   # PDF заметки или книги
 cargo run -p notes-cli -- --vault examples/vault serve   # тестовое хранилище
 ```
 
@@ -32,7 +33,7 @@ cargo run -p notes-cli -- --vault examples/vault serve   # тестовое хр
 | `docs/tech-debt.md` | что отложено и почему |
 | `crates/notes-core/` | ядро: хранилище, компилятор Typst, склейка тем, рисунки, индекс ссылок, настройки, проверка |
 | `crates/notes-server/` | HTTP API и раздача клиента (axum) |
-| `crates/notes-cli/` | команда `notes`: serve, check, build |
+| `crates/notes-cli/` | команда `notes`: serve, check, build, pdf |
 | `web/` | клиент: `app.js` + `app.css` (интерфейс), `konspekt.css` (вид заметок) |
 | `konspekt/` | библиотека оформления: форк konspekt-style + HTML-ветка, `заметка`, `см` |
 | `examples/vault/` | тестовое хранилище (фикстуры тестов и проверки глазами) |

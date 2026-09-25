@@ -264,6 +264,7 @@ async function loadNote(id, { keepScroll = false } = {}) {
     state.version = page.version;
     const y = scrollY;
     root.dataset.kind = page.kind;
+    $("#pdf").hidden = false;
     const r = page.rendered;
     const chapter = keepScroll ? state.book?.current : null;
     state.book = r && state.settings["books.pages"] === "chapters" ? splitBook(r.styles + r.body) : null;
@@ -307,6 +308,7 @@ function showIndex() {
   state.version = null;
   state.book = null;
   $("#chapter-nav").hidden = true;
+  $("#pdf").hidden = true;
   state.headings = [];
   renderToc();
   $("#backlinks").hidden = true;
@@ -596,6 +598,9 @@ async function init() {
   $("#open-settings").onclick = openSettings;
   $("#toggle-sidebar").onclick = toggleSidebar;
   $("#toggle-toc").onclick = toggleToc;
+  // PDF собирается секунды — открываем в новой вкладке, браузер покажет его сам.
+  $("#pdf").onclick = () =>
+    state.current && open(`/api/pdf/${encodeId(state.current)}?theme=${encodeURIComponent(root.dataset.theme)}`, "_blank");
   $("#toc").addEventListener("click", (e) => e.target.closest("a") && !$("#app").classList.contains("toc-room") && $("#toc").classList.remove("open"));
   addEventListener("scroll", onScroll, { passive: true });
   new ResizeObserver(layoutToc).observe($(".main"));

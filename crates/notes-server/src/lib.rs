@@ -18,6 +18,7 @@
 //! | `GET /api/version/{*id}`     | версия заметки — дёшево, без компиляции      |
 //! | `GET /api/links/{*id}`       | ссылки заметки и обратные ссылки на неё      |
 //! | `GET /api/graph`             | граф заметок: узлы и рёбра                   |
+//! | `GET /api/pdf/{*id}?theme=`  | заметка в PDF (по умолчанию — первая тема)   |
 //! | `GET /api/settings`          | схема и значения настроек                    |
 //! | `PUT /api/settings`          | изменить настройки (частично)                |
 //! | `GET /api/themes`            | темы: имя, тёмная ли                         |
@@ -28,7 +29,7 @@
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
@@ -65,6 +66,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/version/{*id}", get(version))
         .route("/api/links/{*id}", get(links))
         .route("/api/graph", get(graph))
+        .route("/api/pdf/{*id}", get(pdf))
         .route("/api/settings", get(get_settings).put(put_settings))
         .route("/api/themes", get(themes))
         .route("/api/themes.css", get(themes_css))
@@ -187,6 +189,42 @@ async fn graph(State(s): State<AppState>) -> ApiResult<Json<Value>> {
     let notes = s.notes.clone();
     let graph = blocking(move || Ok(notes.links()?.graph())).await?;
     Ok(Json(json!(graph)))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct PdfQuery {
+    theme: Option<String>,
+}
+
+async fn pdf(State(s): State<AppState>, Path(id): Path<String>, Query(q): Query<PdfQuery>) -> ApiResult<Response> {
+    let id = NoteId::new(id)?;
+    let notes = s.notes.clone();
+    let theme = q.theme.unwrap_or_else(|| notes.themes().names().first().cloned().unwrap_or_default());
+    let name = id.name().to_owned();
+    let result = blocking(move || notes.pdf(&id, &theme)).await?;
+    Ok(match result {
+        Ok(bytes) => {
+            // Имя файла в заголовке — по RFC 5987 (кириллица).
+            let disposition = format!("inline; filename*=UTF-8''{}.pdf", percent(&name));
+            ([(header::CONTENT_TYPE, "application/pdf".to_owned()), (header::CONTENT_DISPOSITION, disposition)], bytes)
+                .into_response()
+        }
+        Err(errors) => (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({ "error": "не собралось", "errors": errors })))
+            .into_response(),
+    })
+}
+
+/// Процентное кодирование всего, кроме букв, цифр и `-._~`.
+fn percent(s: &str) -> String {
+    s.bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"-._~".contains(&b) {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
 }
 
 async fn get_settings(State(s): State<AppState>) -> Json<Value> {

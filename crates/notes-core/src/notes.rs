@@ -29,7 +29,7 @@ use crate::graph::{LinkIndex, Snapshot};
 use crate::render::{self, LinkResolver, Rendered};
 use crate::themes::ThemeSet;
 use crate::vault::{Entry, NoteId, NoteKind, Vault};
-use crate::world::Compiler;
+use crate::world::{Compiler, LibrarySource};
 use crate::{Error, Result};
 
 #[derive(Debug, Clone)]
@@ -37,7 +37,7 @@ pub struct NotesConfig {
     /// Корень хранилища.
     pub vault: PathBuf,
     /// Библиотека оформления (`konspekt/`), видна заметкам как `/_konspekt/`.
-    pub library: PathBuf,
+    pub library: LibrarySource,
     /// Дополнительные каталоги шрифтов (к системным и встроенным в Typst).
     pub font_dirs: Vec<PathBuf>,
     /// Кэш отрисовки на диске (`None` — только в памяти).
@@ -91,12 +91,15 @@ pub struct Notes {
 impl Notes {
     pub fn open(config: &NotesConfig) -> Result<Self> {
         let vault = Vault::open(&config.vault)?;
-        let library = fs::canonicalize(&config.library).map_err(|e| Error::io(&config.library, e))?;
-        if !library.join("lib.typ").is_file() {
-            return Err(Error::Library(format!("в {} нет lib.typ", library.display())));
+        let library = match &config.library {
+            LibrarySource::Dir(dir) => LibrarySource::Dir(fs::canonicalize(dir).map_err(|e| Error::io(dir, e))?),
+            LibrarySource::Embedded => LibrarySource::Embedded,
+        };
+        if !library.is_valid() {
+            return Err(Error::Library(format!("в библиотеке {library:?} нет lib.typ")));
         }
         let fonts = Arc::new(Fonts::load(&config.font_dirs));
-        let compiler = Compiler::new(vault.root(), &library, fonts);
+        let compiler = Compiler::new(vault.root(), library, fonts);
         let themes = ThemeSet::load(&compiler)?;
         let disk = config.cache.as_ref().map(|dir| DiskCache::new(dir, vault.root()));
         Ok(Self { vault, compiler, themes, cache: Mutex::default(), disk, links: LinkIndex::default() })
@@ -200,6 +203,15 @@ impl Notes {
             return Ok(page_version(&version_of(&c.deps), opts));
         }
         Ok(self.page(id, opts)?.version.clone())
+    }
+
+    /// Заметка в PDF (вид PDF из konspekt) в теме `theme`; без кэша.
+    pub fn pdf(&self, id: &NoteId, theme: &str) -> Result<std::result::Result<Vec<u8>, Vec<Diagnostic>>> {
+        let entry = self.vault.entry(id)?;
+        if !self.themes.names().iter().any(|t| t == theme) {
+            return Err(Error::Setting { key: "тема".into(), reason: format!("нет темы «{theme}»") });
+        }
+        Ok(self.compiler.compile_pdf(&entry.main, theme))
     }
 
     /// Страница для статического сайта: без кэша, относительные ссылки.

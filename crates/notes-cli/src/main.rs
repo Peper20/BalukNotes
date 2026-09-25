@@ -3,6 +3,7 @@
 //!   notes serve            локальный сервер с клиентом (http://127.0.0.1:8421)
 //!   notes check            ошибки компиляции и битые ссылки во всём хранилище
 //!   notes build <каталог>  статический сайт (для VPS без сервера)
+//!   notes pdf <заметка>    заметка в PDF (вид PDF из konspekt)
 //!
 //! Данные — в `--data` (по умолчанию `./data`): `vault/` и `settings.json`;
 //! хранилище можно указать отдельно: `--vault examples/vault`.
@@ -18,7 +19,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use notes_core::check::check;
 use notes_core::settings::{Schema, SettingsStore};
-use notes_core::{Notes, NotesConfig};
+use notes_core::{LibrarySource, NoteId, Notes, NotesConfig};
 
 #[derive(Debug, Parser)]
 #[command(version, about = "Заметки на Typst")]
@@ -32,8 +33,10 @@ struct Cli {
     vault: Option<PathBuf>,
 
     /// Библиотека оформления (konspekt/), видна заметкам как /_konspekt/.
-    #[arg(long, global = true, env = "NOTES_LIBRARY", default_value = default_library())]
-    library: PathBuf,
+    /// По умолчанию — встроенная в бинарник; в отладочной сборке — каталог
+    /// konspekt/ репозитория (правки видны сразу).
+    #[arg(long, global = true, env = "NOTES_LIBRARY")]
+    library: Option<PathBuf>,
 
     /// Дополнительный каталог шрифтов (можно повторять).
     #[arg(long = "font-path", global = true, env = "NOTES_FONT_PATHS", value_delimiter = ':')]
@@ -62,12 +65,31 @@ enum Command {
         /// Каталог результата (создаётся; существующие файлы перезаписываются).
         out: PathBuf,
     },
+    /// Заметку или книгу — в PDF.
+    Pdf {
+        /// Путь заметки от корня хранилища: «Сеть/SSH», «Конспекты/Матан».
+        id: String,
+        /// Файл результата; по умолчанию — <имя заметки>.pdf здесь.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Тема; по умолчанию — первая (светлая).
+        #[arg(long)]
+        theme: Option<String>,
+    },
 }
 
-/// Библиотека из репозитория: для запуска через `cargo run`.
-/// TODO(tech-debt): встроить библиотеку в релизный бинарник.
-fn default_library() -> &'static str {
-    concat!(env!("CARGO_MANIFEST_DIR"), "/../../konspekt")
+/// Библиотека оформления: явно указанная, в отладочной сборке — из
+/// репозитория, иначе — встроенная.
+fn library(explicit: Option<&PathBuf>) -> LibrarySource {
+    if let Some(dir) = explicit {
+        return LibrarySource::Dir(dir.clone());
+    }
+    let repo = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../konspekt"));
+    if cfg!(debug_assertions) && repo.join("lib.typ").is_file() {
+        LibrarySource::Dir(repo)
+    } else {
+        LibrarySource::Embedded
+    }
 }
 
 fn main() -> ExitCode {
@@ -95,7 +117,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
     let started = std::time::Instant::now();
     let config = NotesConfig {
         vault,
-        library: cli.library.clone(),
+        library: library(cli.library.as_ref()),
         font_dirs: cli.font_paths.clone(),
         cache: Some(notes_core::cache::default_dir(&cli.data)),
     };
@@ -110,6 +132,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
             let opts = open_settings(&notes, &cli.data)?.figure_options();
             build::build(&notes, &out, opts).map(|()| ExitCode::SUCCESS)
         }
+        Command::Pdf { id, out, theme } => pdf(&notes, &id, out, theme),
     }
 }
 
@@ -131,6 +154,25 @@ fn serve(notes: Notes, data: &std::path::Path, addr: SocketAddr) -> Result<ExitC
         .await?;
         Ok(ExitCode::SUCCESS)
     })
+}
+
+fn pdf(notes: &Notes, id: &str, out: Option<PathBuf>, theme: Option<String>) -> Result<ExitCode> {
+    let id = NoteId::new(id)?;
+    let theme = theme.unwrap_or_else(|| notes.themes().names().first().cloned().unwrap_or_default());
+    let out = out.unwrap_or_else(|| PathBuf::from(format!("{}.pdf", id.name())));
+    match notes.pdf(&id, &theme)? {
+        Ok(bytes) => {
+            std::fs::write(&out, bytes).with_context(|| format!("записать {}", out.display()))?;
+            println!("{} → {}", id, out.display());
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(errors) => {
+            for e in errors {
+                eprintln!("{id}: {e}");
+            }
+            Ok(ExitCode::FAILURE)
+        }
+    }
 }
 
 fn run_check(notes: &Notes, json: bool) -> Result<ExitCode> {

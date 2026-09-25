@@ -2,7 +2,9 @@
 //!
 //! - Корень проекта Typst — корень хранилища.
 //! - `/_konspekt/…` — **виртуальный** каталог: файлы берутся из библиотеки
-//!   оформления приложения, копии в хранилище нет.
+//!   оформления приложения, копии в хранилище нет. Библиотека — каталог на
+//!   диске (разработка: правки видны сразу и меняют версии заметок) или
+//!   встроенная в бинарник копия `konspekt/` (релиз: бинарник самодостаточен).
 //! - Пакеты (`@preview/cetz`) — из кэша Typst, при отсутствии скачиваются.
 //! - Тема передаётся входом `тема` (`sys.inputs.тема`): на каждую тему — своя
 //!   стандартная библиотека Typst, созданная один раз.
@@ -17,6 +19,7 @@ use std::sync::Arc;
 
 use ecow::eco_format;
 use parking_lot::{Mutex, RwLock};
+use rust_embed::RustEmbed;
 use typst::diag::{FileError, FileResult};
 use typst::foundations::{Bytes, Datetime, Dict, Duration, IntoValue};
 use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
@@ -28,6 +31,7 @@ use typst_kit::datetime::Time;
 use typst_kit::downloader::SystemDownloader;
 use typst_kit::files::{FileLoader, FileStore};
 use typst_kit::packages::SystemPackages;
+use typst_layout::PagedDocument;
 
 use crate::diag::Diagnostic;
 use crate::fonts::Fonts;
@@ -38,31 +42,70 @@ pub const LIB_DIR: &str = "_konspekt";
 /// Имя входа Typst, через который передаётся тема.
 pub const THEME_INPUT: &str = "тема";
 
+/// Библиотека оформления `konspekt/`, встроенная в бинарник. В отладочной
+/// сборке rust-embed читает её с диска.
+#[derive(RustEmbed)]
+#[folder = "../../konspekt/"]
+#[include = "*.typ"]
+struct EmbeddedLibrary;
+
+/// Откуда берётся библиотека оформления.
+#[derive(Debug, Clone)]
+pub enum LibrarySource {
+    /// Каталог на диске: файлы библиотеки входят в версии заметок.
+    Dir(PathBuf),
+    /// Встроенная копия: меняется только с бинарником.
+    Embedded,
+}
+
+impl LibrarySource {
+    /// Есть ли в библиотеке точка входа `lib.typ`.
+    pub fn is_valid(&self) -> bool {
+        match self {
+            Self::Dir(dir) => dir.join("lib.typ").is_file(),
+            Self::Embedded => EmbeddedLibrary::get("lib.typ").is_some(),
+        }
+    }
+}
+
 /// Откуда берутся файлы проекта, библиотеки и пакетов.
 #[derive(Debug)]
 struct Loader {
     vault: PathBuf,
-    lib: PathBuf,
+    lib: LibrarySource,
     packages: SystemPackages,
 }
 
+/// Где лежит файл.
+enum Location {
+    Disk(PathBuf),
+    /// Путь внутри встроенной библиотеки, без `/` в начале.
+    Embedded(String),
+}
+
 impl Loader {
-    /// Настоящий путь файла. Для пакетов — после скачивания, если нужно.
-    fn resolve(&self, id: FileId) -> FileResult<PathBuf> {
+    /// Где файл. Для пакетов — после скачивания, если нужно.
+    fn locate(&self, id: FileId) -> FileResult<Location> {
         let vpath = id.vpath();
         let (root, vpath) = match id.root() {
-            VirtualRoot::Project => match lib_relative(vpath)? {
-                Some(rest) => (self.lib.clone(), rest),
-                None => (self.vault.clone(), vpath.clone()),
+            VirtualRoot::Project => match (lib_relative(vpath)?, &self.lib) {
+                (Some(rest), LibrarySource::Embedded) => {
+                    return Ok(Location::Embedded(rest.get_without_slash().to_owned()));
+                }
+                (Some(rest), LibrarySource::Dir(dir)) => (dir.clone(), rest),
+                (None, _) => (self.vault.clone(), vpath.clone()),
             },
             VirtualRoot::Package(spec) => (self.packages.obtain(spec)?.path().to_path_buf(), vpath.clone()),
         };
-        vpath.realize(&root).map_err(Into::into)
+        vpath.realize(&root).map(Location::Disk).map_err(Into::into)
     }
 
-    /// Путь файла хранилища или библиотеки (не пакета) — для версий.
+    /// Путь файла хранилища или библиотеки на диске (не пакета) — для версий.
     fn local_path(&self, id: FileId) -> Option<PathBuf> {
-        matches!(id.root(), VirtualRoot::Project).then(|| self.resolve(id).ok()).flatten()
+        match (id.root(), self.locate(id)) {
+            (VirtualRoot::Project, Ok(Location::Disk(path))) => Some(path),
+            _ => None,
+        }
     }
 }
 
@@ -80,7 +123,13 @@ fn lib_relative(vpath: &VirtualPath) -> FileResult<Option<VirtualPath>> {
 
 impl FileLoader for Loader {
     fn load(&self, id: FileId) -> FileResult<Bytes> {
-        let path = self.resolve(id)?;
+        let path = match self.locate(id)? {
+            Location::Disk(path) => path,
+            Location::Embedded(rel) => {
+                let file = EmbeddedLibrary::get(&rel).ok_or_else(|| FileError::NotFound(rel.into()))?;
+                return Ok(Bytes::new(file.data.into_owned()));
+            }
+        };
         let meta = fs::metadata(&path).map_err(|e| FileError::from_io(e, &path))?;
         if meta.is_dir() {
             return Err(FileError::IsDirectory);
@@ -117,9 +166,9 @@ impl std::fmt::Debug for Compiler {
 }
 
 impl Compiler {
-    pub fn new(vault: &Path, lib: &Path, fonts: Arc<Fonts>) -> Self {
+    pub fn new(vault: &Path, lib: LibrarySource, fonts: Arc<Fonts>) -> Self {
         let packages = SystemPackages::new(SystemDownloader::new(concat!("baluk-notes/", env!("CARGO_PKG_VERSION"))));
-        let loader = Loader { vault: vault.to_path_buf(), lib: lib.to_path_buf(), packages };
+        let loader = Loader { vault: vault.to_path_buf(), lib, packages };
         Self { files: Mutex::new(FileStore::new(loader)), fonts, libraries: RwLock::default() }
     }
 
@@ -192,6 +241,24 @@ impl Compiler {
         comemo::evict(10);
 
         Compilation { docs: errors.map_or(Ok(docs), Err), warnings, deps }
+    }
+
+    /// Компилирует `main` в PDF в одной теме (пустая — без входа `тема`).
+    pub fn compile_pdf(&self, main: &Path, theme: &str) -> Result<Vec<u8>, Vec<Diagnostic>> {
+        let main = main_id(main).map_err(|m| vec![Diagnostic::error(m)])?;
+        let mut files = self.files.lock();
+        files.reset();
+        let time = Time::system();
+        let library = self.library(theme);
+        let world = CompileWorld { files: &files, fonts: &self.fonts, library: &library, main, time: &time };
+        let to_diags = |errs: &[typst::diag::SourceDiagnostic]| -> Vec<Diagnostic> {
+            errs.iter().map(|e| Diagnostic::from_typst(&world, e)).collect()
+        };
+        let doc = typst::compile::<PagedDocument>(&world).output.map_err(|e| to_diags(&e))?;
+        let pdf = typst_pdf::pdf(&doc, &typst_pdf::PdfOptions::default()).map_err(|e| to_diags(&e));
+        drop(files);
+        comemo::evict(10);
+        pdf
     }
 
     fn library(&self, theme: &str) -> Arc<LazyHash<Library>> {
