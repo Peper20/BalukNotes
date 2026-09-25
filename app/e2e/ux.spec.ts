@@ -92,8 +92,14 @@ test("память места: назад и повторное открытие
   // если выше дорисовался рисунок: браузер держит видимый текст на месте).
   const topText = () =>
     page.evaluate(() => {
-      const el = document.elementFromPoint(innerWidth / 2 + 130, 160);
-      return el?.closest("p, li, h2, h3, h4, figure, pre, table, div.k-box")?.textContent?.slice(0, 60) ?? "";
+      // Первый блок от y = 160 вниз: точка может прийтись на промежуток между
+      // блоками (высота строк зависит от шрифтов системы).
+      for (let y = 160; y < innerHeight; y += 8) {
+        const el = document.elementFromPoint(innerWidth / 2 + 130, y);
+        const block = el?.closest("p, li, h2, h3, h4, figure, pre, table, div.k-box");
+        if (block) return block.textContent?.slice(0, 60) ?? "";
+      }
+      return "";
     });
   await open(page, "демо/компоненты");
   await page.evaluate(() => scrollTo(0, 1500));
