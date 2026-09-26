@@ -157,7 +157,12 @@ pub(crate) fn tags_html(tags: &BTreeMap<String, Vec<TagNote>>) -> String {
     }
     out.push_str("</p>");
     for (tag, notes) in tags {
-        let _ = write!(out, r#"<section class="k-site-tag-notes" id="{}"><h2>#{}</h2>"#, escape(&tag_anchor(tag)), escape(tag));
+        let _ = write!(
+            out,
+            r#"<section class="k-site-tag-notes" id="{}"><h2>#{}</h2>"#,
+            escape(&tag_anchor(tag)),
+            escape(tag)
+        );
         let items = notes.iter().map(|n| Item {
             after: if n.folder.is_empty() { String::new() } else { format!("<span> · {}</span>", escape(&n.folder)) },
             ..Item::new(n.href.clone(), &n.title)

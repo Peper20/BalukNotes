@@ -93,7 +93,11 @@ pub fn build(notes: &Notes, out: &Path, opts: FigureOptions) -> Result<()> {
             });
         }
         built.insert(entry.id.clone());
-        index.entry(folder.to_owned()).or_default().push(IndexEntry { href, title, book: entry.kind == NoteKind::Book });
+        index.entry(folder.to_owned()).or_default().push(IndexEntry {
+            href,
+            title,
+            book: entry.kind == NoteKind::Book,
+        });
     }
     write_extras(notes, out, &themes_json, &built, &tags)?;
     let body = format!(r#"<header class="k-title"><h1>Заметки</h1></header>{}"#, index_html(&index));
