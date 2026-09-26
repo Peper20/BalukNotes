@@ -82,7 +82,9 @@ test("соседние главы — заранее: переход без за
   });
   const prefetched = page.waitForResponse((r) => decodeURIComponent(r.url()).endsWith("/api/notes/Книга?chapter=1"));
   await open(page, "Книга");
-  await prefetched;
+  // Ответ пришёл целиком и разобран клиентом (запас пополняется после разбора).
+  await (await prefetched).finished();
+  await page.waitForTimeout(200);
   const before = requested.length;
   await page.keyboard.press("BracketRight");
   await ready(page);
