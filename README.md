@@ -39,7 +39,7 @@ tools/test-env.sh                                     # тестовое окр�
 | `crates/notes-site/` | статический сайт (`notes build`) |
 | `crates/notes-assets/` | сборка клиента `app/dist` — общая для сервера и сайта |
 | `crates/notes-cli/` | команда `notes`: serve, check, build, pdf |
-| `app/` | клиент: Svelte 5 + TypeScript + Vite; `public/assets/baluk.css` — вид заметок |
+| `app/` | клиент: Svelte 5 + TypeScript + Vite; `src/baluk-css/` — вид заметок (сборка — `assets/baluk.css`) |
 | `baluk/` | библиотека оформления Typst: блоки, рисунки, шаблоны `note`/`book`, ссылки `see` — HTML- и PDF-ветка |
 | `tests/vault/` | хранилище-фикстура: каждый случай отрисовки, каталог — его `README.md` |
 | `tests/snapshots/` | эталонные снимки HTML фикстур (`UPDATE_SNAPSHOTS=1` — обновить) |

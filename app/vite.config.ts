@@ -6,11 +6,13 @@
 // другой — NOTES_API=http://127.0.0.1:8421 npm run dev).
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vitest/config";
+import { balukCss } from "./src/baluk-css/plugin";
 
 const api = process.env.NOTES_API ?? "http://127.0.0.1:8432";
 
 export default defineConfig({
-  plugins: [svelte()],
+  // Вид заметки — assets/baluk.css из блоков src/baluk-css/ (общий с сайтом).
+  plugins: [svelte(), balukCss()],
   build: { outDir: "dist", emptyOutDir: true, assetsDir: "assets", target: "es2023" },
   server: {
     port: 5173,

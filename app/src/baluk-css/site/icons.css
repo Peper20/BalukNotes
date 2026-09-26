@@ -1,0 +1,10 @@
+/* Значки сайта — те же значки Lucide, что в приложении (`@lucide/svelte`),
+ * CSS-маской: сайт работает и без скрипта. Цвет — currentColor.
+ * `lucide("имя", толщина)` сборка заменяет на SVG из пакета `@lucide/icons`
+ * (`baluk-css/bundle.ts`) — путь значка в одном месте, в пакете. */
+.k-static {
+  --k-icon-arrow-left: lucide("arrow-left", 1.75);
+  --k-icon-sun: lucide("sun", 1.75);
+  --k-icon-moon: lucide("moon", 1.75);
+  --k-icon-chevron: lucide("chevron-right", 2);
+}

@@ -1,0 +1,42 @@
+/* ── Граф заметок (Graph.svelte): главная и /graph приложения, граф в
+ * заметке (`#vault-graph`) — и в приложении, и на сайте. */
+.graph-svg { display: block; width: 100%; height: auto; max-height: 70vh; font-family: system-ui, sans-serif; user-select: none; }
+.graph-edge { stroke: var(--k-muted); opacity: 0.45; transition: opacity 0.15s; }
+.graph-node { cursor: pointer; transition: opacity 0.15s; }
+.graph-node circle { stroke-width: 1.5; }
+.graph-node.missing { cursor: default; }
+/* Узел тянется и на картинке (главная, заметка): касание узла — не прокрутка страницы. */
+.graph-node { touch-action: none; }
+.graph-svg.dragging, .graph-svg.dragging .graph-node { cursor: grabbing; }
+.graph-node.missing circle { stroke-dasharray: 3 2; }
+.graph-node text { font-size: var(--label, 11px); fill: var(--k-text); paint-order: stroke; stroke: var(--k-surface); stroke-width: 3px; }
+.graph-node.book text { font-weight: 600; font-size: calc(var(--label, 11px) * 1.1); }
+.graph-node:hover circle, .graph-node:focus-visible circle { stroke: var(--k-text) !important; stroke-width: 2.5; }
+.graph-node:focus { outline: none; }
+.graph-node.center circle { stroke: var(--k-text) !important; stroke-width: 3; }
+.graph-node.center text { font-weight: 700; }
+.graph-svg.focused .graph-node:not(.near) { opacity: 0.2; }
+.graph-svg.focused .graph-edge { opacity: 0.08; }
+.graph-svg.focused .graph-edge.near { opacity: 0.9; stroke: var(--k-accent); }
+.graph-svg.searching:not(.focused) .graph-node:not(.hit) { opacity: 0.2; }
+.graph-svg.searching:not(.focused) .graph-edge { opacity: 0.12; }
+.graph-node.hit circle { stroke: var(--k-accent) !important; stroke-width: 3; }
+.graph-svg.far .graph-node:not(.book, .hit, .near, .center) text { display: none; }
+/* Страница графа: холст во всю оставшуюся высоту. */
+.graph-svg.interactive { height: 100%; max-height: none; cursor: grab; touch-action: none; }
+/* Появление: рёбра и подписи проявляются, кружки растут — от середины к
+ * краям (`--delay`); так же — узлы, добавленные фильтром. */
+@keyframes graph-fade-in { from { opacity: 0; } }
+@keyframes graph-grow { from { opacity: 0; transform: scale(0.2); } }
+.graph-edge, .graph-node text { animation: graph-fade-in 0.45s ease-out var(--delay, 0s) backwards; }
+.graph-node circle { transform-box: fill-box; transform-origin: center; animation: graph-grow 0.45s cubic-bezier(0.3, 1.4, 0.5, 1) var(--delay, 0s) backwards; }
+@media (prefers-reduced-motion: reduce) {
+  .graph-edge, .graph-node text, .graph-node circle { animation: none; }
+}
+.graph-svg.interactive.dragging { cursor: grabbing; }
+.graph-svg.interactive .graph-edge { vector-effect: non-scaling-stroke; }
+
+/* Граф в заметке: картинка Typst, пока нет скрипта; живой граф — поверх. */
+.k-note .k-graph { margin: 1em auto; max-width: 100%; }
+.k-note .k-graph[data-live] > :not(.k-graph-live) { display: none; }
+.k-note .k-graph-live .graph-svg { max-height: 60vh; }

@@ -1,0 +1,40 @@
+/* Начало и конец главы: вводный абзац, план, итоги, вопросы. */
+
+.k-note {
+  .k-lead { margin: 0.4em 0 1.2em; font-size: 1.07em; color: var(--k-lead); text-align: justify; }
+
+  .k-plan {
+    margin: 0.8em 0 1.4em; padding: 0.75em 0;
+    border-top: 0.5pt solid var(--k-line); border-bottom: 0.5pt solid var(--k-line);
+  }
+  .k-plan-head, .k-quiz-head {
+    font-size: 0.74em; font-weight: bold; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--k-accent); margin-bottom: 0.4em;
+  }
+  .k-plan-list { list-style: none; padding: 0; margin: 0; }
+  .k-plan-list li { margin: 0.3em 0; }
+  .k-plan-list li::before { content: "→"; color: var(--k-accent); margin-right: 0.55em; }
+
+  .k-summary {
+    margin: 1.4em 0 1.2em; padding: 1em;
+    background: var(--k-surface); border-top: 1.5pt solid var(--k-accent);
+  }
+  .k-summary-head { font-weight: bold; font-size: 1.05em; color: var(--k-accent); margin-bottom: 0.5em; }
+  .k-summary-list { margin: 0; padding-left: 1.6em; }
+  .k-summary-list li { margin: 0.45em 0; padding-left: 0.2em; }
+
+  .k-quiz {
+    margin: 1.2em 0; padding: 0.8em 1em;
+    border: 0.8pt solid var(--k-quiz-border); border-radius: 6pt;
+  }
+  .k-quiz-head { color: var(--k-box-idea); }
+  .k-quiz-list { margin: 0; padding-left: 1.5em; }
+  .k-quiz-list li::marker { color: var(--k-box-idea); }
+  .k-quiz-answers {
+    margin-top: 0.6em; padding-top: 0.5em;
+    border-top: 0.5pt dashed var(--k-line);
+    font-size: 0.84em; color: var(--k-muted);
+  }
+  .k-quiz-answers summary { cursor: pointer; font-weight: bold; user-select: none; }
+  .k-quiz-answers summary:hover { color: var(--k-box-idea); }
+}

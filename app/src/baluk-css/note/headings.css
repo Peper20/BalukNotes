@@ -1,0 +1,29 @@
+/* Заголовки: глава книги (разрядка, линейка, бледная цифра) и разделы. */
+
+.k-note {
+  .k-h { font-weight: bold; hyphens: manual; text-align: left; line-height: 1.25; }
+  .k-h .k-num { margin-right: 0.35em; }
+
+  /* Глава: надпись разрядкой, название, линейка, бледная крупная цифра. */
+  .k-h1 {
+    position: relative;
+    margin: 2.2em 0 1.1em; padding-bottom: 0.35em;
+    font-size: 2.27em; color: var(--k-accent);
+    border-bottom: 0.8pt solid var(--k-accent);
+  }
+  .k-h1 .k-num {
+    display: block; margin: 0 0 0.3em;
+    font-size: 0.36em; font-weight: normal; letter-spacing: 0.22em;
+    text-transform: uppercase;
+  }
+  .k-h1 .k-num::before { content: attr(data-word) " "; }
+  .k-h1[data-num]::after {
+    content: attr(data-num);
+    position: absolute; right: 0; top: -0.45em; z-index: -1;
+    font-size: 2.9em; line-height: 1; color: var(--k-accent-pale);
+  }
+  .k-h2 { margin: 1.6em 0 0.6em; font-size: 1.27em; color: var(--k-accent); }
+  .k-h3 { margin: 1.3em 0 0.5em; font-size: 1.05em; }
+  .k-h4 { margin: 1em 0 0.4em; font-size: 1em; }
+  .k-h1 + p, .k-h2 + p, .k-h3 + p, .k-h4 + p { text-indent: 0; }
+}
