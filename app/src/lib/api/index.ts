@@ -34,6 +34,7 @@ export type { Rendered } from "./types/Rendered";
 export type { SearchHit } from "./types/SearchHit";
 export type { Schema } from "./types/Schema";
 export type { SettingDef } from "./types/SettingDef";
+export type { Apply } from "./types/Apply";
 export type { Theme } from "./types/Theme";
 
 /** Какую главу книги запросить: по номеру или ту, где якорь. */

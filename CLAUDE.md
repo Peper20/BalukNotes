@@ -148,7 +148,9 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
 - HTML заметки вставляется в DOM напрямую (`NoteView.svelte`), не шаблоном.
 - Настройки вида — атрибутами на `<html>` (`data-numbering`, `data-header-*`,
   …), правила — в `baluk.css`. Новая настройка = запись в
-  `notes-core::settings::Schema` + строка в `src/lib/appearance.ts` + CSS.
+  `notes-core::settings::Schema` (с `.attr("data-…")` или `.var("--…",
+  "px")` — как применить) + CSS; `src/lib/appearance.ts` применяет по
+  схеме, правок TS не нужно (типы — `npm run types`).
 - Стили заметки — только внутри `.k-note { … }`: файлы блоков
   `src/baluk-css/` (`note/*` — заметка, `graph.css`, `site/*` — сайт;
   порядок — `@import` в `src/baluk-css/baluk.css`), при сборке (и в
