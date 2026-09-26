@@ -109,8 +109,8 @@ button.icon:hover { color: var(--k-accent); border-color: var(--k-line); backgro
 .graph-node circle { stroke-width: 1.5; }
 .graph-node.missing { cursor: default; }
 .graph-node.missing circle { stroke-dasharray: 3 2; }
-.graph-node text { font-size: 11px; fill: var(--k-text); paint-order: stroke; stroke: var(--k-surface); stroke-width: 3px; }
-.graph-node.book text { font-weight: 600; font-size: 12px; }
+.graph-node text { font-size: var(--label, 11px); fill: var(--k-text); paint-order: stroke; stroke: var(--k-surface); stroke-width: 3px; }
+.graph-node.book text { font-weight: 600; font-size: calc(var(--label, 11px) * 1.1); }
 .graph-node:hover circle { stroke: var(--k-text) !important; stroke-width: 2.5; }
 .graph-svg.focused .graph-node:not(.near) { opacity: 0.2; }
 .graph-svg.focused .graph-edge { opacity: 0.08; }
@@ -195,13 +195,14 @@ button.icon:hover { color: var(--k-accent); border-color: var(--k-line); backgro
 .settings h2 { margin: 0; font-size: 1.1rem; }
 .settings fieldset { border: none; margin: 0; padding: 0.6rem 1rem; }
 .settings legend { font-weight: 600; color: var(--k-accent); padding: 0.4rem 0 0.2rem; }
-.setting { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0.2rem 1rem; padding: 0.35rem 0; }
-.setting .help { grid-column: 1 / -1; color: var(--k-muted); font-size: 0.85em; }
+.setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.2rem 1rem; padding: 0.35rem 0; }
+.setting-help { grid-column: 1 / -1; color: var(--k-muted); font-size: 0.85em; }
 .setting select, .setting input[type="number"] {
   font: inherit; padding: 0.2rem 0.4rem; border-radius: 5px;
   border: 1px solid var(--k-line); background: var(--k-surface); color: var(--k-text);
 }
 .setting input[type="number"] { width: 5.5rem; }
+.setting select { max-width: min(16rem, 55vw); text-overflow: ellipsis; }
 .setting input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: var(--k-accent); }
 .settings-error { margin: 0 1rem 1rem; color: var(--k-box-pitfall); }
 
@@ -249,6 +250,10 @@ button.icon:hover { color: var(--k-accent); border-color: var(--k-line); backgro
   display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; padding: 0.45rem 0.9rem; border-top: 1px solid var(--k-line);
   font-size: 0.78em; color: var(--k-muted);
 }
+/* Касание без клавиатуры: подсказки про клавиши — лишний шум. */
+@media (pointer: coarse) {
+  .palette-help, .palette-list li kbd { display: none; }
+}
 kbd {
   font: 0.85em/1 var(--k-font-code); padding: 0.15em 0.4em; border-radius: 4px;
   border: 1px solid var(--k-line); border-bottom-width: 2px; background: var(--k-surface); color: var(--k-text);
@@ -278,7 +283,7 @@ kbd {
 .help-body { padding: 0.4rem 1rem 1rem; columns: 2 18rem; column-gap: 2rem; }
 .help section { break-inside: avoid; margin-bottom: 0.8rem; }
 .help h3 { margin: 0.6rem 0 0.3rem; font-size: 0.8em; letter-spacing: 0.06em; text-transform: uppercase; color: var(--k-accent); }
-.help dl { display: grid; grid-template-columns: auto 1fr; gap: 0.3rem 0.8rem; margin: 0; }
+.help dl { display: grid; grid-template-columns: minmax(7rem, auto) 1fr; gap: 0.3rem 0.8rem; margin: 0; }
 .help dt { white-space: nowrap; }
 .help dd { margin: 0; color: var(--k-muted); }
 .help .or { color: var(--k-muted); font-size: 0.8em; }

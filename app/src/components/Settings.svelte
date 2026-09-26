@@ -53,7 +53,7 @@
                 {#each def.options as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
               </select>
             {/if}
-            {#if def.help}<div class="help">{def.help}</div>{/if}
+            {#if def.help}<div class="setting-help">{def.help}</div>{/if}
           </div>
         {/each}
       </fieldset>

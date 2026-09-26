@@ -45,12 +45,19 @@
     return `${x0} ${y0} ${Math.max(...xs) - x0 + padX} ${Math.max(...ys) - y0 + padY + 15}`;
   });
 
+  // Рисунок ужимается по ширине (телефон) — подписи не мельче 9 px на экране.
+  let width = $state(0);
+  const label = $derived.by(() => {
+    const scale = width / Number(viewBox.split(" ")[2]);
+    return scale > 0 ? Math.max(11, 9 / scale) : 11;
+  });
+
   let focused = $state<string | null>(null);
   const near = $derived(focused ? neighbours.get(focused) : null);
 </script>
 
 {#if graph.nodes.length}
-  <svg class="graph-svg" class:focused {viewBox} role="img" aria-label="Граф заметок">
+  <svg class="graph-svg" class:focused {viewBox} role="img" aria-label="Граф заметок" bind:clientWidth={width} style:--label="{label}px">
     {#each graph.edges as e}
       {@const a = pos.get(e.from)!}
       {@const b = pos.get(e.to)!}
@@ -77,7 +84,7 @@
         onpointerleave={() => (focused = null)}
       >
         <circle {r} style:fill={n.kind ? color(n.id) : "none"} style:stroke={color(n.id)} />
-        <text y={r + 13} text-anchor="middle">{splitId(n.id).name}</text>
+        <text y={r + label + 2} text-anchor="middle">{splitId(n.id).name}</text>
         <title>
           {n.kind ? `${n.id}${n.kind === "book" ? " (книга)" : ""} · связей: ${degree.get(n.id)}` : `${n.id} — такой заметки нет`}
         </title>

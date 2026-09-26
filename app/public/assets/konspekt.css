@@ -48,7 +48,8 @@ html {
   a { color: var(--k-accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
   math { font-family: var(--k-font-math); font-size: 1.05em; }
-  math[display="block"] { margin: 0.7em 0; }
+  /* Широкая формула прокручивается сама, а не вся страница (телефон). */
+  math[display="block"] { margin: 0.7em 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 
   ul, ol { padding-left: 1.4em; margin: 0.55em 0; }
   li { margin: 0.2em 0; }

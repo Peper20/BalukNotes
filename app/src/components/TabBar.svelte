@@ -13,10 +13,22 @@
     const note = app.notes.find((n) => n.id === route.id);
     return note?.title ?? note?.name ?? splitId(route.id).name;
   }
+
+  let bar: HTMLDivElement | undefined = $state();
+
+  // Активная вкладка — в поле зрения полосы (на телефоне вкладки не влезают).
+  $effect(() => {
+    void [app.activeTab, app.tabs.length, app.notes]; // названия (ширина) — по списку заметок
+    const tab = bar?.querySelector<HTMLElement>(".tab.active");
+    if (!bar || !tab) return;
+    const [b, t] = [bar.getBoundingClientRect(), tab.getBoundingClientRect()];
+    if (t.left < b.left) bar.scrollLeft += t.left - b.left - 8;
+    else if (t.right > b.right) bar.scrollLeft += t.right - b.right + 8;
+  });
 </script>
 
 {#if app.tabs.length > 1}
-  <div class="tabbar" role="tablist" aria-label="Вкладки">
+  <div class="tabbar" role="tablist" aria-label="Вкладки" bind:this={bar}>
     {#each app.tabs as tab, i}
       <div
         class="tab"
