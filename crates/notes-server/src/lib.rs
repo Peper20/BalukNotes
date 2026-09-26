@@ -54,9 +54,6 @@ use notes_core::settings::SettingsStore;
 use tower_http::compression::CompressionLayer;
 use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 
-pub use crate::assets::web_asset;
-pub use crate::fonts::{font_faces, font_file_name, web_fonts};
-
 /// Общее состояние обработчиков.
 #[derive(Debug, Clone)]
 pub struct AppState {
@@ -107,7 +104,7 @@ pub async fn serve(
     // Шрифты для браузера сжимаются в фоне заранее: иначе первая страница
     // ждала бы сжатия (математический шрифт — ~2 с).
     let notes = state.notes.clone();
-    std::thread::spawn(move || notes.fonts().warm_web(web_fonts(&notes)));
+    std::thread::spawn(move || notes.fonts().warm_web(notes.themes().web_fonts()));
     // Заметки — тоже заранее: все, по приоритету, пропуская собранные.
     let (notes, settings) = (state.notes.clone(), state.settings.clone());
     std::thread::spawn(move || notes.warm_forever(|| settings.figure_options()));

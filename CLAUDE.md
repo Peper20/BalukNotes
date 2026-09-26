@@ -70,8 +70,17 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
 
 ## Rust
 
-- Workspace: `notes-core` (без async и HTTP), `notes-server` (axum), `notes-cli`.
-  Логика — в ядре; сервер и CLI — тонкие обёртки.
+- Workspace: `notes-core` (без async и HTTP), `notes-server` (axum),
+  `notes-site` (статический сайт, `notes build`), `notes-assets` (сборка
+  клиента `app/dist` для сервера и сайта), `notes-cli`. Логика — в ядре;
+  сервер, сайт и CLI — тонкие обёртки.
+- Сервер — модуль на область (`notes`, `graph`, `search`, `settings`,
+  `assets`, `fonts`), у каждого свои маршруты (`routes()`); общие —
+  `AppState` (`lib.rs`) и `error.rs`. Токен доступа (`serve --token`,
+  `NOTES_TOKEN`) — `auth.rs`. Новая область API — новый модуль + `merge` в
+  `router`.
+- Шрифты для браузера — основные шрифты тем (`ThemeSet::web_fonts`, из
+  `baluk/css.typ`): тема со своим шрифтом не требует правки Rust.
 - Typst закреплён `=0.15.1` (HTML-экспорт экспериментальный). Обновление —
   отдельной задачей, с прогоном тестов и проверкой глазами.
 - Ошибки ядра — `notes_core::Error` (thiserror); ошибки компиляции заметок —

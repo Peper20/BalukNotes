@@ -1968,6 +1968,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "notes-assets"
+version = "0.1.0"
+dependencies = [
+ "rust-embed",
+]
+
+[[package]]
 name = "notes-cli"
 version = "0.1.0"
 dependencies = [
@@ -1975,6 +1982,7 @@ dependencies = [
  "clap",
  "notes-core",
  "notes-server",
+ "notes-site",
  "serde_json",
  "tokio",
  "tracing",
@@ -2012,8 +2020,8 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "http-body-util",
+ "notes-assets",
  "notes-core",
- "rust-embed",
  "serde",
  "serde_json",
  "tempfile",
@@ -2022,6 +2030,16 @@ dependencies = [
  "tower-http",
  "tracing",
  "ts-rs",
+]
+
+[[package]]
+name = "notes-site"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "notes-assets",
+ "notes-core",
+ "serde_json",
 ]
 
 [[package]]

@@ -35,7 +35,9 @@ tools/test-env.sh                                     # тестовое окр�
 | `docs/roadmap.md` | вехи и что сделано |
 | `docs/tech-debt.md` | что отложено и почему |
 | `crates/notes-core/` | ядро: хранилище, компилятор Typst, склейка тем, рисунки, индекс ссылок, настройки, проверка |
-| `crates/notes-server/` | HTTP API и раздача клиента (axum) |
+| `crates/notes-server/` | HTTP API и раздача клиента (axum), модуль на область API; токен `--token` |
+| `crates/notes-site/` | статический сайт (`notes build`) |
+| `crates/notes-assets/` | сборка клиента `app/dist` — общая для сервера и сайта |
 | `crates/notes-cli/` | команда `notes`: serve, check, build, pdf |
 | `app/` | клиент: Svelte 5 + TypeScript + Vite; `public/assets/baluk.css` — вид заметок |
 | `baluk/` | библиотека оформления Typst: блоки, рисунки, шаблоны `note`/`book`, ссылки `see` — HTML- и PDF-ветка |

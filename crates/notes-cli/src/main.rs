@@ -8,8 +8,6 @@
 //! Данные — в `--data` (по умолчанию `./data`): `vault/` и `settings.json`;
 //! хранилище можно указать отдельно: `--vault tests/vault`.
 
-mod build;
-
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -135,7 +133,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Command::Build { out } => {
             // Рисунки — с той же точностью, что выбрана в приложении.
             let opts = open_settings(&notes, &cli.data)?.figure_options();
-            build::build(&notes, &out, opts).map(|()| ExitCode::SUCCESS)
+            notes_site::build(&notes, &out, opts).map(|()| ExitCode::SUCCESS)
         }
         Command::Pdf { id, out, theme } => pdf(&notes, &id, out, theme),
     }
