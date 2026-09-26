@@ -31,13 +31,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::diag::Diagnostic;
 use crate::fsutil::write_atomic;
-use crate::render::Rendered;
+use crate::render::{LinkRef, Rendered};
 use crate::vault::NoteId;
 use crate::version::{Dep, StableHasher};
 
 /// Версия формата записей: менять при любом изменении [`Record`] или
 /// [`Rendered`].
-pub const FORMAT: u32 = 2;
+pub const FORMAT: u32 = 3;
 
 /// Предел размера кэша на диске (все хранилища вместе).
 pub const DISK_LIMIT: u64 = 512 << 20;
@@ -59,6 +59,10 @@ pub struct Record {
     /// Метка сырой отрисовки: `None` — отрисовки нет (ошибка, и удачной
     /// сборки не было).
     pub raw: Option<String>,
+    /// Ссылки из последней удачной отрисовки (`Rendered.links`) — и
+    /// вычисляемые: ими индекс ссылок дополняет разбор исходников.
+    #[serde(default)]
+    pub links: Vec<LinkRef>,
 }
 
 /// Файл записи.
@@ -331,6 +335,7 @@ mod tests {
             warnings: vec![],
             build_ms: 7,
             raw: raw.map(Into::into),
+            links: vec![],
         }
     }
 

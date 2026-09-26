@@ -118,6 +118,7 @@ fn check_finds_exactly_the_planted_problems() {
     assert_eq!(
         broken,
         [
+            ("Особые случаи/Ошибка компиляции", "Нет/Из несобравшейся", None),
             ("Особые случаи/Ссылки", "Нет/Такой заметки", None),
             ("Особые случаи/Ссылки", "Сеть/SSH", Some("Нет такого раздела")),
             ("Сеть/UFW", "Сеть/Nginx", None),
@@ -319,6 +320,24 @@ fn search_finds_sections_with_exact_anchors() {
 
     assert!(NOTES.search("нетакогословавхранилище", 10).unwrap().is_empty());
     assert!(NOTES.search("   ", 10).unwrap().is_empty());
+}
+
+#[test]
+fn computed_links_come_from_built_pages() {
+    let notes = Notes::open(&NotesConfig {
+        vault: repo().join("tests/vault"),
+        library: LibrarySource::Dir(repo().join("baluk")),
+        font_dirs: vec![],
+        cache: None,
+    })
+    .unwrap();
+    let target = id("Формулы и теги");
+    let from = |notes: &Notes| -> Vec<String> {
+        notes.index().unwrap().backlinks(&target).into_iter().map(|b| b.from.to_string()).collect()
+    };
+    assert!(!from(&notes).contains(&"Особые случаи/Ссылки".to_owned()), "в исходнике путь вычисляемый");
+    notes.page(&id("Особые случаи/Ссылки"), OPTS).unwrap();
+    assert!(from(&notes).contains(&"Особые случаи/Ссылки".to_owned()), "после сборки — из её ссылок");
 }
 
 #[test]

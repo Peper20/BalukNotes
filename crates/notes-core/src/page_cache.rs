@@ -20,7 +20,7 @@ use parking_lot::Mutex;
 use crate::cache::{DiskCache, Pruned, Record};
 use crate::figures::FigureOptions;
 use crate::pages::NotePage;
-use crate::render::Rendered;
+use crate::render::{LinkRef, Rendered};
 use crate::vault::{Entry, NoteId};
 use crate::version::Versions;
 
@@ -120,6 +120,11 @@ impl PageCache {
     pub fn version(&self, id: &NoteId, opts: FigureOptions) -> Option<String> {
         let record = self.record(id)?;
         Some(page_version(&self.versions.current(&record.deps), opts))
+    }
+
+    /// Ссылки последней удачной сборки (в памяти или на диске).
+    pub fn links(&self, id: &NoteId) -> Option<Vec<LinkRef>> {
+        self.record(id).map(|r| r.links)
     }
 
     /// Сколько длилась прошлая сборка, мс.
@@ -320,6 +325,7 @@ mod tests {
                 warnings: vec![],
                 build_ms: 5,
                 raw: None,
+                links: vec![],
             }
         }
     }

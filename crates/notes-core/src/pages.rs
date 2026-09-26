@@ -49,7 +49,7 @@ pub struct NotePage {
 pub struct Pages {
     vault: Vault,
     pipeline: Arc<dyn Pipeline>,
-    cache: PageCache,
+    cache: Arc<PageCache>,
     /// Держится на время сборки заметки.
     building: Mutex<()>,
     /// Сколько запросов страниц сейчас ждут: прогрев им уступает.
@@ -58,14 +58,14 @@ pub struct Pages {
 
 impl Pages {
     pub fn new(vault: Vault, pipeline: Arc<dyn Pipeline>, cache: PageCache) -> Self {
-        Self { vault, pipeline, cache, building: Mutex::new(()), waiting: AtomicUsize::new(0) }
+        Self { vault, pipeline, cache: Arc::new(cache), building: Mutex::new(()), waiting: AtomicUsize::new(0) }
     }
 
     pub fn vault(&self) -> &Vault {
         &self.vault
     }
 
-    pub fn cache(&self) -> &PageCache {
+    pub fn cache(&self) -> &Arc<PageCache> {
         &self.cache
     }
 
@@ -147,6 +147,8 @@ impl Pages {
                 None => (Raw::None, None),
             },
         };
+        // Ссылки показанной отрисовки — для индекса ссылок (вычисляемые пути).
+        let links = shown.as_ref().map(|r| r.links.clone()).unwrap_or_default();
         let page = opts.map(|opts| {
             let page = NotePage {
                 id: entry.id.clone(),
@@ -166,6 +168,7 @@ impl Pages {
             warnings: built.warnings,
             build_ms: u64::try_from(built.took.as_millis()).unwrap_or(u64::MAX),
             raw: None,
+            links,
         };
         self.cache.store(&entry.id, record, raw, page.clone());
         page.map(|(p, _)| p)

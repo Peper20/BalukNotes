@@ -93,6 +93,10 @@ impl Notes {
         let cache = PageCache::new(versions, disk, MEMORY_BUDGET);
         let typst = Arc::new(TypstPipeline::new(vault.clone(), compiler, themes));
         let pages = Pages::new(vault, typst.clone(), cache);
+        // Индекс ссылок дополняется ссылками собранных страниц (вычисляемые
+        // пути). Слабая ссылка: кэш страниц сам держит индекс через граф.
+        let cache = Arc::downgrade(pages.cache());
+        links.set_built(Box::new(move |id: &NoteId| cache.upgrade()?.links(id)));
         Ok(Self { pages, typst, links, warmer: Warmer::default() })
     }
 
