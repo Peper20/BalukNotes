@@ -1,7 +1,9 @@
 // Сквозные тесты интерфейса: настоящий сервер notes на копии тестового
 // хранилища (tests/.data/e2e/vault — сценарии могут создавать заметки, не
 // трогая фикстуры), своими данными и портом 8433; клиент — сборка app/dist.
-// Браузер — системный chromium, Playwright ничего не скачивает.
+// Браузер — системный chromium, Playwright ничего не скачивает. До сценариев
+// сервер прогревается (e2e/global-setup.ts): все заметки уже собраны, поэтому
+// ожидания короткие; первую сборку проверяет 01-switch (сам меняет файлы).
 //
 //   npm run build && npm run e2e
 import { defineConfig } from "@playwright/test";
@@ -11,7 +13,8 @@ const port = 8433;
 export default defineConfig({
   testDir: "e2e",
   timeout: 60_000,
-  expect: { timeout: 30_000 },
+  expect: { timeout: 10_000 },
+  globalSetup: "./e2e/global-setup.ts",
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],
