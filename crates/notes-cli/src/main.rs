@@ -180,7 +180,6 @@ fn run_check(notes: &Notes, json: bool) -> Result<ExitCode> {
     if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
-        let (mut errors, mut warnings, mut broken) = (0, 0, 0);
         for n in &report.notes {
             for e in &n.errors {
                 println!("{}: {e}", n.id);
@@ -192,14 +191,8 @@ fn run_check(notes: &Notes, json: bool) -> Result<ExitCode> {
                 let anchor = l.anchor.as_deref().map(|a| format!(" / {a}")).unwrap_or_default();
                 println!("{}: битая ссылка «{}{anchor}»: {}", n.id, l.target, l.reason);
             }
-            errors += n.errors.len();
-            warnings += n.warnings.len();
-            broken += n.broken_links.len();
         }
-        println!(
-            "заметок: {}, ошибок: {errors}, предупреждений: {warnings}, битых ссылок: {broken}",
-            report.notes.len()
-        );
+        println!("{}", report.summary());
     }
     Ok(if report.is_clean() { ExitCode::SUCCESS } else { ExitCode::from(1) })
 }

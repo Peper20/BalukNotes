@@ -21,15 +21,23 @@
 `tests/.data/` (не в git, можно удалять).
 
 ```sh
-cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --check
-cargo run -p notes-cli -- --vault tests/vault check   # ровно намеренные проблемы из tests/vault/README.md
-cd app && npm run check && npm test && npm run build && npm run e2e   # клиент: типы, Vitest, сборка, Playwright
+tools/check.sh           # полная проверка — перед коммитом и PR
+tools/check.sh --fast    # без сборки клиента и e2e; ещё --rust, --app
 ```
+
+Скрипт выполняет: `cargo test --workspace`, `cargo clippy --workspace
+--all-targets -- -D warnings`, `cargo fmt --check`; `notes check` на
+`tests/vault` со сверкой итога со строкой «Итог: `…`» в `tests/vault/README.md`
+(её же сверяет тест ядра); выгрузку типов API (`npm run types`) — они должны
+совпасть с закоммиченными; клиент — `npm run check`, `npm test`,
+`npm run build`, `npm run e2e`. В конце — таблица шагов, код возврата
+ненулевой при любой ошибке, логи — `tests/.data/check/`.
 
 - **Эталонные снимки** `tests/snapshots/*.snap` — HTML каждой фикстуры. Тест
   упал — прочитать дифф (`git diff tests/snapshots`) и, если изменение
   задумано, обновить: `UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test snapshots`.
-- Новый случай отрисовки → новая фикстура в `tests/vault/` + строка в его README.
+- Новый случай отрисовки → новая фикстура в `tests/vault/` + строка в его README
+  (и строка «Итог», если изменилось число заметок или проблем).
 
 После правок библиотеки, CSS или клиента — **посмотреть глазами** обе темы и
 узкий экран (снимки — в scratchpad или `tests/.data/`, не в репозиторий):

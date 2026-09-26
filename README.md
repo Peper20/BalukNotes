@@ -41,6 +41,7 @@ tools/test-env.sh                                     # тестовое окр�
 | `baluk/` | библиотека оформления Typst: блоки, рисунки, шаблоны `note`/`book`, ссылки `see` — HTML- и PDF-ветка |
 | `tests/vault/` | хранилище-фикстура: каждый случай отрисовки, каталог — его `README.md` |
 | `tests/snapshots/` | эталонные снимки HTML фикстур (`UPDATE_SNAPSHOTS=1` — обновить) |
+| `tools/check.sh` | полная проверка одной командой: Rust, `notes check` на фикстуре, типы API, клиент, e2e |
 | `tools/test-env.sh` | тестовое окружение: сервер на `tests/vault`, данные в `tests/.data/` |
 | `tools/visual.mjs` | альбом снимков всех фикстур: светлая, тёмная, узкий экран |
 | `tools/shot.mjs` | снимок одной страницы headless Chromium |
@@ -48,5 +49,9 @@ tools/test-env.sh                                     # тестовое окр�
 ## Проверка
 
 ```sh
-cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --check
+tools/check.sh          # всё: cargo test/clippy/fmt, notes check, типы API, клиент, e2e
+tools/check.sh --fast   # без сборки клиента и e2e; ещё есть --rust и --app
 ```
+
+В конце — таблица «шаг → ок/упал, время», код возврата ненулевой при любой
+ошибке; логи шагов — `tests/.data/check/`.

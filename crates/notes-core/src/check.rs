@@ -37,6 +37,19 @@ impl Report {
     pub fn is_clean(&self) -> bool {
         self.notes.iter().all(|n| n.errors.is_empty() && n.broken_links.is_empty())
     }
+
+    /// Итог одной строкой: `заметок: 19, ошибок: 1, предупреждений: 2, битых ссылок: 3`.
+    /// Его печатает `notes check`; ожидаемый итог фикстуры — в `tests/vault/README.md`.
+    pub fn summary(&self) -> String {
+        let count = |f: fn(&NoteReport) -> usize| self.notes.iter().map(f).sum::<usize>();
+        format!(
+            "заметок: {}, ошибок: {}, предупреждений: {}, битых ссылок: {}",
+            self.notes.len(),
+            count(|n| n.errors.len()),
+            count(|n| n.warnings.len()),
+            count(|n| n.broken_links.len()),
+        )
+    }
 }
 
 pub fn check(notes: &Notes) -> Result<Report> {
