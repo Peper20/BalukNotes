@@ -16,6 +16,8 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: { "/api": api, "/fonts": api },
+    // Снимки отрисовки — эталон для тестов разборщика формул (lib/plot).
+    fs: { allow: [".", "../tests/snapshots"] },
   },
   test: {
     include: ["src/**/*.test.ts"],

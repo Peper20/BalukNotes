@@ -4,15 +4,19 @@
   напрямую в DOM, а не шаблоном Svelte.
 -->
 <script lang="ts">
-  import { untrack } from "svelte";
+  import { mount, onDestroy, unmount, untrack } from "svelte";
   import { app } from "../lib/app.svelte";
   import type { NotePage } from "../lib/api";
   import { tagHref } from "../lib/ids";
   import { ui } from "../lib/ui.svelte";
+  import { formulasOk, readSpec } from "../lib/plot/spec";
   import Loading from "./Loading.svelte";
+  import Plot from "./Plot.svelte";
 
   let content: HTMLDivElement | undefined = $state();
   let seenAnchorSeq = 0;
+  let plots: ReturnType<typeof mount>[] = [];
+  onDestroy(unmountPlots);
 
   $effect(() => {
     const page = app.page;
@@ -40,8 +44,10 @@
   function render(page: NotePage, el: HTMLDivElement) {
     const r = page.rendered;
     const intent = app.scroll;
+    unmountPlots();
     el.innerHTML = r ? r.styles + r.body : "";
     linkTags(el);
+    mountPlots(el);
     ui.book = page.book;
     ui.chapter = page.book?.chapter ?? 0;
     app.chapter = page.book ? page.book.chapter : null;
@@ -57,6 +63,29 @@
       const tag = li.textContent?.trim();
       if (tag) li.replaceChildren(Object.assign(document.createElement("a"), { href: tagHref(tag), textContent: tag }));
     }
+  }
+
+  /**
+   * Интерактивные рисунки konspekt: в HTML — `div.k-plot` с JSON и кадром
+   * Typst; живой рисунок встаёт рядом, кадр прячет CSS (`[data-live]`).
+   * Формула не разобралась — остаётся кадр.
+   */
+  function mountPlots(root: Element) {
+    for (const el of root.querySelectorAll<HTMLElement>(".k-plot[data-k-plot]")) {
+      const spec = readSpec(el);
+      if (!spec || !formulasOk(spec)) continue;
+      try {
+        plots.push(mount(Plot, { target: el, props: { spec } }));
+        el.dataset.live = "";
+      } catch (e) {
+        console.warn("интерактивный рисунок:", e);
+      }
+    }
+  }
+
+  function unmountPlots() {
+    for (const p of plots) void unmount(p);
+    plots = [];
   }
 
   /** Прокрутить к разделу; раздел в другой главе книги — загрузить её (прокрутит сама). */
