@@ -1,0 +1,134 @@
+id: Рисунки/Кадры
+kind: Note
+title: Кадры
+tags: рисунки, фикстура
+headings:
+  2 #Диапазон-целых [Диапазон-целых] Диапазон целых
+  2 #Дробный-шаг-и-своя-подпись [Дробный-шаг-и-своя-подпись] Дробный шаг и своя подпись
+  2 #Шаги-алгоритма [Шаги-алгоритма] Шаги алгоритма
+links:
+styles: 1932 байт, fnv 825a2e9c8c5be6b4
+---
+<svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…7136 байт, fnv f3f55fa5aacc4651…</svg>
+<article class="k-doc" data-k-figs="5b5e5235" data-doc="note">
+<header class="k-title">
+<h1>Кадры</h1>
+<ul class="k-tags">
+<li>рисунки</li>
+<li>фикстура</li></ul></header>
+<p>Рисунок с параметром: Typst собирает кадр для каждого значения, в приложении их переключает ползунок, кнопка проигрывания показывает по очереди. В PDF и без JS — кадр по умолчанию и подпись значения.</p>
+<h2 class="k-h k-h2" id="Диапазон-целых" data-k-anchor="Диапазон-целых"><span class="k-num">1</span>Диапазон целых</h2>
+<figure>
+<div class="k-frames" data-k-frames="{&quot;name&quot;:&quot;n&quot;,&quot;count&quot;:12,&quot;default&quot;:3,&quot;fps&quot;:2,&quot;loop&quot;:false}">
+<div class="k-frames-stack">
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 12.253565641em; height: 5.274781389em; display: block" viewBox="0 0 134.789222047 58.022595276" width="134.789222047pt" height="58.022595276pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…2909 байт, fnv 7d5f761fd41b1112…</svg></div>
+<div class="k-frames-label"><em>n</em> = 1</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 12.253565641em; height: 5.274781389em; display: block" viewBox="0 0 134.789222047 58.022595276" width="134.789222047pt" height="58.022595276pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…3146 байт, fnv 0030da819238d348…</svg></div>
+<div class="k-frames-label"><em>n</em> = 2</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 12.253565641em; height: 5.274781389em; display: block" viewBox="0 0 134.789222047 58.022595276" width="134.789222047pt" height="58.022595276pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…3385 байт, fnv 9db3066ab715f6ad…</svg></div>
+<div class="k-frames-label"><em>n</em> = 3</div></div>
+<div class="k-frames-item" data-k-frame-default>
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 12.253565641em; height: 5.274781389em; display: block" viewBox="0 0 134.789222047 58.022595276" width="134.789222047pt" height="58.022595276pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…3622 байт, fnv 273b5a0d47efcc48…</svg></div>
+<div class="k-frames-label"><em>n</em> = 4</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 12.253565641em; height: 5.274781389em; display: block" viewBox="0 0 134.789222047 58.022595276" width="134.789222047pt" height="58.022595276pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…3857 байт, fnv 7471ce2133f2de29…</svg></div>
+<div class="k-frames-label"><em>n</em> = 5</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 12.253565641em; height: 5.274781389em; display: block" viewBox="0 0 134.789222047 58.022595276" width="134.789222047pt" height="58.022595276pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…4102 байт, fnv d53463cd73f31360…</svg></div>
+<div class="k-frames-label"><em>n</em> = 6</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 12.253565641em; height: 5.274781389em; display: block" viewBox="0 0 134.789222047 58.022595276" width="134.789222047pt" height="58.022595276pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…4343 байт, fnv 3e929508528eae00…</svg></div>
+<div class="k-frames-label"><em>n</em> = 7</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 12.253565641em; height: 5.274781389em; display: block" viewBox="0 0 134.789222047 58.022595276" width="134.789222047pt" height="58.022595276pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…4572 байт, fnv 612234255fd3f59a…</svg></div>
+<div class="k-frames-label"><em>n</em> = 8</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 12.253565641em; height: 5.274781389em; display: block" viewBox="0 0 134.789222047 58.022595276" width="134.789222047pt" height="58.022595276pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…4814 байт, fnv 618d8e9fbfa471f1…</svg></div>
+<div class="k-frames-label"><em>n</em> = 9</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 12.253565641em; height: 5.274781389em; display: block" viewBox="0 0 134.789222047 58.022595276" width="134.789222047pt" height="58.022595276pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…5054 байт, fnv 422d52c660fd2715…</svg></div>
+<div class="k-frames-label"><em>n</em> = 10</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 12.253565641em; height: 5.274781389em; display: block" viewBox="0 0 134.789222047 58.022595276" width="134.789222047pt" height="58.022595276pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…5288 байт, fnv dc3d3df71d78cf55…</svg></div>
+<div class="k-frames-label"><em>n</em> = 11</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 12.253565641em; height: 5.274781389em; display: block" viewBox="0 0 134.789222047 58.022595276" width="134.789222047pt" height="58.022595276pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…5504 байт, fnv 433795479235e07c…</svg></div>
+<div class="k-frames-label"><em>n</em> = 12</div></div></div></div>
+<figcaption><span class="k-fig-num">Рис. 1.</span> Нижняя сумма Римана: <math><mi>𝑛</mi></math> прямоугольников</figcaption></figure>
+<h2 class="k-h k-h2" id="Дробный-шаг-и-своя-подпись" data-k-anchor="Дробный-шаг-и-своя-подпись"><span class="k-num">2</span>Дробный шаг и своя подпись</h2>
+<figure>
+<div class="k-frames" data-k-frames="{&quot;name&quot;:&quot;t&quot;,&quot;count&quot;:9,&quot;default&quot;:2,&quot;fps&quot;:4,&quot;loop&quot;:true}">
+<div class="k-frames-stack">
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 6.442376521em; height: 6.442376521em; display: block" viewBox="0 0 70.866141732 70.866141732" width="70.866141732pt" height="70.866141732pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…921 байт, fnv f5cf99433ba9e4a9…</svg></div>
+<div class="k-frames-label">поворот на <math><mn>0</mn><mi>°</mi></math></div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 6.442376521em; height: 6.442376521em; display: block" viewBox="0 0 70.866141732 70.866141732" width="70.866141732pt" height="70.866141732pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…938 байт, fnv e3115bfd805fd229…</svg></div>
+<div class="k-frames-label">поворот на <math><mn>45</mn><mi>°</mi></math></div></div>
+<div class="k-frames-item" data-k-frame-default>
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 6.442376521em; height: 6.442376521em; display: block" viewBox="0 0 70.866141732 70.866141732" width="70.866141732pt" height="70.866141732pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…930 байт, fnv 235ef9b784434076…</svg></div>
+<div class="k-frames-label">поворот на <math><mn>90</mn><mi>°</mi></math></div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 6.442376521em; height: 6.442376521em; display: block" viewBox="0 0 70.866141732 70.866141732" width="70.866141732pt" height="70.866141732pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…943 байт, fnv 29b38c64b3a84e37…</svg></div>
+<div class="k-frames-label">поворот на <math><mn>135</mn><mi>°</mi></math></div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 6.442376521em; height: 6.442376521em; display: block" viewBox="0 0 70.866141732 70.866141732" width="70.866141732pt" height="70.866141732pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…932 байт, fnv 511479c2a33d7b56…</svg></div>
+<div class="k-frames-label">поворот на <math><mn>180</mn><mi>°</mi></math></div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 6.442376521em; height: 6.442376521em; display: block" viewBox="0 0 70.866141732 70.866141732" width="70.866141732pt" height="70.866141732pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…938 байт, fnv 887a76c385cb2589…</svg></div>
+<div class="k-frames-label">поворот на <math><mn>225</mn><mi>°</mi></math></div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 6.442376521em; height: 6.442376521em; display: block" viewBox="0 0 70.866141732 70.866141732" width="70.866141732pt" height="70.866141732pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…929 байт, fnv 87c3d4126a14c020…</svg></div>
+<div class="k-frames-label">поворот на <math><mn>270</mn><mi>°</mi></math></div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 6.442376521em; height: 6.442376521em; display: block" viewBox="0 0 70.866141732 70.866141732" width="70.866141732pt" height="70.866141732pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…927 байт, fnv 0156e0f092487f24…</svg></div>
+<div class="k-frames-label">поворот на <math><mn>315</mn><mi>°</mi></math></div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 6.442376521em; height: 6.442376521em; display: block" viewBox="0 0 70.866141732 70.866141732" width="70.866141732pt" height="70.866141732pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…923 байт, fnv c7201cbaa23eaf95…</svg></div>
+<div class="k-frames-label">поворот на <math><mn>360</mn><mi>°</mi></math></div></div></div></div>
+<figcaption><span class="k-fig-num">Рис. 2.</span> Точка на окружности; проигрывание — по кругу</figcaption></figure>
+<h2 class="k-h k-h2" id="Шаги-алгоритма" data-k-anchor="Шаги-алгоритма"><span class="k-num">3</span>Шаги алгоритма</h2>
+<figure>
+<div class="k-frames" data-k-frames="{&quot;name&quot;:&quot;k&quot;,&quot;count&quot;:4,&quot;default&quot;:0,&quot;fps&quot;:2,&quot;loop&quot;:false}">
+<div class="k-frames-stack">
+<div class="k-frames-item" data-k-frame-default>
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 6.390837509em; height: 2.39218873em; display: block" viewBox="0 0 70.299212598 26.314076033" width="70.299212598pt" height="26.314076033pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…3230 байт, fnv 7673e8883559294f…</svg></div>
+<div class="k-frames-label">исходный массив</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 6.390837509em; height: 2.39218873em; display: block" viewBox="0 0 70.299212598 26.314076033" width="70.299212598pt" height="26.314076033pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…3230 байт, fnv 520a88f9f23e7c58…</svg></div>
+<div class="k-frames-label">проход 1</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 6.390837509em; height: 2.39218873em; display: block" viewBox="0 0 70.299212598 26.314076033" width="70.299212598pt" height="26.314076033pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…3230 байт, fnv 3eb9eefa3c2d4899…</svg></div>
+<div class="k-frames-label">проход 2</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 6.390837509em; height: 2.39218873em; display: block" viewBox="0 0 70.299212598 26.314076033" width="70.299212598pt" height="26.314076033pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…3230 байт, fnv aae340cc83b75662…</svg></div>
+<div class="k-frames-label">проход 3</div></div></div></div>
+<figcaption><span class="k-fig-num">Рис. 3.</span> Пузырьковая сортировка: после прохода <math><mi>𝑘</mi></math> последние <math><mi>𝑘</mi></math> элементов на месте</figcaption></figure></article>

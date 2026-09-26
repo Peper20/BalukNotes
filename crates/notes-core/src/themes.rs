@@ -1,4 +1,4 @@
-//! Темы оформления: цвета из `konspekt/theme.typ` → CSS-переменные.
+//! Темы оформления: цвета из `baluk/theme.typ` → CSS-переменные.
 //!
 //! Источник правды — словари тем в Typst. `css.typ` выгружает их вместе с
 //! производными цветами (фон врезки и т. п.) в `metadata <k-css>`, здесь они
@@ -23,7 +23,10 @@ const CSS_LABEL: &str = "k-css";
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Theme {
+    /// Имя в `theme.typ` — значение настройки и `data-theme`.
     pub name: String,
+    /// Название для интерфейса.
+    pub title: String,
     /// Тёмная ли тема (по светлоте фона) — для выбора «как в системе».
     pub dark: bool,
 }
@@ -53,7 +56,7 @@ impl ThemeSet {
         Self::from_json(&serde_json::to_value(&meta.value)?)
     }
 
-    /// `{тема: {переменная: цвет}}` → темы и CSS.
+    /// `{тема: {title, colors: {переменная: цвет}}}` → темы и CSS.
     fn from_json(value: &Value) -> Result<Self> {
         let bad = |what: &str| Error::Library(format!("{CSS_FILE}: {what}"));
         let map = value.as_object().ok_or_else(|| bad("ожидался словарь тем"))?;
@@ -61,11 +64,13 @@ impl ThemeSet {
             return Err(bad("нет ни одной темы"));
         }
         let mut themes = Vec::new();
-        let mut css = String::from("/* Сгенерировано из konspekt/theme.typ — не править. */\n");
-        for (name, colors) in map {
-            let colors: &Map<String, Value> = colors.as_object().ok_or_else(|| bad("цвета темы — словарь"))?;
+        let mut css = String::from("/* Сгенерировано из baluk/theme.typ — не править. */\n");
+        for (name, theme) in map {
+            let title = theme.get("title").and_then(Value::as_str).unwrap_or(name);
+            let colors: &Map<String, Value> =
+                theme.get("colors").and_then(Value::as_object).ok_or_else(|| bad("цвета темы — словарь"))?;
             let bg = colors.get("bg").and_then(Value::as_str).ok_or_else(|| bad("у темы нет bg"))?;
-            themes.push(Theme { name: name.clone(), dark: is_dark(bg) });
+            themes.push(Theme { name: name.clone(), title: title.to_owned(), dark: is_dark(bg) });
             let _ = writeln!(css, ":root[data-theme=\"{name}\"] {{");
             for (var, color) in colors {
                 let color = color.as_str().ok_or_else(|| bad("цвет — строка"))?;
@@ -109,15 +114,16 @@ mod tests {
     #[test]
     fn css_from_json() {
         let json = serde_json::json!({
-            "светлая": {"bg": "#ffffff", "text": "#1b1b1b"},
-            "тёмная": {"bg": "#16181e", "text": "#dde2ea"},
+            "light": {"title": "Светлая", "colors": {"bg": "#ffffff", "text": "#1b1b1b"}},
+            "dark": {"title": "Тёмная", "colors": {"bg": "#16181e", "text": "#dde2ea"}},
         });
         let set = ThemeSet::from_json(&json).unwrap();
-        assert_eq!(set.names(), ["светлая", "тёмная"]);
+        assert_eq!(set.names(), ["light", "dark"]);
+        assert_eq!(set.themes()[1].title, "Тёмная");
         assert!(!set.themes()[0].dark);
         assert!(set.themes()[1].dark);
-        assert!(set.css().contains(":root[data-theme=\"тёмная\"] {\n  --k-bg: #16181e;"));
-        assert!(set.css().contains(".k-frame-v[data-theme=\"светлая\"] { display: contents; }"));
+        assert!(set.css().contains(":root[data-theme=\"dark\"] {\n  --k-bg: #16181e;"));
+        assert!(set.css().contains(".k-frame-v[data-theme=\"light\"] { display: contents; }"));
     }
 
     #[test]

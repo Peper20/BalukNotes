@@ -37,14 +37,14 @@ test("команды: сменить тему из палитры", async ({ pag
   await page.keyboard.press("Control+k");
   await page.locator(".palette input").pressSequentially("тема ночь");
   await page.keyboard.press("Enter");
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "ночь");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "night");
   await page.keyboard.press("Control+k");
   await page.locator(".palette input").pressSequentially("как в системе");
   await page.keyboard.press("Enter");
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "классика");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "classic");
 });
 
-test("теги: из шапки заметки, страница тега, все теги, палитра", async ({ page }) => {
+test("tags: из шапки заметки, страница тега, все теги, палитра", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await page.locator("#note .k-tags a", { hasText: "сеть" }).click();
   await ready(page);

@@ -8,8 +8,9 @@
   const run = (id: string) => commands().find((c) => c.id === id)?.run();
 
   const crumbs = $derived(app.currentId ? splitId(app.currentId) : null);
+  const themeName = $derived(app.themes.find((t) => t.name === app.theme)?.title ?? app.theme);
   const themeTitle = $derived(
-    `Тема: ${app.settings["appearance.theme"] === "auto" ? `как в системе (${app.theme})` : app.theme}`,
+    `Тема: ${app.settings["appearance.theme"] === "auto" ? `как в системе (${themeName})` : themeName}`,
   );
 
   // PDF собирается секунды — открываем в новой вкладке, браузер покажет его сам.

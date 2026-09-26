@@ -20,7 +20,7 @@ pub fn lint(text: &str) -> Vec<Lint> {
     out
 }
 
-/// `#см("A"); дальше` — в разметке `;` сразу после `#выражения` завершает
+/// `#see("A"); дальше` — в разметке `;` сразу после `#выражения` завершает
 /// выражение и исчезает из текста. Для `#let x = 1;` это задумано, для
 /// вызовов посреди фразы — потерянный знак препинания.
 fn visit(node: &LinkedNode, out: &mut Vec<Lint>) {
@@ -75,10 +75,10 @@ mod tests {
 
     #[test]
     fn swallowed_semicolon_after_call() {
-        let text = "Ссылка #см(\"A\"); дальше\n- пункт #см(\"B\")[текст];\n";
+        let text = "Ссылка #see(\"A\"); дальше\n- пункт #see(\"B\")[текст];\n";
         let found = offsets(text);
         assert_eq!(found.len(), 2);
-        assert_eq!(line_column(text, found[0]), (1, 16));
+        assert_eq!(line_column(text, found[0]), (1, 17));
         assert_eq!(line_column(text, found[1]).0, 2);
     }
 
@@ -86,7 +86,7 @@ mod tests {
     fn statements_and_escapes_are_fine() {
         assert!(offsets("#let x = 1;\n#set text(red);\n#import \"a.typ\": *;\n").is_empty());
         assert!(offsets("#let x = 1; текст").is_empty());
-        assert!(offsets("#см(\"A\")\\; дальше; и ещё").is_empty(), "\\; и ; в тексте — обычный текст");
+        assert!(offsets("#see(\"A\")\\; дальше; и ещё").is_empty(), "\\; и ; в тексте — обычный текст");
         assert!(offsets("#{ let a = 1; a }").is_empty(), "; внутри кода — не в разметке");
     }
 }

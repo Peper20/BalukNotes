@@ -1,5 +1,5 @@
 // Настройки вида — атрибутами и переменными на <html>; правила — в
-// konspekt.css (вид заметки) и app.css (интерфейс). Новая настройка =
+// baluk.css (вид заметки) и app.css (интерфейс). Новая настройка =
 // запись в notes-core::settings::Schema + строка здесь + CSS.
 
 import type { SettingValues, Theme } from "./api";

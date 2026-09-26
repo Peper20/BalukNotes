@@ -9,12 +9,12 @@
 use typst::syntax::ast::AstNode as _;
 use typst::syntax::{SyntaxKind, SyntaxNode, ast};
 
-/// Ссылка на заметку из `konspekt/links.typ`.
-const LINK_FN: &str = "см";
-/// Шаблоны konspekt, у которых берём `название` и `теги`.
-const TEMPLATES: &[&str] = &["заметка", "конспект"];
+/// Ссылка на заметку из `baluk/links.typ`.
+const LINK_FN: &str = "see";
+/// Шаблоны baluk, у которых берём `название` и `теги`.
+const TEMPLATES: &[&str] = &["note", "book"];
 /// Именованные строковые аргументы, которые видны читателю (подписи блоков).
-const VISIBLE_ARGS: &[&str] = &["заголовок", "подпись", "название", "описание", "подзаголовок"];
+const VISIBLE_ARGS: &[&str] = &["title", "label", "caption", "description", "subtitle"];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Outline {
@@ -142,7 +142,7 @@ impl Walker {
         });
     }
 
-    /// `#см("Сеть/SSH")` — надпись как на странице (`konspekt/links.typ`):
+    /// `#see("Сеть/SSH")` — надпись как на странице (`baluk/links.typ`):
     /// своя подпись, иначе якорь, иначе последний сегмент пути.
     fn link(&mut self, node: &SyntaxNode) -> bool {
         let Some(call) = node.cast::<ast::FuncCall>() else { return false };
@@ -157,7 +157,7 @@ impl Walker {
             match arg {
                 ast::Arg::Pos(ast::Expr::Str(s)) if target.is_none() => target = Some(s.get()),
                 ast::Arg::Pos(ast::Expr::ContentBlock(b)) => body = Some(b),
-                ast::Arg::Named(n) if n.name().as_str() == "якорь" => {
+                ast::Arg::Named(n) if n.name().as_str() == "anchor" => {
                     if let ast::Expr::Str(s) = n.expr() {
                         anchor = Some(s.get());
                     }
@@ -173,7 +173,7 @@ impl Walker {
         true
     }
 
-    /// `#show: заметка.with(название: […], теги: (…))`.
+    /// `#show: note.with(title: […], tags: (…))`.
     fn template(&mut self, node: &SyntaxNode) {
         let Some(rule) = node.cast::<ast::ShowRule>() else { return };
         let ast::Expr::FuncCall(call) = rule.transform() else { return };
@@ -185,12 +185,12 @@ impl Walker {
         for arg in call.args().items() {
             let ast::Arg::Named(n) = arg else { continue };
             match (n.name().as_str(), n.expr()) {
-                ("название", ast::Expr::ContentBlock(block)) => {
+                ("title", ast::Expr::ContentBlock(block)) => {
                     let mut inner = Walker::default();
                     inner.walk(block.body().to_untyped(), SyntaxKind::Markup);
                     self.out.title = Some(normalize(&inner.text)).filter(|t| !t.is_empty());
                 }
-                ("теги", ast::Expr::Array(array)) => {
+                ("tags", ast::Expr::Array(array)) => {
                     self.out.tags = array
                         .items()
                         .filter_map(|item| match item {
@@ -217,20 +217,20 @@ mod tests {
     #[test]
     fn title_tags_sections() {
         let o = parse_outline(
-            r#"#import "/_konspekt/lib.typ": *
-#show: заметка.with(название: [SSH и *ключи*], теги: ("сеть", "безопасность"))
+            r#"#import "/_baluk/lib.typ": *
+#show: note.with(title: [SSH и *ключи*], tags: ("сеть", "безопасность"))
 #let x = "не текст"
 
-#лид[Протокол для входа на удалённую машину.]
+#lead[Протокол для входа на удалённую машину.]
 
 = Вход по ключу <ключ>
 Команда `ssh-keygen -t ed25519` создаёт пару -- ключей. Формула $x^2$ пропущена.
-#опр(заголовок: "ключа", язык: "служебное")[*Ключ* — файл.]
-#таблица(выделить: ("1,*": "линия"), [ячейка])
+#definition(title: "ключа", lang: "служебное")[*Ключ* — файл.]
+#data-table(highlight: ("1,*": "line"), [ячейка])
 
 == Смена порта
 // комментарий не текст
-Порт~22 → #см("Сеть/UFW")[межсетевой экран]\; дальше.
+Порт~22 → #see("Сеть/UFW")[межсетевой экран]\; дальше.
 ```sh
 ssh-keygen
 ssh-copy-id host
@@ -247,13 +247,13 @@ ssh-copy-id host
         assert!(s1.contains("пару – ключей"), "{s1}");
         assert!(s1.contains("ключа") && s1.contains("Ключ — файл."), "{s1}");
         assert!(s1.contains("ячейка"), "{s1}");
-        for noise in ["служебное", "линия", "1,*", "x^2", "не текст", "_konspekt"] {
+        for noise in ["служебное", "line", "1,*", "x^2", "не текст", "_baluk"] {
             assert!(!s1.contains(noise) && !o.sections[0].text.contains(noise), "«{noise}» в тексте: {s1}");
         }
         let s2 = &o.sections[2].text;
         assert!(s2.contains("→ межсетевой экран; дальше."), "своя подпись ссылки, без пути: {s2}");
         assert!(!s2.contains("Сеть/UFW"), "{s2}");
-        let o = parse_outline(r#"О ключах — #см("Сеть/SSH"). Порт — #см("Сеть/SSH", якорь: "Смена порта")."#);
+        let o = parse_outline(r#"О ключах — #see("Сеть/SSH"). Порт — #see("Сеть/SSH", anchor: "Смена порта")."#);
         assert_eq!(o.sections[0].text, "О ключах — SSH. Порт — Смена порта.");
         assert!(!s2.contains("комментарий"));
         assert!(s2.contains("ssh-keygen ssh-copy-id host"), "строки кода — через пробел: {s2}");

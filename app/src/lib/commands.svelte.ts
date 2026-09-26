@@ -36,8 +36,8 @@ function fontSize(delta: number) {
 async function copyLink() {
   const id = app.currentId;
   if (!id) return;
-  await navigator.clipboard?.writeText(`#см("${id}")`).catch(() => {});
-  app.status = `скопировано: #см("${id}")`;
+  await navigator.clipboard?.writeText(`#see("${id}")`).catch(() => {});
+  app.status = `скопировано: #see("${id}")`;
 }
 
 function toggleSidebar() {
@@ -78,13 +78,13 @@ export function commands(): Command[] {
     ...app.themes.map((t) => ({
       id: `theme-${t.name}`,
       group: "Вид",
-      title: `Тема: ${t.name}`,
+      title: `Тема: ${t.title}`,
       run: () => void app.saveSettings({ "appearance.theme": t.name }),
     })),
 
     { id: "refresh", group: "Заметка", title: "Пересобрать заметку", keys: keys("KeyR"), available: () => app.currentId != null, run: () => void app.check({ force: true }) },
     { id: "pdf", group: "Заметка", title: "PDF в текущей теме", available: hasNote, run: () => { const url = app.pdfUrl(); if (url) open(url, "_blank"); } },
-    { id: "copy-link", group: "Заметка", title: "Скопировать ссылку #см(…) на заметку", available: () => app.currentId != null, run: () => void copyLink() },
+    { id: "copy-link", group: "Заметка", title: "Скопировать ссылку #see(…) на заметку", available: () => app.currentId != null, run: () => void copyLink() },
     { id: "backlinks", group: "Заметка", title: "Кто ссылается сюда", available: hasNote, run: () => document.getElementById("backlinks")?.scrollIntoView({ behavior: "smooth" }) },
 
     { id: "settings", group: "Приложение", title: "Настройки", keys: keys("Ctrl+Comma"), run: () => (ui.settingsOpen = true) },

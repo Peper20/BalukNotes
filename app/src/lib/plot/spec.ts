@@ -1,4 +1,4 @@
-// Описание интерактивного рисунка из `data-k-plot` (пишет konspekt/plots.typ).
+// Описание интерактивного рисунка из `data-k-plot` (пишет baluk/plots.typ).
 
 import { compile } from "./formula";
 
@@ -12,7 +12,7 @@ export interface Param {
 
 export interface Curve {
   f: string;
-  /** Имя цвета темы: линия, второй, третий, акцент. */
+  /** Имя цвета темы: line, second, third, accent. */
   color: string;
   label: string | null;
   dashed: boolean;
@@ -39,7 +39,7 @@ export interface Plot3D {
   params: Param[];
   labels: [string, string, string];
   n: number;
-  style: "свет" | "сетка";
+  style: "shaded" | "wire";
   color: string;
   /** Начальный вид: поворот и наклон, градусы. */
   view: [number, number];
@@ -73,8 +73,8 @@ export function formulasOk(spec: PlotSpec): boolean {
 
 /** CSS-переменная цвета рисунка по имени цвета темы. */
 export function colorVar(name: string): string {
-  const map: Record<string, string> = { линия: "line", второй: "second", третий: "third", грань: "face" };
-  return name === "акцент" ? "--k-accent" : `--k-fig-${map[name] ?? "line"}`;
+  const known = ["line", "second", "third", "face"];
+  return name === "accent" ? "--k-accent" : `--k-fig-${known.includes(name) ? name : "line"}`;
 }
 
 /** Начальные значения параметров. */

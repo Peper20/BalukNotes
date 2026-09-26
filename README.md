@@ -1,6 +1,6 @@
 # baluk notes
 
-Заметки на Typst с красотой конспектов konspekt-style и удобством Obsidian:
+Заметки на Typst с красотой печатных конспектов и удобством Obsidian:
 ссылки, граф, быстрый переход, поиск — и интерактив, которого нет в PDF.
 Браузер, десктоп и Android из одной кодовой базы (Rust + Tauri 2).
 
@@ -36,8 +36,8 @@ tools/test-env.sh                                     # тестовое окр�
 | `crates/notes-core/` | ядро: хранилище, компилятор Typst, склейка тем, рисунки, индекс ссылок, настройки, проверка |
 | `crates/notes-server/` | HTTP API и раздача клиента (axum) |
 | `crates/notes-cli/` | команда `notes`: serve, check, build, pdf |
-| `app/` | клиент: Svelte 5 + TypeScript + Vite; `public/assets/konspekt.css` — вид заметок |
-| `konspekt/` | библиотека оформления: форк konspekt-style + HTML-ветка, `заметка`, `см` |
+| `app/` | клиент: Svelte 5 + TypeScript + Vite; `public/assets/baluk.css` — вид заметок |
+| `baluk/` | библиотека оформления Typst: блоки, рисунки, шаблоны `note`/`book`, ссылки `see` — HTML- и PDF-ветка |
 | `tests/vault/` | хранилище-фикстура: каждый случай отрисовки, каталог — его `README.md` |
 | `tests/snapshots/` | эталонные снимки HTML фикстур (`UPDATE_SNAPSHOTS=1` — обновить) |
 | `tools/test-env.sh` | тестовое окружение: сервер на `tests/vault`, данные в `tests/.data/` |

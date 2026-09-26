@@ -1,5 +1,5 @@
 // Формула рисунка — строка с кодом Typst из подмножества. Разбор и
-// вычисление повторяют `konspekt/plots.typ` (`_разбор`, `_знач`) построчно:
+// вычисление повторяют `baluk/plots.typ` (`_parse`, `_eval`) построчно:
 // меняешь одно — меняй и другое. Сверка с Typst — formula.test.ts (читает
 // снимок фикстуры `Рисунки/Интерактив`).
 
@@ -91,7 +91,7 @@ export function parse(s: string, names: string[]): Node {
   return node;
 }
 
-/** Число годно: не NaN и не бесконечность (как `_годно` в Typst). */
+/** Число годно: не NaN и не бесконечность (как `_valid` в Typst). */
 const ok = (v: number | null): v is number => v !== null && Math.abs(v) < 1e300;
 
 const frac = (v: number) => v - Math.trunc(v);

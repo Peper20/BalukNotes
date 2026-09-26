@@ -36,7 +36,7 @@ use crate::{Error, Result};
 pub struct NotesConfig {
     /// Корень хранилища.
     pub vault: PathBuf,
-    /// Библиотека оформления (`konspekt/`), видна заметкам как `/_konspekt/`.
+    /// Библиотека оформления (`baluk/`), видна заметкам как `/_baluk/`.
     pub library: LibrarySource,
     /// Дополнительные каталоги шрифтов (к системным и встроенным в Typst).
     pub font_dirs: Vec<PathBuf>,
@@ -244,7 +244,7 @@ impl Notes {
         Ok(self.page(id, opts)?.version.clone())
     }
 
-    /// Заметка в PDF (вид PDF из konspekt) в теме `theme`; без кэша.
+    /// Заметка в PDF (вид PDF из baluk) в теме `theme`; без кэша.
     pub fn pdf(&self, id: &NoteId, theme: &str) -> Result<std::result::Result<Vec<u8>, Vec<Diagnostic>>> {
         let entry = self.vault.entry(id)?;
         if !self.themes.names().iter().any(|t| t == theme) {
@@ -360,7 +360,7 @@ fn version_of(deps: &[PathBuf]) -> String {
     format!("{:016x}", h.finish())
 }
 
-/// Адреса ссылок `#см(…)`: существует ли цель, и куда вести.
+/// Адреса ссылок `#see(…)`: существует ли цель, и куда вести.
 struct VaultLinks<'a> {
     vault: &'a Vault,
     style: LinkStyle,

@@ -21,13 +21,13 @@ links:
   Сеть/SSH / Нет такого раздела
 styles: 0 байт, fnv cbf29ce484222325
 ---
-<article class="k-doc" data-doc="заметка">
+<article class="k-doc" data-doc="note">
 <header class="k-title">
 <h1>Ссылки</h1>
 <ul class="k-tags">
 <li>ссылки</li>
 <li>фикстура</li></ul></header>
-<p>Все виды ссылок <code>#см</code>. Две последние — битые намеренно: их находит <code>notes check</code>, а в интерфейсе они помечены.</p>
+<p>Все виды ссылок <code>#see</code>. Две последние — битые намеренно: их находит <code>notes check</code>, а в интерфейсе они помечены.</p>
 <h2 class="k-h k-h2" id="Рабочие" data-k-anchor="Рабочие"><span class="k-num">1</span>Рабочие</h2>
 <ul>
 <li>на заметку: <a class="k-link" data-k-target="Сеть/SSH" href="/n/Сеть/SSH">SSH</a>;</li>

@@ -15,7 +15,7 @@ async function noSideScroll(page: Page) {
 }
 
 test("узкий экран: страницы и настройки не шире окна", async ({ page }) => {
-  for (const url of ["/", "/tags", noteUrl("Формулы и теги"), noteUrl("Книга"), noteUrl("Сеть/SSH"), noteUrl("Рисунки/Интерактив")]) {
+  for (const url of ["/", "/tags", noteUrl("Формулы и теги"), noteUrl("Книга"), noteUrl("Сеть/SSH"), noteUrl("Рисунки/Интерактив"), noteUrl("Рисунки/Кадры")]) {
     await page.goto(url);
     await ready(page);
     await noSideScroll(page);

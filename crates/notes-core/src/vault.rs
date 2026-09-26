@@ -3,7 +3,7 @@
 //! - **Заметка** — файл `путь/Имя.typ`, идентификатор `путь/Имя`.
 //! - **Книга** — папка с `main.typ`, идентификатор — путь к папке. Файлы
 //!   внутри книги (главы, код) заметками не считаются.
-//! - Служебное пропускается: имена на `_` (библиотека `_konspekt`) и на `.`.
+//! - Служебное пропускается: имена на `_` (библиотека `_baluk`) и на `.`.
 
 use std::fmt;
 use std::fs;
@@ -216,7 +216,7 @@ mod tests {
     fn note_id_validation() {
         assert!(NoteId::new("Сеть/SSH").is_ok());
         assert!(NoteId::new("SSH").is_ok());
-        for bad in ["", "/SSH", "Сеть/", "a//b", "../x", "a/./b", "_konspekt/lib", ".git/x", "a\\b", "SSH.typ"] {
+        for bad in ["", "/SSH", "Сеть/", "a//b", "../x", "a/./b", "_baluk/lib", ".git/x", "a\\b", "SSH.typ"] {
             assert!(NoteId::new(bad).is_err(), "{bad} должен быть отвергнут");
         }
     }
@@ -233,8 +233,7 @@ mod tests {
     fn scan_notes_and_books() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        for f in
-            ["Сеть/SSH.typ", "Сеть/UFW.typ", "Матан/main.typ", "Матан/01-глава.typ", "_konspekt/lib.typ", "код.cpp"]
+        for f in ["Сеть/SSH.typ", "Сеть/UFW.typ", "Матан/main.typ", "Матан/01-глава.typ", "_baluk/lib.typ", "код.cpp"]
         {
             let p = root.join(f);
             fs::create_dir_all(p.parent().unwrap()).unwrap();

@@ -7,10 +7,10 @@ headings:
   2 #Градиент [Градиент] Градиент
   2 #Обычный-рисунок [Обычный-рисунок] Обычный рисунок
 links:
-styles: 1744 байт, fnv dc3e9d3fc745bf29
+styles: 1732 байт, fnv bab0a43b9ef4225e
 ---
 <svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…3300 байт, fnv 0a156eae95bad42c…</svg>
-<article class="k-doc" data-k-figs="fee65deb" data-doc="заметка">
+<article class="k-doc" data-k-figs="fee65deb" data-doc="note">
 <header class="k-title">
 <h1>Темы и градиент</h1>
 <ul class="k-tags">
@@ -21,17 +21,17 @@ styles: 1744 байт, fnv dc3e9d3fc745bf29
 <p>В светлой теме — квадрат, в тёмной — круг: темы различаются не только цветами, поэтому ядро оставляет по варианту на тему (запасной путь).</p>
 <figure>
 <div class="k-frame k-fig">
-<div class="k-frame-v" data-theme="классика">
+<div class="k-frame-v" data-theme="classic">
 <svg style="overflow: visible; width: 5.153901217em; height: 5.153901217em; display: block" viewBox="0 0 56.692913386 56.692913386" width="56.692913386pt" height="56.692913386pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…204 байт, fnv 9a6a57eb6f9a713b…</svg></div>
-<div class="k-frame-v" data-theme="ночь">
+<div class="k-frame-v" data-theme="night">
 <svg style="overflow: visible; width: 5.153901217em; height: 5.153901217em; display: block" viewBox="0 0 56.692913386 56.692913386" width="56.692913386pt" height="56.692913386pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…324 байт, fnv 8772c4e329375961…</svg></div></div>
 <figcaption><span class="k-fig-num">Рис. 1.</span> Разная форма в темах</figcaption></figure>
 <h2 class="k-h k-h2" id="Градиент" data-k-anchor="Градиент"><span class="k-num">2</span>Градиент</h2>
 <figure>
 <div class="k-frame k-fig">
-<div class="k-frame-v" data-theme="классика">
+<div class="k-frame-v" data-theme="classic">
 <svg style="overflow: visible; width: 12.884753042em; height: 2.576950608em; display: block" viewBox="0 0 141.732283465 28.346456693" width="141.732283465pt" height="28.346456693pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…930 байт, fnv cacd13b4bf708468…</svg></div>
-<div class="k-frame-v" data-theme="ночь">
+<div class="k-frame-v" data-theme="night">
 <svg style="overflow: visible; width: 12.884753042em; height: 2.576950608em; display: block" viewBox="0 0 141.732283465 28.346456693" width="141.732283465pt" height="28.346456693pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…928 байт, fnv 44d517ec532e81b4…</svg></div></div>
 <figcaption><span class="k-fig-num">Рис. 2.</span> Заливка градиентом от акцента к фону</figcaption></figure>
 <h2 class="k-h k-h2" id="Обычный-рисунок" data-k-anchor="Обычный-рисунок"><span class="k-num">3</span>Обычный рисунок</h2>

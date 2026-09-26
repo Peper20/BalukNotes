@@ -82,7 +82,7 @@
       ctx.beginPath();
       face.pts.forEach((p, i) => (i ? ctx.lineTo(...S(p)) : ctx.moveTo(...S(p))));
       ctx.closePath();
-      if (spec.style === "сетка") {
+      if (spec.style === "wire") {
         ctx.strokeStyle = get(base);
         ctx.lineWidth = 0.6;
       } else {

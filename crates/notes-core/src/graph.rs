@@ -3,9 +3,9 @@
 //! быстрого перехода и поиска).
 //!
 //! Ссылки берутся **из исходников, без компиляции**: парсер Typst находит
-//! вызовы `#см("путь", якорь: "…")` с буквальными строками. Так весь граф
+//! вызовы `#see("путь", anchor: "…")` с буквальными строками. Так весь граф
 //! строится за миллисекунды, а не за время сборки всех заметок (у книги —
-//! десятки секунд). Ссылка с вычисляемым путём (`#см(путь-из-переменной)`) в
+//! десятки секунд). Ссылка с вычисляемым путём (`#see(путь-из-переменной)`) в
 //! индекс не попадёт — Claude Code пишет ссылки буквально, а `notes check`
 //! проверяет ссылки по собранным страницам, так что расхождение будет видно.
 //!
@@ -26,9 +26,9 @@ use crate::render::LinkRef;
 use crate::vault::{Entry, NoteId, NoteKind, Vault};
 use crate::{Error, Result};
 
-/// Функция ссылки из `konspekt/links.typ`.
-const LINK_FN: &str = "см";
-const ANCHOR_ARG: &str = "якорь";
+/// Функция ссылки из `baluk/links.typ`.
+const LINK_FN: &str = "see";
+const ANCHOR_ARG: &str = "anchor";
 
 /// Ссылка на заметку из другой заметки.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -186,7 +186,7 @@ impl Snapshot {
     }
 }
 
-/// Все `см("…", якорь: "…")` с буквальными строками, без повторов.
+/// Все `see("…", anchor: "…")` с буквальными строками, без повторов.
 pub fn parse_links(text: &str) -> Vec<LinkRef> {
     let root = typst::syntax::parse(text);
     let mut out = Vec::new();
@@ -235,14 +235,14 @@ mod tests {
     #[test]
     fn finds_literal_links_only() {
         let text = r#"
-#import "/_konspekt/lib.typ": *
-Текст #см("Сеть/SSH") и #см("Сеть/SSH", якорь: "Смена порта")[порт].
-#let путь = "Сеть/UFW"
-#см(путь)
-#опр[внутри блока — #см("Матан")]
-#см("Сеть/SSH")
-// #см("закомментировано")
-`#см("в коде")`
+#import "/_baluk/lib.typ": *
+Текст #see("Сеть/SSH") и #see("Сеть/SSH", anchor: "Смена порта")[порт].
+#let target = "Сеть/UFW"
+#see(target)
+#definition[внутри блока — #see("Матан")]
+#see("Сеть/SSH")
+// #see("закомментировано")
+`#see("в коде")`
 "#;
         assert_eq!(
             parse_links(text),
@@ -259,10 +259,10 @@ mod tests {
             fs::create_dir_all(p.parent().unwrap()).unwrap();
             fs::write(p, text).unwrap();
         };
-        write("A.typ", r#"#см("B") #см("B", якорь: "x") #см("A") #см("Нет")"#);
+        write("A.typ", r#"#see("B") #see("B", anchor: "x") #see("A") #see("Нет")"#);
         write("B.typ", "");
         write("Книга/main.typ", r#"#include "01.typ""#);
-        write("Книга/01.typ", r#"#см("B")"#);
+        write("Книга/01.typ", r#"#see("B")"#);
 
         let vault = Vault::open(root).unwrap();
         let index = SourceIndex::default();
@@ -282,7 +282,7 @@ mod tests {
         assert_eq!(edges, [("A", "B", 2), ("A", "Нет", 1), ("Книга", "B", 1)]);
 
         // Правка файла видна без перезапуска; удалённый файл уходит из кэша.
-        write("B.typ", r#"#см("A")"#);
+        write("B.typ", r#"#see("A")"#);
         fs::remove_file(root.join("Книга/01.typ")).unwrap();
         let snap = index.snapshot(&vault).unwrap();
         assert_eq!(snap.backlinks(&NoteId::new("A").unwrap()).len(), 1);

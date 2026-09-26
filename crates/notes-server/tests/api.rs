@@ -17,7 +17,7 @@ static NOTES: LazyLock<Arc<Notes>> = LazyLock::new(|| {
     Arc::new(
         Notes::open(&NotesConfig {
             vault: repo.join("tests/vault"),
-            library: LibrarySource::Dir(repo.join("konspekt")),
+            library: LibrarySource::Dir(repo.join("baluk")),
             font_dirs: vec![],
             cache: None,
         })
@@ -74,7 +74,7 @@ async fn bad_paths_are_rejected() {
     let (app, _dir) = app();
     assert_eq!(call(app.clone(), "GET", &uri("/api/notes/Нет/такой"), None).await.0, StatusCode::NOT_FOUND);
     assert_eq!(call(app.clone(), "GET", "/api/notes/..%2Fetc", None).await.0, StatusCode::BAD_REQUEST);
-    assert_eq!(call(app, "GET", "/api/version/_konspekt/lib", None).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(call(app, "GET", "/api/version/_baluk/lib", None).await.0, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -136,7 +136,7 @@ async fn pdf_export() {
     let res = app
         .clone()
         .oneshot(
-            Request::get(format!("{}?theme={}", uri("/api/pdf/Сеть/SSH"), uri("ночь"))).body(Body::empty()).unwrap(),
+            Request::get(format!("{}?theme={}", uri("/api/pdf/Сеть/SSH"), uri("night"))).body(Body::empty()).unwrap(),
         )
         .await
         .unwrap();

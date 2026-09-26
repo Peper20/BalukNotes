@@ -1,4 +1,4 @@
-// Интерактивные рисунки konspekt: ползунки, координаты, вращение, тема.
+// Интерактивные рисунки baluk: ползунки, координаты, вращение, тема.
 import { expect, test } from "@playwright/test";
 import { open } from "./helpers";
 
@@ -50,7 +50,7 @@ test("поверхность: перетаскивание поворачива�
   const light = await stroke();
   await page.locator("#theme").click();
   await page.locator("#theme").click();
-  await expect(page.locator("html")).toHaveAttribute("data-theme", "ночь");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "night");
   await expect.poll(stroke).not.toBe(light);
   await expect.poll(frame).not.toBe(first);
 });

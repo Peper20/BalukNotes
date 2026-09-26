@@ -12,10 +12,10 @@ headings:
   2 #Тестирование-переходов-состояний [Тестирование-переходов-состояний] Тестирование переходов состояний
   2 #Повторные-запросы-и-идемпотентность [Повторные-запросы-и-идемпотентность] Повторные запросы и идемпотентность
 links:
-styles: 1944 байт, fnv 100d1ac138f0bd9e
+styles: 1932 байт, fnv 18c9d3fc71b78993
 ---
 <svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…63003 байт, fnv 38161e05139f248b…</svg>
-<article class="k-doc" data-k-figs="ed651b88" data-doc="книга">
+<article class="k-doc" data-k-figs="ed651b88" data-doc="book">
 <header class="k-title">
 <div class="k-title-kind">Конспект</div>
 <h1>Проектирование тестов</h1></header>
@@ -124,9 +124,9 @@ styles: 1944 байт, fnv 100d1ac138f0bd9e
 <thead>
 <tr><th>состояние</th><th>оплатить</th><th>отправить</th><th>вручить</th><th>отменить</th></tr></thead>
 <tbody>
-<tr><td>Создан</td><td class="k-hl k-hl-третий">→ Оплачен</td><td>отказ</td><td>отказ</td><td class="k-hl k-hl-третий">→ Отменён</td></tr>
-<tr><td>Оплачен</td><td>отказ</td><td class="k-hl k-hl-третий">→ Отправлен</td><td>отказ</td><td class="k-hl k-hl-третий">→ Отменён</td></tr>
-<tr><td>Отправлен</td><td>отказ</td><td>отказ</td><td class="k-hl k-hl-третий">→ Доставлен</td><td>отказ</td></tr>
+<tr><td>Создан</td><td class="k-hl k-hl-third">→ Оплачен</td><td>отказ</td><td>отказ</td><td class="k-hl k-hl-third">→ Отменён</td></tr>
+<tr><td>Оплачен</td><td>отказ</td><td class="k-hl k-hl-third">→ Отправлен</td><td>отказ</td><td class="k-hl k-hl-third">→ Отменён</td></tr>
+<tr><td>Отправлен</td><td>отказ</td><td>отказ</td><td class="k-hl k-hl-third">→ Доставлен</td><td>отказ</td></tr>
 <tr><td>Доставлен</td><td>отказ</td><td>отказ</td><td>отказ</td><td>отказ</td></tr>
 <tr><td>Отменён</td><td>отказ</td><td>отказ</td><td>отказ</td><td>отказ</td></tr></tbody></table>
 <p>Из 20 клеток таблицы 5 допустимых (подсвечены) и 15 недопустимых. Самые ценные негативные тесты — «отправить неоплаченный заказ» и «оплатить заказ второй раз»: вторая оплата и есть повторный запрос, о котором следующий раздел.</p>

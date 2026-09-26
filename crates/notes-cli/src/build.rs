@@ -12,7 +12,7 @@ use notes_core::fonts::WebVariant;
 use notes_core::notes::{encode, static_path};
 use notes_core::{NoteKind, Notes};
 
-const ASSETS: &[&str] = &["konspekt.css", "static.js"];
+const ASSETS: &[&str] = &["baluk.css", "static.js"];
 
 pub fn build(notes: &Notes, out: &Path, opts: FigureOptions) -> Result<()> {
     fs::create_dir_all(out).with_context(|| format!("создать {}", out.display()))?;
@@ -25,7 +25,7 @@ pub fn build(notes: &Notes, out: &Path, opts: FigureOptions) -> Result<()> {
     fs::write(assets.join("themes.css"), notes.themes().css())?;
     write_fonts(notes, &assets)?;
 
-    let themes: Vec<_> = notes.themes().themes().iter().map(|t| (t.name.clone(), t.dark)).collect();
+    let themes: Vec<_> = notes.themes().themes().iter().map(|t| (t.name.clone(), t.dark, t.title.clone())).collect();
     let themes_json = serde_json::to_string(&themes)?;
     let mut failed = 0;
     let mut index = String::new();
@@ -86,7 +86,7 @@ fn write_fonts(notes: &Notes, assets: &Path) -> Result<()> {
 
 fn page_html(up: &str, kind: &str, title: &str, styles: &str, body: &str, themes: &str) -> String {
     format!(
-        r#"<!DOCTYPE html><html lang="ru" data-kind="{kind}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{title}</title><link rel="stylesheet" href="{up}assets/fonts.css"><link rel="stylesheet" href="{up}assets/konspekt.css"><link rel="stylesheet" href="{up}assets/themes.css">{styles}<script>window.K_THEMES = {themes};</script><script src="{up}assets/static.js"></script></head><body class="k-static"><nav class="k-toolbar"><a href="{up}index.html">все заметки</a><button id="k-theme" type="button"></button></nav><main class="k-note">{body}</main></body></html>"#,
+        r#"<!DOCTYPE html><html lang="ru" data-kind="{kind}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{title}</title><link rel="stylesheet" href="{up}assets/fonts.css"><link rel="stylesheet" href="{up}assets/baluk.css"><link rel="stylesheet" href="{up}assets/themes.css">{styles}<script>window.K_THEMES = {themes};</script><script src="{up}assets/static.js"></script></head><body class="k-static"><nav class="k-toolbar"><a href="{up}index.html">все заметки</a><button id="k-theme" type="button"></button></nav><main class="k-note">{body}</main></body></html>"#,
         title = escape(title),
     )
 }

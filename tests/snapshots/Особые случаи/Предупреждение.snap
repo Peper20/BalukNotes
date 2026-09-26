@@ -9,7 +9,7 @@ links:
   Сеть/SSH
 styles: 0 байт, fnv cbf29ce484222325
 ---
-<article class="k-doc" data-doc="заметка">
+<article class="k-doc" data-doc="note">
 <header class="k-title">
 <h1>Предупреждение</h1></header>
 <p>Заметка собирается, но с предупреждением: горизонтальный отступ в HTML-экспорте Typst пропускается.После отступа.</p>

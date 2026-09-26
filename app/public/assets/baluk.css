@@ -1,7 +1,7 @@
-/* Оформление заметок konspekt в HTML.
+/* Оформление заметок baluk в HTML.
  *
- * Разметку выдаёт библиотека konspekt/ (HTML-ветка, классы k-…), цвета —
- * переменные --k-* из тем konspekt/theme.typ (сервер отдаёт их как
+ * Разметку выдаёт библиотека baluk/ (HTML-ветка, классы k-…), цвета —
+ * переменные --k-* из тем baluk/theme.typ (сервер отдаёт их как
  * /api/themes.css). Размеры переведены из PDF: 1em = кегль текста (11pt),
  * поэтому 9.2pt → 0.84em, 14pt → 1.27em и т. д. Рисунки (SVG) заданы в em
  * того же кегля и масштабируются вместе с текстом.
@@ -217,9 +217,9 @@ html {
   th, td { padding: 0.3em 0.6em; text-align: left; vertical-align: middle; }
   th { font-weight: bold; border-bottom: 0.5pt solid var(--k-table-head-rule); }
   tbody tr + tr td { border-top: 0.3pt solid var(--k-line); }
-  .k-hl { background: var(--k-hl-линия); }
-  .k-hl-второй { background: var(--k-hl-второй); }
-  .k-hl-третий { background: var(--k-hl-третий); }
+  .k-hl { background: var(--k-hl-line); }
+  .k-hl-second { background: var(--k-hl-second); }
+  .k-hl-third { background: var(--k-hl-third); }
   .k-pitfalls td { width: 50%; vertical-align: top; }
   .k-bad { color: var(--k-box-pitfall); }
   .k-good { color: var(--k-box-example); }
@@ -288,7 +288,7 @@ html {
   /* Варианты рисунка по темам: видим только вариант текущей темы. */
   .k-frame-v { display: none; }
 
-  /* Интерактивный рисунок (konspekt/plots.typ): кадр Typst и подпись значений
+  /* Интерактивный рисунок (baluk/plots.typ): кадр Typst и подпись значений
    * видны без JS (статический сайт); клиент ставит data-live и рисует живой. */
   .k-plot-values { text-align: center; font-size: 0.8em; color: var(--k-muted); }
   .k-plot[data-live] > :not(.k-plot-live) { display: none; }
@@ -321,6 +321,31 @@ html {
   .k-plot-slider input { width: 9em; max-width: 40vw; accent-color: var(--k-accent); }
   .k-plot-slider output { min-width: 3em; font-variant-numeric: tabular-nums; }
 
+  /* Кадры (baluk/frames.typ): все кадры лежат в одной клетке сетки — место
+   * по самому большому, страница не прыгает при переключении. Без JS виден
+   * кадр по умолчанию; клиент ставит data-live и data-current. */
+  .k-frames { display: flex; flex-direction: column; align-items: center; gap: 0.35em; max-width: 100%; }
+  .k-frames-stack { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
+  .k-frames-item {
+    grid-area: 1 / 1; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 0.2em;
+  }
+  .k-frames:not([data-live]) .k-frames-item:not([data-k-frame-default]),
+  .k-frames[data-live] .k-frames-item:not([data-current]) { visibility: hidden; }
+  .k-frames-label { text-align: center; font-size: 0.8em; color: var(--k-muted); }
+  .k-frames-controls {
+    display: flex; align-items: center; justify-content: center; gap: 0.5em;
+    font-size: 0.8em; max-width: 100%;
+  }
+  .k-frames-controls button {
+    min-width: 2em; padding: 0.1em 0.4em; border: 1px solid var(--k-line); border-radius: 4px;
+    background: var(--k-surface); color: var(--k-text); font: inherit; cursor: pointer;
+  }
+  .k-frames-controls button:hover { border-color: var(--k-accent); }
+  .k-frames-controls svg { display: block; width: 0.75em; height: 0.75em; margin: 0.2em auto; fill: currentColor; }
+  .k-frames-controls input { width: 12em; max-width: 45vw; accent-color: var(--k-accent); }
+  .k-frames-count { min-width: 3.5em; font-variant-numeric: tabular-nums; color: var(--k-muted); }
+
   /* ── Телефон ───────────────────────────────────────────────────────────── */
   /* Выключка по ширине в узкой колонке без переносов даёт дыры между словами;
    * ужатый рисунок нечитаем — пусть лучше прокручивается пальцем. */
@@ -335,8 +360,8 @@ html {
 
   /* ── Настройки клиента ──────────────────────────────────────────────── */
   /* По умолчанию номера заголовков видны только в книгах (вид документа
-     ставит библиотека: <article class="k-doc" data-doc="книга|заметка">). */
-  :root:not([data-numbering="all"]) & .k-doc:not([data-doc="книга"]) .k-num,
+     ставит библиотека: <article class="k-doc" data-doc="book|note">). */
+  :root:not([data-numbering="all"]) & .k-doc:not([data-doc="book"]) .k-num,
   :root[data-numbering="none"] & .k-num { display: none; }
 
   :root[data-chapters="plain"] & {

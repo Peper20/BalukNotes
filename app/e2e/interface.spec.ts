@@ -6,13 +6,13 @@ import { VAULT, open, ready, title } from "./helpers";
 test("тема по кругу: как в системе → классика → ночь", async ({ page }) => {
   await open(page, "Сеть/SSH");
   const html = page.locator("html");
-  await expect(html).toHaveAttribute("data-theme", "классика");
+  await expect(html).toHaveAttribute("data-theme", "classic");
   await page.locator("#theme").click();
-  await expect(html).toHaveAttribute("data-theme", "классика");
+  await expect(html).toHaveAttribute("data-theme", "classic");
   await page.locator("#theme").click();
-  await expect(html).toHaveAttribute("data-theme", "ночь");
+  await expect(html).toHaveAttribute("data-theme", "night");
   await page.locator("#theme").click(); // обратно «как в системе»
-  await expect(html).toHaveAttribute("data-theme", "классика");
+  await expect(html).toHaveAttribute("data-theme", "classic");
 });
 
 test("настройки: кегль меняется сразу и сохраняется", async ({ page }) => {
@@ -55,7 +55,7 @@ test("новая заметка появляется в дереве без пе
   try {
     await open(page, "Сеть/SSH");
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "Живая.typ"), '#import "/_konspekt/lib.typ": *\n#show: заметка.with(название: [Живая])\n\nПоявилась.\n');
+    writeFileSync(join(dir, "Живая.typ"), '#import "/_baluk/lib.typ": *\n#show: note.with(title: [Живая])\n\nПоявилась.\n');
     await page.locator("#refresh").click();
     const link = page.locator("#tree").getByRole("link", { name: "Живая" });
     await expect(link).toBeVisible();
@@ -71,7 +71,7 @@ test("изменение файла подхватывается по ⟳ без
   const dir = join(VAULT, "Правка");
   const file = join(dir, "Заметка.typ");
   const text = (n: number) =>
-    `#import "/_konspekt/lib.typ": *\n#show: заметка.with(название: [Правка])\n\n${"Абзац.\n\n".repeat(80)}Версия ${n}.\n`;
+    `#import "/_baluk/lib.typ": *\n#show: note.with(title: [Правка])\n\n${"Абзац.\n\n".repeat(80)}Версия ${n}.\n`;
   try {
     mkdirSync(dir, { recursive: true });
     writeFileSync(file, text(1));
@@ -95,7 +95,7 @@ test("изменение файла подхватывается по ⟳ без
 test("PDF заметки в текущей теме", async ({ page }) => {
   await open(page, "Сеть/SSH");
   const [popup] = await Promise.all([page.waitForEvent("popup"), page.locator("#pdf").click()]);
-  expect(decodeURIComponent(popup.url())).toContain("/api/pdf/Сеть/SSH?theme=классика");
+  expect(decodeURIComponent(popup.url())).toContain("/api/pdf/Сеть/SSH?theme=classic");
   await popup.close();
 });
 

@@ -1,27 +1,27 @@
-#import "/_konspekt/lib.typ": *
-#import "/_konspekt/plots.typ": _формула, _знач
-#show: заметка.with(название: [Интерактивные рисунки], теги: ("рисунки", "фикстура"))
+#import "/_baluk/lib.typ": *
+#import "/_baluk/plots.typ": _formula, _eval
+#show: note.with(title: [Интерактивные рисунки], tags: ("рисунки", "фикстура"))
 
 График с ползунками и поверхность с вращением: в PDF и без JS — кадр при
 значениях по умолчанию, в приложении — живой рисунок.
 
 = График с параметрами
 
-#рис(график-интерактив("a * calc.sin(b * x)", -5, 5,
-  параметры: (a: (от: 0, до: 3, шаг: 0.1, знач: 1), b: (от: 0.5, до: 4, шаг: 0.1, знач: 1)),
+#fig(interactive-plot("a * calc.sin(b * x)", -5, 5,
+  params: (a: (from: 0, to: 3, step: 0.1, value: 1), b: (from: 0.5, to: 4, step: 0.1, value: 1)),
   y: (-3, 3)), [Синусоида: амплитуда $a$ и частота $b$])
 
 = Несколько кривых и разрывы
 
-#рис(график-интерактив(
-  ((f: "calc.tan(x)", подпись: "tg x"), (f: "1 / (x - c)", подпись: "1/(x−c)", пунктир: true), "calc.sqrt(x)"),
-  -4, 4, параметры: (c: (от: -2, до: 2, знач: 1)), y: (-4, 4)),
+#fig(interactive-plot(
+  ((f: "calc.tan(x)", label: "tg x"), (f: "1 / (x - c)", label: "1/(x−c)", dashed: true), "calc.sqrt(x)"),
+  -4, 4, params: (c: (from: -2, to: 2, value: 1)), y: (-4, 4)),
   [Асимптоты рвут кривую, корень определён только при $x >= 0$])
 
 = Поверхность
 
-#рис(поверхность-интерактив("calc.sin(k * x) * calc.cos(y)", (-3, 3), (-3, 3),
-  параметры: (k: (от: 0.2, до: 2, шаг: 0.1, знач: 1)), z: (-1, 1)),
+#fig(interactive-surface("calc.sin(k * x) * calc.cos(y)", (-3, 3), (-3, 3),
+  params: (k: (from: 0.2, to: 2, step: 0.1, value: 1)), z: (-1, 1)),
   [Поверхность $z = sin k x cos y$])
 
 = Сверка вычислений
@@ -29,7 +29,7 @@
 Эти значения посчитал Typst; клиент (`app/src/lib/plot/`) сверяет с ними
 свой разборщик (Vitest читает снимок этой заметки).
 
-#let сверка = (
+#let cross-check = (
   ("x * x - 3 * x + 2", (x: 1.5)),
   ("-x * -2", (x: 3)),
   ("-calc.pow(x, 2)", (x: 3)),
@@ -52,10 +52,10 @@
   ("(x + y) * (x - y)", (x: 3, y: 2)),
 )
 #context if target() == "html" {
-  let строки = сверка.map(((ф, пер)) => {
-    let имена = ("x", "y", "a")
-    let пер = пер.pairs().map(((к, v)) => (к, float(v))).to-dict()
-    (f: ф, vars: пер, value: _знач(_формула(ф, имена), пер))
+  let rows = cross-check.map(((ff, vars)) => {
+    let names = ("x", "y", "a")
+    let vars = vars.pairs().map(((kk, v)) => (kk, float(v))).to-dict()
+    (f: ff, vars: vars, value: _eval(_formula(ff, names), vars))
   })
-  html.elem("pre", attrs: (class: "k-plot-check"), json.encode(строки, pretty: false))
+  html.elem("pre", attrs: (class: "k-plot-check"), json.encode(rows, pretty: false))
 } else [Только в HTML.]

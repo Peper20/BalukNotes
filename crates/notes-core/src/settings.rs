@@ -73,7 +73,7 @@ impl Schema {
     #[allow(clippy::too_many_lines)]
     pub fn new(themes: &[Theme]) -> Self {
         let mut theme_options = vec![choice("auto", "как в системе")];
-        theme_options.extend(themes.iter().map(|t| choice(&t.name, &t.name)));
+        theme_options.extend(themes.iter().map(|t| choice(&t.name, &t.title)));
         let bool_def = |key, label, default: bool| SettingDef {
             key,
             label,
@@ -138,11 +138,11 @@ impl Schema {
                     help: None,
                     kind: Kind::Choice {
                         options: vec![
-                            choice("konspekt", "«Глава N» и крупная цифра"),
+                            choice("decorated", "«Глава N» и крупная цифра"),
                             choice("plain", "простой заголовок"),
                         ],
                     },
-                    default: json!("konspekt"),
+                    default: json!("decorated"),
                 },
                 SettingDef {
                     key: "books.pages",
@@ -297,7 +297,10 @@ mod tests {
     use super::*;
 
     fn schema() -> Schema {
-        Schema::new(&[Theme { name: "классика".into(), dark: false }, Theme { name: "ночь".into(), dark: true }])
+        Schema::new(&[
+            Theme { name: "classic".into(), title: "Классика".into(), dark: false },
+            Theme { name: "night".into(), title: "Ночь".into(), dark: true },
+        ])
     }
 
     #[test]
@@ -317,7 +320,7 @@ mod tests {
     #[test]
     fn validation() {
         let s = schema();
-        assert!(s.validate("appearance.theme", &json!("ночь")).is_ok());
+        assert!(s.validate("appearance.theme", &json!("night")).is_ok());
         assert!(s.validate("appearance.theme", &json!("нет")).is_err());
         assert!(s.validate("appearance.font_size", &json!(100)).is_err());
         assert!(s.validate("header.title", &json!("да")).is_err());
