@@ -26,9 +26,14 @@ parking_lot.workspace = true
 rust-embed.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+siphasher.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 ts-rs = { workspace = true, optional = true }
+
+[build-dependencies]
+# Метка кода отрисовки для кэша на диске (build.rs).
+siphasher.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

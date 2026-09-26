@@ -204,10 +204,24 @@ fn disk_cache_survives_restart() {
         .unwrap()
     };
     let first = open().page(&id("Сеть/UFW"), OPTS).unwrap();
-    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1, "страница записана в кэш");
+    let files = walkdir(dir.path());
+    assert_eq!(files.len(), 2, "страница записана в кэш: запись и отрисовка — {files:?}");
     let second = open().page(&id("Сеть/UFW"), OPTS).unwrap();
     assert_eq!(first.version, second.version);
     assert_eq!(first.rendered.as_ref().unwrap().body, second.rendered.as_ref().unwrap().body);
+}
+
+/// Все файлы каталога (рекурсивно).
+fn walkdir(dir: &std::path::Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for e in std::fs::read_dir(dir).unwrap().flatten() {
+        if e.path().is_dir() {
+            out.extend(walkdir(&e.path()));
+        } else {
+            out.push(e.path());
+        }
+    }
+    out
 }
 
 #[test]
@@ -225,17 +239,17 @@ fn warm_builds_everything_once_across_restarts() {
     let first = open();
     let all = first.entries().unwrap().len();
     first.hint_warm(vec![id("Книга")]);
-    let stats = first.warm_pass(|| OPTS);
+    let stats = first.warm_pass();
     assert_eq!((stats.built, stats.skipped), (all, 0), "первый проход собирает всё");
-    assert_eq!(first.warm_pass(|| OPTS).built, 0, "второй — ничего");
+    assert_eq!(first.memory().0, 0, "прогрев — только на диск");
+    assert_eq!(first.warm_pass().built, 0, "второй — ничего");
 
-    // Новый запуск: собранное лежит на диске. Заново — только заметки с
-    // ошибкой (их отрисовка в кэш не пишется).
+    // Новый запуск: собранное (и заметки с ошибкой) лежит на диске.
     let failed =
         first.entries().unwrap().iter().filter(|e| !first.page(&e.id, OPTS).unwrap().errors.is_empty()).count();
     assert!(failed > 0, "в tests/vault есть заметка с ошибкой");
-    let stats = open().warm_pass(|| OPTS);
-    assert_eq!((stats.built, stats.skipped), (failed, all - failed));
+    let stats = open().warm_pass();
+    assert_eq!((stats.built, stats.skipped), (0, all));
 }
 
 #[test]
@@ -360,4 +374,27 @@ fn decoration_words_follow_note_language() {
     {
         assert!(!body.contains(word), "русское «{word}» в английской заметке");
     }
+}
+
+#[test]
+fn storage_in_memory_compiles_and_follows_edits() {
+    let mem = std::sync::Arc::new(notes_core::storage::MemStorage::new());
+    let head = "#import \"/_baluk/lib.typ\": *\n#show: note.with(title: [x])\n";
+    mem.write("A.typ", format!("{head}= Раз\n#include \"часть.typ\"\n"));
+    mem.write("часть.typ", "первая часть");
+    let config = NotesConfig {
+        vault: PathBuf::new(),
+        library: LibrarySource::Dir(repo().join("baluk")),
+        font_dirs: vec![],
+        cache: None,
+    };
+    let notes = Notes::with_storage(mem.clone(), &config).unwrap();
+    let page = notes.page(&id("A"), OPTS).unwrap();
+    assert!(page.errors.is_empty(), "{:?}", page.errors);
+    assert!(page.rendered.as_ref().unwrap().body.contains("первая часть"));
+
+    // Правка включённого файла — новая версия и новый текст.
+    mem.write("часть.typ", "вторая часть");
+    assert_ne!(notes.version(&id("A"), OPTS).unwrap(), page.version);
+    assert!(notes.page(&id("A"), OPTS).unwrap().rendered.as_ref().unwrap().body.contains("вторая часть"));
 }

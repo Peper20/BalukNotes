@@ -39,6 +39,9 @@ clap = { version = "4.6", features = ["derive", "env"] }
 parking_lot = "0.12"
 rust-embed = { version = "8", features = ["mime-guess", "include-exclude"] }
 serde = { version = "1", features = ["derive", "rc"] }
+# Стабильный хэш версий и кэша на диске (notes-core::version) — та же
+# версия, что уже тянет typst.
+siphasher = "1"
 serde_json = { version = "1", features = ["preserve_order"] }
 tempfile = "3"
 thiserror = "2"
