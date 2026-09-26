@@ -99,6 +99,9 @@
 Устройство темы (палитра, шрифты, кегли, поля) — в `theme.typ`. Вёрстка одна на
 все темы, поэтому своя тема — это только палитра.
 
+Текущая тема в своём коде — `current-theme()` (только внутри `context`); в
+`canvas(theme => …)` она приходит аргументом.
+
 ## Блоки (`blocks.typ`)
 
 | Вызов | Что это |
@@ -146,7 +149,7 @@
   Путь указывается от корня хранилища и начинается с `/`. Нет региона — сборка
   падает с понятной ошибкой.
 
-## Рисунки (`figures.typ`, на cetz 0.4.2)
+## Рисунки (`figures.typ` → `figures/`, на cetz 0.4.2)
 
 ```typst
 #fig(
@@ -183,7 +186,7 @@
 Стили рёбер `graph`: `"normal"`, `"bold"`, `"second"`, `"dim"`, `"dashed"`;
 форма узлов: `"circle"` или `"rect"`.
 
-## Интерактивные рисунки (`plots.typ`)
+## Интерактивные рисунки (`plots.typ` → `plots/`)
 
 График с ползунками параметров и поверхность с вращением. Формула — строка
 с кодом Typst; в приложении рисунок живой, в PDF и без JS — кадр при
@@ -213,8 +216,8 @@
 - Вне области определения (деление на ноль, корень из отрицательного) —
   разрыв кривой, не ошибка. Точки по разные стороны от поля — тоже разрыв
   (асимптоты `tan`). Непонятная формула — ошибка сборки с объяснением.
-- Разбор и вычисление написаны дважды: здесь и в клиенте
-  (`app/src/lib/plot/`), построчно одинаково. Сверка — фикстура
+- Разбор и вычисление написаны дважды: `plots/formula.typ` и клиент
+  (`app/src/lib/plot/formula.ts`), построчно одинаково. Сверка — фикстура
   `tests/vault/Рисунки/Интерактив.typ` (Vitest читает её снимок).
 - Цвета в HTML — переменные `--k-fig-*` (из `css-colors`), клиент рисует ими.
 
@@ -308,6 +311,7 @@ CeTZ; приложение и сайт оживляют его по тем же 
 - `tg ctg arctg arcctg sh ch th cth rot grad const` — операторы в русской традиции.
 - `dc("0,5")` — десятичная дробь с запятой. **Не** `$0,5$`: typst напечатает «0, 5».
 - `dd(x)` — дифференциал.
+- `defeq` — «равно по определению» ($:=$).
 
 ## Проверка
 
@@ -316,16 +320,54 @@ python3 baluk/lint.py data/vault      # сырые запятые в форму�
 cargo run -p notes-cli -- check       # ошибки компиляции и битые ссылки
 ```
 
+## Устройство библиотеки
+
+Точка входа — `lib.typ`: он реэкспортирует публичные имена модулей, и
+только они — интерфейс библиотеки (их список сверяет снимок
+`tests/snapshots/baluk-api.txt`, тест `crates/notes-core/tests/library.rs`:
+пропавшее или переименованное имя — падение теста, новое имя без
+описания в этом README — тоже). Имена с `_` — служебные, их можно менять.
+
+Большие модули разложены по темам в подкаталоги, файл верхнего уровня
+собирает их вместе (`figures.typ`, `plots.typ`) — импорт `"figures.typ": …`
+работает как раньше.
+
+**Две ветки блока.** В HTML и в PDF у блока разная вёрстка, поэтому каждый
+пишется так:
+
+```typst
+#let lead(body) = context {
+  if is-web() { return elem("div", "k-lead", body) }   // HTML: разметка с классом
+  …                                                    // PDF: вёрстка страницы
+}
+```
+
+Общий помощник вида `web-or(html, pdf)` не заведён: ветки почти всегда
+считают разное (HTML-ветке не нужны размеры и цвета PDF-ветки), а помощник
+заставил бы оборачивать обе в функции — длиннее, чем `if is-web() { return … }`.
+Страховки для чужой вёрстки (`grid`, `stack`, `place`, `align`)
+стоят только в HTML-ветке шаблона (`_web-template`) и всё равно проверяют
+`is-web()`: внутри `html.frame` вёрстка снова постраничная.
+
 ## Файлы
 
 ```
-lib.typ        точка входа (#import "/_baluk/lib.typ": *)
-theme.typ      темы classic и night, customize(), css-colors() для HTML
+lib.typ        точка входа (#import "/_baluk/lib.typ": *) — публичные имена
+theme.typ      темы classic и night, customize(), current-theme(), css-colors() для HTML
 template.typ   note.with(…) и book.with(…): HTML-ветка и PDF-ветка
 blocks.typ     врезки, lead/plan/summary/quiz, заметки сбоку, таблицы с подсветкой
 code.typ       листинги, кружки-выноски, код из файла, опорные цвета кода для HTML
-figures.typ    canvas, 2D/3D, массивы, матрицы, графы и деревья
-plots.typ      интерактивные рисунки: график с ползунками, поверхность с вращением
+figures.typ    рисунки (собирает figures/):
+  figures/canvas.typ   canvas, fig, in-row; цвет по имени
+  figures/plane.typ    2D: axes, tick, plot, parametric, fill-between, spoke, point, contours
+  figures/space.typ    псевдо-3D: p3, axes3d, surface, prisms, base-shape, revolution, cross-section
+  figures/cells.typ    array-cells, matrix-cells
+  figures/graphs.typ   graph и раскладки: tree-layout, binary-layout, binary-edges, circle-layout
+plots.typ      интерактивные рисунки (собирает plots/):
+  plots/formula.typ    разбор и вычисление формулы — построчно как app/src/lib/plot/formula.ts
+  plots/common.typ     параметры, деления осей, числа, обёртка k-plot
+  plots/plot.typ       interactive-plot: график с ползунками
+  plots/surface.typ    interactive-surface: поверхность с вращением
 frames.typ     кадры: рисунок с параметром, ползунок и проигрывание
 graph.typ      vault-graph(): граф хранилища по фильтру (данные — из приложения)
 charts.typ     диаграммы по данным
@@ -333,7 +375,7 @@ links.typ      see(): ссылки между заметками
 i18n.typ       слова оформления на языке заметки (ru, en): word()
 web.typ        помощники HTML-режима: is-web(), elem(), frame()
 css.typ        выгрузка названий и цветов тем для CSS (служебный, читает приложение)
-math.typ       операторы, dc()
+math.typ       операторы, dc(), dd(), defeq
 lint.py        линт исходников
 README.md      этот файл
 ```

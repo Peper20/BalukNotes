@@ -17,7 +17,7 @@
 
 #import "theme.typ": current-theme
 #import "web.typ": is-web, elem
-#import "plots.typ": _num
+#import "plots/common.typ": _num
 #import "i18n.typ": word
 
 /// Больше кадров — страница тяжелеет (каждый кадр — свой SVG).
