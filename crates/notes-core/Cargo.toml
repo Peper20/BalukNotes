@@ -13,6 +13,7 @@ ts = ["dep:ts-rs"]
 
 [dependencies]
 brotli.workspace = true
+ttf2woff2.workspace = true
 fontcull.workspace = true
 ttf-parser.workspace = true
 typst.workspace = true
