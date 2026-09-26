@@ -1,5 +1,6 @@
 // Статический сайт (notes build) с диска, без сервера: кадры с ползунком,
-// живой рисунок, оглавление и «Ссылаются сюда» (вшиты при сборке), тема.
+// живой рисунок, оглавление и «Ссылаются сюда» (вшиты при сборке), тема,
+// части скрипта по требованию, поиск, граф и теги.
 import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect, test } from "@playwright/test";
@@ -82,4 +83,58 @@ test("сайт: заголовок с формулой в оглавлении �
   const item = page.locator(".k-static-toc a", { hasText: "Пространство" });
   await expect(item.locator("math")).toHaveCount(2);
   await expect(item.locator("strong")).toHaveText("норма");
+});
+
+test("сайт: поиск по заметкам без сервера — кнопка и «/», переход к разделу", async ({ page }) => {
+  await page.goto(pageUrl("index"));
+  await page.locator("#k-search").click();
+  const input = page.locator(".k-search-input");
+  await expect(input).toBeFocused();
+  await input.fill("смена порта");
+  const first = page.locator(".k-search-row").first();
+  await expect(first.locator(".k-search-title")).toHaveText("SSH · Смена порта");
+  await expect(first.locator("mark").first()).toHaveText("Смена");
+  await input.press("Enter");
+  await expect(page).toHaveURL(/SSH\.html#/);
+  await expect(page.locator("main h2", { hasText: "Смена порта" })).toBeInViewport();
+
+  // «/» открывает поиск, Esc закрывает; поиск — как у ядра («ё» = «е», регистр).
+  await page.keyboard.press("/");
+  await expect(input).toBeFocused();
+  await input.fill("НЕТ-ТАКОГО-СЛОВА");
+  await expect(page.locator(".k-search-empty")).toHaveText("Ничего не нашлось.");
+  await input.press("Escape");
+  await expect(page.locator(".k-search")).toHaveCount(0);
+});
+
+test("сайт: граф заметок — узлы из сборки, щелчок открывает заметку", async ({ page }) => {
+  await page.goto(pageUrl("graph"));
+  const node = page.locator('.graph-node[data-id="Сеть/SSH"]');
+  await expect(node).toBeVisible();
+  await expect(page.locator(".k-site-graph-count")).toContainText("узл");
+  // Заметка с ошибкой сборки — без страницы: узел как у ненаписанной.
+  await expect(page.locator('.graph-node[data-id="Особые случаи/Ошибка компиляции"]')).toHaveClass(/missing/);
+  await page.locator(".k-site-graph-search").fill("ufw");
+  await expect(page.locator(".k-site-graph-count")).toContainText("найдено 1");
+  await node.locator("circle").click();
+  await expect(page).toHaveURL(/SSH\.html$/);
+});
+
+test("сайт: теги — ссылки из шапки на страницу тегов", async ({ page }) => {
+  await page.goto(pageUrl("Формулы и теги"));
+  await page.locator(".k-tags a", { hasText: "теги с пробелом" }).click();
+  await expect(page).toHaveURL(/tags\.html#/);
+  const section = page.locator(".k-site-tag-notes", { has: page.locator("h2", { hasText: "#теги с пробелом" }) });
+  await expect(section).toBeInViewport();
+  await section.getByRole("link", { name: "Формулы и теги" }).click();
+  await expect(page).toHaveURL(pageUrl("Формулы и теги"));
+});
+
+test("сайт: на узком экране панель, граф и теги не шире окна", async ({ page }) => {
+  await page.setViewportSize({ width: 400, height: 800 });
+  for (const id of ["Сеть/SSH", "graph", "tags", "index"]) {
+    await page.goto(pageUrl(id));
+    await page.evaluate(() => document.fonts.ready);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), id).toBeLessThanOrEqual(400);
+  }
 });

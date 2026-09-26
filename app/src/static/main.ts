@@ -1,13 +1,14 @@
-// Статический сайт (notes build): тема, якоря и живые рисунки без сервера.
-// Собирается отдельно (scripts/build-static.mjs) в assets/static.js и
-// подключается в <head>: тема ставится до отрисовки страницы. Тяжёлое
-// (живые блоки) — отдельными частями по требованию (`parts.ts`).
+// Статический сайт (notes build): тема, якоря, живые рисунки, поиск и граф
+// без сервера. Собирается отдельно (scripts/build-static.mjs) в
+// assets/static.js и подключается в <head>: тема ставится до отрисовки
+// страницы. Тяжёлое (живые блоки, поиск, граф) — отдельными частями по
+// требованию (`parts.ts`).
 //
 // Тема хранится в браузере (localStorage), по умолчанию — как в системе.
 // window.K_THEMES — [[имя, тёмная, название], …], подставляется сборкой.
 
 import { LIVE_SELECTOR } from "../lib/live/selectors";
-import { load } from "./parts";
+import { load, loadData, pageHref, siteBase } from "./parts";
 
 declare global {
   interface Window {
@@ -64,11 +65,10 @@ addEventListener("DOMContentLoaded", () => {
     };
   }
   const note = document.querySelector("main.k-note");
-  // Узел графа — страница сайта рядом: путь от корня сайта (он — у ссылки «Все заметки»).
-  const home = document.querySelector<HTMLAnchorElement>(".k-toolbar-home")?.getAttribute("href") ?? "index.html";
-  const base = home.replace(/index\.html$/, "");
+  // Узел графа — страница сайта рядом.
+  const base = siteBase();
   const open = (id: string, newTab: boolean) => {
-    const url = `${base}${id.split("/").map(encodeURIComponent).join("/")}.html`;
+    const url = pageHref(base, id);
     if (newTab) window.open(url, "_blank");
     else location.href = url;
   };
@@ -82,11 +82,41 @@ addEventListener("DOMContentLoaded", () => {
       })
       .catch((e: unknown) => console.warn(e));
   }
+  const graph = document.getElementById("k-site-graph");
+  if (graph) {
+    Promise.all([load("graph"), loadData("graph")])
+      .then(([part, layout]) => part.mount(graph, layout, open))
+      .catch((e: unknown) => console.warn(e));
+  }
+  setupSearch(base);
   const toc = document.querySelector<HTMLDetailsElement>(".k-static-toc");
   if (toc) setupToc(toc);
   scrollToAnchor();
 });
 addEventListener("hashchange", scrollToAnchor);
+
+/**
+ * Поиск: кнопка на панели, `/` или Ctrl+K. Часть поиска и индекс грузятся
+ * при первом открытии.
+ */
+function setupSearch(base: string) {
+  const button = document.getElementById("k-search");
+  if (!button) return;
+  button.hidden = false;
+  const show = () => {
+    Promise.all([load("search"), loadData("search")])
+      .then(([part, docs]) => part.open(docs, base))
+      .catch((e: unknown) => console.warn(e));
+  };
+  button.onclick = show;
+  addEventListener("keydown", (e) => {
+    const typing = e.target instanceof HTMLElement && e.target.closest("input, textarea, select, [contenteditable]");
+    if ((e.key === "k" && (e.ctrlKey || e.metaKey)) || (e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey)) {
+      e.preventDefault();
+      show();
+    }
+  });
+}
 
 /**
  * Оглавление: на широком экране — раскрыто сбоку (как в CSS), на узком —

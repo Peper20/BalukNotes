@@ -1,4 +1,5 @@
-/* Статический сайт (notes build): страница и панель «Все заметки» + тема. */
+/* Статический сайт (notes build): страница и панель — «Все заметки», граф,
+ * теги, поиск, тема. На узком экране у ссылок остаются только значки. */
 .k-static { margin: 0; }
 .k-toolbar {
   position: fixed; top: 0.5rem; right: 0.6rem; z-index: 10; display: flex; align-items: center; gap: 0.25rem;
@@ -16,6 +17,16 @@
   mask: var(--k-icon) center / contain no-repeat;
 }
 .k-toolbar-home { --k-icon: var(--k-icon-arrow-left); }
-.k-toolbar button { width: 2rem; padding: 0; justify-content: center; --k-icon: var(--k-icon-sun); }
-.k-toolbar button[data-next="dark"] { --k-icon: var(--k-icon-moon); }
+.k-toolbar-graph { --k-icon: var(--k-icon-graph); }
+.k-toolbar-tags { --k-icon: var(--k-icon-tags); }
+.k-toolbar button { width: 2rem; padding: 0; justify-content: center; }
+.k-toolbar-search { --k-icon: var(--k-icon-search); }
+.k-toolbar-theme { --k-icon: var(--k-icon-sun); }
+.k-toolbar-theme[data-next="dark"] { --k-icon: var(--k-icon-moon); }
 [data-kind="index"] .k-toolbar-home, .k-toolbar [hidden] { display: none; }
+/* Страница, на которой находимся. */
+[data-kind="graph"] .k-toolbar-graph, [data-kind="tags"] .k-toolbar-tags { color: var(--k-accent); }
+@media (max-width: 640px) {
+  .k-toolbar-graph span, .k-toolbar-tags span { display: none; }
+  .k-toolbar-graph, .k-toolbar-tags { padding: 0 0.45rem; }
+}

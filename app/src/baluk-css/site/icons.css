@@ -7,4 +7,7 @@
   --k-icon-sun: lucide("sun", 1.75);
   --k-icon-moon: lucide("moon", 1.75);
   --k-icon-chevron: lucide("chevron-right", 2);
+  --k-icon-search: lucide("search", 1.75);
+  --k-icon-graph: lucide("waypoints", 1.75);
+  --k-icon-tags: lucide("tags", 1.75);
 }

@@ -128,6 +128,47 @@ fn match_section(
     })
 }
 
+/// Заметка в индексе поиска для клиента без сервера (статический сайт):
+/// те же разделы, что ищет [`search`], — поиск по ним повторяет клиент
+/// (`app/src/lib/site-search.ts`, те же правила и веса).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct SearchDoc {
+    pub id: NoteId,
+    pub kind: NoteKind,
+    /// Название заметки (или имя файла).
+    pub title: String,
+    pub sections: Vec<SearchSection>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct SearchSection {
+    /// `None` — начало заметки до первого заголовка.
+    pub heading: Option<String>,
+    /// Якорь раздела (`#…`), как у отрисовки.
+    pub anchor: Option<String>,
+    pub text: String,
+}
+
+/// Индекс поиска всех заметок (`keep` — какие заметки брать).
+pub fn documents(snap: &Snapshot, keep: impl Fn(&NoteId) -> bool) -> Vec<SearchDoc> {
+    snap.outlines()
+        .filter(|(entry, _)| keep(&entry.id))
+        .map(|(entry, outline)| SearchDoc {
+            id: entry.id.clone(),
+            kind: entry.kind,
+            title: outline.title.clone().unwrap_or_else(|| entry.id.name().to_owned()),
+            sections: outline
+                .sections
+                .iter()
+                .zip(section_ids(outline))
+                .map(|(s, anchor)| SearchSection { heading: s.heading.clone(), anchor, text: s.text.clone() })
+                .collect(),
+        })
+        .collect()
+}
+
 /// Превью заметки для подсказки при наведении на ссылку.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]

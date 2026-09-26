@@ -162,8 +162,13 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   + строка в `BLOCKS`), общий для клиента и статического сайта. Скрипт сайта
   — части `src/static/*` → `dist/assets/static*.js` (второй шаг `npm run
   build`, `scripts/build-static.mjs`): `static.js` (тема, оглавление) у
-  каждой страницы, остальные — по требованию (`static/parts.ts`). Сценарии
-  сайта — `e2e/static.spec.ts` (с диска).
+  каждой страницы, остальные (`static-live`, `-search`, `-graph`) — по
+  требованию (`static/parts.ts`); данные сборки (поиск, граф) —
+  `assets/data/*.js` (`notes-site::data`). Поиск сайта
+  (`lib/site-search.ts`) повторяет поиск ядра: правишь `search.rs` — обнови
+  эталон (`UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test
+  search_parity`), Vitest сверит клиента. Сценарии сайта —
+  `e2e/static.spec.ts` (с диска).
 - Значки интерфейса — `@lucide/svelte` (`import X from "@lucide/svelte/icons/x"`),
   не текстовые глифы (▸ ◐ ⎙); на статическом сайте — те же значки
   CSS-маской: `lucide("имя", толщина)` в `src/baluk-css/site/icons.css`,

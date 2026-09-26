@@ -2,7 +2,7 @@
 // файлом `dist/assets/baluk.css`, в `npm run dev` — по тому же адресу.
 
 import type { Plugin } from "vite";
-import { bundle } from "./bundle";
+import { bundle } from "./bundle.ts";
 
 export const BALUK_CSS = "assets/baluk.css";
 

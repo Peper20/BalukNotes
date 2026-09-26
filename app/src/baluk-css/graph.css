@@ -40,3 +40,13 @@
 .k-note .k-graph { margin: 1em auto; max-width: 100%; }
 .k-note .k-graph[data-live] > :not(.k-graph-live) { display: none; }
 .k-note .k-graph-live .graph-svg { max-height: 60vh; }
+
+/* Легенда графа (GraphLegend.svelte): цвет — папка верхнего уровня. */
+.graph-legend { display: flex; flex-wrap: wrap; gap: 0.3em 1em; padding: 0.4em 0.8em 0.6em; font: 12px system-ui, sans-serif; color: var(--k-muted); }
+.graph-legend i { display: inline-block; width: 0.7em; height: 0.7em; border-radius: 50%; margin-right: 0.35em; vertical-align: -0.05em; }
+.graph-legend button {
+  font: inherit; color: inherit; background: none; border: 1px solid transparent; border-radius: 1em;
+  padding: 0.1em 0.6em; cursor: pointer;
+}
+.graph-legend button:hover { border-color: var(--k-line); color: var(--k-text); }
+.graph-legend button.off { opacity: 0.45; text-decoration: line-through; }

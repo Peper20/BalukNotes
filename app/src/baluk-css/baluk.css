@@ -43,3 +43,6 @@
 @import "./site/index.css";
 @import "./site/toc.css";
 @import "./site/backlinks.css";
+@import "./site/tags.css";
+@import "./site/graph.css";
+@import "./site/search.css";

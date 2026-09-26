@@ -14,6 +14,8 @@ import { build } from "vite";
 const PARTS = {
   "static.js": "src/static/main.ts",
   "static-live.js": "src/static/live.ts",
+  "static-search.js": "src/static/search.ts",
+  "static-graph.js": "src/static/graph.ts",
 };
 
 for (const [file, entry] of Object.entries(PARTS)) {

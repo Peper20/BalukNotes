@@ -6,7 +6,7 @@
 // другой — NOTES_API=http://127.0.0.1:8421 npm run dev).
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { defineConfig } from "vitest/config";
-import { balukCss } from "./src/baluk-css/plugin";
+import { balukCss } from "./src/baluk-css/plugin.ts";
 
 const api = process.env.NOTES_API ?? "http://127.0.0.1:8432";
 

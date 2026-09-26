@@ -157,6 +157,11 @@ impl Notes {
         Ok(crate::search::search(&self.index()?, query, limit))
     }
 
+    /// Индекс поиска заметок, для которых `keep` (статический сайт — собранных).
+    pub fn search_documents(&self, keep: impl Fn(&NoteId) -> bool) -> Result<Vec<crate::search::SearchDoc>> {
+        Ok(crate::search::documents(&self.index()?, keep))
+    }
+
     /// Поиск в одной заметке (книге): все разделы по порядку текста.
     pub fn search_in(&self, id: &NoteId, query: &str, limit: usize) -> Result<Vec<crate::search::SearchHit>> {
         let index = self.index()?;
