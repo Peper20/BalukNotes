@@ -9,6 +9,8 @@
 //! - [`render`] — HTML-документы тем → одна страница (склейка рисунков,
 //!   якоря заголовков, ссылки между заметками);
 //! - [`book`] — книга по главам: страница одной главы;
+//! - [`storage`] — файлы хранилища за интерфейсом (каталог, в тестах — память);
+//! - [`version`] — версии заметок по файлам, стабильный хэш;
 //! - [`notes`] — ленивая компиляция с кэшем и версиями по файлам;
 //! - [`check`] — проверка всего хранилища: ошибки и битые ссылки;
 //! - [`settings`] — схема и хранение настроек клиента.
@@ -30,9 +32,11 @@ pub mod outline;
 pub mod render;
 pub mod search;
 pub mod settings;
+pub mod storage;
 pub mod themes;
 pub mod vault;
 pub mod vault_graph;
+pub mod version;
 pub mod warm;
 pub mod webfonts;
 pub mod world;
