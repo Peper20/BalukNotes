@@ -29,7 +29,14 @@ static NOTES: LazyLock<Arc<Notes>> = LazyLock::new(|| {
 fn app() -> (axum::Router, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
     let settings = SettingsStore::open(dir.path().join("settings.json"), Schema::new(NOTES.themes().themes())).unwrap();
-    (router(AppState { notes: NOTES.clone(), settings: Arc::new(settings) }), dir)
+    (router(AppState::new(NOTES.clone(), Arc::new(settings))), dir)
+}
+
+/// То же с токеном доступа.
+fn app_with_token(token: &str) -> (axum::Router, tempfile::TempDir) {
+    let dir = tempfile::tempdir().unwrap();
+    let settings = SettingsStore::open(dir.path().join("settings.json"), Schema::new(NOTES.themes().themes())).unwrap();
+    (router(AppState::new(NOTES.clone(), Arc::new(settings)).with_token(Some(token.into()))), dir)
 }
 
 async fn call(app: axum::Router, method: &str, uri: &str, body: Option<&str>) -> (StatusCode, Value) {
@@ -247,4 +254,40 @@ async fn book_by_chapters() {
     // Не книга — целиком и с chapter.
     let (_, note) = call(app.clone(), "GET", &format!("{}?chapter=1", uri("/api/notes/Сеть/SSH")), None).await;
     assert!(note["book"].is_null() && note["rendered"]["title"] == "SSH");
+}
+
+#[tokio::test]
+async fn token_is_required_when_set() {
+    let (open, _open_dir) = app();
+    let (app, _dir) = app_with_token("s3cret");
+    let get = |uri: &str| Request::get(uri).body(Body::empty()).unwrap();
+    let status = |res: axum::response::Response| res.status();
+
+    // Без токена или с чужим — 401 на всём: API, клиент, шрифты.
+    for path in ["/api/notes", "/", "/api/fonts.css", "/assets/baluk.css"] {
+        assert_eq!(status(app.clone().oneshot(get(path)).await.unwrap()), StatusCode::UNAUTHORIZED, "{path}");
+    }
+    let (code, body) = call(app.clone(), "GET", "/api/notes", None).await;
+    assert_eq!(code, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["error"], "нужен токен доступа");
+    let wrong = Request::get("/api/notes").header("authorization", "Bearer s3cre").body(Body::empty()).unwrap();
+    assert_eq!(status(app.clone().oneshot(wrong).await.unwrap()), StatusCode::UNAUTHORIZED);
+
+    // С токеном — 200: заголовком, параметром адреса (ставит cookie) и cookie.
+    let bearer = Request::get("/api/notes").header("authorization", "Bearer s3cret").body(Body::empty()).unwrap();
+    let res = app.clone().oneshot(bearer).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(res.headers().get("set-cookie").is_none());
+
+    let res = app.clone().oneshot(get("/api/notes?token=s3cret")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let cookie = res.headers()["set-cookie"].to_str().unwrap().to_owned();
+    assert!(cookie.starts_with("notes_token=s3cret;") && cookie.contains("HttpOnly"), "{cookie}");
+
+    let with_cookie =
+        Request::get("/api/fonts.css").header("cookie", "theme=x; notes_token=s3cret").body(Body::empty());
+    assert_eq!(status(app.oneshot(with_cookie.unwrap()).await.unwrap()), StatusCode::OK);
+
+    // Без токена в настройках — проверки нет.
+    assert_eq!(status(open.oneshot(get("/api/notes")).await.unwrap()), StatusCode::OK);
 }

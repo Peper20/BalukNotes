@@ -4,7 +4,12 @@
 //! производными цветами (фон врезки и т. п.) в `metadata <k-css>`, здесь они
 //! превращаются в блоки `:root[data-theme="…"] { --k-…: … }`. Новая тема в
 //! `theme.typ` появляется в приложении без правок Rust и CSS.
+//!
+//! Там же — основные шрифты тем ([`ThemeSet::web_fonts`]): их сервер и
+//! статический сайт отдают браузеру (WOFF2 по частям, `notes-core::webfonts`).
+//! Тема со своим шрифтом не требует правки Rust.
 
+use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -35,6 +40,7 @@ pub struct Theme {
 pub struct ThemeSet {
     themes: Vec<Theme>,
     css: String,
+    web_fonts: Vec<String>,
 }
 
 impl ThemeSet {
@@ -56,7 +62,7 @@ impl ThemeSet {
         Self::from_json(&serde_json::to_value(&meta.value)?)
     }
 
-    /// `{тема: {title, colors: {переменная: цвет}}}` → темы и CSS.
+    /// `{тема: {title, colors: {переменная: цвет}, fonts: [семейство]}}` → темы и CSS.
     fn from_json(value: &Value) -> Result<Self> {
         let bad = |what: &str| Error::Library(format!("{CSS_FILE}: {what}"));
         let map = value.as_object().ok_or_else(|| bad("ожидался словарь тем"))?;
@@ -65,12 +71,19 @@ impl ThemeSet {
         }
         let mut themes = Vec::new();
         let mut css = String::from("/* Сгенерировано из baluk/theme.typ — не править. */\n");
+        let mut web_fonts = BTreeSet::new();
         for (name, theme) in map {
             let title = theme.get("title").and_then(Value::as_str).unwrap_or(name);
             let colors: &Map<String, Value> =
                 theme.get("colors").and_then(Value::as_object).ok_or_else(|| bad("цвета темы — словарь"))?;
             let bg = colors.get("bg").and_then(Value::as_str).ok_or_else(|| bad("у темы нет bg"))?;
             themes.push(Theme { name: name.clone(), title: title.to_owned(), dark: is_dark(bg) });
+            if let Some(fonts) = theme.get("fonts") {
+                let fonts = fonts.as_array().ok_or_else(|| bad("шрифты темы — список"))?;
+                for font in fonts {
+                    web_fonts.insert(font.as_str().ok_or_else(|| bad("шрифт — строка"))?.to_owned());
+                }
+            }
             let _ = writeln!(css, ":root[data-theme=\"{name}\"] {{");
             for (var, color) in colors {
                 let color = color.as_str().ok_or_else(|| bad("цвет — строка"))?;
@@ -83,7 +96,7 @@ impl ThemeSet {
                 ":root[data-theme=\"{name}\"] .k-frame-v[data-theme=\"{name}\"] {{ display: contents; }}"
             );
         }
-        Ok(Self { themes, css })
+        Ok(Self { themes, css, web_fonts: web_fonts.into_iter().collect() })
     }
 
     pub fn themes(&self) -> &[Theme] {
@@ -96,6 +109,12 @@ impl ThemeSet {
 
     pub fn css(&self) -> &str {
         &self.css
+    }
+
+    /// Основные шрифты всех тем — те, что нужны браузеру: по алфавиту, без
+    /// повторов. Шрифт, которого нет среди доступных Typst, просто не отдаётся.
+    pub fn web_fonts(&self) -> &[String] {
+        &self.web_fonts
     }
 }
 
@@ -114,8 +133,8 @@ mod tests {
     #[test]
     fn css_from_json() {
         let json = serde_json::json!({
-            "light": {"title": "Светлая", "colors": {"bg": "#ffffff", "text": "#1b1b1b"}},
-            "dark": {"title": "Тёмная", "colors": {"bg": "#16181e", "text": "#dde2ea"}},
+            "light": {"title": "Светлая", "colors": {"bg": "#ffffff", "text": "#1b1b1b"}, "fonts": ["Serif", "Mono"]},
+            "dark": {"title": "Тёмная", "colors": {"bg": "#16181e", "text": "#dde2ea"}, "fonts": ["Serif", "Math"]},
         });
         let set = ThemeSet::from_json(&json).unwrap();
         assert_eq!(set.names(), ["light", "dark"]);
@@ -124,6 +143,7 @@ mod tests {
         assert!(set.themes()[1].dark);
         assert!(set.css().contains(":root[data-theme=\"dark\"] {\n  --k-bg: #16181e;"));
         assert!(set.css().contains(".k-frame-v[data-theme=\"light\"] { display: contents; }"));
+        assert_eq!(set.web_fonts(), ["Math", "Mono", "Serif"], "по алфавиту, без повторов");
     }
 
     #[test]

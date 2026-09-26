@@ -145,6 +145,9 @@ test("дерево: свёрнутая папка запоминается, пу
   const folder = page.locator("#tree details", { has: page.locator("summary .tree-name").getByText("Глубоко", { exact: true }) });
   await folder.locator("> summary").click();
   await expect(folder).not.toHaveAttribute("open");
+  // Событие toggle приходит задачей после щелчка: без ожидания reload
+  // изредка успевал раньше, и свёрнутость не запоминалась.
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("k-collapsed") ?? "")).toContain("Глубоко");
   await page.reload();
   await ready(page);
   await expect(folder).not.toHaveAttribute("open");

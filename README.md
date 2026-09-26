@@ -35,12 +35,15 @@ tools/test-env.sh                                     # тестовое окр�
 | `docs/roadmap.md` | вехи и что сделано |
 | `docs/tech-debt.md` | что отложено и почему |
 | `crates/notes-core/` | ядро: хранилище, компилятор Typst, склейка тем, рисунки, индекс ссылок, настройки, проверка |
-| `crates/notes-server/` | HTTP API и раздача клиента (axum) |
+| `crates/notes-server/` | HTTP API и раздача клиента (axum), модуль на область API; токен `--token` |
+| `crates/notes-site/` | статический сайт (`notes build`) |
+| `crates/notes-assets/` | сборка клиента `app/dist` — общая для сервера и сайта |
 | `crates/notes-cli/` | команда `notes`: serve, check, build, pdf |
 | `app/` | клиент: Svelte 5 + TypeScript + Vite; `public/assets/baluk.css` — вид заметок |
 | `baluk/` | библиотека оформления Typst: блоки, рисунки, шаблоны `note`/`book`, ссылки `see` — HTML- и PDF-ветка |
 | `tests/vault/` | хранилище-фикстура: каждый случай отрисовки, каталог — его `README.md` |
 | `tests/snapshots/` | эталонные снимки HTML фикстур (`UPDATE_SNAPSHOTS=1` — обновить) |
+| `tools/check.sh` | полная проверка одной командой: Rust, `notes check` на фикстуре, типы API, клиент, e2e |
 | `tools/test-env.sh` | тестовое окружение: сервер на `tests/vault`, данные в `tests/.data/` |
 | `tools/visual.mjs` | альбом снимков всех фикстур: светлая, тёмная, узкий экран |
 | `tools/shot.mjs` | снимок одной страницы headless Chromium |
@@ -48,5 +51,9 @@ tools/test-env.sh                                     # тестовое окр�
 ## Проверка
 
 ```sh
-cargo test --workspace && cargo clippy --workspace --all-targets && cargo fmt --check
+tools/check.sh          # всё: cargo test/clippy/fmt, notes check, типы API, клиент, e2e
+tools/check.sh --fast   # без сборки клиента и e2e; ещё есть --rust и --app
 ```
+
+В конце — таблица «шаг → ок/упал, время», код возврата ненулевой при любой
+ошибке; логи шагов — `tests/.data/check/`.

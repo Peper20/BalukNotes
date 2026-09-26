@@ -37,6 +37,8 @@ fn themes_come_from_library() {
     assert_eq!(names, ["classic", "night"]);
     assert!(NOTES.themes().themes()[1].dark);
     assert!(NOTES.themes().css().contains("--k-box-def:"));
+    // Браузеру — основные шрифты тем (первые в списках `font`), без запасных.
+    assert_eq!(NOTES.themes().web_fonts(), ["Gentium Plus", "JetBrains Mono", "New Computer Modern Math"]);
 }
 
 #[test]
@@ -126,6 +128,15 @@ fn check_finds_exactly_the_planted_problems() {
     assert_eq!(failing, ["Особые случаи/Ошибка компиляции"]);
     let warned: Vec<_> = report.notes.iter().filter(|n| !n.warnings.is_empty()).map(|n| n.id.as_str()).collect();
     assert_eq!(warned, ["Особые случаи/Предупреждение"]);
+    assert_eq!(report.summary(), expected_summary(), "итог в tests/vault/README.md");
+}
+
+/// Ожидаемый итог `notes check` — строка «Итог: `…`» в `tests/vault/README.md`
+/// (её же сверяет `tools/check.sh`).
+fn expected_summary() -> String {
+    let readme = std::fs::read_to_string(repo().join("tests/vault/README.md")).unwrap();
+    let line = readme.lines().find_map(|l| l.strip_prefix("Итог: `")).expect("строка «Итог: `…`» в README");
+    line.trim_end_matches('`').to_owned()
 }
 
 #[test]

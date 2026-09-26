@@ -11,6 +11,7 @@
 
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write as _;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
@@ -94,6 +95,11 @@ impl WebVariant {
     }
 }
 
+/// Имя файла части шрифта у статического сайта: `Gentium-Plus-regular-latin.woff2`.
+pub fn font_file_name(family: &str, variant: WebVariant, chunk: &str) -> String {
+    format!("{}-{}-{chunk}.woff2", family.replace(' ', "-"), variant.slug())
+}
+
 /// Шрифт одного начертания для браузера: части по наборам знаков. Части
 /// сжимаются при первом запросе (Gentium — ~0,1 с на часть, математический
 /// шрифт целиком — ~2 с) и дальше отдаются из памяти.
@@ -164,12 +170,42 @@ impl Fonts {
             .clone()
     }
 
+    /// `@font-face` на каждую часть шрифтов `families` (браузер качает только
+    /// части со знаками страницы — `unicode-range`). `base` — путь к файлам:
+    /// `/fonts/` у сервера (файл части — `{base}{семейство}/{начертание}/{часть}.woff2`),
+    /// `fonts/` у статического сайта (файл — [`font_file_name`]).
+    pub fn font_faces(&self, families: &[impl AsRef<str>], base: &str) -> String {
+        let mut out = String::from("/* Шрифты оформления: те же файлы, что у Typst, в WOFF2 и по наборам знаков. */\n");
+        for family in families {
+            let family = family.as_ref();
+            for v in WebVariant::ALL {
+                let Some(face) = self.web_face(family, v) else { continue };
+                for chunk in &face.chunks {
+                    let url = if base.starts_with('/') {
+                        format!("{base}{}/{}/{}.woff2", family.replace(' ', "%20"), v.slug(), chunk.name)
+                    } else {
+                        format!("{base}{}", font_file_name(family, v, &chunk.name))
+                    };
+                    let range =
+                        chunk.unicode_range.as_ref().map(|r| format!(" unicode-range: {r};")).unwrap_or_default();
+                    let _ = writeln!(
+                        out,
+                        "@font-face {{ font-family: \"{family}\"; src: url(\"{url}\") format(\"woff2\"); font-style: {}; font-weight: {}; font-display: swap;{range} }}",
+                        if v.italic { "italic" } else { "normal" },
+                        if v.bold { 700 } else { 400 },
+                    );
+                }
+            }
+        }
+        out
+    }
+
     /// Сжать все части шрифтов `families` заранее (в фоне при запуске
     /// сервера: первая страница не ждёт сжатия).
-    pub fn warm_web(&self, families: &[&str]) {
+    pub fn warm_web(&self, families: &[impl AsRef<str>]) {
         for family in families {
             for v in WebVariant::ALL {
-                if let Some(face) = self.web_face(family, v) {
+                if let Some(face) = self.web_face(family.as_ref(), v) {
                     for c in &face.chunks {
                         face.file(&c.name);
                     }
