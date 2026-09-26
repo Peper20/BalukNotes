@@ -30,6 +30,33 @@ test("раскрытые «Ответы» не сворачиваются, ко�
   await expect(answers).toHaveAttribute("open", "");
 });
 
+test("раскрытые «Ответы» — по разделу и тексту: блок выше не раскрывает чужой", async ({ page }) => {
+  const dir = join(VAULT, "Ответы");
+  const file = join(dir, "Заметка.typ");
+  const text = (extra: boolean) =>
+    `#import "/_baluk/lib.typ": *\n#show: note.with(title: [Ответы])\n\n= Первый\n\n${extra ? "#quiz(([Новый вопрос], [Добавлены выше.]))\n\n" : ""}` +
+    `= Второй\n\n#quiz(([Вопрос], [Раскрытые.]))\n`;
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, text(false));
+    await page.goto("/");
+    await ready(page);
+    await page.locator("#refresh").click();
+    await page.locator("#tree").getByRole("link", { name: "Заметка" }).click();
+    await ready(page);
+    const answers = page.locator("#note details", { hasText: "Раскрытые." });
+    await answers.locator("summary").click();
+    await expect(answers).toHaveAttribute("open", "");
+    writeFileSync(file, text(true));
+    await page.locator("#refresh").click();
+    await expect(page.locator("#note details")).toHaveCount(2);
+    await expect(answers).toHaveAttribute("open", "");
+    await expect(page.locator("#note details", { hasText: "Добавлены выше." })).not.toHaveAttribute("open", "");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("настройки: кегль меняется сразу и сохраняется", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await page.locator("#open-settings").click();

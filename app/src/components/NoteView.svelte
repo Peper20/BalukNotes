@@ -7,6 +7,7 @@
   import { onDestroy, untrack } from "svelte";
   import { reader, router } from "../lib/state";
   import type { NotePage } from "../lib/api";
+  import { openDetails, restoreDetails } from "../lib/details";
   import { tagHref } from "../lib/ids";
   import { mountLive } from "../lib/live";
   import { ui } from "../lib/ui.svelte";
@@ -47,12 +48,13 @@
     const intent = reader.scroll;
     unmountLive();
     // Та же заметка пересобрана (правка файла, «обновить») — раскрытые
-    // «Ответы» и прочие <details> не должны свернуться сами.
+    // «Ответы» и прочие <details> не должны свернуться сами (по разделу и
+    // тексту summary — lib/details.ts).
     const key = `${page.id}#${page.book?.chapter ?? ""}`;
-    const open = key === shown ? [...el.querySelectorAll("details")].map((d) => d.open) : [];
+    const open = key === shown ? openDetails(el) : new Set<string>();
     shown = key;
     el.innerHTML = r ? r.styles + r.body : "";
-    el.querySelectorAll("details").forEach((d, i) => open[i] && (d.open = true));
+    restoreDetails(el, open);
     linkTags(el);
     unmountLive = mountLive(el, (id, newTab) => router.open(id, null, { newTab }));
     ui.book = page.book;
