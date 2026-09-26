@@ -179,7 +179,7 @@ impl Schema {
                 SettingDef {
                     key: "refresh.interval",
                     label: "Проверять изменения, раз в N секунд",
-                    help: Some("0 — только по кнопке «Обновить»"),
+                    help: Some("Если сервер следит за файлами — сразу, без опроса. 0 — только по кнопке «Обновить»"),
                     kind: Kind::Number { min: 0.0, max: 600.0, step: 1.0 },
                     default: json!(5),
                 },

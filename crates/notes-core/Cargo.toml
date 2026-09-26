@@ -22,6 +22,7 @@ typst-pdf.workspace = true
 typst-kit.workspace = true
 comemo.workspace = true
 ecow.workspace = true
+notify.workspace = true
 parking_lot.workspace = true
 rust-embed.workspace = true
 serde.workspace = true

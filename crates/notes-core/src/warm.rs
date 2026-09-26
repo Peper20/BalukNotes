@@ -19,7 +19,9 @@
 //!   берёт следующую заметку, пока кто-то ждёт страницу. Уже начатую сборку
 //!   он не прерывает (см. `docs/tech-debt.md`).
 //!
-//! Проход повторяется раз в [`RESCAN`] и по новой подсказке: новые и
+//! Проход повторяется по новой подсказке, по изменению файлов хранилища
+//! ([`Warmer::poke`] от наблюдателя, [`crate::watch`]) и на всякий случай раз
+//! в [`RESCAN`] (без наблюдателя — раз в [`RESCAN_UNWATCHED`]): новые и
 //! изменённые заметки тоже собираются заранее. Проверка неизменившейся
 //! заметки — несколько `stat`. При запуске фонового потока кэш на диске
 //! чистится ([`crate::cache::DiskCache::prune`]).
@@ -32,8 +34,12 @@ use parking_lot::{Condvar, Mutex};
 use crate::pages::Pages;
 use crate::vault::{Entry, NoteId, NoteKind};
 
-/// Как часто проверять, не появилось ли несобранное.
-pub const RESCAN: Duration = Duration::from_secs(60);
+/// Как часто проверять, не появилось ли несобранное, если наблюдатель файлов
+/// работает (страховка от потерянного события).
+pub const RESCAN: Duration = Duration::from_secs(600);
+
+/// То же без наблюдателя файлов.
+pub const RESCAN_UNWATCHED: Duration = Duration::from_secs(60);
 
 /// Прогрев: подсказки клиента и будильник фонового потока.
 #[derive(Debug, Default)]
@@ -84,6 +90,14 @@ impl Warmer {
         self.wake.notify_all();
     }
 
+    /// Файлы хранилища изменились: пройти заново (подсказки те же).
+    pub fn poke(&self) {
+        let hints = self.hints.lock();
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        drop(hints);
+        self.wake.notify_all();
+    }
+
     /// Один проход: собрать всё несобранное по порядку. Новая подсказка —
     /// проход начинается заново (собранное пропустится).
     pub fn pass(&self, pages: &Pages) -> WarmStats {
@@ -114,8 +128,8 @@ impl Warmer {
     }
 
     /// Прогревать бесконечно (фоновый поток сервера). Сначала — чистка
-    /// кэша на диске.
-    pub fn forever(&self, pages: &Pages) -> ! {
+    /// кэша на диске. `rescan` — сколько спать без подсказок и изменений.
+    pub fn forever(&self, pages: &Pages, rescan: impl Fn() -> Duration) -> ! {
         prune(pages);
         loop {
             let started = Instant::now();
@@ -134,7 +148,7 @@ impl Warmer {
             let generation = self.generation.load(Ordering::SeqCst);
             let mut hints = self.hints.lock();
             if self.generation.load(Ordering::SeqCst) == generation {
-                self.wake.wait_for(&mut hints, RESCAN);
+                self.wake.wait_for(&mut hints, rescan());
             }
         }
     }
@@ -205,6 +219,16 @@ mod tests {
         s.mem.write("A.typ", "aa");
         assert_eq!(Warmer::default().pass(&restarted), WarmStats { built: 1, skipped: 2 });
         assert_eq!(pipeline.builds.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn poke_restarts_pass() {
+        let warmer = Warmer::default();
+        let before = warmer.generation.load(Ordering::SeqCst);
+        warmer.hint(vec![NoteId::new("A").unwrap()]);
+        warmer.poke();
+        assert_eq!(warmer.generation.load(Ordering::SeqCst), before + 2);
+        assert_eq!(warmer.hints.lock().len(), 1, "подсказки те же");
     }
 
     #[test]

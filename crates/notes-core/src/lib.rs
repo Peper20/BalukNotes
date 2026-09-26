@@ -53,6 +53,7 @@ pub mod vault_data;
 pub mod vault_graph;
 pub mod version;
 pub mod warm;
+pub mod watch;
 pub mod webfonts;
 pub mod world;
 
