@@ -10,22 +10,19 @@
 //! (второй тест проверяет, что каждое имя там упомянуто).
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use notes_core::figures::FigureOptions;
-use notes_core::{LibrarySource, NoteId, Notes, NotesConfig};
+use notes_core::{LibrarySource, NoteId, NotePage, Notes, NotesConfig};
 
 fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// Имена модуля `lib.typ` по алфавиту — так, как их видит заметка.
-fn public_names() -> Vec<String> {
+/// Собирает заметку из одного файла с библиотекой репозитория.
+fn compile(source: &str) -> Arc<NotePage> {
     let vault = tempfile::tempdir().unwrap();
-    std::fs::write(
-        vault.path().join("api.typ"),
-        "#import \"/_baluk/lib.typ\" as baluk\n#dictionary(baluk).keys().sorted().join(\" \")\n",
-    )
-    .unwrap();
+    std::fs::write(vault.path().join("t.typ"), source).unwrap();
     let notes = Notes::open(&NotesConfig {
         vault: vault.path().to_path_buf(),
         library: LibrarySource::Dir(repo().join("baluk")),
@@ -33,7 +30,12 @@ fn public_names() -> Vec<String> {
         cache: None,
     })
     .unwrap();
-    let page = notes.page(&NoteId::new("api").unwrap(), FigureOptions::default()).unwrap();
+    notes.page(&NoteId::new("t").unwrap(), FigureOptions::default()).unwrap()
+}
+
+/// Имена модуля `lib.typ` по алфавиту — так, как их видит заметка.
+fn public_names() -> Vec<String> {
+    let page = compile("#import \"/_baluk/lib.typ\" as baluk\n#dictionary(baluk).keys().sorted().join(\" \")\n");
     assert!(page.errors.is_empty(), "lib.typ не собрался: {:?}", page.errors);
     let rendered = page.rendered.as_ref().expect("нет отрисовки");
     let body = &rendered.body;
@@ -102,4 +104,18 @@ fn has_word(text: &str, name: &str) -> bool {
         let after = text[i + name.len()..].chars().next();
         !before.is_some_and(is_name_char) && !after.is_some_and(is_name_char)
     })
+}
+
+/// `words:` шаблона: неизвестный ключ и не строка — ошибка с подсказкой.
+#[test]
+fn own_words_are_checked() {
+    let error = |words: &str| {
+        let page =
+            compile(&format!("#import \"/_baluk/lib.typ\": *\n#show: note.with(lang: \"de\", words: {words})\nText\n"));
+        page.errors.first().map(|e| e.message.clone()).unwrap_or_default()
+    };
+    assert!(error("(figur: \"Abb.\")").contains("нет слова «figur»"), "{}", error("(figur: \"Abb.\")"));
+    assert!(error("(figure: [Abb.])").contains("— строка"));
+    assert!(error("\"Abb.\"").contains("words — словарь"));
+    assert_eq!(error("(figure: \"Abb.\")"), "");
 }

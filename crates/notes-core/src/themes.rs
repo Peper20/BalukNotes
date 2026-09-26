@@ -62,9 +62,8 @@ impl ThemeSet {
                 .introspector()
                 .query_label(label)
                 .map_err(|e| Error::Library(format!("{CSS_FILE}: нет <{name}>: {e}")))?;
-            let meta = content
-                .to_packed::<MetadataElem>()
-                .ok_or_else(|| Error::Library(format!("<{name}> — не metadata")))?;
+            let meta =
+                content.to_packed::<MetadataElem>().ok_or_else(|| Error::Library(format!("<{name}> — не metadata")))?;
             Ok(serde_json::to_value(&meta.value)?)
         };
         let mut set = Self::from_json(&metadata(CSS_LABEL)?)?;
