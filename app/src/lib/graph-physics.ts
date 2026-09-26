@@ -11,6 +11,10 @@
 // местам) и встают: полный возврат пружинами «встряхивал» граф, а совсем
 // без движения граф замирал мёртво. Рамка (`frame`) — узлы вместе с
 // подписью не выходят за неё.
+//
+// Раздвигание сравнивает пары узлов: у большого графа (от `GRID_FROM`
+// узлов) — только соседей по решётке (`nearPairs`), иначе на тысяче узлов
+// кадр шёл бы десятки миллисекунд. Порядок пар тот же, что и перебором.
 
 export type Point = [number, number];
 /** Прямоугольник `[x0, y0, x1, y1]`. */
@@ -38,6 +42,52 @@ const DAMPING = 0.3;
 const RETURN = 0.25;
 /** Сдвиг (единиц раскладки за шаг), ниже которого граф считается осевшим. */
 const REST = 0.02;
+/** С какого числа узлов пары для раздвигания — по решётке, а не все. */
+export const GRID_FROM = 200;
+
+/**
+ * Пары узлов `i < j`, чьи прямоугольники (`extents` вокруг точек `pos`)
+ * могут пересекаться, — в порядке перебора (по `i`, затем по `j`). До
+ * `GRID_FROM` узлов — все пары; дальше — решётка с клеткой в самый большой
+ * прямоугольник: пересекаются только узлы из соседних клеток.
+ */
+export function nearPairs(pos: Float64Array, extents: Extent[], visit: (i: number, j: number) => void, grid = extents.length >= GRID_FROM): void {
+  const n = extents.length;
+  if (!grid) {
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) visit(i, j);
+    return;
+  }
+  let [cw, ch] = [1e-6, 1e-6];
+  for (const e of extents) {
+    cw = Math.max(cw, 2 * e.half);
+    ch = Math.max(ch, e.top + e.bottom);
+  }
+  const cell = new Int32Array(2 * n);
+  const cells = new Map<number, number[]>();
+  const key = (cx: number, cy: number) => cx * 1_000_003 + cy;
+  for (let i = 0; i < n; i++) {
+    const cx = Math.floor(pos[2 * i]! / cw);
+    const cy = Math.floor(pos[2 * i + 1]! / ch);
+    cell[2 * i] = cx;
+    cell[2 * i + 1] = cy;
+    const k = key(cx, cy);
+    const list = cells.get(k);
+    if (list) list.push(i);
+    else cells.set(k, [i]);
+  }
+  const near: number[] = [];
+  for (let i = 0; i < n; i++) {
+    near.length = 0;
+    const [cx, cy] = [cell[2 * i]!, cell[2 * i + 1]!];
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (const j of cells.get(key(cx + dx, cy + dy)) ?? []) if (j > i) near.push(j);
+      }
+    }
+    near.sort((a, b) => a - b);
+    for (const j of near) visit(i, j);
+  }
+}
 
 export class Physics {
   readonly n: number;
@@ -75,20 +125,17 @@ export class Physics {
    */
   setExtents(extents: Extent[]) {
     const s = new Array<number>(this.n).fill(1);
-    for (let i = 0; i < this.n; i++) {
-      const ei = extents[i]!;
-      for (let j = i + 1; j < this.n; j++) {
-        const ej = extents[j]!;
-        const dx = Math.abs(this.home[2 * j]! - this.home[2 * i]!);
-        const dy = this.home[2 * j + 1]! - this.home[2 * i + 1]!;
-        const w = ei.half + ej.half;
-        const h = dy >= 0 ? ei.bottom + ej.top : ei.top + ej.bottom;
-        if (w <= dx || h <= Math.abs(dy)) continue;
-        const f = Math.max(dx / w, Math.abs(dy) / h);
-        s[i] = Math.min(s[i]!, f);
-        s[j] = Math.min(s[j]!, f);
-      }
-    }
+    nearPairs(this.home, extents, (i, j) => {
+      const [ei, ej] = [extents[i]!, extents[j]!];
+      const dx = Math.abs(this.home[2 * j]! - this.home[2 * i]!);
+      const dy = this.home[2 * j + 1]! - this.home[2 * i + 1]!;
+      const w = ei.half + ej.half;
+      const h = dy >= 0 ? ei.bottom + ej.top : ei.top + ej.bottom;
+      if (w <= dx || h <= Math.abs(dy)) return;
+      const f = Math.max(dx / w, Math.abs(dy) / h);
+      s[i] = Math.min(s[i]!, f);
+      s[j] = Math.min(s[j]!, f);
+    });
     this.extents = extents.map((e, i) => ({ half: e.half * s[i]!, top: e.top * s[i]!, bottom: e.bottom * s[i]! }));
   }
 
@@ -182,35 +229,32 @@ export class Physics {
     }
     // Наехавшие прямоугольники — врозь по оси с меньшим перекрытием, сразу
     // (не силой: иначе пружины вдавливают узлы друг в друга).
-    for (let i = 0; i < n; i++) {
-      const ei = extents[i]!;
-      for (let j = i + 1; j < n; j++) {
-        const ej = extents[j]!;
-        const dx = pos[2 * j]! - pos[2 * i]!;
-        const dy = pos[2 * j + 1]! - pos[2 * i + 1]!;
-        const ox = ei.half + ej.half - Math.abs(dx);
-        if (ox <= 0) continue;
-        const oy = (dy >= 0 ? ei.bottom + ej.top : ei.top + ej.bottom) - Math.abs(dy);
-        if (oy <= 0) continue;
-        const [fi, fj] = [this.fixed(i), this.fixed(j)];
-        // По оси с меньшим перекрытием; упёрлись там в рамку — по другой.
-        const axes: [number, number, number][] = [
-          [0, dx, ox],
-          [1, dy, oy],
-        ];
-        if (oy < ox) axes.reverse();
-        for (const [k, d, o] of axes) {
-          const dir = d < 0 ? -1 : 1;
-          const [si, sj] = fi ? [0, o] : fj ? [o, 0] : [o / 2, o / 2];
-          const mi = this.room(i, k, -dir * si);
-          const mj = this.room(j, k, dir * sj);
-          if (Math.abs(mi) + Math.abs(mj) < o / 2 && k === axes[0]![0]) continue;
-          pos[2 * i + k]! += mi;
-          pos[2 * j + k]! += mj;
-          break;
-        }
+    nearPairs(pos, extents, (i, j) => {
+      const [ei, ej] = [extents[i]!, extents[j]!];
+      const dx = pos[2 * j]! - pos[2 * i]!;
+      const dy = pos[2 * j + 1]! - pos[2 * i + 1]!;
+      const ox = ei.half + ej.half - Math.abs(dx);
+      if (ox <= 0) return;
+      const oy = (dy >= 0 ? ei.bottom + ej.top : ei.top + ej.bottom) - Math.abs(dy);
+      if (oy <= 0) return;
+      const [fi, fj] = [this.fixed(i), this.fixed(j)];
+      // По оси с меньшим перекрытием; упёрлись там в рамку — по другой.
+      const axes: [number, number, number][] = [
+        [0, dx, ox],
+        [1, dy, oy],
+      ];
+      if (oy < ox) axes.reverse();
+      for (const [k, d, o] of axes) {
+        const dir = d < 0 ? -1 : 1;
+        const [si, sj] = fi ? [0, o] : fj ? [o, 0] : [o / 2, o / 2];
+        const mi = this.room(i, k, -dir * si);
+        const mj = this.room(j, k, dir * sj);
+        if (Math.abs(mi) + Math.abs(mj) < o / 2 && k === axes[0]![0]) continue;
+        pos[2 * i + k]! += mi;
+        pos[2 * j + k]! += mj;
+        break;
       }
-    }
+    });
     let fastest = 0;
     for (let i = 0; i < n; i++) {
       if (this.fixed(i)) continue;
