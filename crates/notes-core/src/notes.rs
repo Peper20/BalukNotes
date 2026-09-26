@@ -32,7 +32,7 @@ use crate::storage::Storage;
 use crate::themes::ThemeSet;
 use crate::vault::{Entry, NoteId, Vault};
 use crate::vault_data::VaultData;
-use crate::vault_graph::GraphData;
+use crate::vault_graph::{GraphData, GraphFilter, GraphLayout, Layouts};
 use crate::version::Versions;
 use crate::warm::{WarmStats, Warmer};
 use crate::world::{Compiler, LibrarySource};
@@ -59,6 +59,7 @@ pub struct Notes {
     pages: Pages,
     typst: Arc<TypstPipeline>,
     links: Arc<SourceIndex>,
+    layouts: Arc<Layouts>,
     warmer: Warmer,
 }
 
@@ -84,9 +85,12 @@ impl Notes {
         let fonts =
             Arc::new(Fonts::load(&config.font_dirs).with_web_cache(config.cache.as_ref().map(|c| c.join("fonts"))));
         let links = Arc::new(SourceIndex::default());
+        let layouts = Arc::new(Layouts::default());
         // Данные хранилища для заметок: `/_vault/<префикс>/…`.
-        let data = VaultData::new()
-            .with(crate::vault_graph::DATA_PREFIX, GraphData { vault: vault.clone(), index: links.clone() });
+        let data = VaultData::new().with(
+            crate::vault_graph::DATA_PREFIX,
+            GraphData { vault: vault.clone(), index: links.clone(), layouts: layouts.clone() },
+        );
         let versions = Versions::new(vault.storage().clone()).with_data(data);
         let stamp = crate::cache::stamp(&[library.fingerprint(), fonts.fingerprint()]);
         let compiler = Compiler::new(versions.clone(), library, fonts);
@@ -99,7 +103,7 @@ impl Notes {
         // пути). Слабая ссылка: кэш страниц сам держит индекс через граф.
         let cache = Arc::downgrade(pages.cache());
         links.set_built(Box::new(move |id: &NoteId| cache.upgrade()?.links(id)));
-        Ok(Self { pages, typst, links, warmer: Warmer::default() })
+        Ok(Self { pages, typst, links, layouts, warmer: Warmer::default() })
     }
 
     pub fn vault(&self) -> &Vault {
@@ -122,6 +126,12 @@ impl Notes {
     /// разделы для поиска.
     pub fn index(&self) -> Result<Snapshot> {
         self.links.snapshot(self.vault())
+    }
+
+    /// Граф хранилища по фильтру, разложенный (раскладка — из кэша, если
+    /// такой граф уже раскладывали).
+    pub fn graph_layout(&self, filter: &GraphFilter) -> Result<GraphLayout> {
+        Ok((*self.index()?.graph_layout_cached(filter, &self.layouts)).clone())
     }
 
     /// Превью заметки (и раздела) для подсказки при наведении на ссылку.

@@ -16,7 +16,7 @@ pub(crate) fn routes() -> Router<AppState> {
 
 async fn graph_layout(State(s): State<AppState>, Json(filter): Json<GraphFilter>) -> ApiResult<Json<GraphLayout>> {
     let notes = s.notes.clone();
-    let layout = blocking(move || Ok(notes.index()?.graph_layout(&filter))).await?;
+    let layout = blocking(move || notes.graph_layout(&filter)).await?;
     Ok(Json(layout))
 }
 
