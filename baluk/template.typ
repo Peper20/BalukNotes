@@ -143,6 +143,21 @@
   n => numbering("1.1", counter(heading).get().first(), n)
 }
 
+/// Первое семейство шрифта из `text.font` (строка, массив, словарь с `name`).
+#let _family(font) = {
+  let first = if type(font) == array { font.first() } else { font }
+  if type(first) == dictionary { first.name } else { first }
+}
+
+/// Длина Typst (pt, em или их сумма) → длина CSS.
+#let _css-length(len) = {
+  let num(x) = str(calc.round(x, digits: 4)).replace("−", "-")
+  let parts = ()
+  if len.em != 0 { parts.push(num(len.em) + "em") }
+  if len.abs != 0pt or parts.len() == 0 { parts.push(num(len.abs.pt()) + "pt") }
+  if parts.len() == 1 { parts.first() } else { "calc(" + parts.join(" + ") + ")" }
+}
+
 #let _web-template(theme, doc-kind, kind, title, subtitle, author, date, description, tags, body) = {
   // Шрифт, кегль и цвет в HTML-разметку не попадают (их задаёт CSS), но их
   // наследуют рисунки: html.frame верстается как страница PDF. Без этого
@@ -197,6 +212,19 @@
   show grid: it => context if is-web() { frame(it, kind: "layout") } else { it }
   show stack: it => context if is-web() { frame(it, kind: "layout") } else { it }
   show place: it => context if is-web() { frame(it.body, kind: "layout") } else { it }
+  // Отступы `h`/`v` HTML-экспорт выбрасывает (с предупреждением). Абсолютная
+  // величина (pt, em и их сумма) — пустой элемент с отступом: размер —
+  // переменной `--k-h`/`--k-v`, правило — в CSS. Доли (`1fr`) и проценты
+  // без страницы смысла не имеют — остаются как есть (и предупреждение).
+  // В формулах `h` (и `quad`, `thin`) Typst сам делает `<mspace>` — их не
+  // трогаем: внутри формулы шрифт — математический темы.
+  let math-font = lower(_family(theme.font.math))
+  show h: it => context if is-web() and type(it.amount) == length and lower(_family(text.font)) != math-font {
+    elem("span", "k-h", ..("style": "--k-h: " + _css-length(it.amount)), [])
+  } else { it }
+  show v: it => context if is-web() and type(it.amount) == length {
+    elem("div", "k-v", ..("style": "--k-v: " + _css-length(it.amount)), [])
+  } else { it }
 
   // Весь документ — в <article data-doc>: по виду документа (а не по месту
   // файла в хранилище) CSS решает, показывать ли номера и «Главу N».
