@@ -52,6 +52,11 @@ const CHUNKS: &[(&str, &[(u32, u32)])] = &[
 /// Комбинируемые знаки — в каждой части.
 const MARKS: (u32, u32) = (0x0300, 0x036F);
 
+/// Версия кодировщика для кэша частей на диске ([`chunk_key`]): менять при
+/// любом изменении того, как часть превращается в байты (подмножество,
+/// WOFF2, brotli).
+const ENCODER: u64 = 1;
+
 /// Часть шрифта для браузера.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chunk {
@@ -61,6 +66,18 @@ pub struct Chunk {
     pub unicode_range: Option<String>,
     /// Знаки части (с комбинируемыми); у целого шрифта — пусто.
     codepoints: Vec<u32>,
+}
+
+/// Имя файла части в кэше на диске: хэш файла шрифта (`font_hash`),
+/// состава части и версии кодировщика — другой шрифт или кодировщик дают
+/// другое имя, и старая часть просто не читается.
+pub fn chunk_key(font_hash: u64, chunk: &Chunk) -> String {
+    let mut h = crate::version::StableHasher::new();
+    h.u64(ENCODER).u64(font_hash).str(&chunk.name).u64(chunk.codepoints.len() as u64);
+    for &c in &chunk.codepoints {
+        h.u64(u64::from(c));
+    }
+    h.hex()
 }
 
 /// Как отдавать шрифт: части по наборам знаков или (если резать нельзя или

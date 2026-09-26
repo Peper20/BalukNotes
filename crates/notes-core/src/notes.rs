@@ -49,7 +49,8 @@ pub struct NotesConfig {
     pub library: LibrarySource,
     /// Дополнительные каталоги шрифтов (к системным и встроенным в Typst).
     pub font_dirs: Vec<PathBuf>,
-    /// Кэш отрисовки на диске (`None` — только в памяти).
+    /// Каталог кэша на диске (`data/cache`, `None` — только в памяти):
+    /// `pages/` — отрисовка заметок, `fonts/` — части шрифтов для браузера.
     pub cache: Option<PathBuf>,
 }
 
@@ -80,7 +81,8 @@ impl Notes {
         if !library.is_valid() {
             return Err(Error::Library(format!("в библиотеке {library:?} нет lib.typ")));
         }
-        let fonts = Arc::new(Fonts::load(&config.font_dirs));
+        let fonts =
+            Arc::new(Fonts::load(&config.font_dirs).with_web_cache(config.cache.as_ref().map(|c| c.join("fonts"))));
         let links = Arc::new(SourceIndex::default());
         // Данные хранилища для заметок: `/_vault/<префикс>/…`.
         let data = VaultData::new()
@@ -89,7 +91,7 @@ impl Notes {
         let stamp = crate::cache::stamp(&[library.fingerprint(), fonts.fingerprint()]);
         let compiler = Compiler::new(versions.clone(), library, fonts);
         let themes = ThemeSet::load(&compiler)?;
-        let disk = config.cache.as_ref().map(|dir| DiskCache::new(dir, &vault.location(), stamp));
+        let disk = config.cache.as_ref().map(|dir| DiskCache::new(dir.join("pages"), &vault.location(), stamp));
         let cache = PageCache::new(versions, disk, MEMORY_BUDGET);
         let typst = Arc::new(TypstPipeline::new(vault.clone(), compiler, themes));
         let pages = Pages::new(vault, typst.clone(), cache);
