@@ -33,6 +33,7 @@ mod error;
 pub mod figures;
 pub mod finish;
 pub mod fonts;
+pub mod frames;
 mod fsutil;
 pub mod graph;
 pub mod lint;

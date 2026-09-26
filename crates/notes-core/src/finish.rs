@@ -6,14 +6,18 @@
 //! (и его проходы) — в `AFTER_CACHE` (`build.rs`): их правка кэш на диске
 //! не сбрасывает.
 //!
-//! Новый проход — одна строка в [`FINISH`]; время — в логе («проход»).
+//! Проходы: рисунки ([`crate::figures`]), общие части кадров
+//! ([`crate::frames`]). Новый проход — одна строка в [`FINISH`]; время — в
+//! логе («проход»).
 
 use crate::figures::{self, FigureOptions};
+use crate::frames;
 use crate::passes::timed;
 use crate::render::Rendered;
 
 /// Проходы по порядку.
-pub const FINISH: &[FinishPass] = &[FinishPass { name: "рисунки", run: figures_pass }];
+pub const FINISH: &[FinishPass] =
+    &[FinishPass { name: "рисунки", run: figures_pass }, FinishPass { name: "кадры", run: frames_pass }];
 
 /// Проход по готовой странице.
 #[derive(Debug, Clone, Copy)]
@@ -52,6 +56,22 @@ fn figures_pass(page: &mut Rendered, s: &Settings<'_>) {
     );
     page.body = o.body;
     page.styles.push_str(&o.styles);
+}
+
+/// Кадры: общие части в `<defs>` ([`crate::frames`]). После рисунков:
+/// темы уже склеены и координаты округлены.
+fn frames_pass(page: &mut Rendered, _: &Settings<'_>) {
+    let (body, stats) = frames::share(&page.body);
+    if stats.groups > 0 {
+        tracing::debug!(
+            groups = stats.groups,
+            shared = stats.shared,
+            before = stats.before,
+            after = stats.after,
+            "кадры"
+        );
+    }
+    page.body = body;
 }
 
 #[cfg(test)]

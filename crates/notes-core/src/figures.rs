@@ -177,7 +177,7 @@ fn read_variants(s: &str) -> (Vec<(&str, &str)>, usize) {
 }
 
 /// SVG → теги и текст между ними.
-fn tokens(svg: &str) -> Vec<&str> {
+pub(crate) fn tokens(svg: &str) -> Vec<&str> {
     let mut out = Vec::new();
     let mut rest = svg;
     while !rest.is_empty() {
