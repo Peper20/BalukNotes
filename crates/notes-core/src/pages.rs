@@ -1,15 +1,19 @@
 //! Страницы по запросу: сборка ([`Pipeline`]) поверх кэша ([`PageCache`]).
 //!
 //! Заметка собирается, когда её запросили (или заранее — прогрев,
-//! [`crate::warm`]). Сборки идут по одной (под `building`): второй запрос
-//! той же заметки, пришедший во время её сборки, ждёт первую и берёт
-//! результат из кэша, а не собирает заново. Ждущий запрос пользователя —
-//! сигнал прогреву не начинать новую сборку ([`Pages::wait_for_users`]).
+//! [`crate::warm`]). Сборки **разных** заметок идут параллельно (у каждой
+//! свой кэш файлов компилятора, [`crate::world`]): открыть заметку, пока
+//! собирается книга, можно сразу. Сборка одной заметки — одна (замок
+//! заметки в `building`): второй запрос той же заметки, пришедший во время
+//! её сборки, ждёт первую и берёт результат из кэша, а не собирает заново.
+//! Ждущий запрос пользователя — сигнал прогреву не начинать новую сборку
+//! ([`Pages::wait_for_users`]): процессор — сначала читателю.
 //!
 //! Ошибка компиляции показывается поверх последней удачной отрисовки.
 //! Версия страницы — версия файлов + настройки обработки рисунков: смена
 //! настроек не перекомпилирует заметку, а клиент перезапросит страницу сам.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -50,15 +54,15 @@ pub struct Pages {
     vault: Vault,
     pipeline: Arc<dyn Pipeline>,
     cache: Arc<PageCache>,
-    /// Держится на время сборки заметки.
-    building: Mutex<()>,
+    /// Замки заметок: держится на время сборки этой заметки.
+    building: Mutex<HashMap<NoteId, Arc<Mutex<()>>>>,
     /// Сколько запросов страниц сейчас ждут: прогрев им уступает.
     waiting: AtomicUsize,
 }
 
 impl Pages {
     pub fn new(vault: Vault, pipeline: Arc<dyn Pipeline>, cache: PageCache) -> Self {
-        Self { vault, pipeline, cache: Arc::new(cache), building: Mutex::new(()), waiting: AtomicUsize::new(0) }
+        Self { vault, pipeline, cache: Arc::new(cache), building: Mutex::default(), waiting: AtomicUsize::new(0) }
     }
 
     pub fn vault(&self) -> &Vault {
@@ -86,7 +90,8 @@ impl Pages {
         if let Some(page) = self.cache.page(&entry, opts, &finish, true) {
             return Ok(page);
         }
-        let _building = self.building.lock();
+        let lock = self.note_lock(id);
+        let _building = lock.lock();
         if let Some(page) = self.cache.page(&entry, opts, &finish, false) {
             return Ok(page);
         }
@@ -125,13 +130,22 @@ impl Pages {
     /// `true` — собрана сейчас.
     pub fn prebuild(&self, id: &NoteId) -> Result<bool> {
         let entry = self.vault.entry(id)?;
-        let _building = self.building.lock();
+        let lock = self.note_lock(id);
+        let _building = lock.lock();
         if self.cache.is_fresh(id) {
             return Ok(false);
         }
         let built = self.pipeline.build(&entry, LinkStyle::Server);
         self.store(&entry, built, None);
         Ok(true)
+    }
+
+    /// Замок сборки заметки. Замки несобираемых заметок убираются, чтобы
+    /// карта не росла.
+    fn note_lock(&self, id: &NoteId) -> Arc<Mutex<()>> {
+        let mut locks = self.building.lock();
+        locks.retain(|_, l| Arc::strong_count(l) > 1);
+        locks.entry(id.clone()).or_default().clone()
     }
 
     /// Запомнить сборку. Ошибка — под ней прежняя удачная отрисовка.
@@ -348,6 +362,20 @@ pub(crate) mod tests {
         });
         assert!(Arc::ptr_eq(&a, &b), "второй запрос дождался первой сборки");
         assert_eq!(pipeline.builds.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn different_notes_build_in_parallel() {
+        let s = Setup::new(&[("A.typ", "раз"), ("B.typ", "два")]);
+        let (pages, pipeline) = s.pages(false, Duration::from_millis(300));
+        let started = std::time::Instant::now();
+        std::thread::scope(|scope| {
+            scope.spawn(|| pages.page(&id("A"), OPTS).unwrap());
+            scope.spawn(|| pages.page(&id("B"), OPTS).unwrap());
+        });
+        assert!(started.elapsed() < Duration::from_millis(550), "не по очереди: {:?}", started.elapsed());
+        assert_eq!(pipeline.builds.load(Ordering::SeqCst), 2);
+        assert!(pages.building.lock().len() <= 2);
     }
 
     #[test]
