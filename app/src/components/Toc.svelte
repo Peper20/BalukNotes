@@ -1,15 +1,15 @@
 <!--
-  Оглавление заметки (пункты — app.toc). Сбоку от
+  Оглавление заметки (пункты — reader.toc). Сбоку от
   колонки, если справа хватает места (ширина колонки зависит от кегля),
   иначе — всплывающее по §. Подсвечивает раздел, который сейчас читают.
 -->
 <script lang="ts">
-  import { app } from "../lib/app.svelte";
+  import { reader, settings } from "../lib/state";
   import { ui } from "../lib/ui.svelte";
 
   let nav: HTMLElement | undefined = $state();
 
-  const shown = $derived(app.toc);
+  const shown = $derived(reader.toc);
 
   /** Раздел, который сейчас читают: последний заголовок выше верха окна. */
   function markCurrent() {
@@ -33,12 +33,12 @@
     const room = innerWidth - note.getBoundingClientRect().right;
     ui.tocRoom = room >= 200;
     if (ui.tocRoom) ui.tocWidth = Math.min(room - 32, 300);
-    if (ui.tocRoom && app.settings["panels.toc"]) ui.tocOpen = false;
+    if (ui.tocRoom && settings.values["panels.toc"]) ui.tocOpen = false;
   }
 
   // Пересчёт: новая заметка, глава, кегль, ширина окна или панели.
   $effect(() => {
-    void [shown, ui.chapter, app.settings];
+    void [shown, ui.chapter, settings.values];
     queueMicrotask(() => {
       layout();
       markCurrent();

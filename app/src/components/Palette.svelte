@@ -6,7 +6,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { api, type NoteListItem, type SearchHit } from "../lib/api";
-  import { app } from "../lib/app.svelte";
+  import { notes, places, router } from "../lib/state";
   import { commands, openNote, type Command } from "../lib/commands.svelte";
   import { fuzzy, highlight } from "../lib/fuzzy";
   import { tagHref } from "../lib/ids";
@@ -33,11 +33,11 @@
   const noteItems = $derived.by((): Item[] => {
     if (mode !== "notes") return [];
     if (!q) {
-      const recent = app.recent.map((id) => app.notes.find((n) => n.id === id)).filter((n) => n != null);
-      const rest = app.notes.filter((n) => !app.recent.includes(n.id));
+      const recent = places.recent.map((id) => notes.all.find((n) => n.id === id)).filter((n) => n != null);
+      const rest = notes.all.filter((n) => !places.recent.includes(n.id));
       return [...recent, ...rest].slice(0, 30).map((note) => ({ kind: "note", note, title: [], path: [] }));
     }
-    return app.notes
+    return notes.all
       .map((note) => {
         const t = fuzzy(q, titleOf(note));
         const p = fuzzy(q, note.id);
@@ -63,7 +63,7 @@
   const tagItems = $derived.by((): Item[] => {
     if (mode !== "tags") return [];
     const counts = new Map<string, number>();
-    for (const n of app.notes) for (const t of n.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+    for (const n of notes.all) for (const t of n.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
     return [...counts]
       .map(([tag, count]) => ({ tag, count, m: fuzzy(q, tag) }))
       .filter((x) => x.m)
@@ -116,7 +116,7 @@
     close();
     if (item.kind === "note") openNote(item.note.id, null, newTab);
     else if (item.kind === "hit") openNote(item.hit.id, item.hit.anchor, newTab);
-    else if (item.kind === "tag") app.go(tagHref(item.tag), { newTab });
+    else if (item.kind === "tag") router.go(tagHref(item.tag), { newTab });
     else item.command.run();
   }
 

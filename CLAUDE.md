@@ -125,9 +125,11 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
 
 ## Клиент `app/`
 
-- Svelte 5 (руны) + TypeScript + Vite; без SvelteKit. Состояние —
-  `src/lib/app.svelte.ts` (маршрут, заметка, настройки, обновление) и
-  `ui.svelte.ts` (панели, глава, оглавление); чистая логика — `src/lib/*.ts`
+- Svelte 5 (руны) + TypeScript + Vite; без SvelteKit. Состояние — модули
+  `src/lib/state/` (`settings`, `notes`, `tabs`, `places`, `router`,
+  `reader` — показанная заметка, `updates`; запуск — `start()` в
+  `index.ts`) и `ui.svelte.ts` (панели, глава, оглавление); новое
+  состояние — свой модуль, а не поле в чужом; чистая логика — `src/lib/*.ts`
   с тестами Vitest рядом (`*.test.ts`); компоненты — `src/components/`.
 - **Типы API — из Rust** (`ts-rs`, фича `ts`): `npm run types` выгружает их в
   `src/lib/api/types/` (в git). Поменял структуру ответа — выгрузи и закоммить;

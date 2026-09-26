@@ -8,7 +8,7 @@
   import Minus from "@lucide/svelte/icons/minus";
   import Plus from "@lucide/svelte/icons/plus";
   import { api, type GraphFilter, type GraphLayout } from "../lib/api";
-  import { app } from "../lib/app.svelte";
+  import { notes, router } from "../lib/state";
   import { matches } from "../lib/graph-view";
   import { graphHref, noteHref, splitId } from "../lib/ids";
   import { load, save } from "../lib/storage";
@@ -50,8 +50,8 @@
     return () => (stale = true);
   });
 
-  const titles = $derived(new Map(app.notes.flatMap((n) => (n.title ? [[n.id, n.title] as const] : []))));
-  const allTags = $derived([...new Set(app.notes.flatMap((n) => n.tags))].sort((a, b) => a.localeCompare(b, "ru")));
+  const titles = $derived(new Map(notes.all.flatMap((n) => (n.title ? [[n.id, n.title] as const] : []))));
+  const allTags = $derived([...new Set(notes.all.flatMap((n) => n.tags))].sort((a, b) => a.localeCompare(b, "ru")));
   // Цвета — по всем группам, а не по показанным: фильтр не перекрашивает узлы.
   const groups = $derived(shown?.groups ?? []);
 
@@ -79,7 +79,7 @@
     return () => removeEventListener("resize", measure);
   });
 
-  const centerNote = $derived(route.around ? app.notes.find((n) => n.id === route.around) : null);
+  const centerNote = $derived(route.around ? notes.all.find((n) => n.id === route.around) : null);
   const plural = (n: number, one: string, few: string, many: string) => {
     const m10 = n % 10;
     const m100 = n % 100;
@@ -93,7 +93,7 @@
       <span class="graph-title">
         Соседи
         <a href={noteHref(route.around)} title={centerNote?.title ?? route.around}>{splitId(route.around).name}</a>
-        <select aria-label="Глубина" value={route.depth} onchange={(e) => app.go(graphHref(route.around, Number(e.currentTarget.value)), { replace: true })}>
+        <select aria-label="Глубина" value={route.depth} onchange={(e) => router.go(graphHref(route.around, Number(e.currentTarget.value)), { replace: true })}>
           {#each [1, 2, 3] as d (d)}<option value={d}>{d} {plural(d, "шаг", "шага", "шагов")}</option>{/each}
         </select>
         <a class="graph-all" href="/graph">весь граф</a>
@@ -133,7 +133,7 @@
         interactive
         {titles}
         highlight={hits}
-        onopen={(id, newTab) => app.open(id, null, { newTab })}
+        onopen={(id, newTab) => router.open(id, null, { newTab })}
       />
     {/if}
   </section>
