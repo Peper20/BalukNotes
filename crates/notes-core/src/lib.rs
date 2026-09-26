@@ -5,9 +5,13 @@
 //! - [`vault`] — хранилище: какие файлы — заметки, какие — книги;
 //! - [`world`] — компилятор Typst поверх хранилища (виртуальная библиотека
 //!   `/_baluk/`, шрифты, пакеты);
+//! - [`vault_data`] — данные хранилища для заметок `/_vault/…` (реестр
+//!   поставщиков: граф — [`vault_graph`]);
 //! - [`themes`] — темы оформления из `baluk/theme.typ` → CSS;
-//! - [`render`] — HTML-документы тем → одна страница (склейка рисунков,
-//!   якоря заголовков, ссылки между заметками);
+//! - [`render`] — HTML-документы тем → одна страница; обработка —
+//!   цепочка проходов [`passes`] (склейка рисунков, якоря заголовков,
+//!   ссылки между заметками, …);
+//! - [`finish`] — проходы после кэша, под настройки: [`figures`] (рисунки);
 //! - [`book`] — книга по главам: страница одной главы;
 //! - [`storage`] — файлы хранилища за интерфейсом (каталог, в тестах — память);
 //! - [`version`] — версии заметок по файлам, стабильный хэш;
@@ -27,7 +31,9 @@ pub mod check;
 pub mod diag;
 mod error;
 pub mod figures;
+pub mod finish;
 pub mod fonts;
+pub mod frames;
 mod fsutil;
 pub mod graph;
 pub mod lint;
@@ -35,6 +41,7 @@ pub mod notes;
 pub mod outline;
 pub mod page_cache;
 pub mod pages;
+pub mod passes;
 pub mod pipeline;
 pub mod render;
 pub mod search;
@@ -42,6 +49,7 @@ pub mod settings;
 pub mod storage;
 pub mod themes;
 pub mod vault;
+pub mod vault_data;
 pub mod vault_graph;
 pub mod version;
 pub mod warm;

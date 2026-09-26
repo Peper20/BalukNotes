@@ -22,9 +22,10 @@
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Write as _;
-use std::hash::{DefaultHasher, Hash, Hasher};
 
 use serde::Serialize;
+
+use crate::version::StableHasher;
 
 /// Настройки обработки рисунков.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -177,7 +178,7 @@ fn read_variants(s: &str) -> (Vec<(&str, &str)>, usize) {
 }
 
 /// SVG → теги и текст между ними.
-fn tokens(svg: &str) -> Vec<&str> {
+pub(crate) fn tokens(svg: &str) -> Vec<&str> {
     let mut out = Vec::new();
     let mut rest = svg;
     while !rest.is_empty() {
@@ -315,12 +316,18 @@ impl Page {
         *self.colors.entry(values).or_insert(next)
     }
 
-    /// Метка страницы для переменных: хэш таблицы цветов.
+    /// Метка страницы для переменных: хэш таблицы цветов (стабильный —
+    /// одинаков в любой сборке и на любой машине).
     fn scope(&self) -> String {
         let mut table: Vec<_> = self.colors.iter().collect();
         table.sort_by_key(|(_, n)| **n);
-        let mut h = DefaultHasher::new();
-        table.hash(&mut h);
+        let mut h = StableHasher::new();
+        for (values, n) in table {
+            h.u64(*n as u64).u64(values.len() as u64);
+            for v in values {
+                h.str(v);
+            }
+        }
         format!("{:08x}", h.finish() & 0xffff_ffff)
     }
 

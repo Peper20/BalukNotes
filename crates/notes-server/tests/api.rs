@@ -153,7 +153,7 @@ async fn links_and_graph() {
     assert_eq!(status, StatusCode::OK);
     let missing: Vec<_> =
         graph["nodes"].as_array().unwrap().iter().filter(|n| n["kind"].is_null()).map(|n| &n["id"]).collect();
-    assert_eq!(missing, ["Нет/Такой заметки", "Сеть/Nginx"]);
+    assert_eq!(missing, ["Нет/Из несобравшейся", "Нет/Такой заметки", "Сеть/Nginx"]);
     assert!(graph["edges"].as_array().unwrap().iter().any(|e| e["from"] == "Сеть/UFW" && e["to"] == "Сеть/SSH"));
 
     // Граф по фильтру — уже разложенный: соседи SSH на шаг, без ненаписанных.

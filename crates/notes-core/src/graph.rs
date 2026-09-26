@@ -11,8 +11,14 @@
 //!
 //! Файл разбирается заново, только если изменились его время изменения или
 //! размер. Заметке принадлежит её файл; книге — все `.typ` в её папке.
+//!
+//! Вычисляемые пути индекс берёт из собранных страниц: ссылки последней
+//! удачной сборки заметки ([`SourceIndex::set_built`], из кэша страниц)
+//! дописываются к найденным в исходнике — так они попадают в обратные
+//! ссылки и граф. Пока заметка не пересобрана, её прежние ссылки остаются.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::OnceLock;
 use std::time::SystemTime;
 
 use parking_lot::Mutex;
@@ -68,10 +74,21 @@ struct Parsed {
     outline: Outline,
 }
 
-#[derive(Debug, Default)]
+/// Ссылки последней удачной сборки заметки (`None` — не собиралась).
+pub type BuiltLinks = Box<dyn Fn(&NoteId) -> Option<Vec<LinkRef>> + Send + Sync>;
+
+#[derive(Default)]
 pub struct SourceIndex {
     /// Путь файла в хранилище → разбор.
     files: Mutex<HashMap<String, Parsed>>,
+    /// Откуда брать ссылки собранных страниц.
+    built: OnceLock<BuiltLinks>,
+}
+
+impl std::fmt::Debug for SourceIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SourceIndex").field("files", &self.files.lock().len()).finish_non_exhaustive()
+    }
 }
 
 /// Ссылки всех заметок хранилища на данный момент.
@@ -85,6 +102,13 @@ pub struct Snapshot {
 }
 
 impl SourceIndex {
+    /// Дополнять ссылки из исходников ссылками собранных страниц (один раз).
+    pub fn set_built(&self, built: BuiltLinks) {
+        if self.built.set(built).is_err() {
+            tracing::warn!("индекс ссылок: источник собранных страниц уже задан");
+        }
+    }
+
     /// Обходит хранилище и возвращает ссылки всех заметок. Разбираются
     /// только изменившиеся файлы.
     pub fn snapshot(&self, vault: &Vault) -> Result<Snapshot> {
@@ -123,6 +147,17 @@ impl SourceIndex {
         }
         // Удалённые файлы — из кэша вон.
         files.retain(|path, _| seen.contains(path));
+        drop(files);
+        // Ссылки собранных страниц: вычисляемые пути — после буквальных.
+        if let Some(built) = self.built.get() {
+            for (id, own) in &mut links {
+                for link in built(id).unwrap_or_default() {
+                    if !own.contains(&link) {
+                        own.push(link);
+                    }
+                }
+            }
+        }
         Ok(Snapshot { entries, links, outlines })
     }
 }
@@ -292,5 +327,21 @@ mod tests {
         assert_eq!(snap.backlinks(&NoteId::new("A").unwrap()).len(), 1);
         assert_eq!(snap.backlinks(&b).len(), 2);
         assert_eq!(index.files.lock().len(), 3);
+    }
+
+    #[test]
+    fn built_links_are_merged() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("A.typ"), r#"#let t = "B"; #see(t) #see("C")"#).unwrap();
+        std::fs::write(dir.path().join("B.typ"), "").unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        let index = SourceIndex::default();
+        let a = NoteId::new("A").unwrap();
+        assert!(index.snapshot(&vault).unwrap().backlinks(&NoteId::new("B").unwrap()).is_empty());
+        index.set_built(Box::new(|id: &NoteId| (id.as_str() == "A").then(|| vec![link("C", None), link("B", None)])));
+        let snap = index.snapshot(&vault).unwrap();
+        assert_eq!(snap.outgoing(&a), [link("C", None), link("B", None)], "вычисляемая — после буквальных");
+        assert_eq!(snap.backlinks(&NoteId::new("B").unwrap()).len(), 1);
+        assert_eq!(snap.graph().edges.len(), 2);
     }
 }

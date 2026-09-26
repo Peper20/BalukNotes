@@ -6,8 +6,8 @@
 //!   диске (разработка: правки видны сразу и меняют версии заметок) или
 //!   встроенная в бинарник копия `baluk/` (релиз: бинарник самодостаточен).
 //! - `/_vault/…` — **данные хранилища** для заметок (граф: `/_vault/graph/…`),
-//!   их на лету отдаёт ядро ([`VirtualFiles`]); в версию заметки такой файл
-//!   входит версией всего хранилища (см. [`crate::version`]).
+//!   их на лету отдают поставщики реестра [`crate::vault_data::VaultData`]; в версию заметки
+//!   такой файл входит отпечатком поставщика (см. [`crate::vault_data`]).
 //! - Файлы хранилища читаются через [`Storage`]; при чтении запоминается
 //!   отпечаток файла ([`Versions::token`]) — из них версия заметки.
 //! - Пакеты (`@preview/cetz`) — из кэша Typst, при отсутствии скачиваются.
@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use ecow::eco_format;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::{Condvar, Mutex, RwLock};
 use rust_embed::RustEmbed;
 use typst::diag::{FileError, FileResult};
 use typst::foundations::{Bytes, Datetime, Dict, Duration, IntoValue};
@@ -48,19 +48,6 @@ pub const LIB_DIR: &str = "_baluk";
 
 /// Имя виртуального каталога данных хранилища (граф) для заметок.
 pub const VAULT_DIR: &str = "_vault";
-
-/// Файл `/_vault/…` по пути без `/_vault/`: содержимое или сообщение об ошибке.
-pub type VirtualFile = dyn Fn(&str) -> Result<Vec<u8>, String> + Send + Sync;
-
-/// Поставщик файлов `/_vault/…`.
-#[derive(Clone)]
-pub struct VirtualFiles(pub Arc<VirtualFile>);
-
-impl std::fmt::Debug for VirtualFiles {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("VirtualFiles")
-    }
-}
 
 /// Имя входа Typst, через который передаётся тема.
 pub const THEME_INPUT: &str = "theme";
@@ -114,10 +101,10 @@ impl LibrarySource {
 #[derive(Debug)]
 struct Loader {
     storage: Arc<dyn Storage>,
+    /// Отпечатки файлов; в них же — данные хранилища `/_vault/…`.
     versions: Versions,
     lib: LibrarySource,
-    packages: SystemPackages,
-    virtuals: Option<VirtualFiles>,
+    packages: Arc<SystemPackages>,
     /// Отпечатки прочитанных файлов на момент чтения (с последнего сброса).
     read: Mutex<HashMap<FileId, Token>>,
 }
@@ -131,7 +118,7 @@ enum Location {
     /// Путь внутри встроенной библиотеки, без `/` в начале.
     Embedded(String),
     /// Файл данных хранилища (`/_vault/…`), путь без `_vault/`.
-    Virtual(String),
+    Data(String),
 }
 
 impl Loader {
@@ -141,7 +128,7 @@ impl Loader {
         if matches!(id.root(), VirtualRoot::Project)
             && let Some(rest) = vault_relative(vpath)
         {
-            return Ok(Location::Virtual(rest));
+            return Ok(Location::Data(rest));
         }
         let (root, vpath) = match id.root() {
             VirtualRoot::Project => match (lib_relative(vpath)?, &self.lib) {
@@ -161,7 +148,7 @@ impl Loader {
         match (id.root(), self.locate(id)) {
             (VirtualRoot::Project, Ok(Location::Vault(path))) => Some(Dep::Vault(path)),
             (VirtualRoot::Project, Ok(Location::Disk(path))) => Some(Dep::Library(path)),
-            (VirtualRoot::Project, Ok(Location::Virtual(rest))) => Some(Dep::Data(rest)),
+            (VirtualRoot::Project, Ok(Location::Data(rest))) => Some(Dep::Data(rest)),
             _ => None,
         }
     }
@@ -181,9 +168,8 @@ impl Loader {
                 let file = EmbeddedLibrary::get(&rel).ok_or_else(|| FileError::NotFound(rel.into()))?;
                 return Ok(Bytes::new(file.data.into_owned()));
             }
-            Location::Virtual(rest) => {
-                let virtuals = self.virtuals.as_ref().ok_or_else(|| FileError::NotFound(rest.clone().into()))?;
-                return (virtuals.0)(&rest).map(Bytes::new).map_err(|e| FileError::Other(Some(e.into())));
+            Location::Data(rest) => {
+                return self.versions.data().read(&rest).map(Bytes::new).map_err(|e| FileError::Other(Some(e.into())));
             }
         };
         let meta = fs::metadata(&path).map_err(|e| FileError::from_io(e, &path))?;
@@ -234,11 +220,85 @@ pub struct Compilation {
     pub deps: Vec<(Dep, Token)>,
 }
 
+/// Кэши файлов для одновременных сборок: каждая сборка берёт свой
+/// `FileStore` (он сбрасывается перед сборкой, чтобы увидеть изменения
+/// файлов и собрать список зависимостей именно этой заметки) и возвращает
+/// его после. Одновременно — не больше `max` сборок, остальные ждут.
+struct Stores {
+    storage: Arc<dyn Storage>,
+    versions: Versions,
+    lib: LibrarySource,
+    packages: Arc<SystemPackages>,
+    max: usize,
+    /// Свободные кэши и сколько сейчас занято.
+    state: Mutex<(Vec<FileStore<Loader>>, usize)>,
+    freed: Condvar,
+}
+
+impl Stores {
+    /// Взять кэш файлов (подождать, если заняты все `max`).
+    fn take(&self) -> StoreGuard<'_> {
+        let mut state = self.state.lock();
+        while state.1 >= self.max {
+            self.freed.wait(&mut state);
+        }
+        state.1 += 1;
+        let store = state.0.pop();
+        drop(state);
+        let store = store.unwrap_or_else(|| {
+            FileStore::new(Loader {
+                storage: self.storage.clone(),
+                versions: self.versions.clone(),
+                lib: self.lib.clone(),
+                packages: self.packages.clone(),
+                read: Mutex::default(),
+            })
+        });
+        StoreGuard { stores: self, store: Some(store) }
+    }
+}
+
+/// Взятый кэш файлов; при сбросе возвращается в пул.
+struct StoreGuard<'a> {
+    stores: &'a Stores,
+    store: Option<FileStore<Loader>>,
+}
+
+impl std::ops::Deref for StoreGuard<'_> {
+    type Target = FileStore<Loader>;
+    fn deref(&self) -> &Self::Target {
+        self.store.as_ref().expect("до сброса")
+    }
+}
+
+impl std::ops::DerefMut for StoreGuard<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.store.as_mut().expect("до сброса")
+    }
+}
+
+impl Drop for StoreGuard<'_> {
+    fn drop(&mut self) {
+        let mut state = self.stores.state.lock();
+        if let Some(store) = self.store.take() {
+            state.0.push(store);
+        }
+        state.1 -= 1;
+        drop(state);
+        self.stores.freed.notify_one();
+    }
+}
+
+/// Сколько сборок разных заметок идёт одновременно: половина ядер, но не
+/// меньше двух (открыть заметку, пока собирается книга). Темы одной
+/// заметки — ещё и параллельно между собой.
+fn max_parallel() -> usize {
+    std::thread::available_parallelism().map_or(2, |n| (n.get() / 2).max(2))
+}
+
 pub struct Compiler {
-    /// Заметки собираются по одной: `FileStore` сбрасывается перед каждой,
-    /// чтобы увидеть изменения файлов и собрать список зависимостей именно
-    /// этой заметки. Темы одной заметки — параллельно.
-    files: Mutex<FileStore<Loader>>,
+    /// Кэши файлов: сборки разных заметок идут параллельно, каждая со своим.
+    stores: Stores,
     fonts: Arc<Fonts>,
     /// Стандартная библиотека Typst на каждую тему ("" — без темы).
     libraries: RwLock<HashMap<String, Arc<LazyHash<Library>>>>,
@@ -251,17 +311,19 @@ impl std::fmt::Debug for Compiler {
 }
 
 impl Compiler {
-    /// `virtuals` — поставщик файлов `/_vault/…` (без него их нет).
-    pub fn new(
-        storage: Arc<dyn Storage>,
-        lib: LibrarySource,
-        fonts: Arc<Fonts>,
-        virtuals: Option<VirtualFiles>,
-    ) -> Self {
-        let packages = SystemPackages::new(SystemDownloader::new(concat!("baluk-notes/", env!("CARGO_PKG_VERSION"))));
-        let versions = Versions::new(storage.clone());
-        let loader = Loader { storage, versions, lib, packages, virtuals, read: Mutex::default() };
-        Self { files: Mutex::new(FileStore::new(loader)), fonts, libraries: RwLock::default() }
+    /// Хранилище и данные `/_vault/…` — из `versions` ([`Versions::with_data`]).
+    pub fn new(versions: Versions, lib: LibrarySource, fonts: Arc<Fonts>) -> Self {
+        let downloader = SystemDownloader::new(concat!("baluk-notes/", env!("CARGO_PKG_VERSION")));
+        let stores = Stores {
+            storage: versions.storage().clone(),
+            versions,
+            lib,
+            packages: Arc::new(SystemPackages::new(downloader)),
+            max: max_parallel(),
+            state: Mutex::default(),
+            freed: Condvar::new(),
+        };
+        Self { stores, fonts, libraries: RwLock::default() }
     }
 
     pub fn fonts(&self) -> &Arc<Fonts> {
@@ -280,7 +342,7 @@ impl Compiler {
             }
         };
 
-        let mut files = self.files.lock();
+        let mut files = self.stores.take();
         files.reset();
         files.loader().read.lock().clear();
         let time = Time::system();
@@ -347,7 +409,7 @@ impl Compiler {
     /// Компилирует `main` в PDF в одной теме (пустая — без входа `тема`).
     pub fn compile_pdf(&self, main: &Path, theme: &str) -> Result<Vec<u8>, Vec<Diagnostic>> {
         let main = main_id(main).map_err(|m| vec![Diagnostic::error(m)])?;
-        let mut files = self.files.lock();
+        let mut files = self.stores.take();
         files.reset();
         let time = Time::system();
         let library = self.library(theme);

@@ -31,9 +31,11 @@ use crate::pipeline::{Pipeline, TypstPipeline};
 use crate::storage::Storage;
 use crate::themes::ThemeSet;
 use crate::vault::{Entry, NoteId, Vault};
+use crate::vault_data::VaultData;
+use crate::vault_graph::{GraphData, GraphFilter, GraphLayout, Layouts};
 use crate::version::Versions;
 use crate::warm::{WarmStats, Warmer};
-use crate::world::{Compiler, LibrarySource, VirtualFiles};
+use crate::world::{Compiler, LibrarySource};
 use crate::{Error, Result};
 
 pub use crate::pages::NotePage;
@@ -47,7 +49,8 @@ pub struct NotesConfig {
     pub library: LibrarySource,
     /// Дополнительные каталоги шрифтов (к системным и встроенным в Typst).
     pub font_dirs: Vec<PathBuf>,
-    /// Кэш отрисовки на диске (`None` — только в памяти).
+    /// Каталог кэша на диске (`data/cache`, `None` — только в памяти):
+    /// `pages/` — отрисовка заметок, `fonts/` — части шрифтов для браузера.
     pub cache: Option<PathBuf>,
 }
 
@@ -56,6 +59,7 @@ pub struct Notes {
     pages: Pages,
     typst: Arc<TypstPipeline>,
     links: Arc<SourceIndex>,
+    layouts: Arc<Layouts>,
     warmer: Warmer,
 }
 
@@ -78,23 +82,28 @@ impl Notes {
         if !library.is_valid() {
             return Err(Error::Library(format!("в библиотеке {library:?} нет lib.typ")));
         }
-        let fonts = Arc::new(Fonts::load(&config.font_dirs));
+        let fonts =
+            Arc::new(Fonts::load(&config.font_dirs).with_web_cache(config.cache.as_ref().map(|c| c.join("fonts"))));
         let links = Arc::new(SourceIndex::default());
-        // Данные хранилища для заметок (`/_vault/graph/…` — граф по фильтру).
-        let virtuals = {
-            let (links, vault) = (links.clone(), vault.clone());
-            VirtualFiles(Arc::new(move |path: &str| {
-                crate::vault_graph::virtual_file(|| links.snapshot(&vault).map_err(|e| e.to_string()), path)
-            }))
-        };
+        let layouts = Arc::new(Layouts::default());
+        // Данные хранилища для заметок: `/_vault/<префикс>/…`.
+        let data = VaultData::new().with(
+            crate::vault_graph::DATA_PREFIX,
+            GraphData { vault: vault.clone(), index: links.clone(), layouts: layouts.clone() },
+        );
+        let versions = Versions::new(vault.storage().clone()).with_data(data);
         let stamp = crate::cache::stamp(&[library.fingerprint(), fonts.fingerprint()]);
-        let compiler = Compiler::new(vault.storage().clone(), library, fonts, Some(virtuals));
+        let compiler = Compiler::new(versions.clone(), library, fonts);
         let themes = ThemeSet::load(&compiler)?;
-        let disk = config.cache.as_ref().map(|dir| DiskCache::new(dir, &vault.location(), stamp));
-        let cache = PageCache::new(Versions::new(vault.storage().clone()), disk, MEMORY_BUDGET);
+        let disk = config.cache.as_ref().map(|dir| DiskCache::new(dir.join("pages"), &vault.location(), stamp));
+        let cache = PageCache::new(versions, disk, MEMORY_BUDGET);
         let typst = Arc::new(TypstPipeline::new(vault.clone(), compiler, themes));
         let pages = Pages::new(vault, typst.clone(), cache);
-        Ok(Self { pages, typst, links, warmer: Warmer::default() })
+        // Индекс ссылок дополняется ссылками собранных страниц (вычисляемые
+        // пути). Слабая ссылка: кэш страниц сам держит индекс через граф.
+        let cache = Arc::downgrade(pages.cache());
+        links.set_built(Box::new(move |id: &NoteId| cache.upgrade()?.links(id)));
+        Ok(Self { pages, typst, links, layouts, warmer: Warmer::default() })
     }
 
     pub fn vault(&self) -> &Vault {
@@ -117,6 +126,12 @@ impl Notes {
     /// разделы для поиска.
     pub fn index(&self) -> Result<Snapshot> {
         self.links.snapshot(self.vault())
+    }
+
+    /// Граф хранилища по фильтру, разложенный (раскладка — из кэша, если
+    /// такой граф уже раскладывали).
+    pub fn graph_layout(&self, filter: &GraphFilter) -> Result<GraphLayout> {
+        Ok((*self.index()?.graph_layout_cached(filter, &self.layouts)).clone())
     }
 
     /// Превью заметки (и раздела) для подсказки при наведении на ссылку.

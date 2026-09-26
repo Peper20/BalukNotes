@@ -1,4 +1,4 @@
 id: Особые случаи/Ошибка компиляции
 kind: Note
-Error: /Особые случаи/Ошибка компиляции.typ:7: unknown variable: no-such-function
+Error: /Особые случаи/Ошибка компиляции.typ:10: unknown variable: no-such-function
 (нет отрисовки)

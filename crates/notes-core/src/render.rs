@@ -1,62 +1,27 @@
-//! HTML-документы заметки (по одному на тему) → одна страница.
+//! HTML-документы заметки (по одному на тему) → одна сырая страница.
 //!
-//! Работаем с деревом `typst-html` до сериализации, а не с текстом HTML:
-//!
-//! 1. **Склейка тем.** Текст одинаков во всех темах, различаются только
-//!    рисунки (SVG с вшитыми цветами). Каждый `div.k-frame` базового документа
-//!    получает по варианту рисунка на тему: `div.k-frame-v[data-theme]`,
-//!    CSS показывает вариант текущей темы. Порядок рисунков во всех темах
-//!    одинаковый — это проверяется.
-//! 2. **Якоря заголовков.** Заголовку без метки даётся `id` из его текста
-//!    (`Смена порта` → `Смена-порта`), всем — `data-k-anchor` с тем же слагом:
-//!    так ссылка находит раздел и по тексту, и по метке.
-//! 3. **Ссылки между заметками** (`a.k-link` из `#see`) получают адрес от
-//!    [`LinkResolver`]; ссылки на несуществующие заметки помечаются.
-//! 4. **Цвета кода.** В HTML подсветка идёт опорными цветами (см.
-//!    `baluk/code.typ`), здесь они становятся CSS-переменными темы.
-//! 5. **Скобки в формулах.** Typst помечает парные скобки растягиваемыми, а
-//!    Chrome рисует растягиваемую скобку с широкими полями: `f ( x )`. Если
-//!    внутри нет высокого (дробей, корней, пределов, матриц), растягивать
-//!    нечего — ставим `stretchy="false"`, и скобки плотные, как в PDF.
+//! Работаем с деревом `typst-html` до сериализации, а не с текстом HTML.
+//! Сама обработка — цепочка проходов [`crate::passes`]: склейка тем, якоря
+//! заголовков, ссылки между заметками, скобки в формулах, теги (по дереву),
+//! затем цвета кода (по тексту). Здесь — типы страницы, проверка, что
+//! рисунков во всех темах поровну, сериализация и общие помощники проходов.
 
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
-use ecow::EcoVec;
 use serde::{Deserialize, Serialize};
 use typst::model::Document as _;
-use typst_html::tag::mathml;
-use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlFrame, HtmlNode, HtmlOptions, HtmlTag, attr, tag};
+use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlFrame, HtmlNode, HtmlOptions, attr};
+
+use crate::passes::{self, Context};
 
 // Константой (HtmlAttr::constant) интернируются только имена до 12 символов.
-static DATA_THEME: LazyLock<HtmlAttr> = LazyLock::new(|| attr_name("data-theme"));
-static DATA_TARGET: LazyLock<HtmlAttr> = LazyLock::new(|| attr_name("data-k-target"));
-static DATA_ANCHOR: LazyLock<HtmlAttr> = LazyLock::new(|| attr_name("data-k-anchor"));
+pub(crate) static DATA_TARGET: LazyLock<HtmlAttr> = LazyLock::new(|| attr_name("data-k-target"));
+pub(crate) static DATA_ANCHOR: LazyLock<HtmlAttr> = LazyLock::new(|| attr_name("data-k-anchor"));
 
-fn attr_name(name: &str) -> HtmlAttr {
+pub(crate) fn attr_name(name: &str) -> HtmlAttr {
     HtmlAttr::intern(name).expect("имя атрибута задано в коде и верно")
 }
-
-const STRETCHY: HtmlAttr = HtmlAttr::constant("stretchy");
-
-/// Скобки, которые Typst растягивает по содержимому.
-const FENCES: &[&str] = &["(", ")", "[", "]", "{", "}", "|", "‖", "⟨", "⟩", "⌊", "⌋", "⌈", "⌉"];
-
-/// Элементы MathML, ради которых скобку стоит растягивать.
-const TALL: [HtmlTag; 7] =
-    [mathml::mfrac, mathml::mtable, mathml::msqrt, mathml::mroot, mathml::munderover, mathml::munder, mathml::mover];
-
-/// Опорные цвета подсветки кода (`baluk/code.typ`) → переменные CSS.
-const CODE_COLORS: [(&str, &str); 8] = [
-    ("#010100", "text"),
-    ("#010101", "key"),
-    ("#010102", "type"),
-    ("#010103", "string"),
-    ("#010104", "number"),
-    ("#010105", "comment"),
-    ("#010106", "function"),
-    ("#010107", "hl"),
-];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -123,159 +88,43 @@ pub fn render(docs: Vec<(String, HtmlDocument)>, links: &dyn LinkResolver) -> Re
         }
     });
 
-    let mut state =
-        State { themes: &themes, frames, frame: 0, ids, links, out_headings: vec![], out_links: vec![], tags: vec![] };
-    walk_mut(base.root_mut(), &mut |el| state.visit(el));
-    let State { out_headings: headings, out_links, tags, .. } = state;
+    let mut ctx = Context::new(&themes, frames, ids, links);
+    passes::run_tree(base.root_mut(), &mut ctx, passes::TREE);
+    let Context { headings, out_links, tags, .. } = ctx;
 
     let title = base.info().title.as_ref().map(ToString::to_string);
-    let html = typst_html::html(&base, &HtmlOptions::default())
+    let html = passes::timed("сериализация", || typst_html::html(&base, &HtmlOptions::default()))
         .map_err(|errs| errs.iter().map(|e| e.message.to_string()).collect::<Vec<_>>().join("; "))?;
     let (styles, body) = split_html(&html);
-    Ok(Rendered { title, styles, body: replace_code_colors(&body), headings, links: out_links, tags })
+    let mut page = Rendered { title, styles, body, headings, links: out_links, tags };
+    passes::run_text(&mut page, passes::TEXT);
+    Ok(page)
 }
 
-struct State<'a> {
-    themes: &'a [String],
-    /// Рисунки небазовых тем, по порядку.
-    frames: Vec<Vec<HtmlFrame>>,
-    frame: usize,
-    ids: HashSet<String>,
-    links: &'a dyn LinkResolver,
-    out_headings: Vec<Heading>,
-    out_links: Vec<LinkRef>,
-    tags: Vec<String>,
-}
+/// Знаки, которые в слаге становятся словами: иначе «C» и «C++» получили
+/// бы один слаг (`C` и `C-2` по порядку), а ссылка по тексту — не тот раздел.
+const SIGN_WORDS: [(char, &str); 5] = [('+', "plus"), ('#', "sharp"), ('%', "percent"), ('&', "and"), ('@', "at")];
 
-impl State<'_> {
-    fn visit(&mut self, el: &mut HtmlElement) {
-        if has_class(el, "k-frame") {
-            self.theme_frame(el);
-        } else if is_heading(el) && (has_class(el, "k-h") || el.attrs.get(attr::class).is_none()) {
-            // k-h — заголовок baluk; без классов — обычный `=` чистого Typst.
-            self.heading(el);
-        } else if el.tag == tag::a && has_class(el, "k-link") {
-            self.link(el);
-        } else if el.tag == mathml::mrow {
-            tighten_fences(el);
-        } else if el.tag == tag::ul && has_class(el, "k-tags") {
-            self.tags.extend(el.children.iter().filter_map(|c| match c {
-                HtmlNode::Element(li) => Some(text_of(li, None)),
-                _ => None,
-            }));
-        }
-    }
-
-    /// div.k-frame > svg  →  div.k-frame > div.k-frame-v[data-theme] × темы.
-    fn theme_frame(&mut self, el: &mut HtmlElement) {
-        let Some(base) = el.children.iter().find_map(|c| match c {
-            HtmlNode::Frame(f) => Some(f.clone()),
-            _ => None,
-        }) else {
-            return;
-        };
-        let i = self.frame;
-        self.frame += 1;
-        let mut children = EcoVec::new();
-        for (t, theme) in self.themes.iter().enumerate() {
-            let frame = if t == 0 {
-                base.clone()
-            } else {
-                // id и якоря внутри SVG есть только у базового варианта,
-                // иначе на странице окажутся повторяющиеся id.
-                let mut f = self.frames[t - 1][i].clone();
-                f.id = None;
-                f.anchors = EcoVec::new();
-                f
-            };
-            children.push(HtmlNode::Element(
-                HtmlElement::new(tag::div)
-                    .with_attr(attr::class, "k-frame-v")
-                    .with_attr(*DATA_THEME, theme.as_str())
-                    .with_children(EcoVec::from([HtmlNode::Frame(frame)])),
-            ));
-        }
-        el.children = children;
-    }
-
-    fn heading(&mut self, el: &mut HtmlElement) {
-        let text = text_of(el, Some("k-num")).trim().to_owned();
-        let anchor = slug(&text);
-        let id = if let Some(id) = el.attrs.get(attr::id) {
-            id.to_string()
-        } else {
-            let id = unique(&anchor, &mut self.ids);
-            el.attrs.push(attr::id, id.as_str());
-            id
-        };
-        el.attrs.push(*DATA_ANCHOR, anchor.as_str());
-        // Класс k-hN — уровень оформления (глава, раздел, …), не тег.
-        let level = class_level(el).or_else(|| tag_level(el)).unwrap_or(2);
-        self.out_headings.push(Heading { level, id, anchor, text });
-    }
-
-    fn link(&mut self, el: &mut HtmlElement) {
-        let Some(target) = el.attrs.get(*DATA_TARGET).map(ToString::to_string) else { return };
-        let anchor = el.attrs.get(*DATA_ANCHOR).map(ToString::to_string);
-        if let Some(href) = self.links.href(&target, anchor.as_deref()) {
-            el.attrs.push(attr::href, href);
-        } else {
-            if let Some(class) = el.attrs.get_mut(attr::class) {
-                class.push_str(" k-link-broken");
-            }
-            el.attrs.push(attr::title, format!("нет заметки «{target}»"));
-        }
-        let link = LinkRef { target, anchor };
-        if !self.out_links.contains(&link) {
-            self.out_links.push(link);
-        }
-    }
-}
-
-/// `mrow` вида `( … )` без высокого внутри → скобки не растягиваются.
-fn tighten_fences(row: &mut HtmlElement) {
-    let elems: Vec<usize> =
-        row.children.iter().enumerate().filter_map(|(i, c)| matches!(c, HtmlNode::Element(_)).then_some(i)).collect();
-    let (Some(&first), Some(&last)) = (elems.first(), elems.last()) else { return };
-    if first == last {
-        return;
-    }
-    let is_fence = |node: &HtmlNode| {
-        matches!(node, HtmlNode::Element(e)
-            if e.tag == mathml::mo && e.attrs.get(STRETCHY).is_none() && FENCES.contains(&text_of(e, None).as_str()))
-    };
-    if !is_fence(&row.children[first]) || !is_fence(&row.children[last]) {
-        return;
-    }
-    let mut tall = false;
-    for node in &row.children[first + 1..last] {
-        if let HtmlNode::Element(e) = node {
-            walk(e, &mut |x| tall |= TALL.contains(&x.tag));
-        }
-    }
-    if tall {
-        return;
-    }
-    let children = row.children.make_mut();
-    for i in [first, last] {
-        if let HtmlNode::Element(mo) = &mut children[i] {
-            mo.attrs.push(STRETCHY, "false");
-        }
-    }
-}
-
-/// Слаг для якоря: буквы и цифры (любого алфавита), `-` и `_`; остальное —
+/// Слаг для якоря: буквы и цифры (любого алфавита), `-` и `_`; знаки из
+/// [`SIGN_WORDS`] — словами (`C++` → `C-plus-plus`); остальное —
 /// разделители, схлопываются в один `-`. Регистр сохраняется.
 pub fn slug(text: &str) -> String {
     let mut out = String::new();
     let mut sep = false;
+    let word = |out: &mut String, sep: &mut bool, w: &str| {
+        if *sep && !out.is_empty() {
+            out.push('-');
+        }
+        *sep = false;
+        out.push_str(w);
+    };
     for ch in text.chars() {
         if ch.is_alphanumeric() || ch == '_' || ch == '-' {
-            if sep && !out.is_empty() {
-                out.push('-');
-            }
-            sep = false;
-            out.push(ch);
+            word(&mut out, &mut sep, ch.encode_utf8(&mut [0; 4]));
+        } else if let Some((_, w)) = SIGN_WORDS.iter().find(|(c, _)| *c == ch) {
+            sep = true;
+            word(&mut out, &mut sep, w);
+            sep = true;
         } else {
             sep = true;
         }
@@ -294,28 +143,11 @@ pub(crate) fn unique(base: &str, used: &mut HashSet<String>) -> String {
     id
 }
 
-fn has_class(el: &HtmlElement, class: &str) -> bool {
+pub(crate) fn has_class(el: &HtmlElement, class: &str) -> bool {
     el.attrs.get(attr::class).is_some_and(|c| c.split_whitespace().any(|c| c == class))
 }
 
-fn is_heading(el: &HtmlElement) -> bool {
-    [tag::h2, tag::h3, tag::h4, tag::h5, tag::h6].contains(&el.tag)
-}
-
-/// `<h3>` → 3: у чистого Typst `=` — это `<h2>`, раздел (как `k-h2` заметки).
-fn tag_level(el: &HtmlElement) -> Option<u8> {
-    [tag::h2, tag::h3, tag::h4, tag::h5, tag::h6]
-        .iter()
-        .position(|t| *t == el.tag)
-        .and_then(|i| u8::try_from(i + 2).ok())
-}
-
-/// `k-h2` → 2.
-fn class_level(el: &HtmlElement) -> Option<u8> {
-    el.attrs.get(attr::class)?.split_whitespace().find_map(|c| c.strip_prefix("k-h").and_then(|n| n.parse().ok()))
-}
-
-fn text_of(el: &HtmlElement, skip_class: Option<&str>) -> String {
+pub(crate) fn text_of(el: &HtmlElement, skip_class: Option<&str>) -> String {
     let mut out = String::new();
     collect_text(el, skip_class, &mut out);
     out
@@ -331,7 +163,7 @@ fn collect_text(el: &HtmlElement, skip_class: Option<&str>, out: &mut String) {
     }
 }
 
-fn walk(el: &HtmlElement, f: &mut dyn FnMut(&HtmlElement)) {
+pub(crate) fn walk(el: &HtmlElement, f: &mut dyn FnMut(&HtmlElement)) {
     f(el);
     for child in &el.children {
         if let HtmlNode::Element(e) = child {
@@ -340,7 +172,7 @@ fn walk(el: &HtmlElement, f: &mut dyn FnMut(&HtmlElement)) {
     }
 }
 
-fn walk_mut(el: &mut HtmlElement, f: &mut dyn FnMut(&mut HtmlElement)) {
+pub(crate) fn walk_mut(el: &mut HtmlElement, f: &mut dyn FnMut(&mut HtmlElement)) {
     f(el);
     for child in el.children.make_mut() {
         if let HtmlNode::Element(e) = child {
@@ -390,16 +222,6 @@ fn split_html(html: &str) -> (String, String) {
     (styles, body.to_owned())
 }
 
-fn replace_code_colors(html: &str) -> String {
-    let mut out = html.to_owned();
-    for (hex, name) in CODE_COLORS {
-        // Только в CSS-свойствах (style="color: …"): в SVG опорных цветов нет,
-        // но и случайное совпадение в тексте не трогаем.
-        out = out.replace(&format!("color: {hex}"), &format!("color: var(--k-code-{name})"));
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -408,7 +230,12 @@ mod tests {
     fn slugs() {
         assert_eq!(slug("Смена порта"), "Смена-порта");
         assert_eq!(slug("  Вход по ключу. "), "Вход-по-ключу");
-        assert_eq!(slug("C++ и сборка"), "C-и-сборка");
+        assert_eq!(slug("C++ и сборка"), "C-plus-plus-и-сборка");
+        assert_eq!(slug("C"), "C");
+        assert_eq!(slug("C#"), "C-sharp");
+        assert_eq!(slug("50% готово"), "50-percent-готово");
+        assert_eq!(slug("a+b"), "a-plus-b");
+        assert_eq!(slug("+"), "plus");
         assert_eq!(slug("sec-классы"), "sec-классы");
         assert_eq!(slug("«»"), "раздел");
     }
@@ -427,11 +254,5 @@ mod tests {
         let (styles, body) = split_html(html);
         assert_eq!(styles, "<style>a{}</style><style>b{}</style>");
         assert_eq!(body, "<p>текст</p>");
-    }
-
-    #[test]
-    fn code_colors_become_variables() {
-        let got = replace_code_colors(r##"<span style="color: #010101">fn</span> fill="#010101""##);
-        assert_eq!(got, r##"<span style="color: var(--k-code-key)">fn</span> fill="#010101""##);
     }
 }

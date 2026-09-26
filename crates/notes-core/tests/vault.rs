@@ -118,6 +118,7 @@ fn check_finds_exactly_the_planted_problems() {
     assert_eq!(
         broken,
         [
+            ("Особые случаи/Ошибка компиляции", "Нет/Из несобравшейся", None),
             ("Особые случаи/Ссылки", "Нет/Такой заметки", None),
             ("Особые случаи/Ссылки", "Сеть/SSH", Some("Нет такого раздела")),
             ("Сеть/UFW", "Сеть/Nginx", None),
@@ -272,9 +273,15 @@ fn vault_graph_follows_the_vault() {
     assert!(body.contains(r#"class="k-graph""#) && body.contains("data-k-graph"), "разметка для клиента");
     assert!(body.contains("&quot;id&quot;:&quot;A&quot;") && !body.contains("&quot;id&quot;:&quot;C&quot;"));
 
+    // Правка, не меняющая граф (текст, новая заметка без связей в той же
+    // папке, — вне соседей B), заметку с графом не трогает.
+    std::fs::write(dir.path().join("A.typ"), format!("{head}Текст. #see(\"B\")\n")).unwrap();
+    std::fs::write(dir.path().join("D.typ"), head).unwrap();
+    assert_eq!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "версия — по ответу графа");
+
     // Новая заметка ссылается на B — граф заметки устарел и пересобирается.
     std::fs::write(dir.path().join("C.typ"), format!("{head}#see(\"B\")\n")).unwrap();
-    assert_ne!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "версия — по всему хранилищу");
+    assert_ne!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "граф изменился");
     let body = notes.page(&id("Граф"), OPTS).unwrap().rendered.clone().unwrap().body.clone();
     assert!(body.contains("&quot;id&quot;:&quot;C&quot;"));
 }
@@ -313,6 +320,24 @@ fn search_finds_sections_with_exact_anchors() {
 
     assert!(NOTES.search("нетакогословавхранилище", 10).unwrap().is_empty());
     assert!(NOTES.search("   ", 10).unwrap().is_empty());
+}
+
+#[test]
+fn computed_links_come_from_built_pages() {
+    let notes = Notes::open(&NotesConfig {
+        vault: repo().join("tests/vault"),
+        library: LibrarySource::Dir(repo().join("baluk")),
+        font_dirs: vec![],
+        cache: None,
+    })
+    .unwrap();
+    let target = id("Формулы и теги");
+    let from = |notes: &Notes| -> Vec<String> {
+        notes.index().unwrap().backlinks(&target).into_iter().map(|b| b.from.to_string()).collect()
+    };
+    assert!(!from(&notes).contains(&"Особые случаи/Ссылки".to_owned()), "в исходнике путь вычисляемый");
+    notes.page(&id("Особые случаи/Ссылки"), OPTS).unwrap();
+    assert!(from(&notes).contains(&"Особые случаи/Ссылки".to_owned()), "после сборки — из её ссылок");
 }
 
 #[test]

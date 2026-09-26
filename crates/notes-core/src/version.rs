@@ -19,7 +19,8 @@ use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{FileMeta, Storage, is_typ};
+use crate::storage::{FileMeta, Storage};
+use crate::vault_data::VaultData;
 
 /// Стабильный хэш: алгоритм и порядок байтов закреплены.
 #[derive(Debug, Default, Clone)]
@@ -60,8 +61,8 @@ impl StableHasher {
 pub enum Dep {
     /// Файл хранилища (путь от корня, через `/`).
     Vault(String),
-    /// Данные хранилища для заметок: `/_vault/<путь>` (граф). Отпечаток —
-    /// всё хранилище (см. [`Versions::token`]).
+    /// Данные хранилища для заметок: `/_vault/<путь>` (граф). Отпечаток
+    /// даёт поставщик ([`crate::vault_data`]).
     Data(String),
     /// Файл библиотеки оформления на диске (`--library` каталогом).
     /// Встроенная библиотека в зависимости не входит — она входит в метку
@@ -72,22 +73,39 @@ pub enum Dep {
 /// Отпечаток файла на момент чтения.
 pub type Token = u64;
 
-/// Отпечатки файлов по хранилищу.
+/// Отпечатки файлов по хранилищу и его данным.
 #[derive(Debug, Clone)]
 pub struct Versions {
     storage: Arc<dyn Storage>,
+    data: VaultData,
 }
 
 impl Versions {
+    /// Без данных хранилища (`/_vault/…` — нет таких файлов).
     pub fn new(storage: Arc<dyn Storage>) -> Self {
-        Self { storage }
+        Self { storage, data: VaultData::default() }
+    }
+
+    /// С данными хранилища `/_vault/…`.
+    #[must_use]
+    pub fn with_data(mut self, data: VaultData) -> Self {
+        self.data = data;
+        self
+    }
+
+    pub fn storage(&self) -> &Arc<dyn Storage> {
+        &self.storage
+    }
+
+    pub fn data(&self) -> &VaultData {
+        &self.data
     }
 
     /// Текущий отпечаток файла. Пропавший файл — тоже отпечаток (другой).
     pub fn token(&self, dep: &Dep) -> Token {
         match dep {
             Dep::Vault(path) => meta_token(self.storage.stat(path).ok()),
-            Dep::Data(_) => self.vault_token(),
+            Dep::Data(path) => self.data.token(path),
             Dep::Library(path) => {
                 let meta = std::fs::metadata(path).ok().map(|m| FileMeta {
                     is_dir: m.is_dir(),
@@ -103,19 +121,6 @@ impl Versions {
     pub fn current(&self, deps: &[Dep]) -> String {
         let tokens: Vec<_> = deps.iter().map(|d| (d.clone(), self.token(d))).collect();
         combine(&tokens)
-    }
-
-    /// Отпечаток всего хранилища: пути, размеры и времена всех `.typ`
-    /// (служебные каталоги `_…`, `.…` не входят).
-    fn vault_token(&self) -> Token {
-        let mut files: Vec<String> = self.storage.list().unwrap_or_default();
-        files.retain(|p| is_typ(p));
-        files.sort();
-        let mut h = StableHasher::new();
-        for path in &files {
-            h.str(path).u64(meta_token(self.storage.stat(path).ok()));
-        }
-        h.finish()
     }
 }
 
@@ -188,17 +193,19 @@ mod tests {
     }
 
     #[test]
-    fn vault_data_follows_every_note() {
-        let mem = Arc::new(MemStorage::new());
-        mem.write("A.typ", "");
-        mem.write("_baluk/lib.typ", "");
-        let versions = Versions::new(mem.clone());
-        let deps = [Dep::Data("graph/x.json".into())];
+    fn data_token_comes_from_provider() {
+        use crate::vault_data::FnProvider;
+        use parking_lot::Mutex;
+        let answer = Arc::new(Mutex::new("1"));
+        let data = {
+            let answer = answer.clone();
+            VaultData::new().with("x", FnProvider(move |_: &str| Ok(answer.lock().as_bytes().to_vec())))
+        };
+        let versions = Versions::new(Arc::new(MemStorage::new())).with_data(data);
+        let deps = [Dep::Data("x/a".into())];
         let v1 = versions.current(&deps);
-        mem.write("_baluk/lib.typ", "служебное не в счёт");
-        mem.write("картинка.png", "и не .typ");
         assert_eq!(v1, versions.current(&deps));
-        mem.write("B.typ", "");
-        assert_ne!(v1, versions.current(&deps));
+        *answer.lock() = "2";
+        assert_ne!(v1, versions.current(&deps), "ответ поставщика изменился — версия тоже");
     }
 }

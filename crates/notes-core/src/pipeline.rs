@@ -1,6 +1,7 @@
 //! Сборка заметки — чистая функция от файлов: исходник → компиляция по
-//! темам ([`crate::world`]) → отрисовка ([`crate::render`]) → сырая
-//! страница, и обработка рисунков под настройки ([`crate::figures`]).
+//! темам ([`crate::world`]) → отрисовка ([`crate::render`], проходы
+//! [`crate::passes`]) → сырая страница, и проходы под настройки
+//! ([`crate::finish`]: рисунки).
 //!
 //! Ни кэша, ни блокировок: их добавляют слои выше ([`crate::pages`],
 //! [`crate::page_cache`]). Интерфейс [`Pipeline`] — чтобы проверять эти слои
@@ -11,7 +12,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use crate::diag::Diagnostic;
-use crate::figures::{self, FigureOptions};
+use crate::figures::FigureOptions;
+use crate::finish;
 use crate::fonts::Fonts;
 use crate::render::{self, LinkResolver, Rendered};
 use crate::themes::ThemeSet;
@@ -98,6 +100,7 @@ impl TypstPipeline {
 impl Pipeline for TypstPipeline {
     fn build(&self, entry: &Entry, style: LinkStyle) -> Build {
         let started = Instant::now();
+        let _span = tracing::debug_span!("сборка", id = %entry.id).entered();
         let compilation = self.compiler.compile_html(&entry.main, &self.themes.names());
         let links = VaultLinks { vault: &self.vault, style, from: &entry.id };
         let (raw, errors) = match compilation.docs {
@@ -116,26 +119,10 @@ impl Pipeline for TypstPipeline {
         Build { raw, errors, warnings, deps, files, took }
     }
 
-    /// Обработка рисунков: общие глифы, один SVG на темы, округление.
+    /// Проходы после кэша ([`crate::finish`]): рисунки под настройки.
     fn finish(&self, raw: &Rendered, opts: FigureOptions) -> Rendered {
-        let o = figures::optimize(&raw.body, &self.themes.names(), opts);
-        tracing::debug!(
-            before = raw.body.len(),
-            after = o.body.len(),
-            figures = o.stats.figures,
-            merged = o.stats.merged,
-            glyphs = o.stats.glyphs,
-            colors = o.stats.colors,
-            "рисунки"
-        );
-        Rendered {
-            title: raw.title.clone(),
-            styles: format!("{}{}", raw.styles, o.styles),
-            body: o.body,
-            headings: raw.headings.clone(),
-            links: raw.links.clone(),
-            tags: raw.tags.clone(),
-        }
+        let themes = self.themes.names();
+        finish::finish(raw, &finish::Settings { themes: &themes, opts }, finish::FINISH)
     }
 }
 
