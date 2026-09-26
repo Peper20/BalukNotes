@@ -53,6 +53,11 @@ enum Command {
         /// Адрес; для доступа из сети — 0.0.0.0:8421.
         #[arg(long, default_value = "127.0.0.1:8421")]
         addr: SocketAddr,
+        /// Токен доступа: без него сервер отвечает 401. Передаётся заголовком
+        /// `Authorization: Bearer …`, параметром `?token=` (сервер ставит
+        /// cookie) или cookie `notes_token`. Нужен встроенному серверу Tauri.
+        #[arg(long, env = "NOTES_TOKEN", hide_env_values = true)]
+        token: Option<String>,
     },
     /// Проверить хранилище: ошибки компиляции и битые ссылки (код выхода 1).
     Check {
@@ -125,7 +130,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
     tracing::info!(ms = started.elapsed().as_millis(), "хранилище {}", notes.vault().root().display());
 
     match cli.command {
-        Command::Serve { addr } => serve(notes, &cli.data, addr),
+        Command::Serve { addr, token } => serve(notes, &cli.data, addr, token),
         Command::Check { json } => run_check(&notes, json),
         Command::Build { out } => {
             // Рисунки — с той же точностью, что выбрана в приложении.
@@ -141,9 +146,12 @@ fn open_settings(notes: &Notes, data: &std::path::Path) -> Result<SettingsStore>
     SettingsStore::open(data.join("settings.json"), schema).context("настройки")
 }
 
-fn serve(notes: Notes, data: &std::path::Path, addr: SocketAddr) -> Result<ExitCode> {
+fn serve(notes: Notes, data: &std::path::Path, addr: SocketAddr, token: Option<String>) -> Result<ExitCode> {
     let settings = open_settings(&notes, data)?;
-    let state = notes_server::AppState { notes: Arc::new(notes), settings: Arc::new(settings) };
+    let state = notes_server::AppState::new(Arc::new(notes), Arc::new(settings)).with_token(token);
+    if state.token.is_some() {
+        tracing::info!("доступ — только с токеном");
+    }
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async move {
         let listener = tokio::net::TcpListener::bind(addr).await.with_context(|| format!("занять {addr}"))?;

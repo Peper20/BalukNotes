@@ -166,10 +166,10 @@ impl Fonts {
 
     /// Сжать все части шрифтов `families` заранее (в фоне при запуске
     /// сервера: первая страница не ждёт сжатия).
-    pub fn warm_web(&self, families: &[&str]) {
+    pub fn warm_web(&self, families: &[impl AsRef<str>]) {
         for family in families {
             for v in WebVariant::ALL {
-                if let Some(face) = self.web_face(family, v) {
+                if let Some(face) = self.web_face(family.as_ref(), v) {
                     for c in &face.chunks {
                         face.file(&c.name);
                     }

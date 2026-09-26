@@ -89,7 +89,7 @@ fn write_fonts(notes: &Notes, assets: &Path) -> Result<()> {
     let dir = assets.join("fonts");
     fs::create_dir_all(&dir)?;
     let mut jobs = Vec::new();
-    for family in notes_server::web_fonts() {
+    for family in notes_server::web_fonts(notes) {
         for v in WebVariant::ALL {
             let Some(face) = notes.fonts().web_face(family, v) else { continue };
             for chunk in &face.chunks {
