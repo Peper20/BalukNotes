@@ -5,6 +5,7 @@
 // ждут tools/visual.mjs и e2e-тесты — договорённость для любого клиента.
 
 import { api, ApiError, type NotePage } from "../api";
+import { ChapterCache } from "../chapters";
 import type { Place } from "../places";
 import { chapterSelect, scrollIntent, tocItems, type ScrollIntent } from "../reading";
 import { places } from "./places.svelte";
@@ -34,6 +35,8 @@ class Reader {
   toc = $derived(tocItems(this.page?.rendered?.headings ?? [], Number(settings.values["panels.toc_depth"] ?? 2)));
 
   #ctrl: AbortController | null = null;
+  /** Соседние главы показанной книги — заранее. */
+  #chapters = new ChapterCache((id, chapter, signal) => api.note(id, signal, { chapter }));
   /** Место для заметки, которая сейчас загружается (из истории или памяти). */
   #place: Place | null = null;
 
@@ -49,6 +52,7 @@ class Reader {
     this.page = null;
     this.failure = null;
     this.version = null;
+    this.#chapters.clear();
     document.title = "Заметки";
   }
 
@@ -86,12 +90,17 @@ class Reader {
     const place = this.#place;
     this.#place = null;
     const where = { keepScroll, current: this.chapter, anchor: router.anchor, place };
+    const select = chapterSelect(settings.values["books.pages"] === "chapters", { ...where, chapter });
+    // Соседняя глава той же версии книги — уже здесь (пересборку не ждём из запаса).
+    const k = select.chapter ?? (select.anchor != null ? this.page?.book?.anchors[select.anchor] : undefined);
+    const ready = !keepScroll && k != null ? this.#chapters.get(id, k, this.version) : null;
     try {
-      const page = await api.note(id, ctrl.signal, chapterSelect(settings.values["books.pages"] === "chapters", { ...where, chapter }));
+      const page = ready ?? (await api.note(id, ctrl.signal, select));
       if (this.#ctrl !== ctrl) return;
       this.version = page.version;
       this.scroll = scrollIntent(scroll, { ...where, y: scrollY });
       this.page = page;
+      this.#chapters.shown(page);
       places.visited(id);
       document.title = `${page.rendered?.title ?? router.currentNote?.name ?? id} — Заметки`;
       this.setStatus(`собрано ${new Date().toLocaleTimeString("ru-RU")}`);

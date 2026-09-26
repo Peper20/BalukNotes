@@ -74,6 +74,27 @@ test("главу книги отдаёт сервер: в странице од�
   expect(requested.at(-1)).toBe("/api/notes/Книга?anchor=Картинка-из-файла");
 });
 
+test("соседние главы — заранее: переход без запроса к серверу", async ({ page }) => {
+  const requested: string[] = [];
+  page.on("request", (r) => {
+    const url = new URL(r.url());
+    if (url.pathname.startsWith("/api/notes/")) requested.push(decodeURIComponent(url.pathname + url.search));
+  });
+  const prefetched = page.waitForResponse((r) => decodeURIComponent(r.url()).endsWith("/api/notes/Книга?chapter=1"));
+  await open(page, "Книга");
+  await prefetched;
+  const before = requested.length;
+  await page.keyboard.press("BracketRight");
+  await ready(page);
+  await expect(page.locator("#note h2.k-h1")).toHaveText(/Продолжение/);
+  expect(requested.slice(before)).not.toContain("/api/notes/Книга?chapter=1");
+  // И назад — тоже из запаса (показанная глава остаётся соседкой).
+  await page.keyboard.press("BracketLeft");
+  await ready(page);
+  await expect(page.locator("#note h2.k-h1")).toHaveText(/Основы/);
+  expect(requested.slice(before)).not.toContain("/api/notes/Книга?chapter=0");
+});
+
 test("имена с + # % и глубокая вложенность", async ({ page }) => {
   await open(page, "Особые случаи/Ссылки");
   for (const name of ["C++ и C#", "50% готово", "Дно"]) {
