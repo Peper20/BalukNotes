@@ -5,6 +5,8 @@
 //! - [`vault`] — хранилище: какие файлы — заметки, какие — книги;
 //! - [`world`] — компилятор Typst поверх хранилища (виртуальная библиотека
 //!   `/_baluk/`, шрифты, пакеты);
+//! - [`vault_data`] — данные хранилища для заметок `/_vault/…` (реестр
+//!   поставщиков: граф — [`vault_graph`]);
 //! - [`themes`] — темы оформления из `baluk/theme.typ` → CSS;
 //! - [`render`] — HTML-документы тем → одна страница (склейка рисунков,
 //!   якоря заголовков, ссылки между заметками);
@@ -42,6 +44,7 @@ pub mod settings;
 pub mod storage;
 pub mod themes;
 pub mod vault;
+pub mod vault_data;
 pub mod vault_graph;
 pub mod version;
 pub mod warm;

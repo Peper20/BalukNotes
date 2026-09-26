@@ -6,8 +6,8 @@
 //!   диске (разработка: правки видны сразу и меняют версии заметок) или
 //!   встроенная в бинарник копия `baluk/` (релиз: бинарник самодостаточен).
 //! - `/_vault/…` — **данные хранилища** для заметок (граф: `/_vault/graph/…`),
-//!   их на лету отдаёт ядро ([`VirtualFiles`]); в версию заметки такой файл
-//!   входит версией всего хранилища (см. [`crate::version`]).
+//!   их на лету отдают поставщики реестра [`crate::vault_data::VaultData`]; в версию заметки
+//!   такой файл входит отпечатком поставщика (см. [`crate::vault_data`]).
 //! - Файлы хранилища читаются через [`Storage`]; при чтении запоминается
 //!   отпечаток файла ([`Versions::token`]) — из них версия заметки.
 //! - Пакеты (`@preview/cetz`) — из кэша Typst, при отсутствии скачиваются.
@@ -48,19 +48,6 @@ pub const LIB_DIR: &str = "_baluk";
 
 /// Имя виртуального каталога данных хранилища (граф) для заметок.
 pub const VAULT_DIR: &str = "_vault";
-
-/// Файл `/_vault/…` по пути без `/_vault/`: содержимое или сообщение об ошибке.
-pub type VirtualFile = dyn Fn(&str) -> Result<Vec<u8>, String> + Send + Sync;
-
-/// Поставщик файлов `/_vault/…`.
-#[derive(Clone)]
-pub struct VirtualFiles(pub Arc<VirtualFile>);
-
-impl std::fmt::Debug for VirtualFiles {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("VirtualFiles")
-    }
-}
 
 /// Имя входа Typst, через который передаётся тема.
 pub const THEME_INPUT: &str = "theme";
@@ -114,10 +101,10 @@ impl LibrarySource {
 #[derive(Debug)]
 struct Loader {
     storage: Arc<dyn Storage>,
+    /// Отпечатки файлов; в них же — данные хранилища `/_vault/…`.
     versions: Versions,
     lib: LibrarySource,
     packages: SystemPackages,
-    virtuals: Option<VirtualFiles>,
     /// Отпечатки прочитанных файлов на момент чтения (с последнего сброса).
     read: Mutex<HashMap<FileId, Token>>,
 }
@@ -131,7 +118,7 @@ enum Location {
     /// Путь внутри встроенной библиотеки, без `/` в начале.
     Embedded(String),
     /// Файл данных хранилища (`/_vault/…`), путь без `_vault/`.
-    Virtual(String),
+    Data(String),
 }
 
 impl Loader {
@@ -141,7 +128,7 @@ impl Loader {
         if matches!(id.root(), VirtualRoot::Project)
             && let Some(rest) = vault_relative(vpath)
         {
-            return Ok(Location::Virtual(rest));
+            return Ok(Location::Data(rest));
         }
         let (root, vpath) = match id.root() {
             VirtualRoot::Project => match (lib_relative(vpath)?, &self.lib) {
@@ -161,7 +148,7 @@ impl Loader {
         match (id.root(), self.locate(id)) {
             (VirtualRoot::Project, Ok(Location::Vault(path))) => Some(Dep::Vault(path)),
             (VirtualRoot::Project, Ok(Location::Disk(path))) => Some(Dep::Library(path)),
-            (VirtualRoot::Project, Ok(Location::Virtual(rest))) => Some(Dep::Data(rest)),
+            (VirtualRoot::Project, Ok(Location::Data(rest))) => Some(Dep::Data(rest)),
             _ => None,
         }
     }
@@ -181,9 +168,8 @@ impl Loader {
                 let file = EmbeddedLibrary::get(&rel).ok_or_else(|| FileError::NotFound(rel.into()))?;
                 return Ok(Bytes::new(file.data.into_owned()));
             }
-            Location::Virtual(rest) => {
-                let virtuals = self.virtuals.as_ref().ok_or_else(|| FileError::NotFound(rest.clone().into()))?;
-                return (virtuals.0)(&rest).map(Bytes::new).map_err(|e| FileError::Other(Some(e.into())));
+            Location::Data(rest) => {
+                return self.versions.data().read(&rest).map(Bytes::new).map_err(|e| FileError::Other(Some(e.into())));
             }
         };
         let meta = fs::metadata(&path).map_err(|e| FileError::from_io(e, &path))?;
@@ -251,16 +237,11 @@ impl std::fmt::Debug for Compiler {
 }
 
 impl Compiler {
-    /// `virtuals` — поставщик файлов `/_vault/…` (без него их нет).
-    pub fn new(
-        storage: Arc<dyn Storage>,
-        lib: LibrarySource,
-        fonts: Arc<Fonts>,
-        virtuals: Option<VirtualFiles>,
-    ) -> Self {
+    /// Хранилище и данные `/_vault/…` — из `versions` ([`Versions::with_data`]).
+    pub fn new(versions: Versions, lib: LibrarySource, fonts: Arc<Fonts>) -> Self {
         let packages = SystemPackages::new(SystemDownloader::new(concat!("baluk-notes/", env!("CARGO_PKG_VERSION"))));
-        let versions = Versions::new(storage.clone());
-        let loader = Loader { storage, versions, lib, packages, virtuals, read: Mutex::default() };
+        let storage = versions.storage().clone();
+        let loader = Loader { storage, versions, lib, packages, read: Mutex::default() };
         Self { files: Mutex::new(FileStore::new(loader)), fonts, libraries: RwLock::default() }
     }
 

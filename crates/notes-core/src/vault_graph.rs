@@ -3,9 +3,9 @@
 //!
 //! - страница графа и главная клиента (`POST /api/graph/layout`);
 //! - заметка — `#vault-graph(…)` из `baluk/graph.typ`: библиотека читает
-//!   виртуальный файл `/_vault/graph/<фильтр>.json` (его отдаёт
-//!   [`crate::world`]), CeTZ рисует граф в PDF и HTML, а клиент оживляет
-//!   его по тем же координатам.
+//!   виртуальный файл `/_vault/graph/<фильтр>.json` (его отдаёт поставщик
+//!   [`GraphData`] из реестра [`crate::vault_data`]), CeTZ рисует граф в
+//!   PDF и HTML, а клиент оживляет его по тем же координатам.
 //!
 //! Раскладка — простая силовая модель без библиотек: узлы отталкиваются,
 //! рёбра — пружины, слабое притяжение к центру; затем узлы с подписями
@@ -14,11 +14,14 @@
 //! миллисекунды.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::graph::{Edge, Graph, Snapshot};
-use crate::vault::NoteKind;
+use crate::graph::{Edge, Graph, Snapshot, SourceIndex};
+use crate::vault::{NoteKind, Vault};
+use crate::vault_data::DataProvider;
+use crate::version::Token;
 
 /// Группа заметок в корне хранилища.
 pub const ROOT_GROUP: &str = "в корне";
@@ -305,14 +308,34 @@ fn name_of(id: &str) -> &str {
     id.rsplit_once('/').map_or(id, |(_, name)| name)
 }
 
-/// Файл `/_vault/<path>` для заметки: `graph/<фильтр>.json`, где фильтр —
+/// Префикс графа в данных хранилища: `/_vault/graph/…`.
+pub const DATA_PREFIX: &str = "graph";
+
+/// Поставщик `/_vault/graph/<фильтр>.json` — граф по фильтру.
+#[derive(Debug)]
+pub struct GraphData {
+    pub vault: Vault,
+    pub index: Arc<SourceIndex>,
+}
+
+impl DataProvider for GraphData {
+    fn read(&self, path: &str) -> Result<Vec<u8>, String> {
+        data_file(|| self.index.snapshot(&self.vault).map_err(|e| e.to_string()), path)
+    }
+
+    /// Версия всего хранилища: граф зависит от ссылок и состава заметок.
+    fn token(&self, _path: &str) -> Token {
+        crate::version::vault_token(self.vault.storage().as_ref())
+    }
+}
+
+/// Файл `/_vault/graph/<path>` для заметки: `<фильтр>.json`, где фильтр —
 /// JSON [`GraphFilter`] с экранированными `%`, `/`, `\\` (`baluk/graph.typ`).
 /// Ответ — [`GraphLayout`] в JSON.
-pub fn virtual_file(snapshot: impl FnOnce() -> Result<Snapshot, String>, path: &str) -> Result<Vec<u8>, String> {
+pub fn data_file(snapshot: impl FnOnce() -> Result<Snapshot, String>, path: &str) -> Result<Vec<u8>, String> {
     let query = path
-        .strip_prefix("graph/")
-        .and_then(|p| p.strip_suffix(".json"))
-        .ok_or_else(|| format!("нет данных хранилища «{path}» (есть только graph/…)"))?;
+        .strip_suffix(".json")
+        .ok_or_else(|| format!("нет данных хранилища «{DATA_PREFIX}/{path}» (граф — {DATA_PREFIX}/<фильтр>.json)"))?;
     let filter: GraphFilter =
         serde_json::from_str(&unescape(query)).map_err(|e| format!("граф: неверный фильтр ({e})"))?;
     let layout = snapshot()?.graph_layout(&filter);
@@ -478,11 +501,11 @@ mod tests {
     }
 
     #[test]
-    fn virtual_file_path() {
+    fn data_file_path() {
         assert_eq!(unescape("a%2Fb%5Cc%25252F"), "a/b\\c%252F");
-        let err = virtual_file(|| Err("не нужен".into()), "graph/{}.txt").unwrap_err();
+        let err = data_file(|| Err("не нужен".into()), "{}.txt").unwrap_err();
         assert!(err.contains("graph/"), "{err}");
-        let err = virtual_file(|| Err("не нужен".into()), "graph/{нет.json").unwrap_err();
+        let err = data_file(|| Err("не нужен".into()), "{нет.json").unwrap_err();
         assert!(err.contains("фильтр"), "{err}");
     }
 

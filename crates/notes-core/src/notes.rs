@@ -31,9 +31,11 @@ use crate::pipeline::{Pipeline, TypstPipeline};
 use crate::storage::Storage;
 use crate::themes::ThemeSet;
 use crate::vault::{Entry, NoteId, Vault};
+use crate::vault_data::VaultData;
+use crate::vault_graph::GraphData;
 use crate::version::Versions;
 use crate::warm::{WarmStats, Warmer};
-use crate::world::{Compiler, LibrarySource, VirtualFiles};
+use crate::world::{Compiler, LibrarySource};
 use crate::{Error, Result};
 
 pub use crate::pages::NotePage;
@@ -80,18 +82,15 @@ impl Notes {
         }
         let fonts = Arc::new(Fonts::load(&config.font_dirs));
         let links = Arc::new(SourceIndex::default());
-        // Данные хранилища для заметок (`/_vault/graph/…` — граф по фильтру).
-        let virtuals = {
-            let (links, vault) = (links.clone(), vault.clone());
-            VirtualFiles(Arc::new(move |path: &str| {
-                crate::vault_graph::virtual_file(|| links.snapshot(&vault).map_err(|e| e.to_string()), path)
-            }))
-        };
+        // Данные хранилища для заметок: `/_vault/<префикс>/…`.
+        let data = VaultData::new()
+            .with(crate::vault_graph::DATA_PREFIX, GraphData { vault: vault.clone(), index: links.clone() });
+        let versions = Versions::new(vault.storage().clone()).with_data(data);
         let stamp = crate::cache::stamp(&[library.fingerprint(), fonts.fingerprint()]);
-        let compiler = Compiler::new(vault.storage().clone(), library, fonts, Some(virtuals));
+        let compiler = Compiler::new(versions.clone(), library, fonts);
         let themes = ThemeSet::load(&compiler)?;
         let disk = config.cache.as_ref().map(|dir| DiskCache::new(dir, &vault.location(), stamp));
-        let cache = PageCache::new(Versions::new(vault.storage().clone()), disk, MEMORY_BUDGET);
+        let cache = PageCache::new(versions, disk, MEMORY_BUDGET);
         let typst = Arc::new(TypstPipeline::new(vault.clone(), compiler, themes));
         let pages = Pages::new(vault, typst.clone(), cache);
         Ok(Self { pages, typst, links, warmer: Warmer::default() })
