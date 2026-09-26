@@ -5,12 +5,14 @@
 //!   внутри книги (главы, код) заметками не считаются.
 //! - Служебное пропускается: имена на `_` (библиотека `_baluk`) и на `.`.
 
+use std::collections::BTreeSet;
 use std::fmt;
-use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde::Serialize;
 
+use crate::storage::{DirStorage, Storage, is_typ};
 use crate::{Error, Result};
 
 /// Главный файл книги.
@@ -93,113 +95,129 @@ pub struct Entry {
     pub main: PathBuf,
 }
 
+/// Хранилище: заметки и книги поверх [`Storage`].
 #[derive(Debug, Clone)]
 pub struct Vault {
-    root: PathBuf,
+    storage: Arc<dyn Storage>,
 }
 
 impl Vault {
-    /// Открывает существующее хранилище.
+    /// Открывает существующий каталог-хранилище.
     pub fn open(root: impl AsRef<Path>) -> Result<Self> {
         let root = root.as_ref();
-        let root = fs::canonicalize(root).map_err(|e| Error::io(root, e))?;
-        if !root.is_dir() {
-            return Err(Error::io(
-                &root,
-                std::io::Error::new(std::io::ErrorKind::NotADirectory, "хранилище — не каталог"),
-            ));
-        }
-        Ok(Self { root })
+        let storage = DirStorage::open(root).map_err(|e| Error::io(root, e))?;
+        Ok(Self::new(Arc::new(storage)))
     }
 
-    pub fn root(&self) -> &Path {
-        &self.root
+    /// Хранилище поверх любого [`Storage`] (в тестах — [`crate::storage::MemStorage`]).
+    pub fn new(storage: Arc<dyn Storage>) -> Self {
+        Self { storage }
+    }
+
+    pub fn storage(&self) -> &Arc<dyn Storage> {
+        &self.storage
+    }
+
+    /// Где хранилище (для журнала).
+    pub fn location(&self) -> String {
+        self.storage.location()
+    }
+
+    /// Ошибка ввода-вывода с путём файла.
+    pub(crate) fn io_error(&self, path: &str, e: std::io::Error) -> Error {
+        Error::io(self.storage.display(path), e)
+    }
+
+    /// Прочитать файл хранилища как текст.
+    pub(crate) fn read_text(&self, path: &str) -> Result<String> {
+        let data = self.storage.read(path).map_err(|e| self.io_error(path, e))?;
+        String::from_utf8(data)
+            .map_err(|e| self.io_error(path, std::io::Error::new(std::io::ErrorKind::InvalidData, e.utf8_error())))
+    }
+
+    fn is_file(&self, path: &str) -> bool {
+        self.storage.stat(path).is_ok_and(|m| !m.is_dir)
     }
 
     /// Все заметки и книги, по алфавиту путей.
+    ///
+    /// Книга — каталог с `main.typ` (ближайший к корню: книга в книге не
+    /// ищется); `.typ` вне книг — заметки.
     pub fn entries(&self) -> Result<Vec<Entry>> {
+        let files = self.storage.list().map_err(|e| self.io_error("", e))?;
+        let books: BTreeSet<&str> = files.iter().filter_map(|f| f.strip_suffix(&format!("/{BOOK_MAIN}"))).collect();
         let mut out = Vec::new();
-        self.scan(&self.root, &mut out)?;
+        let mut seen_books = BTreeSet::new();
+        for file in &files {
+            if !is_typ(file) {
+                continue;
+            }
+            match book_of(&books, file) {
+                Some(book) => {
+                    if seen_books.insert(book)
+                        && let Some(id) = rel_to_id(Path::new(book))
+                    {
+                        out.push(Entry { id, kind: NoteKind::Book, main: Path::new(book).join(BOOK_MAIN) });
+                    }
+                }
+                None => {
+                    if let Some(id) = rel_to_id(&Path::new(file).with_extension("")) {
+                        out.push(Entry { id, kind: NoteKind::Note, main: PathBuf::from(file) });
+                    }
+                }
+            }
+        }
         out.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(out)
     }
 
     /// Заметка или книга по идентификатору.
     pub fn entry(&self, id: &NoteId) -> Result<Entry> {
-        let note = PathBuf::from(format!("{id}.typ"));
-        if self.root.join(&note).is_file() {
-            return Ok(Entry { id: id.clone(), kind: NoteKind::Note, main: note });
+        let note = format!("{id}.typ");
+        if self.is_file(&note) {
+            return Ok(Entry { id: id.clone(), kind: NoteKind::Note, main: PathBuf::from(note) });
         }
-        let book = Path::new(id.as_str()).join(BOOK_MAIN);
-        if self.root.join(&book).is_file() {
-            return Ok(Entry { id: id.clone(), kind: NoteKind::Book, main: book });
+        let book = format!("{id}/{BOOK_MAIN}");
+        if self.is_file(&book) {
+            return Ok(Entry { id: id.clone(), kind: NoteKind::Book, main: PathBuf::from(book) });
         }
         Err(Error::NotFound(id.to_string()))
     }
 
-    /// Исходники заметки относительно корня: у заметки — её файл, у книги —
-    /// все `.typ` в папке (кроме служебных `_*` и `.*`), по алфавиту.
-    pub fn files_of(&self, entry: &Entry) -> Result<Vec<PathBuf>> {
+    /// Исходники заметки относительно корня (через `/`): у заметки — её
+    /// файл, у книги — все `.typ` в папке (кроме служебных `_*` и `.*`), по
+    /// алфавиту путей.
+    pub fn files_of(&self, entry: &Entry) -> Result<Vec<String>> {
+        let main = entry.main.to_string_lossy().replace('\\', "/");
         match entry.kind {
-            NoteKind::Note => Ok(vec![entry.main.clone()]),
+            NoteKind::Note => Ok(vec![main]),
             NoteKind::Book => {
-                let mut out = Vec::new();
-                let dir = entry.main.parent().expect("main.typ книги лежит в её папке");
-                self.typ_files(dir, &mut out)?;
-                out.sort();
+                let dir = main.strip_suffix(BOOK_MAIN).expect("main.typ книги лежит в её папке");
+                let files = self.storage.list().map_err(|e| self.io_error(dir, e))?;
+                let mut out: Vec<String> = files.into_iter().filter(|f| f.starts_with(dir) && is_typ(f)).collect();
+                out.sort_by(|a, b| Path::new(a).cmp(Path::new(b)));
                 Ok(out)
             }
         }
     }
 
-    fn typ_files(&self, rel: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-        let dir = self.root.join(rel);
-        for item in fs::read_dir(&dir).map_err(|e| Error::io(&dir, e))? {
-            let item = item.map_err(|e| Error::io(&dir, e))?;
-            let name = item.file_name();
-            let Some(name) = name.to_str() else { continue };
-            if name.starts_with('_') || name.starts_with('.') {
-                continue;
-            }
-            let child = rel.join(name);
-            if item.file_type().map_err(|e| Error::io(item.path(), e))?.is_dir() {
-                self.typ_files(&child, out)?;
-            } else if child.extension().is_some_and(|e| e == "typ") {
-                out.push(child);
-            }
-        }
-        Ok(())
+    /// Размер исходников: у заметки — главный файл, у книги — все её `.typ`.
+    pub fn source_size(&self, entry: &Entry) -> u64 {
+        self.files_of(entry).unwrap_or_default().iter().map(|f| self.storage.stat(f).map_or(0, |m| m.len)).sum()
     }
+}
 
-    fn scan(&self, dir: &Path, out: &mut Vec<Entry>) -> Result<()> {
-        let read = fs::read_dir(dir).map_err(|e| Error::io(dir, e))?;
-        for item in read {
-            let item = item.map_err(|e| Error::io(dir, e))?;
-            let path = item.path();
-            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-                continue; // не UTF-8 — не заметка
-            };
-            if name.starts_with('_') || name.starts_with('.') {
-                continue;
-            }
-            let rel = path.strip_prefix(&self.root).expect("scan идёт внутри корня");
-            let file_type = item.file_type().map_err(|e| Error::io(&path, e))?;
-            if file_type.is_dir() {
-                if path.join(BOOK_MAIN).is_file() {
-                    if let Some(id) = rel_to_id(rel) {
-                        out.push(Entry { id, kind: NoteKind::Book, main: rel.join(BOOK_MAIN) });
-                    }
-                } else {
-                    self.scan(&path, out)?;
-                }
-            } else if path.extension().is_some_and(|e| e == "typ")
-                && let Some(id) = rel_to_id(&rel.with_extension(""))
-            {
-                out.push(Entry { id, kind: NoteKind::Note, main: rel.to_path_buf() });
-            }
+/// Книга, в которую входит файл: ближайший к корню каталог с `main.typ`.
+fn book_of<'a>(books: &BTreeSet<&'a str>, file: &str) -> Option<&'a str> {
+    let mut end = 0;
+    while let Some(i) = file[end..].find('/') {
+        end += i;
+        if let Some(book) = books.get(&file[..end]) {
+            return Some(book);
         }
-        Ok(())
+        end += 1;
     }
+    None
 }
 
 /// Относительный путь → идентификатор (`/`-разделители на любой ОС).
@@ -210,6 +228,8 @@ fn rel_to_id(rel: &Path) -> Option<NoteId> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     #[test]
@@ -251,7 +271,7 @@ mod tests {
         );
         let book = vault.entry(&NoteId::new("Матан").unwrap()).unwrap();
         assert_eq!(book.main, Path::new("Матан/main.typ"));
-        assert_eq!(vault.files_of(&book).unwrap(), [Path::new("Матан/01-глава.typ"), Path::new("Матан/main.typ")]);
+        assert_eq!(vault.files_of(&book).unwrap(), ["Матан/01-глава.typ", "Матан/main.typ"]);
         assert!(matches!(vault.entry(&NoteId::new("Нет").unwrap()), Err(Error::NotFound(_))));
     }
 }

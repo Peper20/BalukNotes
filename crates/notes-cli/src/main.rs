@@ -125,7 +125,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         cache: Some(notes_core::cache::default_dir(&cli.data)),
     };
     let notes = Notes::open(&config).context("открыть хранилище")?;
-    tracing::info!(ms = started.elapsed().as_millis(), "хранилище {}", notes.vault().root().display());
+    tracing::info!(ms = started.elapsed().as_millis(), "хранилище {}", notes.vault().location());
 
     match cli.command {
         Command::Serve { addr, token } => serve(notes, &cli.data, addr, token),

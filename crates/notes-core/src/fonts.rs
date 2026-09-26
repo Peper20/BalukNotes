@@ -218,6 +218,17 @@ impl Fonts {
         self.store.book()
     }
 
+    /// Отпечаток набора шрифтов (семейства и число начертаний) — для метки
+    /// кэша на диске: поставили или убрали шрифт — отрисовка могла
+    /// измениться.
+    pub fn fingerprint(&self) -> u64 {
+        let mut h = crate::version::StableHasher::new();
+        for (family, infos) in self.store.book().families() {
+            h.str(family).u64(infos.count() as u64);
+        }
+        h.finish()
+    }
+
     pub fn font(&self, index: usize) -> Option<Font> {
         self.store.font(index)
     }

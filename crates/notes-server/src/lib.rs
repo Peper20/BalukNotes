@@ -105,8 +105,9 @@ pub async fn serve(
     // ждала бы сжатия (математический шрифт — ~2 с).
     let notes = state.notes.clone();
     std::thread::spawn(move || notes.fonts().warm_web(notes.themes().web_fonts()));
-    // Заметки — тоже заранее: все, по приоритету, пропуская собранные.
-    let (notes, settings) = (state.notes.clone(), state.settings.clone());
-    std::thread::spawn(move || notes.warm_forever(|| settings.figure_options()));
+    // Заметки — тоже заранее: все, по приоритету, пропуская собранные, в
+    // кэш на диске (рисунки обрабатываются при открытии — по настройкам).
+    let notes = state.notes.clone();
+    std::thread::spawn(move || notes.warm_forever());
     axum::serve(listener, router(state)).with_graceful_shutdown(shutdown).await
 }

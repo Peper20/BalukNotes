@@ -13,18 +13,16 @@
 //! размер. Заметке принадлежит её файл; книге — все `.typ` в её папке.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::fs;
-use std::path::PathBuf;
 use std::time::SystemTime;
 
 use parking_lot::Mutex;
 use serde::Serialize;
 use typst::syntax::{SyntaxNode, ast};
 
+use crate::Result;
 use crate::outline::{Outline, parse_outline};
 use crate::render::LinkRef;
 use crate::vault::{Entry, NoteId, NoteKind, Vault};
-use crate::{Error, Result};
 
 /// Функция ссылки из `baluk/links.typ`.
 const LINK_FN: &str = "see";
@@ -72,7 +70,8 @@ struct Parsed {
 
 #[derive(Debug, Default)]
 pub struct SourceIndex {
-    files: Mutex<HashMap<PathBuf, Parsed>>,
+    /// Путь файла в хранилище → разбор.
+    files: Mutex<HashMap<String, Parsed>>,
 }
 
 /// Ссылки всех заметок хранилища на данный момент.
@@ -97,12 +96,11 @@ impl SourceIndex {
         for entry in &entries {
             let mut own: Vec<LinkRef> = Vec::new();
             let mut outline = Outline::default();
-            for rel in vault.files_of(entry)? {
-                let path = vault.root().join(&rel);
-                let meta = fs::metadata(&path).map_err(|e| Error::io(&path, e))?;
-                let stamp = (meta.modified().ok(), meta.len());
+            for path in vault.files_of(entry)? {
+                let meta = vault.storage().stat(&path).map_err(|e| vault.io_error(&path, e))?;
+                let stamp = (meta.modified, meta.len);
                 if files.get(&path).is_none_or(|p| p.stamp != stamp) {
-                    let text = fs::read_to_string(&path).map_err(|e| Error::io(&path, e))?;
+                    let text = vault.read_text(&path)?;
                     let parsed = Parsed { stamp, links: parse_links(&text), outline: parse_outline(&text) };
                     files.insert(path.clone(), parsed);
                 }
@@ -257,6 +255,7 @@ mod tests {
 
     #[test]
     fn backlinks_and_graph() {
+        use std::fs;
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
         let write = |f: &str, text: &str| {

@@ -204,10 +204,24 @@ fn disk_cache_survives_restart() {
         .unwrap()
     };
     let first = open().page(&id("Сеть/UFW"), OPTS).unwrap();
-    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1, "страница записана в кэш");
+    let files = walkdir(dir.path());
+    assert_eq!(files.len(), 2, "страница записана в кэш: запись и отрисовка — {files:?}");
     let second = open().page(&id("Сеть/UFW"), OPTS).unwrap();
     assert_eq!(first.version, second.version);
     assert_eq!(first.rendered.as_ref().unwrap().body, second.rendered.as_ref().unwrap().body);
+}
+
+/// Все файлы каталога (рекурсивно).
+fn walkdir(dir: &std::path::Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for e in std::fs::read_dir(dir).unwrap().flatten() {
+        if e.path().is_dir() {
+            out.extend(walkdir(&e.path()));
+        } else {
+            out.push(e.path());
+        }
+    }
+    out
 }
 
 #[test]
@@ -225,17 +239,17 @@ fn warm_builds_everything_once_across_restarts() {
     let first = open();
     let all = first.entries().unwrap().len();
     first.hint_warm(vec![id("Книга")]);
-    let stats = first.warm_pass(|| OPTS);
+    let stats = first.warm_pass();
     assert_eq!((stats.built, stats.skipped), (all, 0), "первый проход собирает всё");
-    assert_eq!(first.warm_pass(|| OPTS).built, 0, "второй — ничего");
+    assert_eq!(first.memory().0, 0, "прогрев — только на диск");
+    assert_eq!(first.warm_pass().built, 0, "второй — ничего");
 
-    // Новый запуск: собранное лежит на диске. Заново — только заметки с
-    // ошибкой (их отрисовка в кэш не пишется).
+    // Новый запуск: собранное (и заметки с ошибкой) лежит на диске.
     let failed =
         first.entries().unwrap().iter().filter(|e| !first.page(&e.id, OPTS).unwrap().errors.is_empty()).count();
     assert!(failed > 0, "в tests/vault есть заметка с ошибкой");
-    let stats = open().warm_pass(|| OPTS);
-    assert_eq!((stats.built, stats.skipped), (failed, all - failed));
+    let stats = open().warm_pass();
+    assert_eq!((stats.built, stats.skipped), (0, all));
 }
 
 #[test]
