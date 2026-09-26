@@ -1,5 +1,6 @@
 <!--
-  Оглавление заметки (пункты — reader.toc). Сбоку от
+  Оглавление заметки (пункты — reader.toc; заголовок с формулой — его HTML
+  из ядра, `Heading.html`, того же доверия, что и тело заметки). Сбоку от
   колонки, если справа хватает места (ширина колонки зависит от кегля),
   иначе — всплывающее по §. Подсвечивает раздел, который сейчас читают.
 -->
@@ -81,7 +82,9 @@
   <nav class="toc" class:open={ui.tocOpen} aria-label="Оглавление" style:--toc-w="{ui.tocWidth}px" bind:this={nav} onclick={onClick}>
     <div class="toc-title">Содержание</div>
     {#each shown as h (h.id)}
-      <a href="#{encodeURIComponent(h.id)}" data-id={h.id} data-depth={h.depth} class:current={ui.currentHeading === h.id}>{h.text}</a>
+      <a href="#{encodeURIComponent(h.id)}" data-id={h.id} data-depth={h.depth} class:current={ui.currentHeading === h.id}
+        >{#if h.html}{@html h.html}{:else}{h.text}{/if}</a
+      >
     {/each}
   </nav>
 {/if}

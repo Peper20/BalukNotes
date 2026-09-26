@@ -37,7 +37,7 @@ use crate::version::{Dep, StableHasher};
 
 /// Версия формата записей: менять при любом изменении [`Record`] или
 /// [`Rendered`].
-pub const FORMAT: u32 = 3;
+pub const FORMAT: u32 = 4;
 
 /// Предел размера кэша на диске (все хранилища вместе).
 pub const DISK_LIMIT: u64 = 512 << 20;

@@ -8,4 +8,9 @@ level: number, id: string,
 /**
  * Слаг текста заголовка — по нему ссылка находит раздел.
  */
-anchor: string, text: string, };
+anchor: string, text: string, 
+/**
+ * HTML заголовка для оглавления (формулы, выделение) — без номера и
+ * ссылок; `None` — заголовок из одного текста (`passes::heading_html`).
+ */
+html?: string, };

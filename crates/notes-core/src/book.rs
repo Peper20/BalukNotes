@@ -451,8 +451,13 @@ mod tests {
     );
 
     fn page() -> NotePage {
-        let heading =
-            |level, id: &str, text: &str| Heading { level, id: id.into(), anchor: id.into(), text: text.into() };
+        let heading = |level, id: &str, text: &str| Heading {
+            level,
+            id: id.into(),
+            anchor: id.into(),
+            text: text.into(),
+            html: None,
+        };
         NotePage {
             id: crate::NoteId::new("Книга").unwrap(),
             kind: crate::NoteKind::Book,

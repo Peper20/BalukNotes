@@ -76,3 +76,10 @@ test("сайт: живые блоки — отдельной частью, то�
   await expect(page.locator(".k-graph[data-live] .graph-svg").first()).toBeVisible();
   expect(parts).toEqual(["static.js", "static-live.js"]);
 });
+
+test("сайт: заголовок с формулой в оглавлении — формулой", async ({ page }) => {
+  await page.goto(pageUrl("Формулы и теги"));
+  const item = page.locator(".k-static-toc a", { hasText: "Пространство" });
+  await expect(item.locator("math")).toHaveCount(2);
+  await expect(item.locator("strong")).toHaveText("норма");
+});

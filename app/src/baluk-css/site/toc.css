@@ -22,6 +22,8 @@
   text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .k-static-toc a:hover { color: var(--k-text); }
+/* Формулы в пунктах (HTML заголовка из ядра) — математическим шрифтом, как в заметке. */
+.k-static-toc a math { font-family: var(--k-font-math); font-size: 1.1em; }
 .k-static-toc a.current { color: var(--k-accent); border-left-color: var(--k-accent); }
 .k-static-toc li[data-depth="0"] > a { font-weight: 600; color: var(--k-text); }
 .k-static-toc li[data-depth="1"] > a { padding-left: 1.1rem; }

@@ -20,6 +20,8 @@ pub(crate) struct Item {
     pub href: String,
     /// Текст ссылки (экранируется при записи).
     pub text: String,
+    /// Готовый HTML ссылки вместо текста (заголовок с формулой).
+    pub html: Option<String>,
     /// Уровень пункта оглавления (`data-depth`).
     pub depth: Option<u8>,
     /// Готовая разметка после ссылки (папка, раздел, «книга»).
@@ -28,7 +30,7 @@ pub(crate) struct Item {
 
 impl Item {
     fn new(href: String, text: &str) -> Self {
-        Self { href, text: text.to_owned(), depth: None, after: String::new() }
+        Self { href, text: text.to_owned(), html: None, depth: None, after: String::new() }
     }
 }
 
@@ -40,7 +42,8 @@ pub(crate) fn link_list(out: &mut String, tag: &str, items: impl IntoIterator<It
         if let Some(depth) = item.depth {
             let _ = write!(out, r#" data-depth="{depth}""#);
         }
-        let _ = write!(out, r#"><a href="{}">{}</a>{}</li>"#, item.href, escape(&item.text), item.after);
+        let text = item.html.unwrap_or_else(|| escape(&item.text));
+        let _ = write!(out, r#"><a href="{}">{text}</a>{}</li>"#, item.href, item.after);
     }
     let _ = write!(out, "</{tag}>");
 }
@@ -54,9 +57,11 @@ pub(crate) fn toc_html(headings: &[Heading]) -> String {
         return String::new();
     }
     let mut out = String::from(r#"<details class="k-static-toc"><summary>Содержание</summary>"#);
-    let items = shown
-        .into_iter()
-        .map(|h| Item { depth: Some(h.level - top), ..Item::new(format!("#{}", encode(&h.id)), &h.text) });
+    let items = shown.into_iter().map(|h| Item {
+        depth: Some(h.level - top),
+        html: h.html.clone(),
+        ..Item::new(format!("#{}", encode(&h.id)), &h.text)
+    });
     link_list(&mut out, "ol", items);
     out.push_str("</details>");
     out
@@ -123,7 +128,7 @@ mod tests {
     use super::*;
 
     fn heading(level: u8, id: &str, text: &str) -> Heading {
-        Heading { level, id: id.into(), anchor: id.into(), text: text.into() }
+        Heading { level, id: id.into(), anchor: id.into(), text: text.into(), html: None }
     }
 
     #[test]
@@ -136,6 +141,11 @@ mod tests {
         ]);
         assert!(toc.starts_with(r#"<details class="k-static-toc"><summary>Содержание</summary><ol>"#));
         assert!(toc.contains(r##"<li data-depth="1"><a href="#a-1">Раз &lt;и&gt; два</a></li>"##));
+        // Заголовок с формулой — его HTML из ядра.
+        let mut math = heading(2, "c", "ℝ");
+        math.html = Some("<math><mi>ℝ</mi></math>".into());
+        let toc = toc_html(&[heading(2, "a", "Раз"), math]);
+        assert!(toc.contains(r##"<a href="#c"><math><mi>ℝ</mi></math></a>"##));
         assert!(!toc.contains("глубоко"));
         // один пункт — не оглавление
         assert_eq!(toc_html(&[heading(2, "a", "Раз")]), "");
