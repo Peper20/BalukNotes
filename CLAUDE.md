@@ -76,7 +76,7 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   клиента `app/dist` для сервера и сайта), `notes-cli`. Логика — в ядре;
   сервер, сайт и CLI — тонкие обёртки.
 - Сервер — модуль на область (`notes`, `graph`, `search`, `settings`,
-  `assets`, `fonts`), у каждого свои маршруты (`routes()`); общие —
+  `assets`, `fonts`, `events`), у каждого свои маршруты (`routes()`); общие —
   `AppState` (`lib.rs`) и `error.rs`. Токен доступа (`serve --token`,
   `NOTES_TOKEN`) — `auth.rs`. Новая область API — новый модуль + `merge` в
   `router`.
@@ -118,6 +118,10 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   запросу `?chapter=`/`?anchor=`, клиент показывает книгу только по главам
   с сервера). Время проходов и вес — `RUST_LOG=notes_core=debug`, строки
   «проход» и «рисунки».
+- Наблюдатель файлов — `notes-core::watch` (`Storage::watch`, включает
+  только сервер: `Notes::watch`): индекс, прогрев и события клиенту
+  (`GET /api/events`). Это ускорение, не источник правды: всё обязано
+  работать и без него (CLI, сломанный наблюдатель) — обходом, как раньше.
 - Данные хранилища для заметок `/_vault/<префикс>/…` — реестр поставщиков
   `vault_data.rs` (граф — `vault_graph::GraphData`); отпечаток по умолчанию
   — хэш ответа.
@@ -125,10 +129,18 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
 
 ## Клиент `app/`
 
-- Svelte 5 (руны) + TypeScript + Vite; без SvelteKit. Состояние —
-  `src/lib/app.svelte.ts` (маршрут, заметка, настройки, обновление) и
-  `ui.svelte.ts` (панели, глава, оглавление); чистая логика — `src/lib/*.ts`
+- Svelte 5 (руны) + TypeScript + Vite; без SvelteKit. Состояние — модули
+  `src/lib/state/` (`settings`, `notes`, `tabs`, `places`, `router`,
+  `reader` — показанная заметка, `updates`; запуск — `start()` в
+  `index.ts`) и `ui.svelte.ts` (панели, глава, оглавление); новое
+  состояние — свой модуль, а не поле в чужом; чистая логика — `src/lib/*.ts`
   с тестами Vitest рядом (`*.test.ts`); компоненты — `src/components/`.
+- Сервер — только через `src/lib/api/` (`api.*`): адрес и токен —
+  `api/config.ts` (одна настройка), ошибки сети и сервера — `ApiError`
+  (`status` 0 — нет связи). Прямой `fetch` в компонентах не писать.
+- Обновление: источник изменений — `src/lib/changes.ts` (`ChangeSource`:
+  события сервера `GET /api/events`, запасной — опрос), сверку версии
+  делает `state/updates`.
 - **Типы API — из Rust** (`ts-rs`, фича `ts`): `npm run types` выгружает их в
   `src/lib/api/types/` (в git). Поменял структуру ответа — выгрузи и закоммить;
   руками файлы не править. Ответ сервера — именованная структура
@@ -146,13 +158,16 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
 - Значки интерфейса — `@lucide/svelte` (`import X from "@lucide/svelte/icons/x"`),
   не текстовые глифы (▸ ◐ ⎙); на статическом сайте — те же пути CSS-маской
   (`baluk.css`). Вид проверять в Chrome (Claude in Chrome) в обеих темах.
-- Граф — `Graph.svelte` рисует готовую раскладку: фильтр и раскладка — в
+- Граф — `Graph.svelte` (разметка и связки) рисует готовую раскладку: фильтр и раскладка — в
   ядре (`notes-core::vault_graph`, `POST /api/graph/layout`), одни и те же
   для главной, `/graph` и `#vault-graph` в заметках (`baluk/graph.typ`,
   данные — виртуальный `/_vault/graph/…`); на клиенте — только вид
-  (`graph-view.ts`: цвета, поиск, масштаб) и движение (`graph-physics.ts`:
+  (`graph-view.ts`: цвета, поиск, масштаб), жесты (`graph-gesture.ts`),
+  переезды и кадры (`graph-motion.ts`) и физика (`graph-physics.ts`:
   раскладка ядра — покой, нетронутый граф не шевелится; на картинке —
-  главная, заметка — узлы не выходят за рамку; `prefers-reduced-motion`).
+  главная, заметка — узлы не выходят за рамку; `prefers-reduced-motion`;
+  с 200 узлов — решётка). Параметры движения (`RETURN`, `DAMPING`…)
+  подбирал пользователь — не менять без него.
 - Сквозные сценарии — `e2e/*.spec.ts` (Playwright на системном chromium,
   сервер на копии `tests/vault` в `tests/.data/e2e`). Новая возможность
   интерфейса — новый сценарий; телефон — `e2e/mobile.spec.ts` (400×800:

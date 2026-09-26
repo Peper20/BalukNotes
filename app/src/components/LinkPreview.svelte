@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
   import { api, type Preview } from "../lib/api";
-  import { app } from "../lib/app.svelte";
+  import { router } from "../lib/state";
   import { hashAnchor, parseRoute } from "../lib/ids";
 
   const DELAY = 350;
@@ -63,8 +63,8 @@
 
   // Переход — превью больше не к месту.
   $effect(() => {
-    void app.route;
-    void app.anchorSeq;
+    void router.route;
+    void router.anchorSeq;
     preview = null;
     link = null;
   });

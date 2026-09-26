@@ -13,8 +13,10 @@
 //! - [`crate::warm`] — прогрев поверх `pages`.
 //!
 //! Здесь они собираются вместе; сюда же — индекс исходников (ссылки,
-//! поиск), PDF и страницы статического сайта. Никаких фоновых
-//! наблюдателей: см. `docs/architecture.md`, «Обновление — по запросу».
+//! поиск), PDF и страницы статического сайта. Наблюдатель файлов
+//! ([`crate::watch`]) включает только сервер ([`Notes::watch`]): индекс не
+//! обходит хранилище без изменений, прогрев просыпается от них; CLI
+//! обходится без него.
 
 use std::fs;
 use std::path::PathBuf;
@@ -34,7 +36,8 @@ use crate::vault::{Entry, NoteId, Vault};
 use crate::vault_data::VaultData;
 use crate::vault_graph::{GraphData, GraphFilter, GraphLayout, Layouts};
 use crate::version::Versions;
-use crate::warm::{WarmStats, Warmer};
+use crate::warm::{RESCAN, RESCAN_UNWATCHED, WarmStats, Warmer};
+use crate::watch::{Change, Changes};
 use crate::world::{Compiler, LibrarySource};
 use crate::{Error, Result};
 
@@ -60,7 +63,8 @@ pub struct Notes {
     typst: Arc<TypstPipeline>,
     links: Arc<SourceIndex>,
     layouts: Arc<Layouts>,
-    warmer: Warmer,
+    warmer: Arc<Warmer>,
+    changes: Arc<Changes>,
 }
 
 impl Notes {
@@ -85,6 +89,8 @@ impl Notes {
         let fonts =
             Arc::new(Fonts::load(&config.font_dirs).with_web_cache(config.cache.as_ref().map(|c| c.join("fonts"))));
         let links = Arc::new(SourceIndex::default());
+        let changes = Arc::new(Changes::default());
+        links.set_changes(changes.clone());
         let layouts = Arc::new(Layouts::default());
         // Данные хранилища для заметок: `/_vault/<префикс>/…`.
         let data = VaultData::new().with(
@@ -103,7 +109,14 @@ impl Notes {
         // пути). Слабая ссылка: кэш страниц сам держит индекс через граф.
         let cache = Arc::downgrade(pages.cache());
         links.set_built(Box::new(move |id: &NoteId| cache.upgrade()?.links(id)));
-        Ok(Self { pages, typst, links, layouts, warmer: Warmer::default() })
+        let warmer = Arc::new(Warmer::default());
+        let weak = Arc::downgrade(&warmer);
+        changes.subscribe(move |_| {
+            if let Some(w) = weak.upgrade() {
+                w.poke();
+            }
+        });
+        Ok(Self { pages, typst, links, layouts, warmer, changes })
     }
 
     pub fn vault(&self) -> &Vault {
@@ -142,6 +155,15 @@ impl Notes {
     /// Поиск по тексту всех заметок.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<crate::search::SearchHit>> {
         Ok(crate::search::search(&self.index()?, query, limit))
+    }
+
+    /// Поиск в одной заметке (книге): все разделы по порядку текста.
+    pub fn search_in(&self, id: &NoteId, query: &str, limit: usize) -> Result<Vec<crate::search::SearchHit>> {
+        let index = self.index()?;
+        if !index.exists(id.as_str()) {
+            return Err(Error::NotFound(id.to_string()));
+        }
+        Ok(crate::search::search_in(&index, id, query, limit))
     }
 
     /// Страница заметки для сервера: из кэша, если её файлы не менялись
@@ -193,7 +215,26 @@ impl Notes {
 
     /// Прогревать бесконечно (фоновый поток сервера).
     pub fn warm_forever(&self) -> ! {
-        self.warmer.forever(&self.pages)
+        let changes = self.changes.clone();
+        self.warmer.forever(&self.pages, move || if changes.watching() { RESCAN } else { RESCAN_UNWATCHED })
+    }
+
+    // ── Изменения хранилища (см. crate::watch) ─────────────────────────────
+
+    /// Включить наблюдатель файлов хранилища (сервер). `false` — хранилище
+    /// не умеет или не вышло: всё работает обходом, как без него.
+    pub fn watch(&self) -> bool {
+        self.changes.start(&**self.vault().storage())
+    }
+
+    /// Работает ли наблюдатель.
+    pub fn watching(&self) -> bool {
+        self.changes.watching()
+    }
+
+    /// Звать `f` с каждой пачкой изменений хранилища (из потока наблюдателя).
+    pub fn on_change(&self, f: impl Fn(&Change) + Send + Sync + 'static) {
+        self.changes.subscribe(f);
     }
 
     /// Сколько страниц и байт держит кэш в памяти.

@@ -27,6 +27,7 @@ const AFTER_CACHE: &[&str] = &[
     "search.rs",
     "settings.rs",
     "warm.rs",
+    "watch.rs",    // наблюдатель файлов
     "webfonts.rs", // шрифты для браузера
 ];
 

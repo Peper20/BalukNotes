@@ -36,6 +36,9 @@ brotli = "8"
 fontcull = { version = "2.0.1", default-features = false }
 ttf-parser = "0.25"
 clap = { version = "4.6", features = ["derive", "env"] }
+# Наблюдатель файлов хранилища (notes-core::watch): индекс ссылок, прогрев,
+# события клиенту.
+notify = "8"
 parking_lot = "0.12"
 rust-embed = { version = "8", features = ["mime-guess", "include-exclude"] }
 serde = { version = "1", features = ["derive", "rc"] }

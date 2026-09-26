@@ -6,7 +6,7 @@
 <script lang="ts">
   import { tick } from "svelte";
   import { api, type NoteListItem, type SearchHit } from "../lib/api";
-  import { app } from "../lib/app.svelte";
+  import { notes, places, router } from "../lib/state";
   import { commands, openNote, type Command } from "../lib/commands.svelte";
   import { fuzzy, highlight } from "../lib/fuzzy";
   import { tagHref } from "../lib/ids";
@@ -25,19 +25,24 @@
   let searching = $state(false);
 
   const query = $derived(ui.palette?.query ?? "");
-  const mode = $derived(query.startsWith(">") ? "commands" : query.startsWith("/") ? "text" : query.startsWith("#") ? "tags" : "notes");
-  const q = $derived(mode === "notes" ? query.trim() : query.slice(1).trim());
+  /** Поиск в одной книге (её id) — или по всем заметкам. */
+  const book = $derived(ui.palette?.book ?? null);
+  const mode = $derived(
+    book ? "book" : query.startsWith(">") ? "commands" : query.startsWith("/") ? "text" : query.startsWith("#") ? "tags" : "notes",
+  );
+  const q = $derived(mode === "notes" || mode === "book" ? query.trim() : query.slice(1).trim());
+  const bookTitle = $derived(book ? (notes.byId(book)?.title ?? notes.byId(book)?.name ?? book) : "");
 
   const titleOf = (n: NoteListItem) => n.title ?? n.name;
 
   const noteItems = $derived.by((): Item[] => {
     if (mode !== "notes") return [];
     if (!q) {
-      const recent = app.recent.map((id) => app.notes.find((n) => n.id === id)).filter((n) => n != null);
-      const rest = app.notes.filter((n) => !app.recent.includes(n.id));
+      const recent = places.recent.map((id) => notes.all.find((n) => n.id === id)).filter((n) => n != null);
+      const rest = notes.all.filter((n) => !places.recent.includes(n.id));
       return [...recent, ...rest].slice(0, 30).map((note) => ({ kind: "note", note, title: [], path: [] }));
     }
-    return app.notes
+    return notes.all
       .map((note) => {
         const t = fuzzy(q, titleOf(note));
         const p = fuzzy(q, note.id);
@@ -63,7 +68,7 @@
   const tagItems = $derived.by((): Item[] => {
     if (mode !== "tags") return [];
     const counts = new Map<string, number>();
-    for (const n of app.notes) for (const t of n.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
+    for (const n of notes.all) for (const t of n.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
     return [...counts]
       .map(([tag, count]) => ({ tag, count, m: fuzzy(q, tag) }))
       .filter((x) => x.m)
@@ -71,19 +76,20 @@
       .map(({ tag, count, m }) => ({ kind: "tag", tag, count, positions: m!.positions }));
   });
 
-  const hitItems = $derived<Item[]>(mode === "notes" || mode === "text" ? hits.map((hit) => ({ kind: "hit", hit })) : []);
+  const hitItems = $derived<Item[]>(mode === "notes" || mode === "text" || mode === "book" ? hits.map((hit) => ({ kind: "hit", hit })) : []);
   const items = $derived([...noteItems, ...commandItems, ...tagItems, ...hitItems]);
 
   // Поиск по тексту — с задержкой и отменой прежнего запроса.
   $effect(() => {
-    const text = mode === "notes" || mode === "text" ? q : "";
+    const text = mode === "notes" || mode === "text" || mode === "book" ? q : "";
+    const scope = book;
     hits = [];
     if (text.length < 2) return;
     const ctrl = new AbortController();
     const timer = setTimeout(() => {
       searching = true;
       api
-        .search(text, ctrl.signal, mode === "text" ? 50 : 15)
+        .search(text, ctrl.signal, scope ? 100 : mode === "text" ? 50 : 15, scope)
         .then((h) => (hits = h))
         .catch(() => {})
         .finally(() => (searching = false));
@@ -116,7 +122,7 @@
     close();
     if (item.kind === "note") openNote(item.note.id, null, newTab);
     else if (item.kind === "hit") openNote(item.hit.id, item.hit.anchor, newTab);
-    else if (item.kind === "tag") app.go(tagHref(item.tag), { newTab });
+    else if (item.kind === "tag") router.go(tagHref(item.tag), { newTab });
     else item.command.run();
   }
 
@@ -140,9 +146,27 @@
   }
 
   const groupOf = (item: Item) =>
-    item.kind === "note" ? (q ? "Заметки" : "Недавние и все заметки") : item.kind === "hit" ? "В тексте" : item.kind === "tag" ? "Теги" : "Команды";
+    item.kind === "note"
+      ? q
+        ? "Заметки"
+        : "Недавние и все заметки"
+      : item.kind === "hit"
+        ? book
+          ? `В книге «${bookTitle}»`
+          : "В тексте"
+        : item.kind === "tag"
+          ? "Теги"
+          : "Команды";
   const placeholder = $derived(
-    mode === "commands" ? "Команда…" : mode === "text" ? "Слова из текста заметок…" : mode === "tags" ? "Тег…" : "Заметка или слова из текста…",
+    mode === "book"
+      ? `Слова из текста книги «${bookTitle}»…`
+      : mode === "commands"
+        ? "Команда…"
+        : mode === "text"
+          ? "Слова из текста заметок…"
+          : mode === "tags"
+            ? "Тег…"
+            : "Заметка или слова из текста…",
   );
 </script>
 
@@ -185,7 +209,11 @@
               {#if item.note.kind === "book"}<span class="p-badge">книга</span>{/if}
               <span class="p-path">{@render marked(item.note.id, item.path)}</span>
             {:else if item.kind === "hit"}
-              <span class="p-title">{item.hit.title}{#if item.hit.heading}<span class="p-heading">{` › ${item.hit.heading}`}</span>{/if}</span>
+              {#if book}
+                <span class="p-title">{item.hit.heading ?? "Начало книги"}</span>
+              {:else}
+                <span class="p-title">{item.hit.title}{#if item.hit.heading}<span class="p-heading">{` › ${item.hit.heading}`}</span>{/if}</span>
+              {/if}
               <span class="p-snippet">{#each item.hit.snippet as f}{#if f.hit}<mark>{f.text}</mark>{:else}{f.text}{/if}{/each}</span>
             {:else if item.kind === "tag"}
               <span class="p-title">#{@render marked(item.tag, item.positions)}</span>
@@ -197,7 +225,7 @@
           </li>
         {:else}
           <li class="palette-empty" role="presentation">
-            {searching ? "Ищу…" : q ? "Ничего не нашлось" : mode === "text" ? "Введите хотя бы две буквы" : "Пусто"}
+            {searching ? "Ищу…" : q ? "Ничего не нашлось" : mode === "text" || mode === "book" ? "Введите хотя бы две буквы" : "Пусто"}
           </li>
         {/each}
       </ul>

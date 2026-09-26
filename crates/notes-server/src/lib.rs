@@ -26,13 +26,15 @@
 //! | `GET /api/settings`          | схема и значения настроек                    |
 //! | `PUT /api/settings`          | изменить настройки (частично)                |
 //! | `POST /api/warm`             | что собрать заранее первым (см. `notes_core::warm`) |
+//! | `GET /api/events`            | события: файлы изменились (SSE, см. `events`) |
 //! | `GET /api/themes`            | темы: имя, название, тёмная ли               |
 //! | `GET /api/themes.css`        | CSS-переменные тем                           |
 //! | `GET /api/fonts.css`         | `@font-face` для шрифтов оформления (по частям) |
 //! | `GET /fonts/{family}/{style}/{part}.woff2` | часть шрифта (WOFF2, набор знаков) |
 //!
 //! Модули — по областям: `notes` (заметки, PDF, прогрев), `graph`,
-//! `search`, `settings` (и темы), `assets` (клиент), `fonts`; общее —
+//! `search`, `settings` (и темы), `assets` (клиент), `fonts`, `events`
+//! (изменения хранилища); общее —
 //! [`AppState`] и `error`. Со [`AppState::token`] все пути требуют токен
 //! (`auth`: заголовок, `?token=` или cookie).
 
@@ -40,6 +42,7 @@ pub mod api;
 mod assets;
 mod auth;
 mod error;
+mod events;
 mod fonts;
 mod graph;
 mod notes;
@@ -51,6 +54,7 @@ use std::sync::Arc;
 use axum::Router;
 use notes_core::Notes;
 use notes_core::settings::SettingsStore;
+use tokio::sync::{broadcast, watch};
 use tower_http::compression::CompressionLayer;
 use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 
@@ -61,12 +65,23 @@ pub struct AppState {
     pub settings: Arc<SettingsStore>,
     /// Токен доступа: если задан, без него сервер отвечает 401 (см. `auth`).
     pub token: Option<Arc<str>>,
+    /// Изменения хранилища для `GET /api/events`.
+    pub events: broadcast::Sender<api::ChangeEvent>,
+    /// Сервер останавливается: потоки событий закрываются.
+    pub closing: Arc<watch::Sender<bool>>,
 }
 
 impl AppState {
-    /// Состояние без токена.
+    /// Состояние без токена. Изменения хранилища приходят в `events`, когда
+    /// наблюдатель включён (`Notes::watch`, это делает [`serve`]).
     pub fn new(notes: Arc<Notes>, settings: Arc<SettingsStore>) -> Self {
-        Self { notes, settings, token: None }
+        let (events, _) = broadcast::channel(64);
+        let tx = events.clone();
+        notes.on_change(move |c| {
+            // Нет слушателей — не страшно.
+            let _ = tx.send(api::ChangeEvent { seq: c.seq, paths: c.paths.clone() });
+        });
+        Self { notes, settings, token: None, events, closing: Arc::new(watch::Sender::new(false)) }
     }
 
     /// С токеном доступа; пустая строка — как без токена.
@@ -84,7 +99,8 @@ pub fn router(state: AppState) -> Router {
         .merge(graph::routes())
         .merge(search::routes())
         .merge(settings::routes())
-        .merge(fonts::routes());
+        .merge(fonts::routes())
+        .merge(events::routes());
     if let Some(token) = state.token.clone() {
         app = app.layer(axum::middleware::from_fn_with_state(token, auth::require_token));
     }
@@ -109,5 +125,14 @@ pub async fn serve(
     // кэш на диске (рисунки обрабатываются при открытии — по настройкам).
     let notes = state.notes.clone();
     std::thread::spawn(move || notes.warm_forever());
+    // Наблюдатель файлов: индекс ссылок без обходов, прогрев и события клиенту.
+    if state.notes.watch() {
+        tracing::info!("слежу за файлами хранилища");
+    }
+    let closing = state.closing.clone();
+    let shutdown = async move {
+        shutdown.await;
+        closing.send_replace(true);
+    };
     axum::serve(listener, router(state)).with_graceful_shutdown(shutdown).await
 }

@@ -16,10 +16,14 @@
 //! удачной сборки заметки ([`SourceIndex::set_built`], из кэша страниц)
 //! дописываются к найденным в исходнике — так они попадают в обратные
 //! ссылки и граф. Пока заметка не пересобрана, её прежние ссылки остаются.
+//!
+//! С наблюдателем файлов ([`crate::watch::Changes`], сервер) индекс не
+//! обходит хранилище, пока в нём ничего не менялось: разбор всех заметок
+//! берётся из памяти (и на всякий случай обновляется не реже [`MAX_AGE`]).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::sync::OnceLock;
-use std::time::SystemTime;
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant, SystemTime};
 
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -29,6 +33,11 @@ use crate::Result;
 use crate::outline::{Outline, parse_outline};
 use crate::render::LinkRef;
 use crate::vault::{Entry, NoteId, NoteKind, Vault};
+use crate::watch::Changes;
+
+/// С наблюдателем — обходить хранилище хотя бы так часто (страховка от
+/// потерянного события).
+pub const MAX_AGE: Duration = Duration::from_secs(600);
 
 /// Функция ссылки из `baluk/links.typ`.
 const LINK_FN: &str = "see";
@@ -83,6 +92,19 @@ pub struct SourceIndex {
     files: Mutex<HashMap<String, Parsed>>,
     /// Откуда брать ссылки собранных страниц.
     built: OnceLock<BuiltLinks>,
+    /// Наблюдатель файлов: пока счётчик тот же, обход не нужен.
+    changes: OnceLock<Arc<Changes>>,
+    /// Последний обход: при каком счётчике, когда и что нашёл.
+    walked: Mutex<Option<(u64, Instant, Arc<Walk>)>>,
+}
+
+/// Разбор всех заметок хранилища — итог обхода.
+#[derive(Debug)]
+struct Walk {
+    entries: Arc<Vec<Entry>>,
+    /// Ссылки из исходников.
+    links: BTreeMap<NoteId, Vec<LinkRef>>,
+    outlines: Arc<BTreeMap<NoteId, Outline>>,
 }
 
 impl std::fmt::Debug for SourceIndex {
@@ -94,11 +116,11 @@ impl std::fmt::Debug for SourceIndex {
 /// Ссылки всех заметок хранилища на данный момент.
 #[derive(Debug)]
 pub struct Snapshot {
-    entries: Vec<Entry>,
+    entries: Arc<Vec<Entry>>,
     /// Заметка → её ссылки (без повторов, в порядке появления).
     links: BTreeMap<NoteId, Vec<LinkRef>>,
     /// Заметка → содержание (у книги — всех файлов по порядку).
-    outlines: BTreeMap<NoteId, Outline>,
+    outlines: Arc<BTreeMap<NoteId, Outline>>,
 }
 
 impl SourceIndex {
@@ -109,9 +131,51 @@ impl SourceIndex {
         }
     }
 
-    /// Обходит хранилище и возвращает ссылки всех заметок. Разбираются
-    /// только изменившиеся файлы.
+    /// Не обходить хранилище, пока `changes` не сообщит об изменении (один раз).
+    pub fn set_changes(&self, changes: Arc<Changes>) {
+        if self.changes.set(changes).is_err() {
+            tracing::warn!("индекс ссылок: наблюдатель уже задан");
+        }
+    }
+
+    /// Ссылки и содержание всех заметок. Обходит хранилище (разбираются
+    /// только изменившиеся файлы) — или, с наблюдателем, берёт прошлый обход,
+    /// если с тех пор ничего не менялось.
     pub fn snapshot(&self, vault: &Vault) -> Result<Snapshot> {
+        let walk = self.walk(vault)?;
+        let mut links = walk.links.clone();
+        // Ссылки собранных страниц: вычисляемые пути — после буквальных.
+        if let Some(built) = self.built.get() {
+            for (id, own) in &mut links {
+                for link in built(id).unwrap_or_default() {
+                    if !own.contains(&link) {
+                        own.push(link);
+                    }
+                }
+            }
+        }
+        Ok(Snapshot { entries: walk.entries.clone(), links, outlines: walk.outlines.clone() })
+    }
+
+    fn walk(&self, vault: &Vault) -> Result<Arc<Walk>> {
+        let watched = self.changes.get().filter(|c| c.watching());
+        // Счётчик — до обхода: событие во время обхода сделает его устаревшим.
+        let seq = watched.map(|c| c.seq());
+        if let (Some(seq), Some((at_seq, at, walk))) = (seq, &*self.walked.lock())
+            && *at_seq == seq
+            && at.elapsed() < MAX_AGE
+        {
+            return Ok(walk.clone());
+        }
+        let walk = Arc::new(self.walk_files(vault)?);
+        if let Some(seq) = seq {
+            *self.walked.lock() = Some((seq, Instant::now(), walk.clone()));
+        }
+        Ok(walk)
+    }
+
+    /// Обход хранилища: разбираются только изменившиеся файлы.
+    fn walk_files(&self, vault: &Vault) -> Result<Walk> {
         let entries = vault.entries()?;
         let mut files = self.files.lock();
         let mut seen = BTreeSet::new();
@@ -147,18 +211,7 @@ impl SourceIndex {
         }
         // Удалённые файлы — из кэша вон.
         files.retain(|path, _| seen.contains(path));
-        drop(files);
-        // Ссылки собранных страниц: вычисляемые пути — после буквальных.
-        if let Some(built) = self.built.get() {
-            for (id, own) in &mut links {
-                for link in built(id).unwrap_or_default() {
-                    if !own.contains(&link) {
-                        own.push(link);
-                    }
-                }
-            }
-        }
-        Ok(Snapshot { entries, links, outlines })
+        Ok(Walk { entries: Arc::new(entries), links, outlines: Arc::new(outlines) })
     }
 }
 
@@ -327,6 +380,33 @@ mod tests {
         assert_eq!(snap.backlinks(&NoteId::new("A").unwrap()).len(), 1);
         assert_eq!(snap.backlinks(&b).len(), 2);
         assert_eq!(index.files.lock().len(), 3);
+    }
+
+    #[test]
+    fn with_watcher_walks_only_after_change() {
+        use crate::storage::MemStorage;
+        let mem = Arc::new(MemStorage::new());
+        mem.write("A.typ", r#"#see("B")"#);
+        mem.write("B.typ", "");
+        let vault = Vault::new(mem.clone());
+        let changes = Arc::new(Changes::default());
+        assert!(changes.start(&*mem));
+        let index = SourceIndex::default();
+        index.set_changes(changes.clone());
+        let b = NoteId::new("B").unwrap();
+        assert_eq!(index.snapshot(&vault).unwrap().backlinks(&b).len(), 1);
+        let first = index.walked.lock().as_ref().map(|w| Arc::as_ptr(&w.2)).unwrap();
+        index.snapshot(&vault).unwrap();
+        let again = index.walked.lock().as_ref().map(|w| Arc::as_ptr(&w.2)).unwrap();
+        assert_eq!(first, again, "без изменений — прошлый обход");
+
+        mem.write("C.typ", r#"#see("B")"#);
+        assert_eq!(index.snapshot(&vault).unwrap().backlinks(&b).len(), 2, "изменение — новый обход");
+
+        // Без наблюдателя — обход всегда.
+        changes.stop();
+        mem.write("D.typ", r#"#see("B")"#);
+        assert_eq!(index.snapshot(&vault).unwrap().backlinks(&b).len(), 3);
     }
 
     #[test]

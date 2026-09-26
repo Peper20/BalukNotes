@@ -7,15 +7,22 @@
 //! меняться не придётся. Тесты слоёв ядра работают на [`MemStorage`] — в
 //! памяти, без диска.
 //!
+//! Хранилище может сообщать об изменениях файлов ([`Storage::watch`]):
+//! каталог — через наблюдатель ОС (`notify`), и тогда список файлов берётся
+//! из памяти, пока в каталоге ничего не менялось. Кто не умеет — ядро
+//! обходит файлы, как раньше.
+//!
 //! Пути — относительные, через `/`, без `/` в начале: `Сеть/SSH.typ`.
 //! Библиотека оформления (`/_baluk/`) и пакеты Typst — не хранилище: их
 //! читает компилятор ([`crate::world`]).
 
+use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use parking_lot::Mutex;
@@ -28,6 +35,14 @@ pub struct FileMeta {
     /// Время изменения (у каталога и там, где его нет, — `None`).
     pub modified: Option<SystemTime>,
 }
+
+/// Куда хранилище сообщает об изменениях: пути изменившихся файлов (как в
+/// [`Storage::list`], но и служебные на `_`) — или `None`: наблюдатель
+/// сломался, изменения могли потеряться (дальше — без него).
+pub type ChangeSink = Arc<dyn Fn(Option<Vec<String>>) + Send + Sync>;
+
+/// Наблюдатель работает, пока жив этот объект.
+pub type WatchGuard = Box<dyn Any + Send + Sync>;
 
 /// Файлы хранилища.
 pub trait Storage: Send + Sync + fmt::Debug {
@@ -49,6 +64,13 @@ pub trait Storage: Send + Sync + fmt::Debug {
     fn display(&self, path: &str) -> PathBuf {
         PathBuf::from(path)
     }
+
+    /// Сообщать об изменениях файлов в `sink`. `Ok(None)` — хранилище так
+    /// не умеет (по умолчанию).
+    fn watch(&self, sink: ChangeSink) -> io::Result<Option<WatchGuard>> {
+        let _ = sink;
+        Ok(None)
+    }
 }
 
 /// Исходник Typst (`.typ`).
@@ -65,6 +87,15 @@ pub fn is_hidden(name: &str) -> bool {
 #[derive(Debug, Clone)]
 pub struct DirStorage {
     root: PathBuf,
+    /// Список файлов, пока наблюдатель не сообщил об изменении.
+    listed: Arc<Mutex<Listed>>,
+}
+
+#[derive(Debug, Default)]
+struct Listed {
+    /// Наблюдатель работает — список можно помнить.
+    watching: bool,
+    files: Option<Vec<String>>,
 }
 
 impl DirStorage {
@@ -74,7 +105,7 @@ impl DirStorage {
         if !root.is_dir() {
             return Err(io::Error::new(io::ErrorKind::NotADirectory, "хранилище — не каталог"));
         }
-        Ok(Self { root })
+        Ok(Self { root, listed: Arc::default() })
     }
 
     pub fn root(&self) -> &Path {
@@ -117,9 +148,63 @@ impl Storage for DirStorage {
     }
 
     fn list(&self) -> io::Result<Vec<String>> {
+        // Под замком: изменение во время обхода ждёт его конца и сбросит
+        // запомненный список.
+        let mut listed = self.listed.lock();
+        if let Some(files) = &listed.files {
+            return Ok(files.clone());
+        }
         let mut out = Vec::new();
         Self::walk(&self.root, "", &mut out)?;
+        if listed.watching {
+            listed.files = Some(out.clone());
+        }
         Ok(out)
+    }
+
+    fn watch(&self, sink: ChangeSink) -> io::Result<Option<WatchGuard>> {
+        use notify::event::{EventKind, ModifyKind};
+        use notify::{RecursiveMode, Watcher};
+        let root = self.root.clone();
+        let listed = self.listed.clone();
+        let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+            // Чтение файлов (компиляция, сам обход) — не изменение.
+            if matches!(&event, Ok(e) if e.kind.is_access()) {
+                return;
+            }
+            let mut state = listed.lock();
+            // Правка содержимого список файлов не меняет.
+            if !matches!(&event, Ok(e) if matches!(e.kind, EventKind::Modify(ModifyKind::Data(_) | ModifyKind::Metadata(_)))) {
+                state.files = None;
+            }
+            match event {
+                Ok(event) => {
+                    drop(state);
+                    let paths: Vec<String> = event
+                        .paths
+                        .iter()
+                        .filter_map(|p| p.strip_prefix(&root).ok())
+                        .filter_map(|p| p.to_str().map(|p| p.replace(std::path::MAIN_SEPARATOR, "/")))
+                        .filter(|p| !p.is_empty() && !p.split('/').any(|name| name.starts_with('.')))
+                        .collect();
+                    if !paths.is_empty() {
+                        sink(Some(paths));
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("наблюдатель хранилища: {e}; дальше — обход файлов");
+                    state.watching = false;
+                    drop(state);
+                    sink(None);
+                }
+            }
+        })
+        .map_err(io::Error::other)?;
+        watcher.watch(&self.root, RecursiveMode::Recursive).map_err(io::Error::other)?;
+        let mut state = self.listed.lock();
+        state.watching = true;
+        state.files = None;
+        Ok(Some(Box::new(Unwatch { _watcher: watcher, listed: self.listed.clone() })))
     }
 
     fn stat(&self, path: &str) -> io::Result<FileMeta> {
@@ -136,11 +221,32 @@ impl Storage for DirStorage {
     }
 }
 
+/// Остановить наблюдатель: список файлов больше не помнить.
+struct Unwatch {
+    _watcher: notify::RecommendedWatcher,
+    listed: Arc<Mutex<Listed>>,
+}
+
+impl Drop for Unwatch {
+    fn drop(&mut self) {
+        let mut state = self.listed.lock();
+        state.watching = false;
+        state.files = None;
+    }
+}
+
 /// Хранилище в памяти — для тестов. Время изменения — счётчик записей:
-/// каждая запись меняет версию файла.
-#[derive(Debug, Default)]
+/// каждая запись меняет версию файла. Сообщает о записях ([`Storage::watch`]).
+#[derive(Default)]
 pub struct MemStorage {
     files: Mutex<MemFiles>,
+    sink: Mutex<Option<ChangeSink>>,
+}
+
+impl fmt::Debug for MemStorage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MemStorage").field("files", &self.files).finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -160,10 +266,20 @@ impl MemStorage {
         f.clock += 1;
         let clock = f.clock;
         f.files.insert(path.to_owned(), (data.into(), clock));
+        drop(f);
+        self.changed(path);
     }
 
     pub fn remove(&self, path: &str) {
         self.files.lock().files.remove(path);
+        self.changed(path);
+    }
+
+    fn changed(&self, path: &str) {
+        let sink = self.sink.lock().clone();
+        if let Some(sink) = sink {
+            sink(Some(vec![path.to_owned()]));
+        }
     }
 }
 
@@ -195,6 +311,11 @@ impl Storage for MemStorage {
             FileMeta { is_dir: true, .. } => Err(io::Error::new(io::ErrorKind::IsADirectory, path.to_owned())),
             _ => Ok(self.files.lock().files[path].0.clone()),
         }
+    }
+
+    fn watch(&self, sink: ChangeSink) -> io::Result<Option<WatchGuard>> {
+        *self.sink.lock() = Some(sink);
+        Ok(Some(Box::new(())))
     }
 }
 
@@ -232,6 +353,46 @@ mod tests {
             mem.write(f, text);
         }
         check(&mem);
+    }
+
+    /// Ждать, пока `ok()` не станет истиной (события ОС приходят не сразу).
+    fn eventually(ok: impl Fn() -> bool) -> bool {
+        (0..200).any(|_| {
+            ok() || {
+                std::thread::sleep(Duration::from_millis(10));
+                false
+            }
+        })
+    }
+
+    #[test]
+    fn dir_watch_reports_changes_and_keeps_list() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.typ"), "a").unwrap();
+        let disk = DirStorage::open(dir.path()).unwrap();
+        let seen = Arc::new(Mutex::new(Vec::<Option<Vec<String>>>::new()));
+        let sink_seen = seen.clone();
+        let guard = disk.watch(Arc::new(move |paths| sink_seen.lock().push(paths))).unwrap().expect("каталог умеет");
+        assert_eq!(disk.list().unwrap(), ["a.typ"]);
+        assert!(disk.listed.lock().files.is_some(), "список запомнен");
+
+        fs::create_dir(dir.path().join("Сеть")).unwrap();
+        fs::write(dir.path().join("Сеть/SSH.typ"), "ssh").unwrap();
+        fs::create_dir(dir.path().join(".git")).unwrap();
+        fs::write(dir.path().join(".git/x"), "").unwrap();
+        // Файл в только что созданной папке может прийти одним событием папки.
+        assert!(eventually(|| seen.lock().iter().flatten().flatten().any(|p| p.starts_with("Сеть"))));
+        fs::write(dir.path().join("a.typ"), "aa").unwrap();
+        assert!(eventually(|| seen.lock().iter().flatten().flatten().any(|p| p == "a.typ")));
+        assert!(!seen.lock().iter().flatten().flatten().any(|p| p.starts_with(".git")), "служебное на . — не событие");
+        let mut list = disk.list().unwrap();
+        list.sort();
+        assert_eq!(list, ["a.typ", "Сеть/SSH.typ"], "изменение сбросило запомненный список");
+
+        drop(guard);
+        assert!(disk.listed.lock().files.is_none());
+        disk.list().unwrap();
+        assert!(disk.listed.lock().files.is_none(), "без наблюдателя список не помнится");
     }
 
     #[test]

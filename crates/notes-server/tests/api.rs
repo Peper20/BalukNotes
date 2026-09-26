@@ -197,6 +197,15 @@ async fn search_preview_and_note_meta() {
     assert_eq!(hits[0]["id"], "Книга");
     assert_eq!(hits[0]["anchor"], "Итоги-2");
 
+    // В одной книге — все разделы по порядку.
+    let (status, inside) =
+        call(app.clone(), "GET", &format!("/api/search?q={}&note={}", uri("итоги"), uri("Книга")), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(inside.as_array().unwrap().iter().all(|h| h["id"] == "Книга"));
+    let q = format!("/api/search?q=x&note={}", uri("Нет/такой"));
+    assert_eq!(call(app.clone(), "GET", &q, None).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(call(app.clone(), "GET", "/api/search?q=x&note=../x", None).await.0, StatusCode::BAD_REQUEST);
+
     let (status, p) =
         call(app.clone(), "GET", &format!("{}?anchor={}", uri("/api/preview/Сеть/SSH"), uri("Смена порта")), None)
             .await;
@@ -290,4 +299,48 @@ async fn token_is_required_when_set() {
 
     // Без токена в настройках — проверки нет.
     assert_eq!(status(open.oneshot(get("/api/notes")).await.unwrap()), StatusCode::OK);
+}
+
+/// Следующий кадр тела ответа как текст (с тайм-аутом).
+async fn next_frame(body: &mut Body) -> String {
+    let frame =
+        tokio::time::timeout(std::time::Duration::from_secs(10), body.frame()).await.expect("событие не пришло");
+    String::from_utf8(frame.unwrap().unwrap().into_data().unwrap().to_vec()).unwrap()
+}
+
+#[tokio::test]
+async fn events_report_file_changes() {
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let vault = tempfile::tempdir().unwrap();
+    std::fs::write(vault.path().join("A.typ"), "a").unwrap();
+    let notes = Arc::new(
+        Notes::open(&NotesConfig {
+            vault: vault.path().to_owned(),
+            library: LibrarySource::Dir(repo.join("baluk")),
+            font_dirs: vec![],
+            cache: None,
+        })
+        .unwrap(),
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let settings = SettingsStore::open(dir.path().join("settings.json"), Schema::new(notes.themes().themes())).unwrap();
+    let state = AppState::new(notes.clone(), Arc::new(settings));
+    assert!(notes.watch(), "каталог на диске — с наблюдателем");
+    let res = router(state.clone()).oneshot(Request::get("/api/events").body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()["content-type"], "text/event-stream");
+    let mut body = res.into_body();
+    assert_eq!(next_frame(&mut body).await, "event: hello\ndata: {\"watching\":true}\n\n");
+
+    std::fs::write(vault.path().join("B.typ"), "b").unwrap();
+    let change = next_frame(&mut body).await;
+    assert!(
+        change.starts_with("event: change\ndata: {\"seq\":") && change.contains(r#""paths":["B.typ"]"#),
+        "{change}"
+    );
+
+    // Остановка сервера закрывает поток.
+    state.closing.send_replace(true);
+    let end = tokio::time::timeout(std::time::Duration::from_secs(10), body.frame()).await.unwrap();
+    assert!(end.is_none());
 }

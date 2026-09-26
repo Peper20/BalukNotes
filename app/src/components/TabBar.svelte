@@ -5,7 +5,7 @@
 <script lang="ts">
   import Plus from "@lucide/svelte/icons/plus";
   import X from "@lucide/svelte/icons/x";
-  import { app } from "../lib/app.svelte";
+  import { notes, router, tabs } from "../lib/state";
   import { parseRoute, splitId } from "../lib/ids";
 
   function title(url: string): string {
@@ -14,7 +14,7 @@
     if (route.kind === "home") return "Главная";
     if (route.kind === "graph") return route.around ? `Граф: ${splitId(route.around).name}` : "Граф";
     if (route.kind === "tags") return route.tag ? `#${route.tag}` : "Теги";
-    const note = app.notes.find((n) => n.id === route.id);
+    const note = notes.all.find((n) => n.id === route.id);
     return note?.title ?? note?.name ?? splitId(route.id).name;
   }
 
@@ -22,7 +22,7 @@
 
   // Активная вкладка — в поле зрения полосы (на телефоне вкладки не влезают).
   $effect(() => {
-    void [app.activeTab, app.tabs.length, app.notes]; // названия (ширина) — по списку заметок
+    void [tabs.active, tabs.list.length, notes.all]; // названия (ширина) — по списку заметок
     const tab = bar?.querySelector<HTMLElement>(".tab.active");
     if (!bar || !tab) return;
     const [b, t] = [bar.getBoundingClientRect(), tab.getBoundingClientRect()];
@@ -31,19 +31,19 @@
   });
 </script>
 
-{#if app.tabs.length > 1}
+{#if tabs.list.length > 1}
   <div class="tabbar" role="tablist" aria-label="Вкладки" bind:this={bar}>
-    {#each app.tabs as tab, i}
+    {#each tabs.list as tab, i}
       <div
         class="tab"
-        class:active={i === app.activeTab}
+        class:active={i === tabs.active}
         role="tab"
         tabindex="0"
-        aria-selected={i === app.activeTab}
+        aria-selected={i === tabs.active}
         title={decodeURIComponent(tab.url)}
-        onclick={() => app.switchTab(i)}
-        onauxclick={(e) => e.button === 1 && app.closeTab(i)}
-        onkeydown={(e) => e.key === "Enter" && app.switchTab(i)}
+        onclick={() => router.switchTab(i)}
+        onauxclick={(e) => e.button === 1 && router.closeTab(i)}
+        onkeydown={(e) => e.key === "Enter" && router.switchTab(i)}
       >
         <span class="tab-title">{title(tab.url)}</span>
         <button
@@ -52,11 +52,11 @@
           aria-label="Закрыть вкладку"
           onclick={(e) => {
             e.stopPropagation();
-            app.closeTab(i);
+            router.closeTab(i);
           }}><X size={14} strokeWidth={2} aria-hidden="true" /></button
         >
       </div>
     {/each}
-    <button type="button" class="tab-new" title="Новая вкладка (Alt+T)" aria-label="Новая вкладка" onclick={() => app.go("/", { newTab: true })}><Plus size={16} strokeWidth={2} aria-hidden="true" /></button>
+    <button type="button" class="tab-new" title="Новая вкладка (Alt+T)" aria-label="Новая вкладка" onclick={() => router.go("/", { newTab: true })}><Plus size={16} strokeWidth={2} aria-hidden="true" /></button>
   </div>
 {/if}
