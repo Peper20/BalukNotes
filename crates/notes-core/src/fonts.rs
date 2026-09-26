@@ -1,17 +1,41 @@
-//! Шрифты: для компилятора (системные + встроенные в Typst) и для браузера.
+//! Шрифты: для компилятора и для браузера.
+//!
+//! Шрифты оформления (Gentium Plus, JetBrains Mono — каталог `fonts/`) и
+//! шрифты Typst (New Computer Modern Math и др.) встроены в бинарник и
+//! **заслоняют** одноимённые системные: отрисовка одинакова на любой машине,
+//! а ставить шрифты в систему не нужно. Системные — для всего остального.
 //!
 //! Браузер рисует текст и формулы сам, поэтому ему нужны те же файлы
-//! шрифтов, что и Typst: Gentium Plus, JetBrains Mono и New Computer Modern
-//! Math (последний встроен в Typst и в системе его может не быть).
+//! шрифтов, что и Typst, — их отдаёт [`Fonts::web_font`].
 
 use std::any::Any;
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 
+use rust_embed::RustEmbed;
 use typst::foundations::Bytes;
-use typst::text::{Font, FontBook, FontStyle, FontVariant, FontWeight};
+use typst::text::{Font, FontBook, FontInfo, FontStyle, FontVariant, FontWeight};
 use typst::utils::LazyHash;
 use typst_kit::fonts::{self, FontPath, FontStore};
+
+/// Шрифты оформления из `fonts/`. В отладочной сборке rust-embed читает их
+/// с диска.
+#[derive(RustEmbed)]
+#[folder = "../../fonts/"]
+#[include = "*.ttf"]
+#[include = "*.otf"]
+struct EmbeddedFonts;
+
+/// Шрифты оформления, встроенные в бинарник.
+fn konspekt_fonts() -> impl Iterator<Item = (Font, FontInfo)> {
+    EmbeddedFonts::iter().filter_map(|name| EmbeddedFonts::get(&name)).flat_map(|file| {
+        Font::iter(Bytes::new(file.data.into_owned())).map(|font| {
+            let info = font.info().clone();
+            (font, info)
+        })
+    })
+}
 
 pub struct Fonts {
     store: FontStore,
@@ -70,14 +94,20 @@ pub struct WebFont {
 }
 
 impl Fonts {
-    /// Системные шрифты, шрифты из `extra_dirs` и встроенные в Typst.
+    /// Шрифты из `extra_dirs` (явно указанные — главнее всех), встроенные
+    /// (оформления и Typst) и системные — кроме семейств, которые уже есть
+    /// среди встроенных.
     pub fn load(extra_dirs: &[PathBuf]) -> Self {
         let mut store = FontStore::new();
-        store.extend(fonts::system());
         for dir in extra_dirs {
             store.extend(fonts::scan(dir));
         }
-        store.extend(fonts::embedded());
+        let embedded: Vec<_> = konspekt_fonts().chain(fonts::embedded()).collect();
+        let shadowed: HashSet<String> = embedded.iter().map(|(_, info)| info.family.to_lowercase()).collect();
+        store.extend(embedded);
+        // Иначе системный шрифт того же семейства мог бы победить при выборе
+        // (Typst предпочитает вариативный файл статическому).
+        store.extend(fonts::system().filter(|(_, info)| !shadowed.contains(&info.family.to_lowercase())));
         Self { store }
     }
 
@@ -121,5 +151,26 @@ impl Fonts {
             _ => "font/ttf",
         };
         Some(WebFont { data, mime })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn konspekt_fonts_are_embedded_and_win_over_system() {
+        let fonts = Fonts::load(&[]);
+        for family in ["Gentium Plus", "JetBrains Mono", "New Computer Modern Math"] {
+            let index = fonts.book().select(&family.to_lowercase(), FontVariant::default()).expect(family);
+            let source: &dyn Any = fonts.store.source(index).unwrap();
+            assert!(source.is::<Font>(), "{family}: встроенный, не системный файл");
+        }
+        for family in ["Gentium Plus", "JetBrains Mono"] {
+            for v in WebVariant::ALL {
+                let font = fonts.web_font(family, v).unwrap_or_else(|| panic!("{family} {}", v.slug()));
+                assert_eq!(font.mime, "font/ttf");
+            }
+        }
     }
 }

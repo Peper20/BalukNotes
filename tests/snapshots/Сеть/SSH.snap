@@ -11,7 +11,7 @@ links:
   Сеть/SSH / Вход по ключу
 styles: 235 байт, fnv 16d3c64f519a6efb
 ---
-<svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…12775 байт, fnv 2f9cc58bf428fa37…</svg>
+<svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…12775 байт, fnv 9dc0374a42dde7b8…</svg>
 <article class="k-doc" data-k-figs="41399c17" data-doc="заметка">
 <header class="k-title">
 <h1>SSH</h1>
@@ -23,7 +23,7 @@ styles: 235 байт, fnv 16d3c64f519a6efb
 <p>Клиент и сервер сначала договариваются о шифровании, потом сервер доказывает, что он — тот самый (<strong>ключ хоста</strong>), и только затем клиент входит — паролем или ключом (см. <a href="#рис-ssh">1</a>).</p>
 <figure id="рис-ssh">
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 20.615604868em; height: 3.09234073em; display: block" viewBox="0 0 226.771653543 34.015748031" width="226.771653543pt" height="34.015748031pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…5161 байт, fnv b7549b5590e7e419…</svg></div>
+<svg style="overflow: visible; width: 20.615604868em; height: 3.09234073em; display: block" viewBox="0 0 226.771653543 34.015748031" width="226.771653543pt" height="34.015748031pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…5161 байт, fnv f7e571db427e82a0…</svg></div>
 <figcaption><span class="k-fig-num">Рис. 1.</span> По сети идёт только зашифрованный поток — пароль и команды не видны</figcaption></figure>
 <div class="k-box k-def"><span class="k-label">Определение 1 (ключ хоста).</span> <strong>Ключ хоста</strong> — пара ключей сервера. При первом входе клиент запоминает его отпечаток в <code>~/.ssh/known_hosts</code> и дальше сверяет.</div>
 <h2 class="k-h k-h2" id="Вход-по-ключу" data-k-anchor="Вход-по-ключу"><span class="k-num">2</span>Вход по ключу</h2>
