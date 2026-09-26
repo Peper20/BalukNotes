@@ -375,3 +375,26 @@ fn decoration_words_follow_note_language() {
         assert!(!body.contains(word), "русское «{word}» в английской заметке");
     }
 }
+
+#[test]
+fn storage_in_memory_compiles_and_follows_edits() {
+    let mem = std::sync::Arc::new(notes_core::storage::MemStorage::new());
+    let head = "#import \"/_baluk/lib.typ\": *\n#show: note.with(title: [x])\n";
+    mem.write("A.typ", format!("{head}= Раз\n#include \"часть.typ\"\n"));
+    mem.write("часть.typ", "первая часть");
+    let config = NotesConfig {
+        vault: PathBuf::new(),
+        library: LibrarySource::Dir(repo().join("baluk")),
+        font_dirs: vec![],
+        cache: None,
+    };
+    let notes = Notes::with_storage(mem.clone(), &config).unwrap();
+    let page = notes.page(&id("A"), OPTS).unwrap();
+    assert!(page.errors.is_empty(), "{:?}", page.errors);
+    assert!(page.rendered.as_ref().unwrap().body.contains("первая часть"));
+
+    // Правка включённого файла — новая версия и новый текст.
+    mem.write("часть.typ", "вторая часть");
+    assert_ne!(notes.version(&id("A"), OPTS).unwrap(), page.version);
+    assert!(notes.page(&id("A"), OPTS).unwrap().rendered.as_ref().unwrap().body.contains("вторая часть"));
+}
