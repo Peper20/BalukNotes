@@ -62,6 +62,7 @@ button.icon {
 }
 button.icon:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
 button.icon:hover { color: var(--k-accent); border-color: var(--k-line); background: var(--k-surface); }
+button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 
 /* ── Ошибки компиляции ──────────────────────────────────────────────── */
 .problems { margin: 0.8rem auto 0; max-width: 52rem; padding: 0 1rem; }

@@ -30,6 +30,7 @@
     interactive = false,
     highlight = null,
     titles = null,
+    moved = $bindable(false),
   }: {
     /** Граф с раскладкой из ядра (`POST /api/graph/layout` или `#vault-graph` заметки). */
     layout: GraphLayout;
@@ -39,6 +40,8 @@
     highlight?: Set<string> | null;
     /** Названия заметок для подсказки. */
     titles?: Map<string, string> | null;
+    /** Узлы переставлены руками — картинка разошлась с раскладкой ядра. */
+    moved?: boolean;
   } = $props();
 
   const graph = $derived(layout);
@@ -74,6 +77,7 @@
     const target = base;
     untrack(() => {
       sim = null;
+      moved = false;
       const from = at;
       if (!GLIDE || !anyMoving(from, target)) {
         frames.stop();
@@ -114,6 +118,24 @@
   }
   export function zoom(factor: number) {
     view = zoomAt(view, factor, width / 2, height / 2);
+  }
+  /**
+   * Вернуть раскладку ядра: узлы плавно переезжают на свои места (с
+   * замедлением, без перелёта), физика забывает перестановки.
+   */
+  export function restore() {
+    pull = null;
+    sim = null;
+    moved = false;
+    const from = at;
+    if (!GLIDE) {
+      frames.stop();
+      at = base;
+      return;
+    }
+    const target = base;
+    // Последний кадр — ровно раскладка (без ошибки округления).
+    frames.tween(GLIDE, (e) => (at = e < 1 ? glide(from, target, e) : target));
   }
   /** Показать узел: в центр окна, не мельче 1:1. */
   export function show(id: string) {
@@ -229,6 +251,7 @@
     } else if (move.kind === "drag") {
       if (move.first || !sim) {
         dragging = true;
+        moved = true;
         focused = move.id;
         physics();
       }

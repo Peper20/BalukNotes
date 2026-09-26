@@ -154,3 +154,57 @@ test.describe("без движения (prefers-reduced-motion)", () => {
     expect(await page.locator('.graph-node[data-id="Сеть/SSH"]').count()).toBe(0);
   });
 });
+
+test("граф: «вернуть раскладку» — узлы плавно, без перелёта, возвращаются на места", async ({ page }) => {
+  await page.goto("/graph");
+  await ready(page);
+  const restore = page.getByRole("button", { name: "вернуть раскладку" });
+  await expect(restore).toBeDisabled();
+  const xy = (id: string) =>
+    page.locator(`.graph-node[data-id="${id}"]`).evaluate((g) => (g.getAttribute("transform") ?? "").match(/[-\d.]+/g)!.map(Number));
+  const ids = await page.locator(".graph-node").evaluateAll((gs) => gs.map((g) => (g as SVGElement).dataset.id!));
+  const home = new Map(await Promise.all(ids.map(async (id) => [id, await xy(id)] as const)));
+
+  // Протянуть узел — соседи тянутся за ним, после отпускания возвращаются лишь на четверть.
+  const ssh = page.locator('.graph-node[data-id="Сеть/SSH"] circle');
+  const c = (await ssh.boundingBox())!;
+  await page.mouse.move(c.x + c.width / 2, c.y + c.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 160, c.y + 90, { steps: 10 });
+  await page.mouse.up();
+  await expect(restore).toBeEnabled();
+  await page.waitForTimeout(1500); // физика осела
+  const away = async () => {
+    let far = 0;
+    for (const id of ids) {
+      const [x, y] = await xy(id);
+      const [hx, hy] = home.get(id)!;
+      far = Math.max(far, Math.hypot(x! - hx!, y! - hy!));
+    }
+    return far;
+  };
+  expect(await away()).toBeGreaterThan(20);
+
+  // Вернуть: расстояние до дома у узла SSH только убывает, в конце — ровно дома.
+  const track = page.locator('.graph-node[data-id="Сеть/SSH"]').evaluate(
+    (g, [hx, hy]) =>
+      new Promise<number[]>((done) => {
+        const seen: number[] = [];
+        const start = performance.now();
+        const tick = () => {
+          const [x, y] = (g.getAttribute("transform") ?? "").match(/[-\d.]+/g)!.map(Number);
+          seen.push(Math.hypot(x! - hx!, y! - hy!));
+          if (performance.now() - start < 900) requestAnimationFrame(tick);
+          else done(seen);
+        };
+        requestAnimationFrame(tick);
+      }),
+    home.get("Сеть/SSH")!,
+  );
+  await restore.click();
+  const dist = await track;
+  for (let i = 1; i < dist.length; i++) expect(dist[i]!).toBeLessThanOrEqual(dist[i - 1]! + 1e-6);
+  expect(dist.at(-1)!).toBeLessThan(1e-6);
+  expect(await away()).toBeLessThan(1e-6);
+  await expect(restore).toBeDisabled();
+});

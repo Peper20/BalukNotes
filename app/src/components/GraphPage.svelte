@@ -7,6 +7,7 @@
   import Maximize from "@lucide/svelte/icons/maximize";
   import Minus from "@lucide/svelte/icons/minus";
   import Plus from "@lucide/svelte/icons/plus";
+  import Undo2 from "@lucide/svelte/icons/undo-2";
   import { api, type GraphFilter, type GraphLayout } from "../lib/api";
   import { notes, router } from "../lib/state";
   import { matches } from "../lib/graph-view";
@@ -59,6 +60,8 @@
   const hits = $derived(shown && query.trim() ? new Set(shown.nodes.filter((n) => matches(query, n.id, titles.get(n.id))).map((n) => n.id)) : null);
 
   let graph: Graph | undefined = $state();
+  /** Узлы переставлены — есть что вернуть. */
+  let moved = $state(false);
 
   function toggleGroup(g: string) {
     prefs.hidden = prefs.hidden.includes(g) ? prefs.hidden.filter((h) => h !== g) : [...prefs.hidden, g];
@@ -112,6 +115,7 @@
       <button type="button" class="icon" title="Мельче" aria-label="мельче" onclick={() => graph?.zoom(1 / 1.3)}><Minus size={18} strokeWidth={1.75} aria-hidden="true" /></button>
       <button type="button" class="icon" title="Крупнее" aria-label="крупнее" onclick={() => graph?.zoom(1.3)}><Plus size={18} strokeWidth={1.75} aria-hidden="true" /></button>
       <button type="button" class="icon" title="Вписать в окно" aria-label="вписать" onclick={() => graph?.fit()}><Maximize size={18} strokeWidth={1.75} aria-hidden="true" /></button>
+      <button type="button" class="icon" title="Вернуть раскладку: узлы — на свои места" aria-label="вернуть раскладку" disabled={!moved} onclick={() => graph?.restore()}><Undo2 size={18} strokeWidth={1.75} aria-hidden="true" /></button>
     </span>
     {#if shown}
       <span class="graph-count">
@@ -129,6 +133,7 @@
     {:else if shown}
       <Graph
         bind:this={graph}
+        bind:moved
         layout={shown}
         interactive
         {titles}
@@ -138,7 +143,7 @@
     {/if}
   </section>
   <p class="graph-hint">
-    Колесо или два пальца — масштаб, протянуть фон — сдвиг, протянуть узел — переставить (соседи потянутся за ним),
-    щелчок — открыть (Ctrl — в новой вкладке).
+    Колесо или два пальца — масштаб, протянуть фон — сдвиг, протянуть узел — переставить (соседи потянутся за ним;
+    вернуть всех на места — кнопкой ↶), щелчок — открыть (Ctrl — в новой вкладке).
   </p>
 </main>
