@@ -19,7 +19,7 @@ use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{FileMeta, Storage, is_typ};
+use crate::storage::{FileMeta, Storage};
 use crate::vault_data::VaultData;
 
 /// Стабильный хэш: алгоритм и порядок байтов закреплены.
@@ -124,19 +124,6 @@ impl Versions {
     }
 }
 
-/// Отпечаток всего хранилища: пути, размеры и времена всех `.typ`
-/// (служебные каталоги `_…`, `.…` не входят).
-pub fn vault_token(storage: &dyn Storage) -> Token {
-    let mut files: Vec<String> = storage.list().unwrap_or_default();
-    files.retain(|p| is_typ(p));
-    files.sort();
-    let mut h = StableHasher::new();
-    for path in &files {
-        h.str(path).u64(meta_token(storage.stat(path).ok()));
-    }
-    h.finish()
-}
-
 /// Отпечаток по сведениям о файле (`None` — файла нет).
 fn meta_token(meta: Option<FileMeta>) -> Token {
     let mut h = StableHasher::new();
@@ -203,19 +190,6 @@ mod tests {
         // …и пока она шла, файл поменяли.
         mem.write("a.typ", "2");
         assert_ne!(read, versions.current(&[dep]), "сборка устарела сразу");
-    }
-
-    #[test]
-    fn vault_token_follows_every_note() {
-        let mem = Arc::new(MemStorage::new());
-        mem.write("A.typ", "");
-        mem.write("_baluk/lib.typ", "");
-        let v1 = vault_token(mem.as_ref());
-        mem.write("_baluk/lib.typ", "служебное не в счёт");
-        mem.write("картинка.png", "и не .typ");
-        assert_eq!(v1, vault_token(mem.as_ref()));
-        mem.write("B.typ", "");
-        assert_ne!(v1, vault_token(mem.as_ref()));
     }
 
     #[test]

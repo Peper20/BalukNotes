@@ -21,7 +21,6 @@ use serde::{Deserialize, Serialize};
 use crate::graph::{Edge, Graph, Snapshot, SourceIndex};
 use crate::vault::{NoteKind, Vault};
 use crate::vault_data::DataProvider;
-use crate::version::Token;
 
 /// Группа заметок в корне хранилища.
 pub const ROOT_GROUP: &str = "в корне";
@@ -318,14 +317,11 @@ pub struct GraphData {
     pub index: Arc<SourceIndex>,
 }
 
+/// Отпечаток — по самому ответу (по умолчанию): правка заметки, не
+/// изменившая граф, заметку с графом не пересобирает.
 impl DataProvider for GraphData {
     fn read(&self, path: &str) -> Result<Vec<u8>, String> {
         data_file(|| self.index.snapshot(&self.vault).map_err(|e| e.to_string()), path)
-    }
-
-    /// Версия всего хранилища: граф зависит от ссылок и состава заметок.
-    fn token(&self, _path: &str) -> Token {
-        crate::version::vault_token(self.vault.storage().as_ref())
     }
 }
 

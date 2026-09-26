@@ -272,9 +272,15 @@ fn vault_graph_follows_the_vault() {
     assert!(body.contains(r#"class="k-graph""#) && body.contains("data-k-graph"), "разметка для клиента");
     assert!(body.contains("&quot;id&quot;:&quot;A&quot;") && !body.contains("&quot;id&quot;:&quot;C&quot;"));
 
+    // Правка, не меняющая граф (текст, новая заметка без связей в той же
+    // папке, — вне соседей B), заметку с графом не трогает.
+    std::fs::write(dir.path().join("A.typ"), format!("{head}Текст. #see(\"B\")\n")).unwrap();
+    std::fs::write(dir.path().join("D.typ"), head).unwrap();
+    assert_eq!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "версия — по ответу графа");
+
     // Новая заметка ссылается на B — граф заметки устарел и пересобирается.
     std::fs::write(dir.path().join("C.typ"), format!("{head}#see(\"B\")\n")).unwrap();
-    assert_ne!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "версия — по всему хранилищу");
+    assert_ne!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "граф изменился");
     let body = notes.page(&id("Граф"), OPTS).unwrap().rendered.clone().unwrap().body.clone();
     assert!(body.contains("&quot;id&quot;:&quot;C&quot;"));
 }
