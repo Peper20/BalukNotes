@@ -28,7 +28,7 @@ use typst_kit::fonts::{self, FontPath, FontStore};
 struct EmbeddedFonts;
 
 /// Шрифты оформления, встроенные в бинарник.
-fn konspekt_fonts() -> impl Iterator<Item = (Font, FontInfo)> {
+fn bundled_fonts() -> impl Iterator<Item = (Font, FontInfo)> {
     EmbeddedFonts::iter().filter_map(|name| EmbeddedFonts::get(&name)).flat_map(|file| {
         Font::iter(Bytes::new(file.data.into_owned())).map(|font| {
             let info = font.info().clone();
@@ -102,7 +102,7 @@ impl Fonts {
         for dir in extra_dirs {
             store.extend(fonts::scan(dir));
         }
-        let embedded: Vec<_> = konspekt_fonts().chain(fonts::embedded()).collect();
+        let embedded: Vec<_> = bundled_fonts().chain(fonts::embedded()).collect();
         let shadowed: HashSet<String> = embedded.iter().map(|(_, info)| info.family.to_lowercase()).collect();
         store.extend(embedded);
         // Иначе системный шрифт того же семейства мог бы победить при выборе
@@ -159,7 +159,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn konspekt_fonts_are_embedded_and_win_over_system() {
+    fn bundled_fonts_are_embedded_and_win_over_system() {
         let fonts = Fonts::load(&[]);
         for family in ["Gentium Plus", "JetBrains Mono", "New Computer Modern Math"] {
             let index = fonts.book().select(&family.to_lowercase(), FontVariant::default()).expect(family);

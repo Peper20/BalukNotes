@@ -7,10 +7,12 @@
   import { mount, onDestroy, unmount, untrack } from "svelte";
   import { app } from "../lib/app.svelte";
   import type { NotePage } from "../lib/api";
+  import { parseFrames } from "../lib/frames";
   import { tagHref } from "../lib/ids";
   import { ui } from "../lib/ui.svelte";
   import { formulasOk, readSpec } from "../lib/plot/spec";
   import Loading from "./Loading.svelte";
+  import Frames from "./Frames.svelte";
   import Plot from "./Plot.svelte";
 
   let content: HTMLDivElement | undefined = $state();
@@ -48,6 +50,7 @@
     el.innerHTML = r ? r.styles + r.body : "";
     linkTags(el);
     mountPlots(el);
+    mountFrames(el);
     ui.book = page.book;
     ui.chapter = page.book?.chapter ?? 0;
     app.chapter = page.book ? page.book.chapter : null;
@@ -66,7 +69,7 @@
   }
 
   /**
-   * Интерактивные рисунки konspekt: в HTML — `div.k-plot` с JSON и кадром
+   * Интерактивные рисунки baluk: в HTML — `div.k-plot` с JSON и кадром
    * Typst; живой рисунок встаёт рядом, кадр прячет CSS (`[data-live]`).
    * Формула не разобралась — остаётся кадр.
    */
@@ -79,6 +82,24 @@
         el.dataset.live = "";
       } catch (e) {
         console.warn("интерактивный рисунок:", e);
+      }
+    }
+  }
+
+  /**
+   * Кадры: все кадры уже в разметке, без JS CSS показывает кадр по
+   * умолчанию. Клиент добавляет ползунок и «▶» и ставит `data-live`.
+   */
+  function mountFrames(root: Element) {
+    for (const el of root.querySelectorAll<HTMLElement>(".k-frames[data-k-frames]")) {
+      const spec = parseFrames(el.dataset.kFrames);
+      const items = [...el.querySelectorAll<HTMLElement>(":scope > .k-frames-stack > .k-frames-item")];
+      if (!spec || items.length !== spec.count) continue;
+      try {
+        plots.push(mount(Frames, { target: el, props: { root: el, items, spec } }));
+        el.dataset.live = "";
+      } catch (e) {
+        console.warn("кадры:", e);
       }
     }
   }

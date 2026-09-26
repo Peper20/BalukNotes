@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-// Снимок фикстуры: в нём значения, посчитанные konspekt (Typst) — эталон.
+// Снимок фикстуры: в нём значения, посчитанные baluk (Typst) — эталон.
 import snapshot from "../../../../tests/snapshots/Рисунки/Интерактив.snap?raw";
 import { compile, FormulaError, parse } from "./formula";
 

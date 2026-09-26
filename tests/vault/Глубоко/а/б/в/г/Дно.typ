@@ -1,4 +1,4 @@
-#import "/_konspekt/lib.typ": *
-#show: заметка.with(название: [Дно])
+#import "/_baluk/lib.typ": *
+#show: note.with(title: [Дно])
 
 Заметка на пятом уровне вложенности: дерево должно раскрываться до неё.

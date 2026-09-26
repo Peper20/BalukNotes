@@ -1,7 +1,7 @@
 // Статический сайт (notes build): тема и якоря без сервера.
 //
 // Тема хранится в браузере (localStorage), по умолчанию — как в системе.
-// window.K_THEMES — [[имя, тёмная], …], подставляется сборкой.
+// window.K_THEMES — [[имя, тёмная, название], …], подставляется сборкой.
 
 (() => {
   const root = document.documentElement;
@@ -24,7 +24,7 @@
 
   addEventListener("DOMContentLoaded", () => {
     const button = document.getElementById("k-theme");
-    const show = () => (button.textContent = `тема: ${root.dataset.theme}`);
+    const show = () => (button.textContent = `тема: ${(themes.find(([n]) => n === root.dataset.theme) ?? [])[2] ?? root.dataset.theme}`);
     show();
     button.onclick = () => {
       root.dataset.theme = names[(names.indexOf(root.dataset.theme) + 1) % names.length];

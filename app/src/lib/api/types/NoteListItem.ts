@@ -15,6 +15,6 @@ name: string,
  */
 folder: string, 
 /**
- * Название из шаблона (`название: […]`), если есть.
+ * Название из шаблона (`title: […]`), если есть.
  */
 title: string | null, tags: Array<string>, };

@@ -1,4 +1,4 @@
-<!-- Интерактивный рисунок konspekt (`div.k-plot`): график или поверхность. -->
+<!-- Интерактивный рисунок baluk (`div.k-plot`): график или поверхность. -->
 <script lang="ts">
   import type { PlotSpec } from "../lib/plot/spec";
   import Plot2D from "./Plot2D.svelte";

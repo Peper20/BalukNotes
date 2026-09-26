@@ -97,7 +97,7 @@ test("битая ссылка не ведёт никуда", async ({ page }) =>
 
 test("ошибка и предупреждения сборки", async ({ page }) => {
   await open(page, "Особые случаи/Ошибка компиляции");
-  await expect(page.locator("#problems .errors")).toContainText("unknown variable: нет-такой-функции");
+  await expect(page.locator("#problems .errors")).toContainText("unknown variable: no-such-function");
   await open(page, "Особые случаи/Предупреждение");
   await expect(page.locator("#problems summary")).toHaveText("Предупреждения: 2");
 });

@@ -111,6 +111,12 @@ pub fn optimize(body: &str, themes: &[String], opts: FigureOptions) -> Optimized
     while let Some(start) = rest.find(VARIANT_OPEN) {
         out.push_str(&rest[..start]);
         let (variants, len) = read_variants(&rest[start..]);
+        if len == 0 {
+            // Вариант без `</svg></div>` (пустой рисунок) — не наш, оставляем как есть.
+            out.push_str(VARIANT_OPEN);
+            rest = &rest[start + VARIANT_OPEN.len()..];
+            continue;
+        }
         let group = &rest[start..start + len];
         rest = &rest[start + len..];
         stats.figures += 1;
@@ -335,7 +341,7 @@ impl Page {
 }
 
 /// Помечает страницу меткой переменных: на `<article class="k-doc">`
-/// (шаблон konspekt) или обёрткой вокруг всего.
+/// (шаблон baluk) или обёрткой вокруг всего.
 fn scoped(body: &str, scope: &str) -> String {
     const ARTICLE: &str = r#"<article class="k-doc""#;
     if let Some(i) = body.find(ARTICLE) {
@@ -667,7 +673,7 @@ impl Pen {
 mod tests {
     use super::*;
 
-    const THEMES: [&str; 2] = ["светлая", "тёмная"];
+    const THEMES: [&str; 2] = ["classic", "night"];
 
     fn themes() -> Vec<String> {
         THEMES.iter().map(ToString::to_string).collect()
@@ -732,7 +738,7 @@ mod tests {
             o.body
         );
         assert!(o.body.contains(r#"<svg style="width: 1.123456em">"#), "корневой тег не трогаем");
-        assert!(o.styles.contains(r#":root[data-theme="тёмная"] [data-k-figs="#));
+        assert!(o.styles.contains(r#":root[data-theme="night"] [data-k-figs="#));
         assert!(o.styles.contains("--kf0: #eeeeee;"));
         assert!(o.body.starts_with(r#"<article class="k-doc" data-k-figs=""#));
     }
@@ -764,5 +770,13 @@ mod tests {
         let o = optimize("<p>текст 1.23456</p>", &themes(), FigureOptions::default());
         assert_eq!(o.body, "<p>текст 1.23456</p>");
         assert!(o.styles.is_empty());
+    }
+
+    #[test]
+    fn variant_without_svg_is_kept() {
+        // пустой рисунок: раньше цикл не сдвигался и зависал
+        let body = format!(r#"{VARIANT_OPEN}classic"></div>{VARIANT_OPEN}night"></div>"#);
+        let o = optimize(&body, &themes(), FigureOptions::default());
+        assert_eq!(o.body, body);
     }
 }

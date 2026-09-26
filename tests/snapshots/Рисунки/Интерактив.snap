@@ -8,10 +8,10 @@ headings:
   2 #Поверхность [Поверхность] Поверхность
   2 #Сверка-вычислений [Сверка-вычислений] Сверка вычислений
 links:
-styles: 6004 байт, fnv ef41abc9c3000656
+styles: 5992 байт, fnv 1f706f70e8fee8ab
 ---
 <svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…4864 байт, fnv 67af5fd78053636e…</svg>
-<article class="k-doc" data-k-figs="79a1095e" data-doc="заметка">
+<article class="k-doc" data-k-figs="79a1095e" data-doc="note">
 <header class="k-title">
 <h1>Интерактивные рисунки</h1>
 <ul class="k-tags">
@@ -20,14 +20,14 @@ styles: 6004 байт, fnv ef41abc9c3000656
 <p>График с ползунками и поверхность с вращением: в PDF и без JS — кадр при значениях по умолчанию, в приложении — живой рисунок.</p>
 <h2 class="k-h k-h2" id="График-с-параметрами" data-k-anchor="График-с-параметрами"><span class="k-num">1</span>График с параметрами</h2>
 <figure>
-<div class="k-plot" data-k-plot="{&quot;kind&quot;:&quot;2d&quot;,&quot;curves&quot;:[{&quot;f&quot;:&quot;a * calc.sin(b * x)&quot;,&quot;color&quot;:&quot;линия&quot;,&quot;label&quot;:null,&quot;dashed&quot;:false}],&quot;x&quot;:[-5.0,5.0],&quot;y&quot;:[-3.0,3.0],&quot;params&quot;:[{&quot;name&quot;:&quot;a&quot;,&quot;min&quot;:0.0,&quot;max&quot;:3.0,&quot;step&quot;:0.1,&quot;value&quot;:1.0},{&quot;name&quot;:&quot;b&quot;,&quot;min&quot;:0.5,&quot;max&quot;:4.0,&quot;step&quot;:0.1,&quot;value&quot;:1.0}],&quot;labels&quot;:[&quot;x&quot;,&quot;y&quot;],&quot;width&quot;:8,&quot;height&quot;:5}">
+<div class="k-plot" data-k-plot="{&quot;kind&quot;:&quot;2d&quot;,&quot;curves&quot;:[{&quot;f&quot;:&quot;a * calc.sin(b * x)&quot;,&quot;color&quot;:&quot;line&quot;,&quot;label&quot;:null,&quot;dashed&quot;:false}],&quot;x&quot;:[-5.0,5.0],&quot;y&quot;:[-3.0,3.0],&quot;params&quot;:[{&quot;name&quot;:&quot;a&quot;,&quot;min&quot;:0.0,&quot;max&quot;:3.0,&quot;step&quot;:0.1,&quot;value&quot;:1.0},{&quot;name&quot;:&quot;b&quot;,&quot;min&quot;:0.5,&quot;max&quot;:4.0,&quot;step&quot;:0.1,&quot;value&quot;:1.0}],&quot;labels&quot;:[&quot;x&quot;,&quot;y&quot;],&quot;width&quot;:8,&quot;height&quot;:5}">
 <div class="k-frame k-fig">
 <svg style="overflow: visible; width: 20.615604868em; height: 12.884753042em; display: block" viewBox="0 0 226.771653543 141.732283465" width="226.771653543pt" height="141.732283465pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…8665 байт, fnv 2f99d5bd8accb940…</svg></div>
 <div class="k-plot-values">a = 1, b = 1</div></div>
 <figcaption><span class="k-fig-num">Рис. 1.</span> Синусоида: амплитуда <math><mi>𝑎</mi></math> и частота <math><mi>𝑏</mi></math></figcaption></figure>
 <h2 class="k-h k-h2" id="Несколько-кривых-и-разрывы" data-k-anchor="Несколько-кривых-и-разрывы"><span class="k-num">2</span>Несколько кривых и разрывы</h2>
 <figure>
-<div class="k-plot" data-k-plot="{&quot;kind&quot;:&quot;2d&quot;,&quot;curves&quot;:[{&quot;f&quot;:&quot;calc.tan(x)&quot;,&quot;color&quot;:&quot;линия&quot;,&quot;label&quot;:&quot;tg x&quot;,&quot;dashed&quot;:false},{&quot;f&quot;:&quot;1 / (x - c)&quot;,&quot;color&quot;:&quot;второй&quot;,&quot;label&quot;:&quot;1/(x−c)&quot;,&quot;dashed&quot;:true},{&quot;f&quot;:&quot;calc.sqrt(x)&quot;,&quot;color&quot;:&quot;третий&quot;,&quot;label&quot;:null,&quot;dashed&quot;:false}],&quot;x&quot;:[-4.0,4.0],&quot;y&quot;:[-4.0,4.0],&quot;params&quot;:[{&quot;name&quot;:&quot;c&quot;,&quot;min&quot;:-2.0,&quot;max&quot;:2.0,&quot;step&quot;:0.04,&quot;value&quot;:1.0}],&quot;labels&quot;:[&quot;x&quot;,&quot;y&quot;],&quot;width&quot;:8,&quot;height&quot;:5}">
+<div class="k-plot" data-k-plot="{&quot;kind&quot;:&quot;2d&quot;,&quot;curves&quot;:[{&quot;f&quot;:&quot;calc.tan(x)&quot;,&quot;color&quot;:&quot;line&quot;,&quot;label&quot;:&quot;tg x&quot;,&quot;dashed&quot;:false},{&quot;f&quot;:&quot;1 / (x - c)&quot;,&quot;color&quot;:&quot;second&quot;,&quot;label&quot;:&quot;1/(x−c)&quot;,&quot;dashed&quot;:true},{&quot;f&quot;:&quot;calc.sqrt(x)&quot;,&quot;color&quot;:&quot;third&quot;,&quot;label&quot;:null,&quot;dashed&quot;:false}],&quot;x&quot;:[-4.0,4.0],&quot;y&quot;:[-4.0,4.0],&quot;params&quot;:[{&quot;name&quot;:&quot;c&quot;,&quot;min&quot;:-2.0,&quot;max&quot;:2.0,&quot;step&quot;:0.04,&quot;value&quot;:1.0}],&quot;labels&quot;:[&quot;x&quot;,&quot;y&quot;],&quot;width&quot;:8,&quot;height&quot;:5}">
 <div class="k-frame k-fig">
 <svg style="overflow: visible; width: 20.615604868em; height: 12.884753042em; display: block" viewBox="0 0 226.771653543 141.732283465" width="226.771653543pt" height="141.732283465pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…10530 байт, fnv 2a1f9d38e187ef04…</svg></div>
 <div class="k-plot-legend"><span class="k-plot-key" style="color: var(--k-fig-line)">— tg x</span><span class="k-plot-key" style="color: var(--k-fig-second)">- - 1/(x−c)</span></div>
@@ -35,7 +35,7 @@ styles: 6004 байт, fnv ef41abc9c3000656
 <figcaption><span class="k-fig-num">Рис. 2.</span> Асимптоты рвут кривую, корень определён только при <math><mi>𝑥</mi><mo>≥</mo><mn>0</mn></math></figcaption></figure>
 <h2 class="k-h k-h2" id="Поверхность" data-k-anchor="Поверхность"><span class="k-num">3</span>Поверхность</h2>
 <figure>
-<div class="k-plot" data-k-plot="{&quot;kind&quot;:&quot;3d&quot;,&quot;f&quot;:&quot;calc.sin(k * x) * calc.cos(y)&quot;,&quot;x&quot;:[-3.0,3.0],&quot;y&quot;:[-3.0,3.0],&quot;z&quot;:[-1.0,1.0],&quot;params&quot;:[{&quot;name&quot;:&quot;k&quot;,&quot;min&quot;:0.2,&quot;max&quot;:2.0,&quot;step&quot;:0.1,&quot;value&quot;:1.0}],&quot;labels&quot;:[&quot;x&quot;,&quot;y&quot;,&quot;z&quot;],&quot;n&quot;:24,&quot;style&quot;:&quot;свет&quot;,&quot;color&quot;:&quot;грань&quot;,&quot;view&quot;:[-30,28],&quot;size&quot;:3}">
+<div class="k-plot" data-k-plot="{&quot;kind&quot;:&quot;3d&quot;,&quot;f&quot;:&quot;calc.sin(k * x) * calc.cos(y)&quot;,&quot;x&quot;:[-3.0,3.0],&quot;y&quot;:[-3.0,3.0],&quot;z&quot;:[-1.0,1.0],&quot;params&quot;:[{&quot;name&quot;:&quot;k&quot;,&quot;min&quot;:0.2,&quot;max&quot;:2.0,&quot;step&quot;:0.1,&quot;value&quot;:1.0}],&quot;labels&quot;:[&quot;x&quot;,&quot;y&quot;,&quot;z&quot;],&quot;n&quot;:24,&quot;style&quot;:&quot;shaded&quot;,&quot;color&quot;:&quot;face&quot;,&quot;view&quot;:[-30,28],&quot;size&quot;:3}">
 <div class="k-frame k-fig">
 <svg style="overflow: visible; width: 10.560539986em; height: 10.659272621em; display: block" viewBox="0 0 116.165939849 117.251998829" width="116.165939849pt" height="117.251998829pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…153516 байт, fnv 3359e0341b16f282…</svg></div>
 <div class="k-plot-values">k = 1</div></div>

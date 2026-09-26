@@ -1,10 +1,10 @@
-#import "/_konspekt/lib.typ": *
+#import "/_baluk/lib.typ": *
 
 = Приложение
 
 == Картинка из файла
 
-#рис(image("img/схема.svg", width: 60%), [SVG-картинка из папки книги])
+#fig(image("img/схема.svg", width: 60%), [SVG-картинка из папки книги])
 
 == Итоги
 

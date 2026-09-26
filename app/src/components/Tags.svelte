@@ -45,7 +45,7 @@
           {#each byTag as [t, list] (t)}<a class="tag-chip" href={tagHref(t)}>#{t} <small>{list.length}</small></a>{/each}
         </p>
       {:else}
-        <p class="home-lead">Тегов пока нет: они задаются в шаблоне заметки — <code>теги: ("сеть", "linux")</code>.</p>
+        <p class="home-lead">Тегов пока нет: они задаются в шаблоне заметки — <code>tags: ("сеть", "linux")</code>.</p>
       {/if}
     {/if}
   </div>

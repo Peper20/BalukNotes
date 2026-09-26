@@ -3,7 +3,7 @@
 //! Книга собирается целиком (счётчики, ссылки между главами), но показывать
 //! её лучше по главе: вёрстка всей книги — сотни миллисекунд на ПК и секунды
 //! на телефоне. Главы — прямые потомки `<article class="k-doc"
-//! data-doc="книга">` от одного `h2.k-h1` до следующего; всё до первой главы
+//! data-doc="book">` от одного `h2.k-h1` до следующего; всё до первой главы
 //! (титул) идёт с первой.
 //!
 //! Работает с готовым HTML (после [`crate::figures`]): режет текст по
@@ -216,7 +216,7 @@ fn find_book_article(body: &str) -> Option<usize> {
         let start = from + i;
         let tag = next_tag(body, start)?;
         let raw = &body[tag.start..tag.end];
-        if has_class(raw, "k-doc") && attr(raw, "data-doc").as_deref() == Some("книга") {
+        if has_class(raw, "k-doc") && attr(raw, "data-doc").as_deref() == Some("book") {
             return Some(tag.end);
         }
         from = tag.end;
@@ -437,7 +437,7 @@ mod tests {
 
     const BOOK: &str = concat!(
         r#"<svg class="k-glyphs" aria-hidden="true"><defs><symbol id="g1"><path d="M0"/></symbol><symbol id="g2"><path d="M1"/></symbol></defs></svg>"#,
-        r#"<article class="k-doc" data-k-figs="ab" data-doc="книга">"#,
+        r#"<article class="k-doc" data-k-figs="ab" data-doc="book">"#,
         "\n<header class=\"k-title\"><h1>Книга</h1></header>\n",
         r#"<h2 class="k-h k-h1" data-num="1" id="гл-1" data-k-anchor="Первая"><span class="k-num">1</span>Первая</h2>"#,
         "\n<p title=\"a > b\">текст<br>ещё</p>",
@@ -512,7 +512,7 @@ mod tests {
         assert!(!b.contains("<header") && !b.contains("гл-1") && b.contains("не прямой потомок"));
         assert!(b.contains(r#"<symbol id="g2">"#) && !b.contains(r#"<symbol id="g1">"#));
         assert!(
-            b.starts_with(SPRITE_OPEN) && b.contains(r#"<article class="k-doc" data-k-figs="ab" data-doc="книга">"#)
+            b.starts_with(SPRITE_OPEN) && b.contains(r#"<article class="k-doc" data-k-figs="ab" data-doc="book">"#)
         );
 
         let by_anchor = |a| chapter_page(&p, Select { chapter: None, anchor: Some(a) }).unwrap().book.unwrap().chapter;
@@ -525,7 +525,7 @@ mod tests {
     fn not_a_book() {
         let mut p = page();
         let r = Arc::get_mut(p.rendered.as_mut().unwrap()).unwrap();
-        r.body = r.body.replace("data-doc=\"книга\"", "data-doc=\"заметка\"");
+        r.body = r.body.replace("data-doc=\"book\"", "data-doc=\"note\"");
         assert!(chapter_page(&p, Select::default()).is_none());
         let one = BOOK.split("<h2 class=\"k-h k-h1\" data-num=\"2\"").next().unwrap().to_owned() + "</article>";
         let r = Arc::get_mut(p.rendered.as_mut().unwrap()).unwrap();

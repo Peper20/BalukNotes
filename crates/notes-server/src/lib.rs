@@ -24,7 +24,7 @@
 //! | `GET /api/pdf/{*id}?theme=`  | заметка в PDF (по умолчанию — первая тема)   |
 //! | `GET /api/settings`          | схема и значения настроек                    |
 //! | `PUT /api/settings`          | изменить настройки (частично)                |
-//! | `GET /api/themes`            | темы: имя, тёмная ли                         |
+//! | `GET /api/themes`            | темы: имя, название, тёмная ли               |
 //! | `GET /api/themes.css`        | CSS-переменные тем                           |
 //! | `GET /api/fonts.css`         | `@font-face` для шрифтов оформления          |
 //! | `GET /fonts/{family}/{style}`| файл шрифта                                  |
@@ -52,7 +52,7 @@ use rust_embed::RustEmbed;
 use serde_json::{Map, Value};
 use tower_http::compression::CompressionLayer;
 
-/// Шрифты оформления, которые нужны браузеру (из `konspekt/theme.typ`).
+/// Шрифты оформления, которые нужны браузеру (из `baluk/theme.typ`).
 const WEB_FONTS: &[&str] = &["Gentium Plus", "JetBrains Mono", "New Computer Modern Math"];
 
 /// Клиент — сборка `app/` (`npm run build` → `app/dist`). В отладочной
@@ -108,7 +108,7 @@ pub async fn serve(
     axum::serve(listener, router(state)).with_graceful_shutdown(shutdown).await
 }
 
-/// Файл клиента (`konspekt.css`, `static.js`, …) — для статической сборки.
+/// Файл клиента (`baluk.css`, `static.js`, …) — для статической сборки.
 pub fn web_asset(name: &str) -> Option<Vec<u8>> {
     WebAssets::get(&format!("assets/{name}")).map(|f| f.data.into_owned())
 }

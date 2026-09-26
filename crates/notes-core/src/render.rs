@@ -10,10 +10,10 @@
 //! 2. **Якоря заголовков.** Заголовку без метки даётся `id` из его текста
 //!    (`Смена порта` → `Смена-порта`), всем — `data-k-anchor` с тем же слагом:
 //!    так ссылка находит раздел и по тексту, и по метке.
-//! 3. **Ссылки между заметками** (`a.k-link` из `#см`) получают адрес от
+//! 3. **Ссылки между заметками** (`a.k-link` из `#see`) получают адрес от
 //!    [`LinkResolver`]; ссылки на несуществующие заметки помечаются.
 //! 4. **Цвета кода.** В HTML подсветка идёт опорными цветами (см.
-//!    `konspekt/code.typ`), здесь они становятся CSS-переменными темы.
+//!    `baluk/code.typ`), здесь они становятся CSS-переменными темы.
 //! 5. **Скобки в формулах.** Typst помечает парные скобки растягиваемыми, а
 //!    Chrome рисует растягиваемую скобку с широкими полями: `f ( x )`. Если
 //!    внутри нет высокого (дробей, корней, пределов, матриц), растягивать
@@ -46,7 +46,7 @@ const FENCES: &[&str] = &["(", ")", "[", "]", "{", "}", "|", "‖", "⟨", "⟩"
 const TALL: [HtmlTag; 7] =
     [mathml::mfrac, mathml::mtable, mathml::msqrt, mathml::mroot, mathml::munderover, mathml::munder, mathml::mover];
 
-/// Опорные цвета подсветки кода (`konspekt/code.typ`) → переменные CSS.
+/// Опорные цвета подсветки кода (`baluk/code.typ`) → переменные CSS.
 const CODE_COLORS: [(&str, &str); 8] = [
     ("#010100", "text"),
     ("#010101", "key"),
@@ -69,7 +69,7 @@ pub struct Heading {
     pub text: String,
 }
 
-/// Ссылка из заметки, как она написана в `#см(…)`.
+/// Ссылка из заметки, как она написана в `#see(…)`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct LinkRef {
@@ -152,7 +152,7 @@ impl State<'_> {
         if has_class(el, "k-frame") {
             self.theme_frame(el);
         } else if is_heading(el) && (has_class(el, "k-h") || el.attrs.get(attr::class).is_none()) {
-            // k-h — заголовок konspekt; без классов — обычный `=` чистого Typst.
+            // k-h — заголовок baluk; без классов — обычный `=` чистого Typst.
             self.heading(el);
         } else if el.tag == tag::a && has_class(el, "k-link") {
             self.link(el);

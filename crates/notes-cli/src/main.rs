@@ -3,7 +3,7 @@
 //!   notes serve            локальный сервер с клиентом (http://127.0.0.1:8421)
 //!   notes check            ошибки компиляции и битые ссылки во всём хранилище
 //!   notes build <каталог>  статический сайт (для VPS без сервера)
-//!   notes pdf <заметка>    заметка в PDF (вид PDF из konspekt)
+//!   notes pdf <заметка>    заметка в PDF (вид PDF из baluk)
 //!
 //! Данные — в `--data` (по умолчанию `./data`): `vault/` и `settings.json`;
 //! хранилище можно указать отдельно: `--vault tests/vault`.
@@ -32,9 +32,9 @@ struct Cli {
     #[arg(long, global = true, env = "NOTES_VAULT")]
     vault: Option<PathBuf>,
 
-    /// Библиотека оформления (konspekt/), видна заметкам как /_konspekt/.
+    /// Библиотека оформления (baluk/), видна заметкам как /_baluk/.
     /// По умолчанию — встроенная в бинарник; в отладочной сборке — каталог
-    /// konspekt/ репозитория (правки видны сразу).
+    /// baluk/ репозитория (правки видны сразу).
     #[arg(long, global = true, env = "NOTES_LIBRARY")]
     library: Option<PathBuf>,
 
@@ -84,7 +84,7 @@ fn library(explicit: Option<&PathBuf>) -> LibrarySource {
     if let Some(dir) = explicit {
         return LibrarySource::Dir(dir.clone());
     }
-    let repo = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../konspekt"));
+    let repo = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../baluk"));
     if cfg!(debug_assertions) && repo.join("lib.typ").is_file() {
         LibrarySource::Dir(repo)
     } else {

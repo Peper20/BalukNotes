@@ -1,0 +1,204 @@
+// Темы оформления.
+//
+// Тема — обычный словарь. Выбирается один раз в начале документа:
+//   #show: book.with(theme: themes.classic, ...)
+// Шаблон кладёт её в state, и все врезки, листинги и рисунки берут цвета
+// и шрифты оттуда (внутри `context`). Поэтому одна и та же глава без правок
+// верстается в любой теме.
+//
+// Своя тема: #let mine = customize(themes.classic, (color: (accent: rgb("#7a1f5c"))))
+// — глубокое слияние, указывать нужно только то, что меняется.
+
+// ── Глубокое слияние словарей ──────────────────────────────────────────────
+#let customize(base, changes) = {
+  let result = base
+  for (key, val) in changes {
+    if key in result and type(result.at(key)) == dictionary and type(val) == dictionary {
+      result.insert(key, customize(result.at(key), val))
+    } else {
+      result.insert(key, val)
+    }
+  }
+  result
+}
+
+// ── Шрифты ────────────────────────────────────────────────────────────────
+// Первый в списке — основной, остальные — запасные для недостающих глифов.
+#let _text-fonts = ("Gentium Plus", "New Computer Modern")
+#let _code-fonts = ("JetBrains Mono", "DejaVu Sans Mono")
+
+// Семантические цвета врезок: у каждой — насыщенный цвет (линия, подпись)
+// и фон. Разные типы различаются ТОНОМ: конспект читают с экрана, врезка
+// должна узнаваться боковым зрением до чтения подписи.
+#let _boxes(accent, example, remark, pitfall, idea, algorithm, bg: 94%) = (
+  definition: accent,
+  theorem: accent.darken(15%),
+  example: example,
+  remark: remark,
+  pitfall: pitfall,
+  idea: idea,
+  algorithm: algorithm,
+  bg-share: bg, // насколько осветлять цвет для заливки
+)
+
+// ═════════════════════════════════════════════════════════════════════════
+// A. КЛАССИКА — основная тема: развитие конспекта по матану. Синий
+//    акцент, врезки с полосой слева, книжный абзац с отступом.
+// ═════════════════════════════════════════════════════════════════════════
+#let classic = (
+  name: "classic",
+  title: "Классика", // название в интерфейсе
+  font: (
+    text: _text-fonts,
+    headings: _text-fonts,
+    captions: _text-fonts,
+    math: ("New Computer Modern Math",),
+    code: _code-fonts,
+  ),
+  size: (text: 11pt, code: 8.8pt, small: 9.2pt, chapter: 25pt, section: 14pt, subsection: 11.5pt),
+  par: (leading: 0.72em, indent: 1.2em, spacing: 0.72em, justify: true),
+  page: (margin: (x: 2.4cm, top: 2.6cm, bottom: 2.4cm)),
+  color: (
+    bg: white,
+    text: rgb("#1b1b1b"),
+    muted: rgb("#5f6670"),
+    line: rgb("#c9ced6"),
+    surface: rgb("#f4f6f9"), // фон листингов, таблиц-шапок
+    accent: rgb("#1f4e79"),
+    secondary: rgb("#c62828"), // «спицы», выделения на рисунках
+    boxes: _boxes(
+      rgb("#1f4e79"), rgb("#2e7d32"), rgb("#b8860b"),
+      rgb("#b3261e"), rgb("#00796b"), rgb("#6a4c93"),
+      bg: 94%,
+    ),
+    code: (
+      text: rgb("#1b1b1b"), keyword: rgb("#1f4e79"), type: rgb("#6a4c93"),
+      string: rgb("#2e7d32"), number: rgb("#b5561b"), comment: rgb("#7b8490"),
+      function: rgb("#8a3b12"), highlight: rgb("#fff3c4"),
+    ),
+    fig: (
+      line: rgb("#1f4e79"), fill: rgb("#1f4e79").lighten(82%),
+      face: rgb("#dce6f2"), second: rgb("#c62828"), third: rgb("#2e7d32"),
+      axis: rgb("#1b1b1b"), grid: rgb("#c9ced6"),
+    ),
+  ),
+)
+
+// ═════════════════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════════════════
+// B. НОЧЬ — та же «классика», перекрашенная для чтения с экрана в темноте.
+//    Отличие ТОЛЬКО в палитре: шрифты, кегли, поля, заголовки, врезки и
+//    колонтитулы те же. Один и тот же конспект в двух видах должен выглядеть
+//    одним конспектом, а не двумя разными.
+// ═════════════════════════════════════════════════════════════════════════
+#let night = customize(classic, (
+  name: "night",
+  title: "Ночь",
+  color: (
+    bg: rgb("#16181e"),
+    text: rgb("#dde2ea"),
+    muted: rgb("#8a93a5"),
+    line: rgb("#343a48"),
+    surface: rgb("#1f232c"),
+    accent: rgb("#7fb4ff"),
+    secondary: rgb("#ff9e64"),
+    boxes: _boxes(
+      rgb("#7fb4ff"), rgb("#69d3a0"), rgb("#f2c46d"),
+      rgb("#ff8585"), rgb("#5fd0d6"), rgb("#b69cff"),
+      // На тёмном фоне заливку врезки делаем прозрачностью, а не осветлением.
+      bg: 0%,
+    ),
+    code: (
+      text: rgb("#d4d9e2"), keyword: rgb("#c099ff"), type: rgb("#7fb4ff"),
+      string: rgb("#9ece6a"), number: rgb("#ff9e64"), comment: rgb("#6b7489"),
+      function: rgb("#5fd0d6"), highlight: rgb("#2e3446"),
+    ),
+    fig: (
+      line: rgb("#7fb4ff"), fill: rgb("#7fb4ff").transparentize(80%),
+      face: rgb("#26324a"), second: rgb("#ff9e64"), third: rgb("#69d3a0"),
+      axis: rgb("#aab2c2"), grid: rgb("#3a4152"),
+    ),
+  ),
+))
+
+#let themes = (classic: classic, night: night)
+
+// ── Доступ к текущей теме ──────────────────────────────────────────────────
+#let _theme-state = state("baluk-theme", none)
+
+/// Вид документа: "book" (главы, нумерация «глава.n») или "note"
+/// (разделы, сквозная нумерация). Ставит шаблон.
+#let _doc-kind = state("baluk-doc-kind", "book")
+
+/// Текущая тема. Вызывать только внутри `context`.
+#let current-theme() = {
+  let theme = _theme-state.get()
+  if theme == none { classic } else { theme }
+}
+
+/// Тёмная ли тема (по светлоте фона).
+#let is-dark(theme) = theme.color.bg.components().at(0) < 50%
+
+/// Бледный оттенок цвета для крупных «водяных» деталей (номер главы).
+#let pale(theme, col) = if is-dark(theme) { col.transparentize(88%) } else { col.lighten(88%) }
+
+/// Цвет заливки врезки данного вида с учётом темы (светлой или тёмной).
+#let box-bg(theme, color) = {
+  if theme.color.boxes.bg-share == 0% { color.transparentize(90%) } else { color.lighten(theme.color.boxes.bg-share) }
+}
+
+/// Тень и свет грани цвета `base` для объёмных рисунков (интерактивная
+/// поверхность): грань смешивает их по освещённости. В HTML — переменные
+/// `--k-fig-<color>-dark/-light`, чтобы клиент красил так же.
+#let fig-shades(theme, base) = if is-dark(theme) {
+  (base.darken(35%), base.lighten(18%))
+} else {
+  (base.darken(28%), base.lighten(45%))
+}
+
+// ── Цвета для CSS (HTML-режим) ────────────────────────────────────────────
+// В HTML цвета задаёт CSS, но источник правды — эта же тема: сборщик
+// забирает словарь из css.typ (typst query) и пишет CSS-переменные
+// --k-<имя>. Производные цвета (фон врезки, бледный номер главы) считаются
+// здесь теми же функциями, что и в PDF, — вид совпадает.
+#let _css-boxes = (
+  definition: "def", theorem: "thm", example: "example", remark: "remark",
+  pitfall: "pitfall", idea: "idea", algorithm: "algo",
+)
+
+#let css-colors(theme) = {
+  let pal = theme.color
+  let bx = pal.boxes
+  let dark = is-dark(theme)
+  let result = (
+    bg: pal.bg, text: pal.text, muted: pal.muted, line: pal.line,
+    surface: pal.surface, accent: pal.accent, second: pal.secondary,
+    accent-pale: pale(theme, pal.accent),
+    accent-bg: box-bg(theme, pal.accent),
+    lead: pal.text.transparentize(if dark { 5% } else { 10% }),
+    step: bx.example.darken(if dark { 0% } else { 10% }),
+    quiz-border: bx.idea.lighten(if dark { 0% } else { 50% }).transparentize(if dark { 55% } else { 0% }),
+    table-rule: pal.text.transparentize(20%),
+    table-head-rule: pal.text.transparentize(30%),
+  )
+  for (kind, cls) in _css-boxes {
+    result.insert("box-" + cls, bx.at(kind))
+    result.insert("box-" + cls + "-bg", box-bg(theme, bx.at(kind)))
+  }
+  for (name, color) in (second: pal.fig.second, third: pal.fig.third, line: pal.fig.line) {
+    result.insert("hl-" + name, if dark { color.transparentize(80%) } else { color.lighten(85%) })
+  }
+  // рисунки: цвета интерактивных рисунков (клиент рисует их сам)
+  for (name, cls) in (line: "line", second: "second", third: "third", face: "face") {
+    let (shadow, light) = fig-shades(theme, pal.fig.at(name))
+    result.insert("fig-" + cls, pal.fig.at(name))
+    result.insert("fig-" + cls + "-dark", shadow)
+    result.insert("fig-" + cls + "-light", light)
+  }
+  result.insert("fig-axis", pal.fig.axis)
+  result.insert("fig-grid", pal.fig.grid)
+  for (key, name) in (text: "text", keyword: "key", type: "type", string: "string", number: "number", comment: "comment", function: "function", highlight: "hl") {
+    result.insert("code-" + name, pal.code.at(key))
+  }
+  result.pairs().map(((kk, v)) => (kk, v.to-hex())).to-dict()
+}

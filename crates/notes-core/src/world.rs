@@ -1,10 +1,10 @@
 //! Компилятор Typst поверх хранилища.
 //!
 //! - Корень проекта Typst — корень хранилища.
-//! - `/_konspekt/…` — **виртуальный** каталог: файлы берутся из библиотеки
+//! - `/_baluk/…` — **виртуальный** каталог: файлы берутся из библиотеки
 //!   оформления приложения, копии в хранилище нет. Библиотека — каталог на
 //!   диске (разработка: правки видны сразу и меняют версии заметок) или
-//!   встроенная в бинарник копия `konspekt/` (релиз: бинарник самодостаточен).
+//!   встроенная в бинарник копия `baluk/` (релиз: бинарник самодостаточен).
 //! - Пакеты (`@preview/cetz`) — из кэша Typst, при отсутствии скачиваются.
 //! - Тема передаётся входом `тема` (`sys.inputs.тема`): на каждую тему — своя
 //!   стандартная библиотека Typst, созданная один раз.
@@ -37,15 +37,15 @@ use crate::diag::Diagnostic;
 use crate::fonts::Fonts;
 
 /// Имя виртуального каталога библиотеки оформления в хранилище.
-pub const LIB_DIR: &str = "_konspekt";
+pub const LIB_DIR: &str = "_baluk";
 
 /// Имя входа Typst, через который передаётся тема.
-pub const THEME_INPUT: &str = "тема";
+pub const THEME_INPUT: &str = "theme";
 
-/// Библиотека оформления `konspekt/`, встроенная в бинарник. В отладочной
+/// Библиотека оформления `baluk/`, встроенная в бинарник. В отладочной
 /// сборке rust-embed читает её с диска.
 #[derive(RustEmbed)]
-#[folder = "../../konspekt/"]
+#[folder = "../../baluk/"]
 #[include = "*.typ"]
 struct EmbeddedLibrary;
 
@@ -109,12 +109,12 @@ impl Loader {
     }
 }
 
-/// `/_konspekt/lib.typ` → `Some(/lib.typ)`; остальное → `None`.
+/// `/_baluk/lib.typ` → `Some(/lib.typ)`; остальное → `None`.
 fn lib_relative(vpath: &VirtualPath) -> FileResult<Option<VirtualPath>> {
     let path = vpath.get_without_slash();
     let Some(rest) = path.strip_prefix(LIB_DIR) else { return Ok(None) };
     if !(rest.is_empty() || rest.starts_with('/')) {
-        return Ok(None); // «_konspekt2/…» — обычный файл хранилища
+        return Ok(None); // «_baluk2/…» — обычный файл хранилища
     }
     VirtualPath::new(if rest.is_empty() { "/" } else { rest })
         .map(Some)
@@ -344,9 +344,9 @@ mod tests {
     #[test]
     fn library_paths_are_virtual() {
         let v = |s| VirtualPath::new(s).unwrap();
-        assert_eq!(lib_relative(&v("/_konspekt/lib.typ")).unwrap(), Some(v("/lib.typ")));
-        assert_eq!(lib_relative(&v("/_konspekt")).unwrap(), Some(v("/")));
-        assert_eq!(lib_relative(&v("/_konspekt2/x.typ")).unwrap(), None);
+        assert_eq!(lib_relative(&v("/_baluk/lib.typ")).unwrap(), Some(v("/lib.typ")));
+        assert_eq!(lib_relative(&v("/_baluk")).unwrap(), Some(v("/")));
+        assert_eq!(lib_relative(&v("/_baluk2/x.typ")).unwrap(), None);
         assert_eq!(lib_relative(&v("/Сеть/SSH.typ")).unwrap(), None);
     }
 }

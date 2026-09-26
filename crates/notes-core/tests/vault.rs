@@ -1,6 +1,6 @@
 //! Сквозная проверка на тестовом хранилище `tests/vault` (каталог случаев —
 //! `tests/vault/README.md`): настоящая
-//! компиляция Typst с библиотекой `konspekt/`. Нужен пакет cetz 0.4.2 в
+//! компиляция Typst с библиотекой `baluk/`. Нужен пакет cetz 0.4.2 в
 //! кэше Typst (или сеть — он скачается).
 
 use std::path::PathBuf;
@@ -18,7 +18,7 @@ fn repo() -> PathBuf {
 static NOTES: LazyLock<Notes> = LazyLock::new(|| {
     Notes::open(&NotesConfig {
         vault: repo().join("tests/vault"),
-        library: LibrarySource::Dir(repo().join("konspekt")),
+        library: LibrarySource::Dir(repo().join("baluk")),
         font_dirs: vec![],
         cache: None,
     })
@@ -34,7 +34,7 @@ fn id(s: &str) -> NoteId {
 #[test]
 fn themes_come_from_library() {
     let names = NOTES.themes().names();
-    assert_eq!(names, ["классика", "ночь"]);
+    assert_eq!(names, ["classic", "night"]);
     assert!(NOTES.themes().themes()[1].dark);
     assert!(NOTES.themes().css().contains("--k-box-def:"));
 }
@@ -68,7 +68,7 @@ fn figures_share_one_svg_across_themes() {
     assert_eq!(r.body.matches(r#"class="k-frame k-fig""#).count(), 1);
     assert!(!r.body.contains("k-frame-v"), "темы различаются только цветами — один SVG");
     assert!(r.body.contains("var(--kf"));
-    assert!(r.styles.contains(r#":root[data-theme="ночь"] [data-k-figs=""#));
+    assert!(r.styles.contains(r#":root[data-theme="night"] [data-k-figs=""#));
 }
 
 #[test]
@@ -186,7 +186,7 @@ fn disk_cache_survives_restart() {
     let open = || {
         Notes::open(&NotesConfig {
             vault: repo().join("tests/vault"),
-            library: LibrarySource::Dir(repo().join("konspekt")),
+            library: LibrarySource::Dir(repo().join("baluk")),
             font_dirs: vec![],
             cache: Some(dir.path().to_path_buf()),
         })
@@ -203,7 +203,7 @@ fn disk_cache_survives_restart() {
 fn concurrent_requests_share_one_build() {
     let notes = Notes::open(&NotesConfig {
         vault: repo().join("tests/vault"),
-        library: LibrarySource::Dir(repo().join("konspekt")),
+        library: LibrarySource::Dir(repo().join("baluk")),
         font_dirs: vec![],
         cache: None,
     })
