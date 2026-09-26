@@ -1,11 +1,13 @@
 // Статический сайт (notes build): тема, якоря и живые рисунки без сервера.
-// Собирается отдельно (vite.static.config.ts) в assets/static.js и
-// подключается в <head>: тема ставится до отрисовки страницы.
+// Собирается отдельно (scripts/build-static.mjs) в assets/static.js и
+// подключается в <head>: тема ставится до отрисовки страницы. Тяжёлое
+// (живые блоки) — отдельными частями по требованию (`parts.ts`).
 //
 // Тема хранится в браузере (localStorage), по умолчанию — как в системе.
 // window.K_THEMES — [[имя, тёмная, название], …], подставляется сборкой.
 
-import { mountLive } from "./lib/live";
+import { LIVE_SELECTOR } from "../lib/live/selectors";
+import { load } from "./parts";
 
 declare global {
   interface Window {
@@ -26,11 +28,15 @@ const dark = matchMedia("(prefers-color-scheme: dark)").matches;
 const system = (themes.find(([, d]) => d === dark) ?? themes[0])?.[0] ?? "";
 root.dataset.theme = saved && names.includes(saved) ? saved : system;
 
+/** Где оставила страницу последняя прокрутка к якорю (`NaN` — не было). */
+let anchoredAt = NaN;
+
 function scrollToAnchor() {
   if (location.hash.length < 2) return;
   const name = decodeURIComponent(location.hash.slice(1));
   const el = document.getElementById(name) ?? document.querySelector(`[data-k-anchor="${CSS.escape(name)}"]`);
   el?.scrollIntoView();
+  if (el) anchoredAt = scrollY;
 }
 
 addEventListener("DOMContentLoaded", () => {
@@ -66,7 +72,16 @@ addEventListener("DOMContentLoaded", () => {
     if (newTab) window.open(url, "_blank");
     else location.href = url;
   };
-  if (note) mountLive(note, open);
+  if (note?.querySelector(LIVE_SELECTOR)) {
+    load("live")
+      .then((live) => {
+        // Живые блоки меняют высоту — якорь, если читатель не ушёл от него, догоняем.
+        const y = scrollY;
+        live.mountLive(note, open);
+        if (scrollY === y && y === anchoredAt) scrollToAnchor();
+      })
+      .catch((e: unknown) => console.warn(e));
+  }
   const toc = document.querySelector<HTMLDetailsElement>(".k-static-toc");
   if (toc) setupToc(toc);
   scrollToAnchor();
@@ -100,6 +115,9 @@ function setupToc(toc: HTMLDetailsElement) {
     });
     links.forEach((a, i) => a.classList.toggle("current", i === current));
   };
-  addEventListener("scroll", () => (frame ||= requestAnimationFrame(mark)), { passive: true });
+  const schedule = () => (frame ||= requestAnimationFrame(mark));
+  addEventListener("scroll", schedule, { passive: true });
+  // Высота страницы меняется и без прокрутки: живые блоки грузятся позже.
+  new ResizeObserver(schedule).observe(document.body);
   mark();
 }

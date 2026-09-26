@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && vite build -c vite.static.config.ts",
+    "build": "vite build && node scripts/build-static.mjs",
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "test": "vitest run",
     "e2e": "playwright test",

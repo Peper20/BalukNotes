@@ -2,7 +2,7 @@
 //! список заметок, стили, темы и шрифты рядом. Работает без сервера (любой
 //! веб-сервер или просто файлы). В страницу вшиты оглавление и «Ссылаются
 //! сюда» ([`markup`]) — они видны и без JS; скрипт сайта
-//! (`app/src/static.ts`) добавляет тему, интерактивные рисунки и ползунок
+//! (`app/src/static/`) добавляет тему, интерактивные рисунки и ползунок
 //! кадров. Файлы клиента — из сборки `app/dist` (`notes-assets`).
 
 mod markup;
@@ -21,8 +21,9 @@ use notes_core::{NoteKind, Notes};
 use crate::markup::{IndexEntry, backlinks_html, index_html, toc_html};
 use crate::page::Page;
 
-/// Файлы клиента, нужные сайту.
-const ASSETS: &[&str] = &["baluk.css", "static.js"];
+/// Файлы клиента, нужные сайту, кроме частей скрипта `static*.js` (их
+/// сборка берёт все: `app/scripts/build-static.mjs`).
+const ASSETS: &[&str] = &["baluk.css"];
 
 /// Собрать сайт в `out` (создаётся; существующие файлы перезаписываются).
 /// Заметки, которые не собрались, пропускаются — в конце ошибка с их числом.
@@ -30,7 +31,11 @@ pub fn build(notes: &Notes, out: &Path, opts: FigureOptions) -> Result<()> {
     fs::create_dir_all(out).with_context(|| format!("создать {}", out.display()))?;
     let assets = out.join("assets");
     fs::create_dir_all(&assets)?;
-    for name in ASSETS {
+    let scripts = notes_assets::asset_names("static");
+    if !scripts.iter().any(|n| n == "static.js") {
+        bail!("нет static.js в сборке клиента app/dist");
+    }
+    for name in ASSETS.iter().copied().chain(scripts.iter().map(String::as_str)) {
         let file = notes_assets::asset(name).with_context(|| format!("нет {name} в сборке клиента app/dist"))?;
         fs::write(assets.join(name), file.data)?;
     }

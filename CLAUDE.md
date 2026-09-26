@@ -151,10 +151,13 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   `notes-core::settings::Schema` + строка в `src/lib/appearance.ts` + CSS.
 - Стили заметки — только внутри `.k-note { … }` (`public/assets/baluk.css`,
   общий со статическим сайтом); интерфейс — `src/app.css`.
-- Живые части заметки (интерактивные рисунки, кадры) — `src/lib/live.ts`,
-  общий для клиента и статического сайта: `src/static.ts` →
-  `dist/assets/static.js` (второй шаг `npm run build`,
-  `vite.static.config.ts`). Сценарии сайта — `e2e/static.spec.ts` (с диска).
+- Живые части заметки (интерактивные рисунки, кадры, граф) — реестр
+  `src/lib/live/` (блок = модуль с `LiveBlock` + селектор в `selectors.ts`
+  + строка в `BLOCKS`), общий для клиента и статического сайта. Скрипт сайта
+  — части `src/static/*` → `dist/assets/static*.js` (второй шаг `npm run
+  build`, `scripts/build-static.mjs`): `static.js` (тема, оглавление) у
+  каждой страницы, остальные — по требованию (`static/parts.ts`). Сценарии
+  сайта — `e2e/static.spec.ts` (с диска).
 - Значки интерфейса — `@lucide/svelte` (`import X from "@lucide/svelte/icons/x"`),
   не текстовые глифы (▸ ◐ ⎙); на статическом сайте — те же пути CSS-маской
   (`baluk.css`). Вид проверять в Chrome (Claude in Chrome) в обеих темах.

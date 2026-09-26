@@ -60,3 +60,19 @@ test("сайт: на узком экране оглавление свёрнут
   await expect(toc).not.toHaveAttribute("open", "");
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(400);
 });
+
+test("сайт: живые блоки — отдельной частью, только где они есть", async ({ page }) => {
+  const parts: string[] = [];
+  page.on("request", (r) => {
+    const m = /assets\/(static[^/]*\.js)$/.exec(r.url());
+    if (m) parts.push(m[1]!);
+  });
+  await page.goto(pageUrl("Сеть/SSH"));
+  await expect(page.locator(".k-static-toc a").first()).toBeVisible();
+  expect(parts).toEqual(["static.js"]);
+
+  parts.length = 0;
+  await page.goto(pageUrl("Рисунки/Граф хранилища"));
+  await expect(page.locator(".k-graph[data-live] .graph-svg").first()).toBeVisible();
+  expect(parts).toEqual(["static.js", "static-live.js"]);
+});
