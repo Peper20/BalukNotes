@@ -1,6 +1,8 @@
 // Запросы к серверу notes. Типы ответов — из Rust (types/, `npm run types`).
+// Адрес сервера и токен — config.ts; ошибки сети и сервера — ApiError.
 
 import { encodeId } from "../ids";
+import { apiUrl, authHeaders } from "./config";
 import type { ErrorResponse } from "./types/ErrorResponse";
 import type { Graph } from "./types/Graph";
 import type { GraphFilter } from "./types/GraphFilter";
@@ -15,6 +17,7 @@ import type { Theme } from "./types/Theme";
 import type { VersionResponse } from "./types/VersionResponse";
 import type { WarmRequest } from "./types/WarmRequest";
 
+export { apiConfig, apiUrl, configure, rebaseStylesheets, type ApiConfig } from "./config";
 export type { BookView } from "./types/BookView";
 export type { Chapter } from "./types/Chapter";
 export type { Diagnostic } from "./types/Diagnostic";
@@ -42,6 +45,11 @@ export interface ChapterSelect {
 /** Значения настроек: ключ → число, строка или флаг. */
 export type SettingValues = SettingsResponse["values"];
 
+/**
+ * Ошибка запроса — одним типом для сети и сервера: `status` — код ответа,
+ * 0 — сервер недоступен (сеть). Отмена запроса (`AbortSignal`) — не
+ * ApiError, а обычный `AbortError`.
+ */
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -50,10 +58,21 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
+
+  /** Сервер не ответил (нет сети, сервер остановлен). */
+  get offline(): boolean {
+    return this.status === 0;
+  }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(apiUrl(path), { ...init, headers: { ...authHeaders(), ...(init.headers as Record<string, string> | undefined) } });
+  } catch (e) {
+    if ((e as Error).name === "AbortError") throw e;
+    throw new ApiError((e as Error).message, 0);
+  }
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
     const err = body as ErrorResponse | null;
@@ -61,6 +80,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   return body as T;
 }
+
+const json = (method: string, data: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
 
 export const api = {
   notes: () => request<NoteListItem[]>("/api/notes"),
@@ -73,22 +94,16 @@ export const api = {
   links: (id: string) => request<LinksResponse>(`/api/links/${encodeId(id)}`),
   graph: () => request<Graph>("/api/graph"),
   /** Граф по фильтру, уже разложенный (фильтр и раскладка — в ядре). */
-  graphLayout: (filter: Partial<GraphFilter> = {}) =>
-    request<GraphLayout>("/api/graph/layout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(filter) }),
+  graphLayout: (filter: Partial<GraphFilter> = {}) => request<GraphLayout>("/api/graph/layout", json("POST", filter)),
   search: (q: string, signal?: AbortSignal, limit = 30) =>
     request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`, { signal }),
   preview: (id: string, anchor?: string | null, signal?: AbortSignal) =>
     request<Preview>(`/api/preview/${encodeId(id)}${anchor ? `?anchor=${encodeURIComponent(anchor)}` : ""}`, { signal }),
   themes: () => request<Theme[]>("/api/themes"),
   settings: () => request<SettingsResponse>("/api/settings"),
-  saveSettings: (patch: SettingValues) =>
-    request<SettingValues>("/api/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    }),
+  saveSettings: (patch: SettingValues) => request<SettingValues>("/api/settings", json("PUT", patch)),
   /** Подсказать серверу, что собрать заранее первым (ответ не нужен). */
-  warm: (req: WarmRequest) =>
-    fetch("/api/warm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(req) }).then(() => {}),
-  pdfUrl: (id: string, theme: string) => `/api/pdf/${encodeId(id)}?theme=${encodeURIComponent(theme)}`,
+  warm: (req: WarmRequest) => request<unknown>("/api/warm", json("POST", req)).then(() => {}),
+  /** Адрес PDF — его открывает браузер (новая вкладка), токен — в адресе. */
+  pdfUrl: (id: string, theme: string) => apiUrl(`/api/pdf/${encodeId(id)}?theme=${encodeURIComponent(theme)}`, { withToken: true }),
 };

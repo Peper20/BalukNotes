@@ -1,16 +1,17 @@
 // Обновление: изменились файлы показанной заметки — перезагрузить её.
-// Проверка — по кнопке, при возврате в окно и раз в N секунд сверкой версии
-// (/api/version/… — дёшево: сервер ничего не компилирует, если файлы не
-// менялись).
+// Проверка — сверка версии (/api/version/… — дёшево: сервер ничего не
+// компилирует, если файлы не менялись) по кнопке, при возврате в окно и по
+// сигналу источника изменений (../changes.ts: опрос раз в N секунд).
 
 import { api } from "../api";
+import { polling, type ChangeSource } from "../changes";
 import { notes } from "./notes.svelte";
 import { reader } from "./reader.svelte";
 import { router } from "./router.svelte";
 import { settings } from "./settings.svelte";
 
 class Updates {
-  #timer: ReturnType<typeof setInterval> | undefined;
+  #stop = () => {};
 
   start(): void {
     this.#schedule();
@@ -33,10 +34,14 @@ class Updates {
     }
   }
 
+  /** Источник изменений по настройкам. */
+  #source(): ChangeSource {
+    return polling(Number(settings.values["refresh.interval"]));
+  }
+
   #schedule(): void {
-    clearInterval(this.#timer);
-    const seconds = Number(settings.values["refresh.interval"]);
-    if (seconds > 0) this.#timer = setInterval(() => document.hidden || this.check(), seconds * 1000);
+    this.#stop();
+    this.#stop = this.#source().start(() => void this.check());
   }
 
   #settingsSaved(keys: string[]): void {

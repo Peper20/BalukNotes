@@ -10,7 +10,7 @@
 // Чистая логика — в ../tabs.ts, ../places.ts, ../reading.ts (с Vitest).
 // Интерфейс вокруг заметки (панели, глава, оглавление) — ../ui.svelte.ts.
 
-import { api } from "../api";
+import { api, rebaseStylesheets } from "../api";
 import { parseRoute } from "../ids";
 import { notes } from "./notes.svelte";
 import { places } from "./places.svelte";
@@ -24,6 +24,7 @@ export { notes, places, reader, router, settings, tabs, updates };
 
 /** Запуск клиента: настройки и список заметок с сервера, маршрут, прогрев. */
 export async function start(): Promise<void> {
+  rebaseStylesheets();
   // Список заметок — после настроек: вид (кегль) меняет ширину названий
   // вкладок, а полоса вкладок прокручивается к активной по списку заметок.
   const [, list] = await Promise.all([settings.load(), api.notes()]);
