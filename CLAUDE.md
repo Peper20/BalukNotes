@@ -52,6 +52,14 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
 - Останавливать сервер — `kill $(pgrep -x notes)`, **не** `pkill -f …`: шаблон
   совпадает с командной строкой самой оболочки и убивает её.
 
+## Облачное окружение (Claude Code в облаке)
+
+- Chromium — обёртка `/usr/local/bin/chromium` с `--no-sandbox` (ставит
+  setup script окружения); шрифты оформления встроены, ставить не нужно;
+  `packages.typst.org` разрешён (CeTZ). `data/` может не быть —
+  работать на `tests/vault`.
+- Время: полная сборка Rust с нуля ~8 мин, `cargo test` ~1 мин, e2e ~40 с.
+
 ## Rust
 
 - Workspace: `notes-core` (без async и HTTP), `notes-server` (axum), `notes-cli`.
@@ -67,7 +75,8 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
 - Линты — `[workspace.lints]` (clippy pedantic); `#[allow]` — точечно и с причиной.
 - Страница заметки: `render.rs` (дерево typst-html: склейка тем, якоря,
   ссылки) → `figures.rs` (текст SVG: один SVG на темы, общие глифы,
-  округление). Замер веса — `RUST_LOG=notes_core=debug`, строка «рисунки».
+  округление); глава книги — `book.rs` (нарезка готовой страницы по запросу
+  `?chapter=`/`?anchor=`, клиент показывает книгу только по главам с сервера). Замер веса — `RUST_LOG=notes_core=debug`, строка «рисунки».
 - Тесты: модульные рядом с кодом; сквозные — `crates/*/tests/` на `tests/vault`.
 
 ## Клиент `app/`
@@ -88,7 +97,10 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   общий со статическим сайтом); интерфейс — `src/app.css`.
 - Сквозные сценарии — `e2e/*.spec.ts` (Playwright на системном chromium,
   сервер на копии `tests/vault` в `tests/.data/e2e`). Новая возможность
-  интерфейса — новый сценарий.
+  интерфейса — новый сценарий; телефон — `e2e/mobile.spec.ts` (400×800:
+  страница не шире окна — замер после `document.fonts.ready`).
+- Классы интерфейса — уникальные по смыслу: общий `.help` у подсказки
+  настройки и диалога справки однажды растянул настройки за край экрана.
 
 ## Библиотека `konspekt/`
 
