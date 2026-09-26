@@ -6,7 +6,7 @@
 #import "code.typ": tm-theme, code-theme
 #import "blocks.typ": small-caps
 #import "web.typ": is-web, elem, frame
-#import "i18n.typ": word
+#import "i18n.typ": word, _own-words, _check-words
 
 // ── Мелочи ────────────────────────────────────────────────────────────────
 #let _margin-left(theme) = theme.page.margin.at("left", default: theme.page.margin.at("x", default: 2cm))
@@ -386,12 +386,14 @@
   themes.at(name)
 }
 
-#let _document(doc-kind, theme, lang, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body) = {
+#let _document(doc-kind, theme, lang, words, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body) = {
   assert(type(lang) == str, message: "lang — код языка строкой, например \"en\"")
   let theme = if theme == auto { _theme-from-input() } else { theme }
   set text(lang: lang)
   _theme-state.update(theme)
   _doc-kind.update(doc-kind)
+  // Без своих слов состояние не трогаем: документ тот же, что и без `words:`.
+  if _check-words(words) != (:) { _own-words.update(words) }
 
   set document(title: title, author: if author == none { () } else if type(author) == str { author } else { () })
   show: it => context {
@@ -409,6 +411,7 @@
 /// #show: book.with(
 ///   theme: auto,              // auto — из --input theme=…; или themes.night, своя
 ///   lang: "ru",               // язык: слова оформления («Глава», «Рис.») и переносы
+///   words: (:),               // свои слова поверх словаря: (chapter: "Kapitel", figure: "Abb.")
 ///   kind: auto,               // надпись над названием (auto — «Конспект»): Задачник, Шпаргалка…
 ///   title: [...], subtitle: [...], author: [...], date: [...],
 ///   description: [...],          // 2–3 фразы на титул: для кого и как читать
@@ -417,6 +420,7 @@
 #let book(
   theme: auto,
   lang: "ru",
+  words: (:),
   kind: auto,
   title: none,
   subtitle: none,
@@ -428,7 +432,7 @@
   toc: true,
   depth: 2,
   body,
-) = _document("book", theme, lang, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body)
+) = _document("book", theme, lang, words, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body)
 
 /// Заметка — одна тема целиком: `=` — раздел, нумерация сквозная.
 ///   #import "/_baluk/lib.typ": *
@@ -436,8 +440,9 @@
 #let note(
   theme: auto,
   lang: "ru",
+  words: (:),
   title: none,
   description: none,
   tags: (),
   body,
-) = _document("note", theme, lang, none, title, none, none, none, description, tags, false, false, 2, body)
+) = _document("note", theme, lang, words, none, title, none, none, none, description, tags, false, false, 2, body)

@@ -7,7 +7,8 @@
 //!
 //! Там же — основные шрифты тем ([`ThemeSet::web_fonts`]): их сервер и
 //! статический сайт отдают браузеру (WOFF2 по частям, `notes-core::webfonts`).
-//! Тема со своим шрифтом не требует правки Rust.
+//! Тема со своим шрифтом не требует правки Rust. И языки словарей оформления
+//! ([`ThemeSet::languages`], `<k-langs>`) — для проверки `lang:` в `notes check`.
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -24,6 +25,7 @@ use crate::{Error, Result};
 
 const CSS_FILE: &str = "css.typ";
 const CSS_LABEL: &str = "k-css";
+const LANGS_LABEL: &str = "k-langs";
 
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -41,6 +43,9 @@ pub struct ThemeSet {
     themes: Vec<Theme>,
     css: String,
     web_fonts: Vec<String>,
+    /// Языки словарей оформления (`i18n.typ`); пусто — библиотека их не
+    /// выгружает (старая), язык заметок не проверяется.
+    languages: Vec<String>,
 }
 
 impl ThemeSet {
@@ -51,15 +56,22 @@ impl ThemeSet {
             .docs
             .map_err(|errs| Error::Library(errs.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n")))?;
         let (_, doc) = docs.into_iter().next().expect("одна компиляция без темы");
-        let label = Label::new(PicoStr::intern(CSS_LABEL)).expect("метка не пустая");
-        let content = doc
-            .introspector()
-            .query_label(label)
-            .map_err(|e| Error::Library(format!("{CSS_FILE}: нет <{CSS_LABEL}>: {e}")))?;
-        let meta = content
-            .to_packed::<MetadataElem>()
-            .ok_or_else(|| Error::Library(format!("<{CSS_LABEL}> — не metadata")))?;
-        Self::from_json(&serde_json::to_value(&meta.value)?)
+        let metadata = |name: &str| -> Result<Value> {
+            let label = Label::new(PicoStr::intern(name)).expect("метка не пустая");
+            let content = doc
+                .introspector()
+                .query_label(label)
+                .map_err(|e| Error::Library(format!("{CSS_FILE}: нет <{name}>: {e}")))?;
+            let meta = content
+                .to_packed::<MetadataElem>()
+                .ok_or_else(|| Error::Library(format!("<{name}> — не metadata")))?;
+            Ok(serde_json::to_value(&meta.value)?)
+        };
+        let mut set = Self::from_json(&metadata(CSS_LABEL)?)?;
+        if let Ok(Value::Array(langs)) = metadata(LANGS_LABEL) {
+            set.languages = langs.iter().filter_map(Value::as_str).map(str::to_owned).collect();
+        }
+        Ok(set)
     }
 
     /// `{тема: {title, colors: {переменная: цвет}, fonts: [семейство]}}` → темы и CSS.
@@ -96,7 +108,7 @@ impl ThemeSet {
                 ":root[data-theme=\"{name}\"] .k-frame-v[data-theme=\"{name}\"] {{ display: contents; }}"
             );
         }
-        Ok(Self { themes, css, web_fonts: web_fonts.into_iter().collect() })
+        Ok(Self { themes, css, web_fonts: web_fonts.into_iter().collect(), languages: Vec::new() })
     }
 
     pub fn themes(&self) -> &[Theme] {
@@ -115,6 +127,11 @@ impl ThemeSet {
     /// повторов. Шрифт, которого нет среди доступных Typst, просто не отдаётся.
     pub fn web_fonts(&self) -> &[String] {
         &self.web_fonts
+    }
+
+    /// Языки, для которых в библиотеке есть слова оформления (`ru`, `en`).
+    pub fn languages(&self) -> &[String] {
+        &self.languages
     }
 }
 

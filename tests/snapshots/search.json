@@ -167,6 +167,18 @@
       ]
     },
     {
+      "id": "Особые случаи/Свои слова",
+      "kind": "note",
+      "title": "Eigene Wörter",
+      "sections": [
+        {
+          "heading": null,
+          "anchor": null,
+          "text": "Слова оформления — из words: шаблона. Словаря языка de в библиотеке нет, но свои слова заданы — notes check не предупреждает. GrenzwertEine Folge konvergiert gegen , wenn . Abschätzen . Нет в words: — слово из русского словаря. Parabel"
+        }
+      ]
+    },
+    {
       "id": "Особые случаи/Ссылки",
       "kind": "note",
       "title": "Ссылки",
@@ -1140,6 +1152,124 @@
             }
           ],
           "score": 33
+        },
+        {
+          "id": "Особые случаи/Свои слова",
+          "kind": "note",
+          "title": "Eigene Wörter",
+          "heading": null,
+          "anchor": null,
+          "snippet": [
+            {
+              "text": "…— из words: шаблона. Словаря языка d",
+              "hit": false
+            },
+            {
+              "text": "e",
+              "hit": true
+            },
+            {
+              "text": " в библиотеке нет, но свои слова заданы — not",
+              "hit": false
+            },
+            {
+              "text": "e",
+              "hit": true
+            },
+            {
+              "text": "s ch",
+              "hit": false
+            },
+            {
+              "text": "e",
+              "hit": true
+            },
+            {
+              "text": "ck не предупреждает. Gr",
+              "hit": false
+            },
+            {
+              "text": "e",
+              "hit": true
+            },
+            {
+              "text": "nzw",
+              "hit": false
+            },
+            {
+              "text": "e",
+              "hit": true
+            },
+            {
+              "text": "rt",
+              "hit": false
+            },
+            {
+              "text": "E",
+              "hit": true
+            },
+            {
+              "text": "in",
+              "hit": false
+            },
+            {
+              "text": "e",
+              "hit": true
+            },
+            {
+              "text": " Folg",
+              "hit": false
+            },
+            {
+              "text": "e",
+              "hit": true
+            },
+            {
+              "text": " konv",
+              "hit": false
+            },
+            {
+              "text": "e",
+              "hit": true
+            },
+            {
+              "text": "rgi",
+              "hit": false
+            },
+            {
+              "text": "e",
+              "hit": true
+            },
+            {
+              "text": "rt g",
+              "hit": false
+            },
+            {
+              "text": "e",
+              "hit": true
+            },
+            {
+              "text": "g",
+              "hit": false
+            },
+            {
+              "text": "e",
+              "hit": true
+            },
+            {
+              "text": "n , w",
+              "hit": false
+            },
+            {
+              "text": "e",
+              "hit": true
+            },
+            {
+              "text": "nn .…",
+              "hit": false
+            }
+          ],
+          "score": 25
         },
         {
           "id": "Особые случаи/English",

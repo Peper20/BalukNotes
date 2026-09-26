@@ -1,5 +1,6 @@
 #import "/_baluk/lib.typ": *
-#show: note.with(title: [Предупреждение])
+// lang без словаря и без words: — предупреждение notes check
+#show: note.with(lang: "uk", title: [Предупреждение])
 
 Заметка собирается, но с предупреждением: дробный отступ (`1fr`) в
 HTML-экспорте Typst пропускается.#h(1fr)После отступа.

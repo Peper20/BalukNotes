@@ -1,7 +1,8 @@
 id: Особые случаи/Предупреждение
 kind: Note
-Warning: /Особые случаи/Предупреждение.typ:5: h was ignored during HTML export
-Warning: /Особые случаи/Предупреждение.typ:14: «;» после #выражения не попадёт в текст: Typst считает его концом выражения
+Warning: /Особые случаи/Предупреждение.typ:6: h was ignored during HTML export
+Warning: /Особые случаи/Предупреждение.typ:3: для этого языка в библиотеке нет слов оформления: «Определение», «Рис.», «Глава» останутся русскими
+Warning: /Особые случаи/Предупреждение.typ:15: «;» после #выражения не попадёт в текст: Typst считает его концом выражения
 title: Предупреждение
 tags: 
 headings:
@@ -9,7 +10,7 @@ links:
   Сеть/SSH
 styles: 1509 байт, fnv 6df1eccb54ca6374
 ---
-<article class="k-doc" data-doc="note" lang="ru">
+<article class="k-doc" data-doc="note" lang="uk">
 <header class="k-title">
 <h1>Предупреждение</h1></header>
 <p>Заметка собирается, но с предупреждением: дробный отступ (<code>1fr</code>) в HTML-экспорте Typst пропускается.После отступа.</p>
