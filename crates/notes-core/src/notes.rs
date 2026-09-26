@@ -1,6 +1,7 @@
 //! Заметки как сервис: ленивая компиляция, кэш и версии.
 //!
-//! Заметка собирается, только когда её запросили. Вместе с результатом
+//! Заметка собирается, когда её запросили (или заранее — прогрев сервера,
+//! [`crate::warm`]). Вместе с результатом
 //! запоминается список файлов, которые прочитала компиляция (сама заметка,
 //! библиотека, код из `код-из-файла`, картинки…). **Версия** — хэш времён
 //! изменения и размеров этих файлов: узнать, изменилась ли заметка, стоит
@@ -16,7 +17,8 @@ use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, SystemTime};
 
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -29,7 +31,7 @@ use crate::graph::{Snapshot, SourceIndex};
 use crate::render::{self, LinkResolver, Rendered};
 use crate::themes::ThemeSet;
 use crate::vault::{Entry, NoteId, NoteKind, Vault};
-use crate::world::{Compiler, LibrarySource};
+use crate::world::{Compiler, LibrarySource, VAULT_DIR, VirtualFiles};
 use crate::{Error, Result};
 
 #[derive(Debug, Clone)]
@@ -92,7 +94,10 @@ pub struct Notes {
     /// Держится на время сборки заметки (см. [`Notes::page`]).
     building: Mutex<()>,
     disk: Option<DiskCache>,
-    links: SourceIndex,
+    links: Arc<SourceIndex>,
+    /// Сколько запросов страниц сейчас ждут: прогрев им уступает.
+    waiting: AtomicUsize,
+    warm: crate::warm::WarmQueue,
 }
 
 impl Notes {
@@ -106,7 +111,15 @@ impl Notes {
             return Err(Error::Library(format!("в библиотеке {library:?} нет lib.typ")));
         }
         let fonts = Arc::new(Fonts::load(&config.font_dirs));
-        let compiler = Compiler::new(vault.root(), library, fonts);
+        let links = Arc::new(SourceIndex::default());
+        // Данные хранилища для заметок (`/_vault/graph/…` — граф по фильтру).
+        let virtuals = {
+            let (links, vault) = (links.clone(), vault.clone());
+            VirtualFiles(Arc::new(move |path: &str| {
+                crate::vault_graph::virtual_file(|| links.snapshot(&vault).map_err(|e| e.to_string()), path)
+            }))
+        };
+        let compiler = Compiler::new(vault.root(), library, fonts, Some(virtuals));
         let themes = ThemeSet::load(&compiler)?;
         let disk = config.cache.as_ref().map(|dir| DiskCache::new(dir, vault.root()));
         Ok(Self {
@@ -116,7 +129,9 @@ impl Notes {
             cache: Mutex::default(),
             building: Mutex::new(()),
             disk,
-            links: SourceIndex::default(),
+            links,
+            waiting: AtomicUsize::new(0),
+            warm: crate::warm::WarmQueue::default(),
         })
     }
 
@@ -158,6 +173,19 @@ impl Notes {
     /// пришедший во время её сборки (пользователь ушёл и вернулся), ждёт
     /// первую и берёт результат из кэша, а не собирает заново.
     pub fn page(&self, id: &NoteId, opts: FigureOptions) -> Result<Arc<NotePage>> {
+        /// Запрос ждёт страницу — прогрев не начнёт новую сборку.
+        struct Waiting<'a>(&'a AtomicUsize);
+        impl Drop for Waiting<'_> {
+            fn drop(&mut self) {
+                self.0.fetch_sub(1, Ordering::SeqCst);
+            }
+        }
+        self.waiting.fetch_add(1, Ordering::SeqCst);
+        let _waiting = Waiting(&self.waiting);
+        self.page_inner(id, opts)
+    }
+
+    fn page_inner(&self, id: &NoteId, opts: FigureOptions) -> Result<Arc<NotePage>> {
         let entry = self.vault.entry(id)?;
         if let Some(page) = self.fresh(id, opts) {
             return Ok(page);
@@ -187,6 +215,32 @@ impl Notes {
         let cached = Cached { page: page.clone(), raw, opts, deps: built.deps, files: built.files };
         self.cache.lock().insert(id.clone(), cached);
         Ok(page)
+    }
+
+    // ── Прогрев (см. crate::warm) ─────────────────────────────────────────
+
+    pub(crate) fn warm_queue(&self) -> &crate::warm::WarmQueue {
+        &self.warm
+    }
+
+    /// Есть ли у заметки годная сборка — в памяти или на диске.
+    pub(crate) fn is_built(&self, id: &NoteId) -> bool {
+        if let Some(c) = self.cache.lock().get(id) {
+            return version_of(&c.deps) == c.files;
+        }
+        self.disk.as_ref().is_some_and(|d| d.is_fresh(id, version_of))
+    }
+
+    /// Подождать, пока запросы пользователя получат свои страницы.
+    pub(crate) fn wait_for_users(&self) {
+        while self.waiting.load(Ordering::SeqCst) > 0 {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    /// Собрать заметку в кэш (без учёта в `waiting`).
+    pub(crate) fn warm_one(&self, id: &NoteId, opts: FigureOptions) -> Result<()> {
+        self.page_inner(id, opts).map(drop)
     }
 
     /// Страница из кэша в памяти, если файлы заметки не менялись (при
@@ -343,12 +397,47 @@ fn page_version(files: &str, opts: FigureOptions) -> String {
     format!("{files}-{}", opts.key())
 }
 
+/// `<хранилище>/_vault/…` → `<хранилище>`.
+fn vault_data_root(path: &Path) -> Option<&Path> {
+    path.ancestors().find(|a| a.file_name().is_some_and(|n| n == VAULT_DIR))?.parent()
+}
+
+/// Версия всего хранилища: пути, времена и размеры всех `.typ` (кроме
+/// служебных каталогов `_…` и `.…`).
+fn vault_stamp(root: &Path, h: &mut DefaultHasher) {
+    fn walk(dir: &Path, out: &mut Vec<(PathBuf, u64, Option<std::time::Duration>)>) {
+        let Ok(read) = fs::read_dir(dir) else { return };
+        for e in read.flatten() {
+            let path = e.path();
+            let hidden = e.file_name().to_str().is_some_and(|n| n.starts_with(['_', '.']));
+            let Ok(meta) = e.metadata() else { continue };
+            if meta.is_dir() {
+                if !hidden {
+                    walk(&path, out);
+                }
+            } else if path.extension().is_some_and(|x| x == "typ") {
+                let modified = meta.modified().ok().and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok());
+                out.push((path, meta.len(), modified));
+            }
+        }
+    }
+    let mut files = Vec::new();
+    walk(root, &mut files);
+    files.sort();
+    files.hash(h);
+}
+
 /// Хэш (путь, время изменения, размер) по всем файлам. Пропавший файл тоже
 /// меняет версию.
 fn version_of(deps: &[PathBuf]) -> String {
     let mut h = DefaultHasher::new();
     for path in deps {
         path.hash(&mut h);
+        // Данные хранилища (`/_vault/…`, граф) зависят от всех заметок.
+        if let Some(root) = vault_data_root(path) {
+            vault_stamp(root, &mut h);
+            continue;
+        }
         match fs::metadata(path) {
             Ok(meta) => {
                 meta.len().hash(&mut h);

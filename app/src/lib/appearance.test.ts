@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { applyAppearance, resolveTheme } from "./appearance";
+import { applyAppearance, nextTheme, resolveTheme } from "./appearance";
 
 const themes = [
   { name: "classic", title: "Классика", dark: false },
@@ -11,6 +11,12 @@ it("тема: явная, по системе, неизвестная", () => {
   expect(resolveTheme("auto", themes, true)).toBe("night");
   expect(resolveTheme("auto", themes, false)).toBe("classic");
   expect(resolveTheme("sepia", themes, true)).toBe("night");
+});
+
+it("кнопка темы: всегда другая на вид", () => {
+  expect(nextTheme("night", themes)).toBe("classic");
+  expect(nextTheme("classic", themes)).toBe("night");
+  expect(nextTheme("sepia", themes)).toBe("classic");
 });
 
 it("настройки — атрибутами на <html>", () => {

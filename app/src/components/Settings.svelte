@@ -1,5 +1,6 @@
 <!-- Настройки: форма строится по схеме с сервера, каждое изменение сразу сохраняется. -->
 <script lang="ts">
+  import X from "@lucide/svelte/icons/x";
   import type { SettingDef } from "../lib/api";
   import { app } from "../lib/app.svelte";
   import { ui } from "../lib/ui.svelte";
@@ -22,7 +23,7 @@
   <form method="dialog">
     <header>
       <h2>Настройки</h2>
-      <button class="icon" value="close" aria-label="Закрыть">✕</button>
+      <button class="icon" value="close" aria-label="Закрыть"><X size={18} strokeWidth={1.75} aria-hidden="true" /></button>
     </header>
     {#each app.schema?.groups ?? [] as group (group.key)}
       <fieldset>

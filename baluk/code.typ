@@ -7,6 +7,7 @@
 
 #import "theme.typ": current-theme, box-bg
 #import "web.typ": is-web, elem
+#import "i18n.typ": word
 
 // ── Тема подсветки (tmTheme) генерируется из палитры ──────────────────────
 #let _hex(c) = c.to-hex()
@@ -109,7 +110,7 @@
         elem("div", "k-listing-cap", [#elem("span", "k-lang", _lang-name(lg)) #caption])
       }
       raw(code-text.trim("\n", at: end), lang: lg, block: true)
-      if complexity != none { elem("div", "k-listing-cx")[Сложность: #complexity] }
+      if complexity != none { elem("div", "k-listing-cx")[#word("complexity"): #complexity] }
     })
   } }
 
@@ -161,7 +162,7 @@
     body
     if complexity != none {
       block(above: 0.4em, text(font: theme.font.captions, size: theme.size.small, fill: theme.color.muted)[
-        Сложность: #complexity
+        #word("complexity"): #complexity
       ])
     }
   })

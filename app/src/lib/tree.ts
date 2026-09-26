@@ -32,6 +32,11 @@ export function buildTree(notes: NoteListItem[]): Folder {
   return root;
 }
 
+/** Сколько заметок в папке вместе с вложенными. */
+export function countNotes(f: Folder): number {
+  return f.notes.length + f.folders.reduce((sum, sub) => sum + countNotes(sub), 0);
+}
+
 /** Папки на пути к заметке — чтобы раскрыть их в дереве. */
 export function ancestors(id: string): string[] {
   const parts = id.split("/").slice(0, -1);

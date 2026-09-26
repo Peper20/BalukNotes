@@ -6,16 +6,7 @@
 
 #import "theme.typ": current-theme, _doc-kind, box-bg, is-dark
 #import "web.typ": is-web, elem
-
-#let _box-titles = (
-  definition: "Определение",
-  theorem: "Теорема",
-  example: "Пример",
-  remark: "Замечание",
-  pitfall: "Типичная ошибка",
-  idea: "Идея",
-  algorithm: "Алгоритм",
-)
+#import "i18n.typ": word
 
 // Нумеруются только те врезки, на которые ссылаются: определения и теоремы
 // (общий счётчик), примеры (свой). Номер — «глава.n», сброс в начале главы.
@@ -42,7 +33,7 @@
 #let small-caps(s) = context if is-web() { elem("span", "k-caps", upper(s)) } else { text(size: 0.8em, tracking: 0.07em, upper(s)) }
 
 #let _box-label(kind, title, number, color) = {
-  let name = _box-titles.at(kind)
+  let name = word(kind)
   text(weight: "bold", fill: color)[#name#if number != none [ #number]#if title != none [ (#title)].]
   [ ]
 }
@@ -60,7 +51,7 @@
     let can-break = kind not in ("definition", "theorem")
 
     if is-web() {
-      let head = [#_box-titles.at(kind)#if number != none [ #number]#if title != none [ (#title)].]
+      let head = [#word(kind)#if number != none [ #number]#if title != none [ (#title)].]
       return elem("div", "k-box k-" + _box-classes.at(kind), [#elem("span", "k-label", head) #body])
     }
     block(
@@ -88,8 +79,8 @@
   _steps.step()
   context {
     let theme = current-theme()
-    if is-web() { return [#elem("span", "k-step")[Шаг #_steps.get().first(). #name.] ] }
-    text(weight: "bold", fill: theme.color.boxes.example.darken(if is-dark(theme) { 0% } else { 10% }))[Шаг #_steps.get().first(). #name.]
+    if is-web() { return [#elem("span", "k-step")[#word("step") #_steps.get().first(). #name.] ] }
+    text(weight: "bold", fill: theme.color.boxes.example.darken(if is-dark(theme) { 0% } else { 10% }))[#word("step") #_steps.get().first(). #name.]
     [ ]
   }
 }
@@ -97,11 +88,11 @@
 /// Ответ в рамке, прижат вправо.
 #let answer(body) = context {
   let theme = current-theme()
-  if is-web() { return elem("div", "k-answer", [#elem("span", "k-answer-label")[Ответ:] #body]) }
+  if is-web() { return elem("div", "k-answer", [#elem("span", "k-answer-label")[#word("answer"):] #body]) }
   align(right, box(
     stroke: 0.7pt + theme.color.boxes.example, radius: 3pt, inset: (x: 8pt, y: 5pt),
     fill: box-bg(theme, theme.color.boxes.example),
-    [#text(weight: "bold", fill: theme.color.boxes.example)[Ответ:] #body],
+    [#text(weight: "bold", fill: theme.color.boxes.example)[#word("answer"):] #body],
   ))
 }
 
@@ -109,14 +100,14 @@
 #let proof(body) = context {
   let theme = current-theme()
   if is-web() {
-    return elem("div", "k-proof", [#elem("span", "k-proof-head")[Почему это верно.] #body #elem("span", "k-qed")[∎]])
+    return elem("div", "k-proof", [#elem("span", "k-proof-head", word("proof")) #body #elem("span", "k-qed")[∎]])
   }
   block(
     width: 100%, above: 0.8em, below: 1em, breakable: true,
     stroke: (left: 0.6pt + theme.color.line), inset: (left: 10pt, y: 2pt),
   )[
     #set text(size: 0.94em)
-    #text(style: "italic", fill: theme.color.muted)[Почему это верно.] #body #h(1fr) #text(fill: theme.color.muted)[∎]
+    #text(style: "italic", fill: theme.color.muted, word("proof")) #body #h(1fr) #text(fill: theme.color.muted)[∎]
   ]
 }
 
@@ -179,7 +170,7 @@
   let theme = current-theme()
   let acc = theme.color.accent
   let items = items.pos()
-  let display-text = if _doc-kind.get() == "note" [В этой заметке] else [В этой главе]
+  let display-text = word(if _doc-kind.get() == "note" { "plan-note" } else { "plan-chapter" })
   if is-web() {
     return elem("div", "k-plan", {
       elem("div", "k-plan-head", display-text)
@@ -201,11 +192,11 @@
   let items = items.pos()
   if is-web() {
     return elem("div", "k-summary", {
-      elem("div", "k-summary-head")[Коротко о главном]
+      elem("div", "k-summary-head", word("summary"))
       elem("ol", "k-summary-list", items.map(x => html.elem("li", x)).join())
     })
   }
-  let title = text(font: theme.font.headings, weight: "bold", fill: acc, size: 1.05em)[Коротко о главном]
+  let title = text(font: theme.font.headings, weight: "bold", fill: acc, size: 1.05em, word("summary"))
   let entries = {
     set par(first-line-indent: 0em)
     grid(columns: (auto, 1fr), column-gutter: 0.7em, row-gutter: 0.75em,
@@ -225,10 +216,10 @@
   // В HTML ответы спрятаны в <details>: сначала подумать, потом раскрыть.
   if is-web() {
     return elem("div", "k-quiz", {
-      elem("div", "k-quiz-head")[Проверь себя]
+      elem("div", "k-quiz-head", word("quiz"))
       elem("ol", "k-quiz-list", items.map(((q, _)) => html.elem("li", q)).join())
       html.elem("details", attrs: (class: "k-quiz-answers"), {
-        html.elem("summary")[Ответы]
+        html.elem("summary", word("answers"))
         elem("ol", "k-quiz-list", items.map(((_, ans)) => html.elem("li", ans)).join())
       })
     })
@@ -239,13 +230,13 @@
     inset: (x: 12pt, y: 10pt),
     {
       set par(first-line-indent: 0em)
-      block(below: 8pt, text(font: theme.font.captions, weight: "bold", size: 0.8em, tracking: 0.1em, fill: acc, upper[Проверь себя]))
+      block(below: 8pt, text(font: theme.font.captions, weight: "bold", size: 0.8em, tracking: 0.1em, fill: acc, upper(word("quiz"))))
       for (i, (q, _)) in items.enumerate() {
         block(below: 0.6em, grid(columns: (1.3em, 1fr), text(weight: "bold", fill: acc)[#(i + 1).], q))
       }
       line(length: 100%, stroke: (paint: theme.color.line, dash: "dashed", thickness: 0.5pt))
       set text(size: theme.size.small, fill: theme.color.muted)
-      [*Ответы.* ]
+      [*#word("answers").* ]
       items.enumerate().map(((i, (_, ans))) => [#(i + 1)) #ans]).join([ #h(0.4em) ])
     })
 }
@@ -310,8 +301,8 @@
   if is-web() {
     return elem("table", "k-table k-pitfalls", {
       html.elem("thead", html.elem("tr", {
-        elem("th", "k-bad")[✗ Ошибка]
-        elem("th", "k-good")[✓ Как избежать]
+        elem("th", "k-bad")[✗ #word("mistake")]
+        elem("th", "k-good")[✓ #word("avoid")]
       }))
       html.elem("tbody", items.map(((err, fix)) => html.elem("tr", html.elem("td", err) + html.elem("td", fix))).join())
     })
@@ -319,8 +310,8 @@
   block(width: 100%, above: 1em, below: 1.2em, table(
     columns: (1fr, 1fr),
     table.header(
-      text(fill: bad-color, weight: "bold")[✗ Ошибка],
-      text(fill: good-color, weight: "bold")[✓ Как избежать],
+      text(fill: bad-color, weight: "bold")[✗ #word("mistake")],
+      text(fill: good-color, weight: "bold")[✓ #word("avoid")],
     ),
     ..items.flatten(),
   ))

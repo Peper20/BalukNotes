@@ -1,6 +1,6 @@
 // Интерактивные рисунки baluk: ползунки, координаты, вращение, тема.
 import { expect, test } from "@playwright/test";
-import { open } from "./helpers";
+import { open, resetTheme } from "./helpers";
 
 test("график: живой вместо кадра, ползунок меняет кривую, координаты под указателем", async ({ page }) => {
   await open(page, "Рисунки/Интерактив");
@@ -49,8 +49,8 @@ test("поверхность: перетаскивание поворачива�
   const stroke = () => page.locator(".k-plot-curve").first().evaluate((p) => getComputedStyle(p).stroke);
   const light = await stroke();
   await page.locator("#theme").click();
-  await page.locator("#theme").click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "night");
   await expect.poll(stroke).not.toBe(light);
   await expect.poll(frame).not.toBe(first);
+  await resetTheme(page);
 });

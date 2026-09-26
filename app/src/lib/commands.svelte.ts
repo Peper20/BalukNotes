@@ -2,7 +2,7 @@
 // справки (?). Новая возможность интерфейса = команда здесь.
 
 import { app } from "./app.svelte";
-import { noteHref, tagHref } from "./ids";
+import { graphHref, noteHref, tagHref } from "./ids";
 import { combo, type Combo } from "./keys";
 import { mobile, ui } from "./ui.svelte";
 
@@ -60,6 +60,8 @@ export function commands(): Command[] {
     { id: "commands", group: "Переход", title: "Команды", keys: keys("Ctrl+KeyK"), run: () => ui.openPalette(">") },
     { id: "home", group: "Переход", title: "Главная: граф и все заметки", keys: keys("KeyH"), run: () => app.go("/") },
     { id: "tags", group: "Переход", title: "Теги", run: () => app.go(tagHref()) },
+    { id: "graph", group: "Переход", title: "Граф заметок", keys: keys("KeyG"), run: () => app.go(graphHref()) },
+    { id: "graph-around", group: "Переход", title: "Граф: соседи заметки", available: () => app.currentId != null, run: () => app.go(graphHref(app.currentId)) },
     { id: "prev-chapter", group: "Переход", title: "Предыдущая глава", keys: keys("BracketLeft"), available: hasBook, run: () => chapter(-1) },
     { id: "next-chapter", group: "Переход", title: "Следующая глава", keys: keys("BracketRight"), available: hasBook, run: () => chapter(1) },
 

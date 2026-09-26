@@ -20,5 +20,6 @@
 #import "figures.typ": canvas, fig, in-row, axes, tick, plot, parametric, fill-between, spoke, point, contours, p3, axes3d, surface, prisms, base-shape, revolution, cross-section, array-cells, matrix-cells, graph, tree-layout, binary-layout, binary-edges, circle-layout
 #import "plots.typ": interactive-plot, interactive-surface
 #import "frames.typ": frames
+#import "graph.typ": vault-graph
 #import "charts.typ": chart
 #import "math.typ": *

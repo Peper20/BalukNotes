@@ -7,6 +7,7 @@
   import { mobile, ui } from "./lib/ui.svelte";
   import Backlinks from "./components/Backlinks.svelte";
   import ChapterNav from "./components/ChapterNav.svelte";
+  import GraphPage from "./components/GraphPage.svelte";
   import Help from "./components/Help.svelte";
   import Home from "./components/Home.svelte";
   import LinkPreview from "./components/LinkPreview.svelte";
@@ -47,10 +48,10 @@
     const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
     if (!a || a.target || e.defaultPrevented || e.button > 1 || e.shiftKey || e.altKey) return;
     const url = new URL(a.href, location.href);
-    const internal = url.pathname === "/" || url.pathname.startsWith("/n/") || url.pathname.startsWith("/tags");
+    const internal = url.pathname === "/" || url.pathname.startsWith("/n/") || url.pathname.startsWith("/tags") || url.pathname === "/graph";
     if (url.origin !== location.origin || !internal) return;
     const newTab = e.button === 1 || e.ctrlKey || e.metaKey;
-    if (url.pathname === location.pathname && !newTab) {
+    if (url.pathname === location.pathname && url.search === location.search && !newTab) {
       // Якорь в той же заметке: прокрутка — клиентом, запоминаем в истории.
       if (url.hash) {
         e.preventDefault();
@@ -60,7 +61,7 @@
     }
     e.preventDefault();
     if (mobile.matches) ui.sidebarOpen = false;
-    app.go(url.pathname + url.hash, { newTab });
+    app.go(url.pathname + url.search + url.hash, { newTab });
   }
 
   /** Горячие клавиши — по реестру команд; одиночные — не во время ввода. */
@@ -109,6 +110,8 @@
         <ChapterNav />
         {#if app.page}<Backlinks id={app.page.id} />{/if}
         <Toc />
+      {:else if app.route.kind === "graph" && started}
+        <GraphPage route={app.route} />
       {:else if app.route.kind === "tags" && started}
         <Tags tag={app.route.tag} />
       {:else if started}

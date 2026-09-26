@@ -71,6 +71,9 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
 - Шрифты оформления — `fonts/` (Gentium Plus, JetBrains Mono, OFL), встроены в
   бинарник и заслоняют системные: в систему ставить не нужно, отрисовка
   одинакова везде. Замена файла → обновить снимки и посмотреть глазами.
+  Браузеру — `notes-core::webfonts`: WOFF2 по частям с `unicode-range`.
+- Прогрев — `notes-core::warm`: сервер собирает все заметки заранее (по
+  приоритету, пропуская собранные); запрос пользователя — вне очереди.
 - Пути заметок — только через `NoteId` (проверяет `..`, служебные `_`/`.`).
 - Линты — `[workspace.lints]` (clippy pedantic); `#[allow]` — точечно и с причиной.
 - Страница заметки: `render.rs` (дерево typst-html: склейка тем, якоря,
@@ -95,6 +98,20 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   `notes-core::settings::Schema` + строка в `src/lib/appearance.ts` + CSS.
 - Стили заметки — только внутри `.k-note { … }` (`public/assets/baluk.css`,
   общий со статическим сайтом); интерфейс — `src/app.css`.
+- Живые части заметки (интерактивные рисунки, кадры) — `src/lib/live.ts`,
+  общий для клиента и статического сайта: `src/static.ts` →
+  `dist/assets/static.js` (второй шаг `npm run build`,
+  `vite.static.config.ts`). Сценарии сайта — `e2e/static.spec.ts` (с диска).
+- Значки интерфейса — `@lucide/svelte` (`import X from "@lucide/svelte/icons/x"`),
+  не текстовые глифы (▸ ◐ ⎙); на статическом сайте — те же пути CSS-маской
+  (`baluk.css`). Вид проверять в Chrome (Claude in Chrome) в обеих темах.
+- Граф — `Graph.svelte` рисует готовую раскладку: фильтр и раскладка — в
+  ядре (`notes-core::vault_graph`, `POST /api/graph/layout`), одни и те же
+  для главной, `/graph` и `#vault-graph` в заметках (`baluk/graph.typ`,
+  данные — виртуальный `/_vault/graph/…`); на клиенте — только вид
+  (`graph-view.ts`: цвета, поиск, масштаб) и движение (`graph-physics.ts`:
+  раскладка ядра — покой, нетронутый граф не шевелится; на картинке —
+  главная, заметка — узлы не выходят за рамку; `prefers-reduced-motion`).
 - Сквозные сценарии — `e2e/*.spec.ts` (Playwright на системном chromium,
   сервер на копии `tests/vault` в `tests/.data/e2e`). Новая возможность
   интерфейса — новый сценарий; телефон — `e2e/mobile.spec.ts` (400×800:
@@ -135,6 +152,9 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   которому ядро склеивает темы).
 - Кадры — `frames.typ`: каждый кадр — обычный `canvas`, в HTML все кадры в
   разметке (`div.k-frames-item`), клиент только переключает `data-current`.
+- Слова оформления («Определение», «Рис.», «Глава») — только через `word(…)`
+  из `i18n.typ` (язык — `lang:` шаблона); новое слово — во все словари.
+  Русский PDF и HTML от этого не меняются (сверено байт в байт).
 - Интерактивные рисунки — `plots.typ`: разбор формул в нём и в
   `app/src/lib/plot/formula.ts` **одинаковы построчно**; правишь один —
   правь второй и дополни сверку в `tests/vault/Рисунки/Интерактив.typ`

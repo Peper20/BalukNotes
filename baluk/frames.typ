@@ -18,6 +18,7 @@
 #import "theme.typ": current-theme
 #import "web.typ": is-web, elem
 #import "plots.typ": _num
+#import "i18n.typ": word
 
 /// Больше кадров — страница тяжелеет (каждый кадр — свой SVG).
 #let _max-frames = 60
@@ -71,7 +72,7 @@
   } else if type(v) in (str, content) {
     [#emph(name) = #v]
   } else {
-    [кадр #(i + 1) из #count]
+    context [#word("frame") #(i + 1) #word("frame-of") #count]
   }
 }
 

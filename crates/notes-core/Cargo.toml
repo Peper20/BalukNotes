@@ -12,6 +12,9 @@ publish.workspace = true
 ts = ["dep:ts-rs"]
 
 [dependencies]
+brotli.workspace = true
+fontcull.workspace = true
+ttf-parser.workspace = true
 typst.workspace = true
 typst-html.workspace = true
 typst-layout.workspace = true
@@ -29,6 +32,8 @@ ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true
+# Математический шрифт для теста WOFF2 (тот же, что встроен в typst-kit).
+typst-assets = { version = "=0.15.1", features = ["fonts"] }
 
 [lints]
 workspace = true

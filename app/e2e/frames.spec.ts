@@ -1,6 +1,6 @@
 // Кадры baluk: ползунок, кнопки, проигрывание, тема.
 import { expect, test } from "@playwright/test";
-import { open } from "./helpers";
+import { open, resetTheme } from "./helpers";
 
 test("кадры: виден кадр по умолчанию, ползунок и ‹ › переключают, место не прыгает", async ({ page }) => {
   await open(page, "Рисунки/Кадры");
@@ -60,10 +60,7 @@ test("кадры: тема перекрашивает кадры, ползуно
     });
   const light = await shown();
   await page.locator("#theme").click();
-  await page.locator("#theme").click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "night");
   await expect.poll(shown).not.toBe(light);
-  // настройки общие для всех сценариев: вернуть «как в системе»
-  await page.locator("#theme").click();
-  await expect.poll(() => page.evaluate(async () => (await (await fetch("/api/settings")).json()).values["appearance.theme"])).toBe("auto");
+  await resetTheme(page);
 });

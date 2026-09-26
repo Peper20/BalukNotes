@@ -6,6 +6,7 @@
 #import "code.typ": tm-theme, code-theme
 #import "blocks.typ": small-caps
 #import "web.typ": is-web, elem, frame
+#import "i18n.typ": word
 
 // ── Мелочи ────────────────────────────────────────────────────────────────
 #let _margin-left(theme) = theme.page.margin.at("left", default: theme.page.margin.at("x", default: 2cm))
@@ -46,7 +47,7 @@
   block(width: 100%, above: 0pt, below: 1.2em, {
     if numbered {
       place(top + right, dy: -0.4em, text(font: theme.font.headings, size: 72pt, weight: "bold", fill: pale(theme, acc), n))
-      text(font: theme.font.headings, size: 9pt, tracking: 0.22em, fill: acc, upper[Глава #n])
+      text(font: theme.font.headings, size: 9pt, tracking: 0.22em, fill: acc, upper[#word("chapter") #n])
       v(0.25em)
     }
     text(font: theme.font.headings, size: theme.size.chapter, weight: "bold", fill: acc, hyphenate: false, it.body)
@@ -146,7 +147,7 @@
   // Шрифт, кегль и цвет в HTML-разметку не попадают (их задаёт CSS), но их
   // наследуют рисунки: html.frame верстается как страница PDF. Без этого
   // подписи на рисунках — чёрные (не видно в тёмной теме) и чужим шрифтом.
-  set text(font: theme.font.text, size: theme.size.text, lang: "ru", fill: theme.color.text)
+  set text(font: theme.font.text, size: theme.size.text, fill: theme.color.text)
   show math.equation: set text(font: theme.font.math)
   show raw: set text(font: theme.font.code)
   // Номера заголовков выдаются всегда (span.k-num): показывать ли их, решает
@@ -166,7 +167,9 @@
       // Метка `= Раздел <метка>` — это id: по нему ведут ссылки #see(anchor: "метка").
       if it.has("label") { attrs.insert("id", str(it.label)) }
       elem(tag, "k-h k-h" + str(calc.min(it.level + shift, 4)), ..attrs, {
-        if number != none { elem("span", "k-num", number) }
+        // «Глава» перед номером главы рисует CSS (настройка вида) — слово на языке заметки.
+        let word-attrs = if is-chapter { ("data-word": word("chapter")) } else { (:) }
+        if number != none { elem("span", "k-num", ..word-attrs, number) }
         it.body
       })
     }
@@ -197,7 +200,7 @@
 
   // Весь документ — в <article data-doc>: по виду документа (а не по месту
   // файла в хранилище) CSS решает, показывать ли номера и «Главу N».
-  elem("article", "k-doc", ..("data-doc": doc-kind), {
+  elem("article", "k-doc", ..("data-doc": doc-kind, lang: text.lang), {
   if title != none {
     elem("header", "k-title", {
       if kind != none { elem("div", "k-title-kind", kind) }
@@ -288,7 +291,7 @@
   if title-page { _title-page(theme, kind, title, subtitle, author, date, description) }
   if toc {
     page(header: none, footer: none, {
-      block(below: 1.2em, text(font: theme.font.headings, size: 20pt, weight: "bold", fill: acc)[Содержание])
+      block(below: 1.2em, text(font: theme.font.headings, size: 20pt, weight: "bold", fill: acc, word("contents")))
       set par(leading: 0.55em, first-line-indent: 0em)
       show outline.entry.where(level: 1): it => block(above: 1em, text(weight: "bold", fill: acc, it))
       outline(title: none, depth: depth, indent: 1.3em)
@@ -312,7 +315,7 @@
     footer: _page-footer(theme),
     header-ascent: 35%,
   )
-  set text(font: theme.font.text, size: theme.size.text, lang: "ru", fill: theme.color.text, hyphenate: auto)
+  set text(font: theme.font.text, size: theme.size.text, fill: theme.color.text, hyphenate: auto)
   show math.equation: set text(font: theme.font.math)
   set par(
     justify: theme.par.justify,
@@ -355,31 +358,38 @@
   themes.at(name)
 }
 
-#let _document(doc-kind, theme, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body) = {
+#let _document(doc-kind, theme, lang, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body) = {
+  assert(type(lang) == str, message: "lang — код языка строкой, например \"en\"")
   let theme = if theme == auto { _theme-from-input() } else { theme }
+  set text(lang: lang)
   _theme-state.update(theme)
   _doc-kind.update(doc-kind)
 
   set document(title: title, author: if author == none { () } else if type(author) == str { author } else { () })
-  show: it => context if is-web() {
-    _web-template(theme, doc-kind, kind, title, subtitle, author, date, description, tags, it)
-  } else {
-    _pdf-template(theme, doc-kind, kind, title, subtitle, author, date, description, title-page, toc, depth, it)
+  show: it => context {
+    let kind = if kind == auto { word("book-kind") } else { kind }
+    if is-web() {
+      _web-template(theme, doc-kind, kind, title, subtitle, author, date, description, tags, it)
+    } else {
+      _pdf-template(theme, doc-kind, kind, title, subtitle, author, date, description, title-page, toc, depth, it)
+    }
   }
   body
 }
 
 /// Книга — большой конспект из глав: `=` — глава с номером.
-/// #show: конспект.with(
+/// #show: book.with(
 ///   theme: auto,              // auto — из --input theme=…; или themes.night, своя
-///   kind: [Конспект],          // надпись над названием: Задачник, Шпаргалка…
+///   lang: "ru",               // язык: слова оформления («Глава», «Рис.») и переносы
+///   kind: auto,               // надпись над названием (auto — «Конспект»): Задачник, Шпаргалка…
 ///   title: [...], subtitle: [...], author: [...], date: [...],
 ///   description: [...],          // 2–3 фразы на титул: для кого и как читать
 ///   title-page: true, toc: true, depth: 2,   // только PDF
 /// )
 #let book(
   theme: auto,
-  kind: [Конспект],
+  lang: "ru",
+  kind: auto,
   title: none,
   subtitle: none,
   author: none,
@@ -390,15 +400,16 @@
   toc: true,
   depth: 2,
   body,
-) = _document("book", theme, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body)
+) = _document("book", theme, lang, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body)
 
 /// Заметка — одна тема целиком: `=` — раздел, нумерация сквозная.
 ///   #import "/_baluk/lib.typ": *
 ///   #show: note.with(title: [SSH], tags: ("безопасность",))
 #let note(
   theme: auto,
+  lang: "ru",
   title: none,
   description: none,
   tags: (),
   body,
-) = _document("note", theme, none, title, none, none, none, description, tags, false, false, 2, body)
+) = _document("note", theme, lang, none, title, none, none, none, description, tags, false, false, 2, body)

@@ -17,6 +17,7 @@
           max={p.max}
           step={p.step}
           value={values[p.name]}
+          style:--k-fill="{(((values[p.name] ?? p.value) - p.min) / (p.max - p.min || 1)) * 100}%"
           oninput={(e) => (values = { ...values, [p.name]: Number(e.currentTarget.value) })}
         />
         <output>{formatNumber(values[p.name] ?? p.value, p.step)}</output>

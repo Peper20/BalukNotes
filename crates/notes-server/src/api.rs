@@ -7,7 +7,7 @@ use notes_core::diag::Diagnostic;
 use notes_core::graph::Backlink;
 use notes_core::settings::Schema;
 use notes_core::{NoteId, NoteKind};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 /// Элемент `GET /api/notes`.
@@ -23,6 +23,14 @@ pub struct NoteListItem {
     /// Название из шаблона (`title: […]`), если есть.
     pub title: Option<String>,
     pub tags: Vec<String>,
+}
+
+/// `POST /api/warm`: что собрать заранее первым (заметки во вкладках,
+/// недавние). Неизвестные и неверные пути пропускаются.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct WarmRequest {
+    pub ids: Vec<String>,
 }
 
 /// `GET /api/version/{id}`.

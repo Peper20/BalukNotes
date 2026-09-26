@@ -1,0 +1,71 @@
+id: Особые случаи/English
+kind: Book
+title: Notes in English
+tags: фикстура, языки
+headings:
+  1 #Blocks [Blocks] Blocks
+  1 #Code-and-figures [Code-and-figures] Code and figures
+links:
+styles: 1668 байт, fnv fcecd369a2700f3d
+---
+<article class="k-doc" data-k-figs="f4fdaa70" data-doc="book" lang="en">
+<header class="k-title">
+<div class="k-title-kind">Notes</div>
+<h1>Notes in English</h1>
+<p class="k-description">Decoration words follow the language of the note.</p>
+<ul class="k-tags">
+<li>фикстура</li>
+<li>языки</li></ul></header>
+<h2 class="k-h k-h1" data-num="1" id="Blocks" data-k-anchor="Blocks"><span class="k-num" data-word="Chapter">1</span>Blocks</h2>
+<div class="k-plan">
+<div class="k-plan-head">In this chapter</div>
+<ul class="k-plan-list">
+<li>define a limit</li>
+<li>prove a theorem</li>
+<li>solve an example</li></ul></div>
+<div class="k-box k-def"><span class="k-label">Definition 1.1 (limit).</span> A sequence <math><msub><mi>𝑥</mi><mi>𝑛</mi></msub></math> converges to <math><mi>𝑎</mi></math> if <math><mo stretchy="false">|</mo><msub><mi>𝑥</mi><mi>𝑛</mi></msub><mo>−</mo><mi>𝑎</mi><mo lspace="0em" rspace="0em">|</mo><mo stretchy="false">→</mo><mn>0</mn></math>.</div>
+<div class="k-box k-thm"><span class="k-label">Theorem 1.2.</span> Every convergent sequence is bounded.</div>
+<div class="k-proof"><span class="k-proof-head">Why this holds.</span> Take <math><mi>𝜀</mi><mo>=</mo><mn>1</mn></math>. <span class="k-qed">∎</span></div>
+<div class="k-box k-example"><span class="k-label">Example 1.1 (squeeze).</span> <span class="k-step">Step 1. Estimate.</span> <math><mo>−</mo><mfrac><mn>1</mn><mi>𝑛</mi></mfrac><mo>≤</mo><mfrac><mrow><mo lspace="0em" rspace="0.16666666666666666em">sin</mo><mi>𝑛</mi></mrow><mi>𝑛</mi></mfrac><mo>≤</mo><mfrac><mn>1</mn><mi>𝑛</mi></mfrac></math>.
+<div class="k-answer"><span class="k-answer-label">Answer:</span> <math><mn>0</mn></math></div></div>
+<div class="k-box k-remark"><span class="k-label">Remark.</span> A remark.</div>
+<div class="k-box k-pitfall"><span class="k-label">Common mistake.</span> A pitfall.</div>
+<div class="k-box k-idea"><span class="k-label">Idea.</span> An idea.</div>
+<div class="k-box k-algo"><span class="k-label">Algorithm.</span> An algorithm.</div>
+<table class="k-table k-pitfalls">
+<thead>
+<tr><th class="k-bad">✗ Mistake</th><th class="k-good">✓ How to avoid</th></tr></thead>
+<tbody>
+<tr><td>dividing by zero</td><td>check the denominator</td></tr></tbody></table>
+<div class="k-summary">
+<div class="k-summary-head">Key points</div>
+<ol class="k-summary-list">
+<li>limits</li>
+<li>bounds</li></ol></div>
+<div class="k-quiz">
+<div class="k-quiz-head">Check yourself</div>
+<ol class="k-quiz-list">
+<li>Is <math><mfrac><mn>1</mn><mi>𝑛</mi></mfrac></math> bounded?</li></ol>
+<details class="k-quiz-answers"><summary>Answers</summary>
+<ol class="k-quiz-list">
+<li>Yes.</li></ol></details></div>
+<h2 class="k-h k-h1" data-num="2" id="Code-and-figures" data-k-anchor="Code-and-figures"><span class="k-num" data-word="Chapter">2</span>Code and figures</h2>
+<div class="k-listing k-numbered">
+<pre><code data-lang="python"><span class="k-line"><span style="color: var(--k-code-function)">print</span>(<span style="color: var(--k-code-function)">sum</span>(<span style="color: var(--k-code-function)">range</span>(<span style="color: var(--k-code-number)">10</span>)))</span></code></pre>
+<div class="k-listing-cx">Complexity: <math><mi>𝑂</mi><mrow><mo stretchy="false">(</mo><mi>𝑛</mi><mo stretchy="false">)</mo></mrow></math></div></div>
+<figure>
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 2.576950608em; height: 2.576950608em; display: block" viewBox="0 0 28.346456693 28.346456693" width="28.346456693pt" height="28.346456693pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…305 байт, fnv 813e181682791c58…</svg></div>
+<figcaption><span class="k-fig-num">Fig. 2.1.</span> A circle</figcaption></figure>
+<figure>
+<div class="k-frames" data-k-frames="{&quot;name&quot;:&quot;k&quot;,&quot;count&quot;:2,&quot;default&quot;:0,&quot;fps&quot;:2,&quot;loop&quot;:false}">
+<div class="k-frames-stack">
+<div class="k-frames-item" data-k-frame-default>
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 1.546170365em; height: 1.546170365em; display: block" viewBox="0 0 17.007874016 17.007874016" width="17.007874016pt" height="17.007874016pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…283 байт, fnv f049532ca82c2e1e…</svg></div>
+<div class="k-frames-label">frame 1 of 2</div></div>
+<div class="k-frames-item">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 3.09234073em; height: 3.09234073em; display: block" viewBox="0 0 34.015748031 34.015748031" width="34.015748031pt" height="34.015748031pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…305 байт, fnv 4989118c3f106158…</svg></div>
+<div class="k-frames-label">frame 2 of 2</div></div></div></div>
+<figcaption><span class="k-fig-num">Fig. 2.2.</span> Frames without a numeric parameter</figcaption></figure></article>

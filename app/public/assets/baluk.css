@@ -97,7 +97,7 @@ html {
     font-size: 0.36em; font-weight: normal; letter-spacing: 0.22em;
     text-transform: uppercase;
   }
-  .k-h1 .k-num::before { content: "Глава "; }
+  .k-h1 .k-num::before { content: attr(data-word) " "; }
   .k-h1[data-num]::after {
     content: attr(data-num);
     position: absolute; right: 0; top: -0.45em; z-index: -1;
@@ -321,6 +321,30 @@ html {
   .k-plot-slider input { width: 9em; max-width: 40vw; accent-color: var(--k-accent); }
   .k-plot-slider output { min-width: 3em; font-variant-numeric: tabular-nums; }
 
+  /* Ползунки кадров и интерактивных рисунков: тонкая дорожка, пройденная
+   * часть — цветом акцента (--k-fill ставит клиент). */
+  .k-frames-controls input[type="range"], .k-plot-slider input[type="range"] {
+    appearance: none; height: 1.4em; background: none; cursor: pointer;
+  }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(to right, var(--k-accent) var(--k-fill, 0%), color-mix(in srgb, var(--k-muted) 35%, transparent) var(--k-fill, 0%));
+  }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]::-moz-range-track {
+    height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--k-muted) 35%, transparent);
+  }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--k-accent); }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]::-webkit-slider-thumb {
+    appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%;
+    background: var(--k-accent); border: 2px solid var(--k-bg); box-shadow: 0 0 0 1px var(--k-accent);
+  }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]::-moz-range-thumb {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--k-accent); border: 2px solid var(--k-bg); box-shadow: 0 0 0 1px var(--k-accent);
+  }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]:focus-visible { outline: none; }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--k-accent) 45%, transparent); }
+
   /* Кадры (baluk/frames.typ): все кадры лежат в одной клетке сетки — место
    * по самому большому, страница не прыгает при переключении. Без JS виден
    * кадр по умолчанию; клиент ставит data-live и data-current. */
@@ -333,17 +357,20 @@ html {
   .k-frames:not([data-live]) .k-frames-item:not([data-k-frame-default]),
   .k-frames[data-live] .k-frames-item:not([data-current]) { visibility: hidden; }
   .k-frames-label { text-align: center; font-size: 0.8em; color: var(--k-muted); }
+  /* Панель кадров: контурные значки без фона и рамки, ползунок, счётчик. */
   .k-frames-controls {
-    display: flex; align-items: center; justify-content: center; gap: 0.5em;
+    display: flex; align-items: center; justify-content: center; gap: 0.15em;
     font-size: 0.8em; max-width: 100%;
   }
   .k-frames-controls button {
-    min-width: 2em; padding: 0.1em 0.4em; border: 1px solid var(--k-line); border-radius: 4px;
-    background: var(--k-surface); color: var(--k-text); font: inherit; cursor: pointer;
+    display: inline-grid; place-items: center; width: 2em; height: 2em; padding: 0; flex: none;
+    border: none; border-radius: 6px; background: none; color: var(--k-muted); cursor: pointer;
   }
-  .k-frames-controls button:hover { border-color: var(--k-accent); }
-  .k-frames-controls svg { display: block; width: 0.75em; height: 0.75em; margin: 0.2em auto; fill: currentColor; }
-  .k-frames-controls input { width: 12em; max-width: 45vw; accent-color: var(--k-accent); }
+  .k-frames-controls button:hover { background: color-mix(in srgb, var(--k-accent) 12%, transparent); color: var(--k-accent); }
+  .k-frames-controls button:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
+  .k-frames-controls .k-frames-play { color: var(--k-accent); }
+  .k-frames-controls input { width: 12em; max-width: 40vw; margin: 0 0.35em; accent-color: var(--k-accent); }
+
   .k-frames-count { min-width: 3.5em; font-variant-numeric: tabular-nums; color: var(--k-muted); }
 
   /* ── Телефон ───────────────────────────────────────────────────────────── */
@@ -391,12 +418,136 @@ html {
   .k-tags li::before { content: "#"; opacity: 0.6; }
 }
 
+/* ── Граф заметок (Graph.svelte): главная и /graph приложения, граф в
+ * заметке (`#vault-graph`) — и в приложении, и на сайте. */
+.graph-svg { display: block; width: 100%; height: auto; max-height: 70vh; font-family: system-ui, sans-serif; user-select: none; }
+.graph-edge { stroke: var(--k-muted); opacity: 0.45; transition: opacity 0.15s; }
+.graph-node { cursor: pointer; transition: opacity 0.15s; }
+.graph-node circle { stroke-width: 1.5; }
+.graph-node.missing { cursor: default; }
+/* Узел тянется и на картинке (главная, заметка): касание узла — не прокрутка страницы. */
+.graph-node { touch-action: none; }
+.graph-svg.dragging, .graph-svg.dragging .graph-node { cursor: grabbing; }
+.graph-node.missing circle { stroke-dasharray: 3 2; }
+.graph-node text { font-size: var(--label, 11px); fill: var(--k-text); paint-order: stroke; stroke: var(--k-surface); stroke-width: 3px; }
+.graph-node.book text { font-weight: 600; font-size: calc(var(--label, 11px) * 1.1); }
+.graph-node:hover circle, .graph-node:focus-visible circle { stroke: var(--k-text) !important; stroke-width: 2.5; }
+.graph-node:focus { outline: none; }
+.graph-node.center circle { stroke: var(--k-text) !important; stroke-width: 3; }
+.graph-node.center text { font-weight: 700; }
+.graph-svg.focused .graph-node:not(.near) { opacity: 0.2; }
+.graph-svg.focused .graph-edge { opacity: 0.08; }
+.graph-svg.focused .graph-edge.near { opacity: 0.9; stroke: var(--k-accent); }
+.graph-svg.searching:not(.focused) .graph-node:not(.hit) { opacity: 0.2; }
+.graph-svg.searching:not(.focused) .graph-edge { opacity: 0.12; }
+.graph-node.hit circle { stroke: var(--k-accent) !important; stroke-width: 3; }
+.graph-svg.far .graph-node:not(.book, .hit, .near, .center) text { display: none; }
+/* Страница графа: холст во всю оставшуюся высоту. */
+.graph-svg.interactive { height: 100%; max-height: none; cursor: grab; touch-action: none; }
+/* Появление: рёбра и подписи проявляются, кружки растут — от середины к
+ * краям (`--delay`); так же — узлы, добавленные фильтром. */
+@keyframes graph-fade-in { from { opacity: 0; } }
+@keyframes graph-grow { from { opacity: 0; transform: scale(0.2); } }
+.graph-edge, .graph-node text { animation: graph-fade-in 0.45s ease-out var(--delay, 0s) backwards; }
+.graph-node circle { transform-box: fill-box; transform-origin: center; animation: graph-grow 0.45s cubic-bezier(0.3, 1.4, 0.5, 1) var(--delay, 0s) backwards; }
+@media (prefers-reduced-motion: reduce) {
+  .graph-edge, .graph-node text, .graph-node circle { animation: none; }
+}
+.graph-svg.interactive.dragging { cursor: grabbing; }
+.graph-svg.interactive .graph-edge { vector-effect: non-scaling-stroke; }
+
+/* Граф в заметке: картинка Typst, пока нет скрипта; живой граф — поверх. */
+.k-note .k-graph { margin: 1em auto; max-width: 100%; }
+.k-note .k-graph[data-live] > :not(.k-graph-live) { display: none; }
+.k-note .k-graph-live .graph-svg { max-height: 60vh; }
+
 /* ── Статический сайт (notes build) ─────────────────────────────────── */
 .k-static { margin: 0; }
-.k-toolbar { position: fixed; top: 0.6rem; right: 0.8rem; z-index: 10; display: flex; gap: 0.5rem; font: 13px/1 var(--k-font-code); }
-.k-toolbar a, .k-toolbar button {
-  color: var(--k-muted); background: var(--k-surface); border: 1px solid var(--k-line);
-  border-radius: 4px; padding: 0.35rem 0.6rem; cursor: pointer; font: inherit; text-decoration: none;
+/* Значки сайта — пути Lucide (как в приложении), CSS-маской: сайт работает
+ * и без скрипта. Цвет — currentColor. */
+.k-static {
+  --k-icon-arrow-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 19-7-7 7-7'/%3E%3Cpath d='M19 12H5'/%3E%3C/svg%3E");
+  --k-icon-sun: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3Cpath d='M12 2v2M12 20v2m-7.07-17.07 1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41'/%3E%3C/svg%3E");
+  --k-icon-moon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401'/%3E%3C/svg%3E");
+  --k-icon-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
 }
-.k-toolbar a:hover, .k-toolbar button:hover { color: var(--k-accent); }
-.k-index { columns: 2 16rem; }
+.k-toolbar {
+  position: fixed; top: 0.5rem; right: 0.6rem; z-index: 10; display: flex; align-items: center; gap: 0.25rem;
+  font: 13px/1 system-ui, sans-serif;
+}
+.k-toolbar a, .k-toolbar button {
+  display: inline-flex; align-items: center; gap: 0.4rem; height: 2rem; box-sizing: border-box; padding: 0 0.6rem;
+  color: var(--k-muted); background: color-mix(in srgb, var(--k-bg) 85%, transparent); backdrop-filter: blur(6px);
+  border: 1px solid transparent; border-radius: 6px; cursor: pointer; font: inherit; text-decoration: none;
+}
+.k-toolbar a:hover, .k-toolbar button:hover { color: var(--k-accent); border-color: var(--k-line); background: var(--k-surface); }
+.k-toolbar a:focus-visible, .k-toolbar button:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
+.k-toolbar a::before, .k-toolbar button::before {
+  content: ""; width: 18px; height: 18px; flex: none; background: currentColor;
+  mask: var(--k-icon) center / contain no-repeat;
+}
+.k-toolbar-home { --k-icon: var(--k-icon-arrow-left); }
+.k-toolbar button { width: 2rem; padding: 0; justify-content: center; --k-icon: var(--k-icon-sun); }
+.k-toolbar button[data-next="dark"] { --k-icon: var(--k-icon-moon); }
+[data-kind="index"] .k-toolbar-home, .k-toolbar [hidden] { display: none; }
+
+/* Главная: заметки по папкам — колонками. */
+.k-note .k-index {
+  columns: 2 16rem; column-gap: 2.5rem; margin-top: 1.5em; text-align: left;
+  section { break-inside: avoid; margin: 0 0 1.4em; }
+  h2 {
+    margin: 0 0 0.4em; padding: 0; border: none; font-size: 0.72em; font-weight: 600;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--k-muted);
+  }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { margin: 0.3em 0; text-align: left; hyphens: none; }
+  li::marker { content: none; }
+  a { color: var(--k-text); }
+  a:hover { color: var(--k-accent); }
+  .k-index-book { font-size: 0.7em; color: var(--k-muted); margin-left: 0.3em; white-space: nowrap; }
+}
+
+/* Оглавление: сбоку, если слева от колонки хватает места; иначе — свёрнутый
+ * список над заметкой (раскрывает скрипт сайта на широком экране). */
+.k-static-toc {
+  font: 13px/1.4 system-ui, sans-serif; box-sizing: border-box; width: min(46rem, 100% - 2rem);
+  margin: 3.2rem auto 0; padding: 0.4rem 0.6rem;
+  border: 1px solid var(--k-line); border-radius: 6px; background: var(--k-surface);
+}
+.k-static-toc summary {
+  display: flex; align-items: center; gap: 0.3rem; list-style: none; user-select: none;
+  cursor: pointer; font-size: 0.8em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--k-muted);
+}
+.k-static-toc summary::-webkit-details-marker { display: none; }
+.k-static-toc summary::before {
+  content: ""; width: 14px; height: 14px; flex: none; background: currentColor;
+  mask: var(--k-icon-chevron) center / contain no-repeat; transition: transform 0.15s ease;
+}
+.k-static-toc[open] summary::before { transform: rotate(90deg); }
+.k-static-toc summary:hover { color: var(--k-text); }
+.k-static-toc ol { list-style: none; margin: 0.4rem 0 0; padding: 0; }
+.k-static-toc a {
+  display: block; padding: 0.15rem 0.5rem; border-left: 2px solid transparent; color: var(--k-muted);
+  text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.k-static-toc a:hover { color: var(--k-text); }
+.k-static-toc a.current { color: var(--k-accent); border-left-color: var(--k-accent); }
+.k-static-toc li[data-depth="0"] > a { font-weight: 600; color: var(--k-text); }
+.k-static-toc li[data-depth="1"] > a { padding-left: 1.1rem; }
+@media (min-width: 78rem) {
+  .k-static-toc {
+    position: fixed; top: 3.2rem; left: 1rem; width: 15rem; max-height: calc(100vh - 4.5rem); overflow-y: auto;
+    margin: 0; border: none; background: none;
+  }
+}
+
+/* «Ссылаются сюда» под заметкой. */
+.k-note .k-static-backlinks {
+  margin-top: 3em; border-top: 1px solid var(--k-line); padding-top: 1em; font-size: 0.8em; text-align: left;
+  h2 { font-size: 0.8em; letter-spacing: 0.08em; text-transform: uppercase; color: var(--k-muted); margin: 0 0 0.5em; font-weight: 600; border: none; }
+  ul { margin: 0; padding: 0; list-style: none; }
+  li { margin: 0.25em 0; }
+  a { color: var(--k-accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  span { color: var(--k-muted); }
+}

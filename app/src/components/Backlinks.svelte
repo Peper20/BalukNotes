@@ -2,7 +2,7 @@
 <script lang="ts">
   import { api, type LinksResponse } from "../lib/api";
   import { app } from "../lib/app.svelte";
-  import { noteHref, splitId } from "../lib/ids";
+  import { graphHref, noteHref, splitId } from "../lib/ids";
 
   let { id }: { id: string } = $props();
   let links = $state.raw<LinksResponse | null>(null);
@@ -21,7 +21,7 @@
 
 {#if links?.backlinks.length}
   <section class="backlinks" id="backlinks">
-    <h2>Ссылаются сюда · {links.backlinks.length}</h2>
+    <h2>Ссылаются сюда · {links.backlinks.length} <a class="backlinks-graph" href={graphHref(id)}>на графе</a></h2>
     <ul>
       {#each links.backlinks as b}
         {@const note = app.notes.find((n) => n.id === b.from)}

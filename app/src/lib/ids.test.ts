@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeId, hashAnchor, noteHref, parseRoute, splitId } from "./ids";
+import { encodeId, graphHref, hashAnchor, noteHref, parseRoute, splitId } from "./ids";
 
 describe("адреса заметок", () => {
   it("кодирует сегменты, оставляя /", () => {
@@ -16,6 +16,14 @@ describe("адреса заметок", () => {
     expect(parseRoute("/n/")).toEqual({ kind: "home" });
     // Битое кодирование — главная, а не исключение.
     expect(parseRoute("/n/%E0%A4%A")).toEqual({ kind: "home" });
+  });
+
+  it("граф: весь и соседи заметки", () => {
+    expect(parseRoute("/graph")).toEqual({ kind: "graph", around: null, depth: 1 });
+    const url = new URL(graphHref("Имена/C++ и C#", 2), "http://x");
+    expect(parseRoute(url.pathname, url.search)).toEqual({ kind: "graph", around: "Имена/C++ и C#", depth: 2 });
+    expect(parseRoute("/graph", "?around=A&depth=99")).toEqual({ kind: "graph", around: "A", depth: 1 });
+    expect(graphHref("A")).toBe("/graph?around=A");
   });
 
   it("якорь и имя", () => {

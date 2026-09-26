@@ -81,6 +81,22 @@ impl DiskCache {
             .then_some(stored)
     }
 
+    /// Годна ли запись для заметки — без загрузки самой отрисовки (для
+    /// прогрева: собранное в прошлый запуск не собирать снова).
+    pub fn is_fresh(&self, id: &NoteId, current: impl FnOnce(&[PathBuf]) -> String) -> bool {
+        /// Заголовок записи; `raw` и `warnings` serde пропускает, не разбирая в структуры.
+        #[derive(Deserialize)]
+        struct Head {
+            build: String,
+            id: String,
+            files: String,
+            deps: Vec<PathBuf>,
+        }
+        let Ok(data) = fs::read(self.path(id)) else { return false };
+        serde_json::from_slice::<Head>(&data)
+            .is_ok_and(|h| h.build == self.build && h.id == id.as_str() && current(&h.deps) == h.files)
+    }
+
     pub fn store(&self, id: &NoteId, files: &str, deps: &[PathBuf], raw: &Rendered, warnings: &[Diagnostic]) {
         #[derive(Serialize)]
         struct StoredRef<'a> {
@@ -143,14 +159,18 @@ mod tests {
         });
         assert_eq!(got.unwrap().raw.body, "<p>x</p>");
         assert!(cache.load(&id, |_| "v2".into()).is_none(), "файлы изменились");
+        assert!(cache.is_fresh(&id, |_| "v1".into()));
+        assert!(!cache.is_fresh(&id, |_| "v2".into()));
 
         let other_build =
             DiskCache { build: "другая".into(), ..DiskCache::new(dir.path(), "/хранилище") };
         assert!(other_build.load(&id, |_| "v1".into()).is_none(), "другая сборка приложения");
+        assert!(!other_build.is_fresh(&id, |_| "v1".into()));
         let other_vault = DiskCache::new(dir.path(), "/другое");
         assert!(other_vault.load(&id, |_| "v1".into()).is_none(), "другое хранилище");
 
         fs::write(cache.path(&id), "испорчено").unwrap();
         assert!(cache.load(&id, |_| "v1".into()).is_none());
+        assert!(!cache.is_fresh(&id, |_| "v1".into()));
     }
 }

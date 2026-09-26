@@ -4,7 +4,7 @@ import { noteUrl, open, ready, title } from "./helpers";
 test("главная: граф и список, клик по узлу открывает заметку", async ({ page }) => {
   await page.goto("/");
   await ready(page);
-  await expect(page.locator(".home-lead")).toContainText("1 книга");
+  await expect(page.locator(".home-lead")).toContainText("2 книги");
   await expect(page.locator(".graph-node")).not.toHaveCount(0);
   // По кружку: центр узла (кружок + подпись) может прийтись на щель между ними.
   await page.locator('.graph-node[data-id="Сеть/SSH"] circle').click();

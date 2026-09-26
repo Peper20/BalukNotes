@@ -10,7 +10,7 @@
 // ждут tools/visual.mjs и e2e-тесты — договорённость для любого клиента.
 
 import { api, ApiError, type ChapterSelect, type NoteListItem, type NotePage, type Schema, type SettingValues, type Theme } from "./api";
-import { applyAppearance, resolveTheme } from "./appearance";
+import { applyAppearance, nextTheme, resolveTheme } from "./appearance";
 import { hashAnchor, noteHref, parseRoute, type Route } from "./ids";
 import { load, save } from "./storage";
 
@@ -100,6 +100,9 @@ class App {
     if (!this.tabs.length) this.tabs = [{ url: "/" }];
     this.activeTab = Math.min(Math.max(this.activeTab, 0), this.tabs.length - 1);
     this.syncRoute();
+    // Сервер собирает все заметки заранее — сначала те, что во вкладках и недавние.
+    const tabIds = this.tabs.map((t) => parseRoute(new URL(t.url, location.href).pathname)).flatMap((r) => (r.kind === "note" ? [r.id] : []));
+    void api.warm({ ids: [...new Set([...tabIds, ...this.recent])] }).catch(() => {});
     addEventListener("popstate", () => this.syncRoute({ pop: true }));
     addEventListener("focus", () => this.settings["refresh.on_focus"] && this.check());
     addEventListener("pagehide", () => this.remember());
@@ -174,7 +177,7 @@ class App {
 
   /** Маршрут по адресу страницы: та же заметка — только якорь. */
   syncRoute({ pop = false } = {}): void {
-    const route = parseRoute(location.pathname);
+    const route = parseRoute(location.pathname, location.search);
     this.anchor = hashAnchor(location.hash);
     const tab = this.tabs[this.activeTab];
     if (tab) tab.url = location.pathname + location.search + location.hash;
@@ -347,9 +350,10 @@ class App {
   }
 
   cycleTheme(): void {
-    const options = ["auto", ...this.themes.map((t) => t.name)];
-    const i = options.indexOf(String(this.settings["appearance.theme"]));
-    void this.saveSettings({ "appearance.theme": options[(i + 1) % options.length]! });
+    const patch = { "appearance.theme": nextTheme(this.theme, this.themes) };
+    // Сразу, не дожидаясь сервера: иначе клик кажется непринятым.
+    this.settings = { ...this.settings, ...patch };
+    void this.saveSettings(patch);
   }
 
   pdfUrl(): string | null {

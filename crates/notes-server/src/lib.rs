@@ -11,7 +11,7 @@
 //!
 //! | Путь                         | Что                                          |
 //! |------------------------------|----------------------------------------------|
-//! | `GET /`, `/n/{*id}`, `/tags…`| клиент (одна страница, маршрутизация в JS)   |
+//! | `GET /`, `/n/{*id}`, `/tags…`, `/graph` | клиент (одна страница, маршрутизация в JS) |
 //! | `GET /assets/{*path}`        | файлы клиента (сборка `app/dist/assets`)     |
 //! | `GET /api/notes`             | список заметок и книг                        |
 //! | `GET /api/notes/{*id}`       | заметка: HTML, заголовки, ссылки, ошибки     |
@@ -19,15 +19,17 @@
 //! | `GET /api/version/{*id}`     | версия заметки — дёшево, без компиляции      |
 //! | `GET /api/links/{*id}`       | ссылки заметки и обратные ссылки на неё      |
 //! | `GET /api/graph`             | граф заметок: узлы и рёбра                   |
+//! | `POST /api/graph/layout`     | граф по фильтру, разложенный (`notes_core::vault_graph`) |
 //! | `GET /api/search?q=&limit=`  | поиск по тексту всех заметок                 |
 //! | `GET /api/preview/{*id}?anchor=` | превью заметки/раздела (без компиляции)  |
 //! | `GET /api/pdf/{*id}?theme=`  | заметка в PDF (по умолчанию — первая тема)   |
 //! | `GET /api/settings`          | схема и значения настроек                    |
 //! | `PUT /api/settings`          | изменить настройки (частично)                |
+//! | `POST /api/warm`             | что собрать заранее первым (см. `notes_core::warm`) |
 //! | `GET /api/themes`            | темы: имя, название, тёмная ли               |
 //! | `GET /api/themes.css`        | CSS-переменные тем                           |
-//! | `GET /api/fonts.css`         | `@font-face` для шрифтов оформления          |
-//! | `GET /fonts/{family}/{style}`| файл шрифта                                  |
+//! | `GET /api/fonts.css`         | `@font-face` для шрифтов оформления (по частям) |
+//! | `GET /fonts/{family}/{style}/{part}.woff2` | часть шрифта (WOFF2, набор знаков) |
 
 pub mod api;
 
@@ -37,7 +39,7 @@ use std::sync::Arc;
 use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use notes_core::book::{Select, chapter_page};
 use notes_core::fonts::WebVariant;
@@ -45,12 +47,16 @@ use notes_core::graph::Graph;
 use notes_core::search::{Preview, SearchHit};
 use notes_core::settings::SettingsStore;
 use notes_core::themes::Theme;
+use notes_core::vault_graph::{GraphFilter, GraphLayout};
 use notes_core::{NoteId, Notes};
 
-use crate::api::{ErrorResponse, LinksResponse, NoteListItem, OutgoingLink, SettingsResponse, VersionResponse};
+use crate::api::{
+    ErrorResponse, LinksResponse, NoteListItem, OutgoingLink, SettingsResponse, VersionResponse, WarmRequest,
+};
 use rust_embed::RustEmbed;
 use serde_json::{Map, Value};
 use tower_http::compression::CompressionLayer;
+use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 
 /// Шрифты оформления, которые нужны браузеру (из `baluk/theme.typ`).
 const WEB_FONTS: &[&str] = &["Gentium Plus", "JetBrains Mono", "New Computer Modern Math"];
@@ -79,6 +85,7 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .route("/", get(shell))
         .route("/n/{*id}", get(shell))
+        .route("/graph", get(shell))
         .route("/tags", get(shell))
         .route("/tags/{*tag}", get(shell))
         .route("/assets/{*path}", get(asset))
@@ -87,15 +94,21 @@ pub fn router(state: AppState) -> Router {
         .route("/api/version/{*id}", get(version))
         .route("/api/links/{*id}", get(links))
         .route("/api/graph", get(graph))
+        .route("/api/graph/layout", post(graph_layout))
         .route("/api/search", get(search))
         .route("/api/preview/{*id}", get(preview))
         .route("/api/pdf/{*id}", get(pdf))
         .route("/api/settings", get(get_settings).put(put_settings))
+        .route("/api/warm", post(warm))
         .route("/api/themes", get(themes))
         .route("/api/themes.css", get(themes_css))
         .route("/api/fonts.css", get(fonts_css))
-        .route("/fonts/{family}/{style}", get(font))
-        .layer(CompressionLayer::new())
+        .route("/fonts/{family}/{style}/{file}", get(font))
+        // WOFF2 уже сжат brotli — второй раз не жать.
+        .layer(
+            CompressionLayer::new()
+                .compress_when(DefaultPredicate::new().and(NotForContentType::const_new("font/woff2"))),
+        )
         .with_state(state)
 }
 
@@ -105,6 +118,13 @@ pub async fn serve(
     state: AppState,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> std::io::Result<()> {
+    // Шрифты для браузера сжимаются в фоне заранее: иначе первая страница
+    // ждала бы сжатия (математический шрифт — ~2 с).
+    let notes = state.notes.clone();
+    std::thread::spawn(move || notes.fonts().warm_web(WEB_FONTS));
+    // Заметки — тоже заранее: все, по приоритету, пропуская собранные.
+    let (notes, settings) = (state.notes.clone(), state.settings.clone());
+    std::thread::spawn(move || notes.warm_forever(|| settings.figure_options()));
     axum::serve(listener, router(state)).with_graceful_shutdown(shutdown).await
 }
 
@@ -272,6 +292,12 @@ async fn links(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<J
     .await
 }
 
+async fn graph_layout(State(s): State<AppState>, Json(filter): Json<GraphFilter>) -> ApiResult<Json<GraphLayout>> {
+    let notes = s.notes.clone();
+    let layout = blocking(move || Ok(notes.index()?.graph_layout(&filter))).await?;
+    Ok(Json(layout))
+}
+
 async fn graph(State(s): State<AppState>) -> ApiResult<Json<Graph>> {
     let notes = s.notes.clone();
     let graph = blocking(move || Ok(notes.index()?.graph())).await?;
@@ -324,6 +350,11 @@ async fn put_settings(State(s): State<AppState>, Json(patch): Json<Map<String, V
     Ok(Json(Value::Object(values)))
 }
 
+async fn warm(State(s): State<AppState>, Json(req): Json<WarmRequest>) -> StatusCode {
+    s.notes.hint_warm(req.ids.iter().filter_map(|id| NoteId::new(id).ok()).collect());
+    StatusCode::NO_CONTENT
+}
+
 async fn themes(State(s): State<AppState>) -> Json<Vec<Theme>> {
     Json(s.notes.themes().themes().to_vec())
 }
@@ -332,39 +363,65 @@ async fn themes_css(State(s): State<AppState>) -> Response {
     css(s.notes.themes().css().to_owned())
 }
 
+/// `@font-face` на каждую часть шрифта: браузер качает только части со
+/// знаками страницы (`unicode-range`).
 async fn fonts_css(State(s): State<AppState>) -> Response {
-    let mut out = String::from("/* Шрифты оформления: те же файлы, что у Typst. */\n");
-    for family in WEB_FONTS {
-        for v in WebVariant::ALL {
-            if s.notes.fonts().web_font(family, v).is_none() {
-                continue;
-            }
-            let _ = writeln!(
-                out,
-                "@font-face {{ font-family: \"{family}\"; src: url(\"/fonts/{}/{}\"); font-style: {}; font-weight: {}; font-display: swap; }}",
-                family.replace(' ', "%20"),
-                v.slug(),
-                if v.italic { "italic" } else { "normal" },
-                if v.bold { 700 } else { 400 },
-            );
-        }
+    let notes = s.notes.clone();
+    let css_text = blocking(move || Ok(font_faces(&notes, "/fonts/"))).await;
+    match css_text {
+        Ok(text) => css(text),
+        Err(e) => e.into_response(),
     }
-    css(out)
 }
 
-async fn font(State(s): State<AppState>, Path((family, style)): Path<(String, String)>) -> Response {
-    let Some(variant) = WebVariant::from_slug(&style) else {
+/// `@font-face` шрифтов оформления; `base` — путь к файлам (`/fonts/` у
+/// сервера, `fonts/` у статического сайта). Файл части — `{base}{семейство}/{начертание}/{часть}.woff2`
+/// (у сайта — [`font_file_name`]).
+pub fn font_faces(notes: &Notes, base: &str) -> String {
+    let mut out = String::from("/* Шрифты оформления: те же файлы, что у Typst, в WOFF2 и по наборам знаков. */\n");
+    for family in WEB_FONTS {
+        for v in WebVariant::ALL {
+            let Some(face) = notes.fonts().web_face(family, v) else { continue };
+            for chunk in &face.chunks {
+                let url = if base.starts_with('/') {
+                    format!("{base}{}/{}/{}.woff2", family.replace(' ', "%20"), v.slug(), chunk.name)
+                } else {
+                    format!("{base}{}", font_file_name(family, v, &chunk.name))
+                };
+                let range = chunk.unicode_range.as_ref().map(|r| format!(" unicode-range: {r};")).unwrap_or_default();
+                let _ = writeln!(
+                    out,
+                    "@font-face {{ font-family: \"{family}\"; src: url(\"{url}\") format(\"woff2\"); font-style: {}; font-weight: {}; font-display: swap;{range} }}",
+                    if v.italic { "italic" } else { "normal" },
+                    if v.bold { 700 } else { 400 },
+                );
+            }
+        }
+    }
+    out
+}
+
+/// Имя файла части шрифта у статического сайта: `Gentium-Plus-regular-latin.woff2`.
+pub fn font_file_name(family: &str, variant: WebVariant, chunk: &str) -> String {
+    format!("{}-{}-{chunk}.woff2", family.replace(' ', "-"), variant.slug())
+}
+
+async fn font(State(s): State<AppState>, Path((family, style, file)): Path<(String, String, String)>) -> Response {
+    let (Some(variant), Some(chunk)) = (WebVariant::from_slug(&style), file.strip_suffix(".woff2")) else {
         return StatusCode::NOT_FOUND.into_response();
     };
     if !WEB_FONTS.contains(&family.as_str()) {
         return StatusCode::NOT_FOUND.into_response();
     }
-    match s.notes.fonts().web_font(&family, variant) {
-        Some(font) => {
-            ([(header::CONTENT_TYPE, font.mime), (header::CACHE_CONTROL, "public, max-age=86400")], font.data.to_vec())
+    let (notes, chunk) = (s.notes.clone(), chunk.to_owned());
+    let data = blocking(move || Ok(notes.fonts().web_face(&family, variant).and_then(|face| face.file(&chunk)))).await;
+    match data {
+        Ok(Some(data)) => {
+            ([(header::CONTENT_TYPE, "font/woff2"), (header::CACHE_CONTROL, "public, max-age=86400")], data.to_vec())
                 .into_response()
         }
-        None => StatusCode::NOT_FOUND.into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => e.into_response(),
     }
 }
 

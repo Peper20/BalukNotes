@@ -28,6 +28,11 @@ ecow = "0.2.6"
 
 anyhow = "1"
 axum = "0.8"
+# Шрифты для браузера (notes-core::webfonts): подмножества по наборам знаков
+# и WOFF2. brotli и ttf-parser — те же версии, что уже тянут tower-http и typst.
+brotli = "8"
+fontcull = { version = "2.0.1", default-features = false }
+ttf-parser = "0.25"
 clap = { version = "4.6", features = ["derive", "env"] }
 parking_lot = "0.12"
 rust-embed = { version = "8", features = ["mime-guess", "include-exclude"] }

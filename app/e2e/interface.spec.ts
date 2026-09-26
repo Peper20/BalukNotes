@@ -1,18 +1,33 @@
 import { rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { VAULT, open, ready, title } from "./helpers";
+import { VAULT, open, ready, resetTheme, title } from "./helpers";
 
-test("тема по кругу: как в системе → классика → ночь", async ({ page }) => {
+test("тема: каждый клик — сразу другая на вид («как в системе» — в настройках)", async ({ page }) => {
   await open(page, "Сеть/SSH");
   const html = page.locator("html");
   await expect(html).toHaveAttribute("data-theme", "classic");
-  await page.locator("#theme").click();
-  await expect(html).toHaveAttribute("data-theme", "classic");
-  await page.locator("#theme").click();
-  await expect(html).toHaveAttribute("data-theme", "night");
-  await page.locator("#theme").click(); // обратно «как в системе»
-  await expect(html).toHaveAttribute("data-theme", "classic");
+  try {
+    await page.locator("#theme").click();
+    await expect(html).toHaveAttribute("data-theme", "night");
+    await expect(page.locator("#theme")).toHaveAttribute("title", /Ночь.*«Классика»/);
+    await page.locator("#theme").click();
+    await expect(html).toHaveAttribute("data-theme", "classic");
+  } finally {
+    await resetTheme(page);
+  }
+});
+
+test("раскрытые «Ответы» не сворачиваются, когда заметка пересобрана", async ({ page }) => {
+  await open(page, "демо/компоненты");
+  const answers = page.locator(".k-quiz-answers").first();
+  await answers.locator("summary").click();
+  await expect(answers).toHaveAttribute("open", "");
+  // Метка на старой разметке: пропала — значит, HTML вставлен заново.
+  await page.locator("#note .note-body > *").first().evaluate((el) => el.setAttribute("data-old", ""));
+  await page.locator("#refresh").click();
+  await expect(page.locator("#note [data-old]")).toHaveCount(0);
+  await expect(answers).toHaveAttribute("open", "");
 });
 
 test("настройки: кегль меняется сразу и сохраняется", async ({ page }) => {
@@ -80,6 +95,7 @@ test("изменение файла подхватывается по ⟳ без
     await page.locator("#refresh").click();
     await page.locator("#tree").getByRole("link", { name: "Заметка" }).click();
     await ready(page);
+    await page.mouse.move(700, 400); // над заметкой, а не над деревом (оно прокручивается само)
     await page.mouse.wheel(0, 800);
     await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(300);
     const y = await page.evaluate(() => scrollY);

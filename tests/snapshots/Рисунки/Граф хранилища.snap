@@ -1,0 +1,26 @@
+id: Рисунки/Граф хранилища
+kind: Note
+title: Граф хранилища
+tags: рисунки, фикстура
+headings:
+  2 #Соседи-заметки [Соседи-заметки] Соседи заметки
+  2 #Папка-без-ненаписанных [Папка-без-ненаписанных] Папка без ненаписанных
+links:
+styles: 259 байт, fnv 19551df6c69c886e
+---
+<svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…16327 байт, fnv 4c2339d970614738…</svg>
+<article class="k-doc" data-k-figs="48a487af" data-doc="note" lang="ru">
+<header class="k-title">
+<h1>Граф хранилища</h1>
+<ul class="k-tags">
+<li>рисунки</li>
+<li>фикстура</li></ul></header>
+<p>Граф заметок прямо в заметке: фильтр и раскладка — из приложения, рисует CeTZ; в HTML клиент оживляет его по тем же координатам.</p>
+<h2 class="k-h k-h2" id="Соседи-заметки" data-k-anchor="Соседи-заметки"><span class="k-num">1</span>Соседи заметки</h2>
+<div class="k-graph" data-k-graph="{&quot;nodes&quot;:[{&quot;id&quot;:&quot;Особые случаи/Предупреждение&quot;,&quot;kind&quot;:&quot;note&quot;,&quot;name&quot;:&quot;Предупреждение&quot;,&quot;group&quot;:&quot;Особые случаи&quot;,&quot;x&quot;:150.11725154390095,&quot;y&quot;:3.15623726596423,&quot;r&quot;:6.2,&quot;degree&quot;:1},{&quot;id&quot;:&quot;Особые случаи/Ссылки&quot;,&quot;kind&quot;:&quot;note&quot;,&quot;name&quot;:&quot;Ссылки&quot;,&quot;group&quot;:&quot;Особые случаи&quot;,&quot;x&quot;:-95.18665774062474,&quot;y&quot;:64.74149715798426,&quot;r&quot;:6.9,&quot;degree&quot;:2},{&quot;id&quot;:&quot;Сеть/SSH&quot;,&quot;kind&quot;:&quot;note&quot;,&quot;name&quot;:&quot;SSH&quot;,&quot;group&quot;:&quot;Сеть&quot;,&quot;x&quot;:14.685570392927307,&quot;y&quot;:-8.479707104916917,&quot;r&quot;:8.3,&quot;degree&quot;:4},{&quot;id&quot;:&quot;Сеть/UFW&quot;,&quot;kind&quot;:&quot;note&quot;,&quot;name&quot;:&quot;UFW&quot;,&quot;group&quot;:&quot;Сеть&quot;,&quot;x&quot;:-82.38218768293144,&quot;y&quot;:-62.258118287720535,&quot;r&quot;:7.6,&quot;degree&quot;:3}],&quot;edges&quot;:[{&quot;from&quot;:&quot;Особые случаи/Предупреждение&quot;,&quot;to&quot;:&quot;Сеть/SSH&quot;,&quot;count&quot;:1},{&quot;from&quot;:&quot;Особые случаи/Ссылки&quot;,&quot;to&quot;:&quot;Сеть/SSH&quot;,&quot;count&quot;:3},{&quot;from&quot;:&quot;Особые случаи/Ссылки&quot;,&quot;to&quot;:&quot;Сеть/UFW&quot;,&quot;count&quot;:1},{&quot;from&quot;:&quot;Сеть/SSH&quot;,&quot;to&quot;:&quot;Сеть/UFW&quot;,&quot;count&quot;:1},{&quot;from&quot;:&quot;Сеть/UFW&quot;,&quot;to&quot;:&quot;Сеть/SSH&quot;,&quot;count&quot;:1}],&quot;groups&quot;:[&quot;Глубоко&quot;,&quot;Имена&quot;,&quot;в корне&quot;,&quot;Нет&quot;,&quot;Особые случаи&quot;,&quot;Рисунки&quot;,&quot;Сеть&quot;,&quot;ассессмент&quot;,&quot;демо&quot;],&quot;bounds&quot;:[-114.32665774062474,-69.85811828772053,194.77725154390095,86.84149715798426],&quot;center&quot;:&quot;Сеть/SSH&quot;}">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 22.152198374em; height: 10.940241919em; display: block" viewBox="0 0 243.674182115 120.342661107" width="243.674182115pt" height="120.342661107pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…6066 байт, fnv e58bb925eabc5fe3…</svg></div></div>
+<h2 class="k-h k-h2" id="Папка-без-ненаписанных" data-k-anchor="Папка-без-ненаписанных"><span class="k-num">2</span>Папка без ненаписанных</h2>
+<div class="k-graph" data-k-graph="{&quot;nodes&quot;:[{&quot;id&quot;:&quot;Сеть/SSH&quot;,&quot;kind&quot;:&quot;note&quot;,&quot;name&quot;:&quot;SSH&quot;,&quot;group&quot;:&quot;Сеть&quot;,&quot;x&quot;:53.82261271247149,&quot;y&quot;:-3.2790887580751786e-15,&quot;r&quot;:6.9,&quot;degree&quot;:2},{&quot;id&quot;:&quot;Сеть/UFW&quot;,&quot;kind&quot;:&quot;note&quot;,&quot;name&quot;:&quot;UFW&quot;,&quot;group&quot;:&quot;Сеть&quot;,&quot;x&quot;:-53.82261271247149,&quot;y&quot;:3.3122802799324007e-15,&quot;r&quot;:6.9,&quot;degree&quot;:2}],&quot;edges&quot;:[{&quot;from&quot;:&quot;Сеть/SSH&quot;,&quot;to&quot;:&quot;Сеть/UFW&quot;,&quot;count&quot;:1},{&quot;from&quot;:&quot;Сеть/UFW&quot;,&quot;to&quot;:&quot;Сеть/SSH&quot;,&quot;count&quot;:1}],&quot;groups&quot;:[&quot;Глубоко&quot;,&quot;Имена&quot;,&quot;в корне&quot;,&quot;Нет&quot;,&quot;Особые случаи&quot;,&quot;Рисунки&quot;,&quot;Сеть&quot;,&quot;ассессмент&quot;,&quot;демо&quot;],&quot;bounds&quot;:[-63.39261271247149,-6.900000000000004,63.39261271247149,22.1],&quot;center&quot;:null}">
+<div class="k-frame k-fig">
+<svg style="overflow: visible; width: 9.263899917em; height: 1.652997159em; display: block" viewBox="0 0 101.90289909 18.18296875" width="101.90289909pt" height="18.18296875pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…2106 байт, fnv 081e6e066cb907fd…</svg></div></div></article>

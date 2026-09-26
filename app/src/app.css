@@ -14,23 +14,35 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text); ba
 }
 .sidebar-head { padding: 0.9rem 1rem 0.5rem; }
 .brand { font-weight: 600; color: var(--k-text); text-decoration: none; letter-spacing: 0.02em; }
-.tree { padding: 0 0.5rem 2rem; }
-.tree details { margin-left: 0.4rem; }
-.tree summary {
-  cursor: pointer; padding: 0.2rem 0.4rem; border-radius: 4px; color: var(--k-muted);
-  list-style: none; user-select: none;
+/* Строка дерева: [шеврон] значок имя [счётчик]. Отступ уровня — ширина
+ * шеврона с зазором: шеврон вложенной папки встаёт под значок родителя,
+ * значок заметки — под значок соседней папки; направляющая — под шевроном. */
+.tree { --tree-pad: 0.5rem; --tree-gap: 0.4rem; padding: 0.1rem 0.5rem 2rem; font-size: 13.5px; }
+.tree summary, .tree a {
+  display: flex; align-items: center; gap: var(--tree-gap); min-height: 1.75rem; box-sizing: border-box;
+  padding: 0 var(--tree-pad); border-radius: 6px; color: var(--k-text); text-decoration: none;
 }
-.tree summary::before { content: "▸"; display: inline-block; width: 1em; transition: transform 0.1s; }
-.tree details[open] > summary::before { transform: rotate(90deg); }
-.tree summary:hover { color: var(--k-text); }
-.tree .items { margin-left: 0.8rem; border-left: 1px solid var(--k-line); padding-left: 0.2rem; }
-.tree a {
-  display: block; padding: 0.2rem 0.5rem; border-radius: 4px;
-  color: var(--k-text); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.tree summary { cursor: pointer; list-style: none; user-select: none; }
+.tree summary::-webkit-details-marker { display: none; }
+.tree a { padding-left: calc(var(--tree-pad) + 16px + var(--tree-gap)); }
+.tree summary:hover, .tree a:hover { background: color-mix(in srgb, var(--k-text) 7%, transparent); }
+.tree summary:focus-visible, .tree a:focus-visible { outline: 2px solid var(--k-accent); outline-offset: -2px; }
+.tree svg { flex: none; }
+.tree .tree-chevron { color: var(--k-muted); transition: transform 0.15s ease; }
+.tree details[open] > summary .tree-chevron { transform: rotate(90deg); }
+.tree .tree-icon { color: var(--k-muted); }
+.tree summary .tree-icon { color: color-mix(in srgb, var(--k-accent) 70%, var(--k-muted)); }
+.tree .tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree summary .tree-name { font-weight: 550; }
+.tree .tree-count { font-size: 0.78em; color: var(--k-muted); font-variant-numeric: tabular-nums; }
+.tree .items {
+  margin-left: calc(var(--tree-pad) + 8px); border-left: 1px solid color-mix(in srgb, var(--k-muted) 30%, transparent);
+  padding-left: calc(var(--tree-gap) + 8px - var(--tree-pad) - 1px);
 }
-.tree a:hover { background: color-mix(in srgb, var(--k-accent) 10%, transparent); }
-.tree a.active { background: color-mix(in srgb, var(--k-accent) 18%, transparent); color: var(--k-accent); font-weight: 600; }
-.tree a.book::after { content: "книга"; margin-left: 0.5em; font-size: 0.75em; color: var(--k-muted); }
+.tree .items:has(> a.active) { border-left-color: color-mix(in srgb, var(--k-accent) 55%, transparent); }
+@media (pointer: coarse) { .tree summary, .tree a { min-height: 2.3rem; } }
+.tree a.active { background: color-mix(in srgb, var(--k-accent) 16%, transparent); color: var(--k-accent); font-weight: 600; }
+.tree a.active .tree-icon { color: var(--k-accent); }
 
 /* ── Верхняя строка ─────────────────────────────────────────────────── */
 .main { min-width: 0; }
@@ -44,9 +56,11 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text); ba
 .status { color: var(--k-muted); font-size: 0.85em; white-space: nowrap; }
 .status.busy::before { content: "● "; color: var(--k-accent); }
 button.icon {
+  display: inline-grid; place-items: center; flex: none; padding: 0;
   font: inherit; font-size: 1.05rem; line-height: 1; width: 2rem; height: 2rem; border-radius: 6px;
   border: 1px solid transparent; background: none; color: var(--k-muted); cursor: pointer;
 }
+button.icon:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
 button.icon:hover { color: var(--k-accent); border-color: var(--k-line); background: var(--k-surface); }
 
 /* ── Ошибки компиляции ──────────────────────────────────────────────── */
@@ -103,20 +117,35 @@ button.icon:hover { color: var(--k-accent); border-color: var(--k-line); backgro
   min-height: 3em; overflow: hidden;
 }
 .k-note .graph-hint { font-size: 0.75em; color: var(--k-muted); text-align: left; margin-top: 0.5em; }
-.graph-svg { display: block; width: 100%; height: auto; max-height: 70vh; font-family: system-ui, sans-serif; }
-.graph-edge { stroke: var(--k-muted); opacity: 0.45; transition: opacity 0.15s; }
-.graph-node { cursor: pointer; transition: opacity 0.15s; }
-.graph-node circle { stroke-width: 1.5; }
-.graph-node.missing { cursor: default; }
-.graph-node.missing circle { stroke-dasharray: 3 2; }
-.graph-node text { font-size: var(--label, 11px); fill: var(--k-text); paint-order: stroke; stroke: var(--k-surface); stroke-width: 3px; }
-.graph-node.book text { font-weight: 600; font-size: calc(var(--label, 11px) * 1.1); }
-.graph-node:hover circle { stroke: var(--k-text) !important; stroke-width: 2.5; }
-.graph-svg.focused .graph-node:not(.near) { opacity: 0.2; }
-.graph-svg.focused .graph-edge { opacity: 0.08; }
-.graph-svg.focused .graph-edge.near { opacity: 0.9; stroke: var(--k-accent); }
+/* Сам граф (узлы, рёбра, подсветка) — в baluk.css: он общий с графом в заметке и сайтом. */
 .graph-legend { display: flex; flex-wrap: wrap; gap: 0.3em 1em; padding: 0.4em 0.8em 0.6em; font: 12px system-ui, sans-serif; color: var(--k-muted); }
 .graph-legend i { display: inline-block; width: 0.7em; height: 0.7em; border-radius: 50%; margin-right: 0.35em; vertical-align: -0.05em; }
+.graph-legend button {
+  font: inherit; color: inherit; background: none; border: 1px solid transparent; border-radius: 1em;
+  padding: 0.1em 0.6em; cursor: pointer;
+}
+.graph-legend button:hover { border-color: var(--k-line); color: var(--k-text); }
+.graph-legend button.off { opacity: 0.45; text-decoration: line-through; }
+.graph-page { display: flex; flex-direction: column; min-height: 20rem; box-sizing: border-box; }
+.graph-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; padding: 0.5rem 0.8rem 0;
+  font-size: 0.9em; color: var(--k-muted);
+}
+.graph-bar label { white-space: nowrap; cursor: pointer; }
+.graph-bar select, .graph-search {
+  font: inherit; color: var(--k-text); background: var(--k-surface); border: 1px solid var(--k-line);
+  border-radius: 6px; padding: 0.2rem 0.4rem;
+}
+.graph-search { width: 12em; max-width: 40vw; }
+.graph-title { color: var(--k-text); font-weight: 600; display: inline-flex; align-items: center; gap: 0.4em; flex-wrap: wrap; }
+.graph-title a { color: var(--k-accent); }
+.graph-title .graph-all { font-weight: 400; color: var(--k-muted); }
+.graph-zoom { display: inline-flex; }
+.graph-count { margin-left: auto; font-variant-numeric: tabular-nums; }
+.graph-canvas { flex: 1; min-height: 0; position: relative; border-top: 1px solid var(--k-line); border-bottom: 1px solid var(--k-line); }
+.graph-empty { margin: 3rem auto; text-align: center; color: var(--k-muted); }
+.graph-page .graph-hint { margin: 0; padding: 0.3rem 0.8rem; font-size: 0.8em; color: var(--k-muted); }
+.backlinks h2 .backlinks-graph { font-size: 0.75em; font-weight: 400; margin-left: 0.6em; }
 
 /* ── Пустое состояние и список ──────────────────────────────────────── */
 .welcome { color: var(--k-muted); }
@@ -272,6 +301,7 @@ kbd {
 .tab.active { background: var(--k-bg); color: var(--k-text); border-color: var(--k-line); margin-bottom: -1px; }
 .tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab-close, .tab-new {
+  display: inline-grid; place-items: center; padding: 0; flex: none;
   font: inherit; line-height: 1; border: none; background: none; color: var(--k-muted); cursor: pointer;
   width: 1.3rem; height: 1.3rem; border-radius: 4px;
 }

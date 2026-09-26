@@ -90,15 +90,37 @@ async fn settings_are_validated() {
 }
 
 #[tokio::test]
+async fn warm_hints_are_accepted() {
+    let (app, _dir) = app();
+    let (status, _) =
+        call(app.clone(), "POST", "/api/warm", Some(r#"{"ids": ["Сеть/SSH", "../чужое", "Нет такой"]}"#)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "неверные и неизвестные пути пропускаются");
+    let (status, _) = call(app, "POST", "/api/warm", Some("[]")).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
 async fn client_and_fonts_are_served() {
     let (app, _dir) = app();
     let res = app.clone().oneshot(Request::get(uri("/n/Сеть/SSH")).body(Body::empty()).unwrap()).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let res =
-        app.clone().oneshot(Request::get("/fonts/Gentium%20Plus/regular").body(Body::empty()).unwrap()).await.unwrap();
+    // Шрифты — по частям в WOFF2: `@font-face` на часть с `unicode-range`.
+    let res = app.clone().oneshot(Request::get("/api/fonts.css").body(Body::empty()).unwrap()).await.unwrap();
+    let css = String::from_utf8(res.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+    assert!(css.contains(r#"url("/fonts/Gentium%20Plus/regular/cyrillic.woff2") format("woff2")"#), "{css}");
+    assert!(css.contains("unicode-range: U+300-33F, U+342-36F, U+400-45F"));
+    assert!(css.contains(r#"url("/fonts/New%20Computer%20Modern%20Math/regular/all.woff2")"#));
+    let req = Request::get("/fonts/Gentium%20Plus/regular/cyrillic.woff2").header("accept-encoding", "br");
+    let res = app.clone().oneshot(req.body(Body::empty()).unwrap()).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
-    let res = app.oneshot(Request::get("/fonts/Comic%20Sans/regular").body(Body::empty()).unwrap()).await.unwrap();
-    assert_eq!(res.status(), StatusCode::NOT_FOUND, "раздаются только шрифты оформления");
+    assert_eq!(res.headers()["content-type"], "font/woff2");
+    assert!(res.headers().get("content-encoding").is_none(), "WOFF2 не сжимается второй раз");
+    let body = res.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(&body[..4], b"wOF2");
+    for bad in ["/fonts/Comic%20Sans/regular/latin.woff2", "/fonts/Gentium%20Plus/regular/klingon.woff2"] {
+        let res = app.clone().oneshot(Request::get(bad).body(Body::empty()).unwrap()).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND, "{bad}: раздаются только части шрифтов оформления");
+    }
 }
 
 #[tokio::test]
@@ -126,6 +148,15 @@ async fn links_and_graph() {
         graph["nodes"].as_array().unwrap().iter().filter(|n| n["kind"].is_null()).map(|n| &n["id"]).collect();
     assert_eq!(missing, ["Нет/Такой заметки", "Сеть/Nginx"]);
     assert!(graph["edges"].as_array().unwrap().iter().any(|e| e["from"] == "Сеть/UFW" && e["to"] == "Сеть/SSH"));
+
+    // Граф по фильтру — уже разложенный: соседи SSH на шаг, без ненаписанных.
+    let body = r#"{"around": "Сеть/SSH", "depth": 1, "missing": false}"#;
+    let (status, layout) = call(app.clone(), "POST", "/api/graph/layout", Some(body)).await;
+    assert_eq!(status, StatusCode::OK);
+    let nodes = layout["nodes"].as_array().unwrap();
+    assert!(nodes.iter().any(|n| n["id"] == "Сеть/UFW" && n["x"].is_number() && n["group"] == "Сеть"));
+    assert!(nodes.iter().all(|n| !n["kind"].is_null()), "ненаписанные скрыты");
+    assert_eq!(layout["center"], "Сеть/SSH");
 
     assert_eq!(call(app, "GET", &uri("/api/links/Нет/такой"), None).await.0, StatusCode::NOT_FOUND);
 }

@@ -142,7 +142,7 @@ test("клавиши: главы, справка, режим чтения", asyn
 
 test("дерево: свёрнутая папка запоминается, путь к открытой заметке раскрывается", async ({ page }) => {
   await open(page, "Сеть/SSH");
-  const folder = page.locator("#tree details", { has: page.locator("summary", { hasText: /^Глубоко$/ }) });
+  const folder = page.locator("#tree details", { has: page.locator("summary .tree-name").getByText("Глубоко", { exact: true }) });
   await folder.locator("> summary").click();
   await expect(folder).not.toHaveAttribute("open");
   await page.reload();

@@ -4,21 +4,20 @@
   напрямую в DOM, а не шаблоном Svelte.
 -->
 <script lang="ts">
-  import { mount, onDestroy, unmount, untrack } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import { app } from "../lib/app.svelte";
   import type { NotePage } from "../lib/api";
-  import { parseFrames } from "../lib/frames";
   import { tagHref } from "../lib/ids";
+  import { mountLive } from "../lib/live";
   import { ui } from "../lib/ui.svelte";
-  import { formulasOk, readSpec } from "../lib/plot/spec";
   import Loading from "./Loading.svelte";
-  import Frames from "./Frames.svelte";
-  import Plot from "./Plot.svelte";
 
   let content: HTMLDivElement | undefined = $state();
   let seenAnchorSeq = 0;
-  let plots: ReturnType<typeof mount>[] = [];
-  onDestroy(unmountPlots);
+  /** Что сейчас показано: заметка и глава — чтобы при перерисовке той же сохранить раскрытое. */
+  let shown: string | null = null;
+  let unmountLive = () => {};
+  onDestroy(() => unmountLive());
 
   $effect(() => {
     const page = app.page;
@@ -46,11 +45,16 @@
   function render(page: NotePage, el: HTMLDivElement) {
     const r = page.rendered;
     const intent = app.scroll;
-    unmountPlots();
+    unmountLive();
+    // Та же заметка пересобрана (правка файла, «обновить») — раскрытые
+    // «Ответы» и прочие <details> не должны свернуться сами.
+    const key = `${page.id}#${page.book?.chapter ?? ""}`;
+    const open = key === shown ? [...el.querySelectorAll("details")].map((d) => d.open) : [];
+    shown = key;
     el.innerHTML = r ? r.styles + r.body : "";
+    el.querySelectorAll("details").forEach((d, i) => open[i] && (d.open = true));
     linkTags(el);
-    mountPlots(el);
-    mountFrames(el);
+    unmountLive = mountLive(el, (id, newTab) => app.open(id, null, { newTab }));
     ui.book = page.book;
     ui.chapter = page.book?.chapter ?? 0;
     app.chapter = page.book ? page.book.chapter : null;
@@ -66,47 +70,6 @@
       const tag = li.textContent?.trim();
       if (tag) li.replaceChildren(Object.assign(document.createElement("a"), { href: tagHref(tag), textContent: tag }));
     }
-  }
-
-  /**
-   * Интерактивные рисунки baluk: в HTML — `div.k-plot` с JSON и кадром
-   * Typst; живой рисунок встаёт рядом, кадр прячет CSS (`[data-live]`).
-   * Формула не разобралась — остаётся кадр.
-   */
-  function mountPlots(root: Element) {
-    for (const el of root.querySelectorAll<HTMLElement>(".k-plot[data-k-plot]")) {
-      const spec = readSpec(el);
-      if (!spec || !formulasOk(spec)) continue;
-      try {
-        plots.push(mount(Plot, { target: el, props: { spec } }));
-        el.dataset.live = "";
-      } catch (e) {
-        console.warn("интерактивный рисунок:", e);
-      }
-    }
-  }
-
-  /**
-   * Кадры: все кадры уже в разметке, без JS CSS показывает кадр по
-   * умолчанию. Клиент добавляет ползунок и «▶» и ставит `data-live`.
-   */
-  function mountFrames(root: Element) {
-    for (const el of root.querySelectorAll<HTMLElement>(".k-frames[data-k-frames]")) {
-      const spec = parseFrames(el.dataset.kFrames);
-      const items = [...el.querySelectorAll<HTMLElement>(":scope > .k-frames-stack > .k-frames-item")];
-      if (!spec || items.length !== spec.count) continue;
-      try {
-        plots.push(mount(Frames, { target: el, props: { root: el, items, spec } }));
-        el.dataset.live = "";
-      } catch (e) {
-        console.warn("кадры:", e);
-      }
-    }
-  }
-
-  function unmountPlots() {
-    for (const p of plots) void unmount(p);
-    plots = [];
   }
 
   /** Прокрутить к разделу; раздел в другой главе книги — загрузить её (прокрутит сама). */

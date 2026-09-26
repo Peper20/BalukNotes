@@ -135,6 +135,11 @@ impl Snapshot {
         self.outlines.get(id)
     }
 
+    /// Теги заметки по пути (`None` — нет такой заметки).
+    pub fn tags_of(&self, id: &str) -> Option<&[String]> {
+        self.outlines.get(&NoteId::new(id).ok()?).map(|o| o.tags.as_slice())
+    }
+
     /// Все заметки с содержанием.
     pub fn outlines(&self) -> impl Iterator<Item = (&Entry, &Outline)> {
         self.entries.iter().filter_map(|e| self.outlines.get(&e.id).map(|o| (e, o)))

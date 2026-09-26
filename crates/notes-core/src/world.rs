@@ -5,6 +5,9 @@
 //!   оформления приложения, копии в хранилище нет. Библиотека — каталог на
 //!   диске (разработка: правки видны сразу и меняют версии заметок) или
 //!   встроенная в бинарник копия `baluk/` (релиз: бинарник самодостаточен).
+//! - `/_vault/…` — **данные хранилища** для заметок (граф: `/_vault/graph/…`),
+//!   их на лету отдаёт ядро ([`VirtualFiles`]); в версию заметки такой файл
+//!   входит версией всего хранилища (см. `notes::version_of`).
 //! - Пакеты (`@preview/cetz`) — из кэша Typst, при отсутствии скачиваются.
 //! - Тема передаётся входом `тема` (`sys.inputs.тема`): на каждую тему — своя
 //!   стандартная библиотека Typst, созданная один раз.
@@ -38,6 +41,22 @@ use crate::fonts::Fonts;
 
 /// Имя виртуального каталога библиотеки оформления в хранилище.
 pub const LIB_DIR: &str = "_baluk";
+
+/// Имя виртуального каталога данных хранилища (граф) для заметок.
+pub const VAULT_DIR: &str = "_vault";
+
+/// Файл `/_vault/…` по пути без `/_vault/`: содержимое или сообщение об ошибке.
+pub type VirtualFile = dyn Fn(&str) -> Result<Vec<u8>, String> + Send + Sync;
+
+/// Поставщик файлов `/_vault/…`.
+#[derive(Clone)]
+pub struct VirtualFiles(pub Arc<VirtualFile>);
+
+impl std::fmt::Debug for VirtualFiles {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("VirtualFiles")
+    }
+}
 
 /// Имя входа Typst, через который передаётся тема.
 pub const THEME_INPUT: &str = "theme";
@@ -74,6 +93,7 @@ struct Loader {
     vault: PathBuf,
     lib: LibrarySource,
     packages: SystemPackages,
+    virtuals: Option<VirtualFiles>,
 }
 
 /// Где лежит файл.
@@ -81,12 +101,19 @@ enum Location {
     Disk(PathBuf),
     /// Путь внутри встроенной библиотеки, без `/` в начале.
     Embedded(String),
+    /// Файл данных хранилища (`/_vault/…`), путь без `_vault/`.
+    Virtual(String),
 }
 
 impl Loader {
     /// Где файл. Для пакетов — после скачивания, если нужно.
     fn locate(&self, id: FileId) -> FileResult<Location> {
         let vpath = id.vpath();
+        if matches!(id.root(), VirtualRoot::Project)
+            && let Some(rest) = vault_relative(vpath)
+        {
+            return Ok(Location::Virtual(rest));
+        }
         let (root, vpath) = match id.root() {
             VirtualRoot::Project => match (lib_relative(vpath)?, &self.lib) {
                 (Some(rest), LibrarySource::Embedded) => {
@@ -104,6 +131,8 @@ impl Loader {
     fn local_path(&self, id: FileId) -> Option<PathBuf> {
         match (id.root(), self.locate(id)) {
             (VirtualRoot::Project, Ok(Location::Disk(path))) => Some(path),
+            // Несуществующий путь внутри хранилища: версия — по всему хранилищу.
+            (VirtualRoot::Project, Ok(Location::Virtual(rest))) => Some(self.vault.join(VAULT_DIR).join(rest)),
             _ => None,
         }
     }
@@ -121,6 +150,12 @@ fn lib_relative(vpath: &VirtualPath) -> FileResult<Option<VirtualPath>> {
         .map_err(|e| FileError::Other(Some(eco_format!("{e}"))))
 }
 
+/// `/_vault/graph/x.json` → `Some("graph/x.json")`; остальное → `None`.
+fn vault_relative(vpath: &VirtualPath) -> Option<String> {
+    let rest = vpath.get_without_slash().strip_prefix(VAULT_DIR)?.strip_prefix('/')?;
+    Some(rest.to_owned())
+}
+
 impl FileLoader for Loader {
     fn load(&self, id: FileId) -> FileResult<Bytes> {
         let path = match self.locate(id)? {
@@ -128,6 +163,10 @@ impl FileLoader for Loader {
             Location::Embedded(rel) => {
                 let file = EmbeddedLibrary::get(&rel).ok_or_else(|| FileError::NotFound(rel.into()))?;
                 return Ok(Bytes::new(file.data.into_owned()));
+            }
+            Location::Virtual(rest) => {
+                let virtuals = self.virtuals.as_ref().ok_or_else(|| FileError::NotFound(rest.clone().into()))?;
+                return (virtuals.0)(&rest).map(Bytes::new).map_err(|e| FileError::Other(Some(e.into())));
             }
         };
         let meta = fs::metadata(&path).map_err(|e| FileError::from_io(e, &path))?;
@@ -166,9 +205,10 @@ impl std::fmt::Debug for Compiler {
 }
 
 impl Compiler {
-    pub fn new(vault: &Path, lib: LibrarySource, fonts: Arc<Fonts>) -> Self {
+    /// `virtuals` — поставщик файлов `/_vault/…` (без него их нет).
+    pub fn new(vault: &Path, lib: LibrarySource, fonts: Arc<Fonts>, virtuals: Option<VirtualFiles>) -> Self {
         let packages = SystemPackages::new(SystemDownloader::new(concat!("baluk-notes/", env!("CARGO_PKG_VERSION"))));
-        let loader = Loader { vault: vault.to_path_buf(), lib, packages };
+        let loader = Loader { vault: vault.to_path_buf(), lib, packages, virtuals };
         Self { files: Mutex::new(FileStore::new(loader)), fonts, libraries: RwLock::default() }
     }
 
@@ -348,5 +388,8 @@ mod tests {
         assert_eq!(lib_relative(&v("/_baluk")).unwrap(), Some(v("/")));
         assert_eq!(lib_relative(&v("/_baluk2/x.typ")).unwrap(), None);
         assert_eq!(lib_relative(&v("/Сеть/SSH.typ")).unwrap(), None);
+        assert_eq!(vault_relative(&v("/_vault/graph/x.json")).as_deref(), Some("graph/x.json"));
+        assert_eq!(vault_relative(&v("/_vault2/x")), None);
+        assert_eq!(vault_relative(&v("/Сеть/SSH.typ")), None);
     }
 }

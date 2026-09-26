@@ -10,6 +10,16 @@ export function resolveTheme(value: unknown, themes: Theme[], systemDark: boolea
   return (themes.find((t) => t.dark === systemDark) ?? themes[0])?.name ?? "";
 }
 
+/**
+ * Следующая тема для кнопки: всегда другая **на вид**. «Как в системе» в
+ * цикл не входит — при нём первый клик часто ничего не менял (система уже
+ * давала ту же тему); этот режим — в настройках.
+ */
+export function nextTheme(shown: string, themes: Theme[]): string {
+  const i = themes.findIndex((t) => t.name === shown);
+  return themes[(i + 1) % themes.length]?.name ?? shown;
+}
+
 export function applyAppearance(root: HTMLElement, v: SettingValues, theme: string): void {
   root.dataset.theme = theme;
   root.style.setProperty("--k-size", `${v["appearance.font_size"]}px`);

@@ -15,11 +15,11 @@ links:
 styles: 1932 байт, fnv 18c9d3fc71b78993
 ---
 <svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…63003 байт, fnv 38161e05139f248b…</svg>
-<article class="k-doc" data-k-figs="ed651b88" data-doc="book">
+<article class="k-doc" data-k-figs="ed651b88" data-doc="book" lang="ru">
 <header class="k-title">
 <div class="k-title-kind">Конспект</div>
 <h1>Проектирование тестов</h1></header>
-<h2 class="k-h k-h1" data-num="1" id="Проектирование-тестов" data-k-anchor="Проектирование-тестов"><span class="k-num">1</span>Проектирование тестов</h2>
+<h2 class="k-h k-h1" data-num="1" id="Проектирование-тестов" data-k-anchor="Проектирование-тестов"><span class="k-num" data-word="Глава">1</span>Проектирование тестов</h2>
 <div class="k-lead">Проверить программу на всех входах нельзя: у функции от одного <code>int</code> их больше четырёх миллиардов. Проектирование тестов отвечает на вопрос, какие десять входов выбрать, чтобы поймать как можно больше ошибок. Многие приёмы кажутся очевидными (пустой массив, один элемент, максимальный размер, сравнение с медленным решением), но у каждого есть название и правила, и именно их спрашивают на тесте.</div>
 <div class="k-plan">
 <div class="k-plan-head">В этой главе</div>

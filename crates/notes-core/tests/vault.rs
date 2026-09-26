@@ -200,6 +200,61 @@ fn disk_cache_survives_restart() {
 }
 
 #[test]
+fn warm_builds_everything_once_across_restarts() {
+    let dir = tempfile::tempdir().unwrap();
+    let open = || {
+        Notes::open(&NotesConfig {
+            vault: repo().join("tests/vault"),
+            library: LibrarySource::Dir(repo().join("baluk")),
+            font_dirs: vec![],
+            cache: Some(dir.path().to_path_buf()),
+        })
+        .unwrap()
+    };
+    let first = open();
+    let all = first.entries().unwrap().len();
+    first.hint_warm(vec![id("Книга")]);
+    let stats = first.warm_pass(|| OPTS);
+    assert_eq!((stats.built, stats.skipped), (all, 0), "первый проход собирает всё");
+    assert_eq!(first.warm_pass(|| OPTS).built, 0, "второй — ничего");
+
+    // Новый запуск: собранное лежит на диске. Заново — только заметки с
+    // ошибкой (их отрисовка в кэш не пишется).
+    let failed =
+        first.entries().unwrap().iter().filter(|e| !first.page(&e.id, OPTS).unwrap().errors.is_empty()).count();
+    assert!(failed > 0, "в tests/vault есть заметка с ошибкой");
+    let stats = open().warm_pass(|| OPTS);
+    assert_eq!((stats.built, stats.skipped), (failed, all - failed));
+}
+
+#[test]
+fn vault_graph_follows_the_vault() {
+    let dir = tempfile::tempdir().unwrap();
+    let head = "#import \"/_baluk/lib.typ\": *\n#show: note.with(title: [x])\n";
+    std::fs::write(dir.path().join("A.typ"), format!("{head}#see(\"B\")\n")).unwrap();
+    std::fs::write(dir.path().join("B.typ"), head).unwrap();
+    std::fs::write(dir.path().join("Граф.typ"), format!("{head}#vault-graph(around: \"B\")\n")).unwrap();
+    let notes = Notes::open(&NotesConfig {
+        vault: dir.path().to_path_buf(),
+        library: LibrarySource::Dir(repo().join("baluk")),
+        font_dirs: vec![],
+        cache: None,
+    })
+    .unwrap();
+    let page = notes.page(&id("Граф"), OPTS).unwrap();
+    assert!(page.errors.is_empty(), "{:?}", page.errors);
+    let body = &page.rendered.as_ref().unwrap().body;
+    assert!(body.contains(r#"class="k-graph""#) && body.contains("data-k-graph"), "разметка для клиента");
+    assert!(body.contains("&quot;id&quot;:&quot;A&quot;") && !body.contains("&quot;id&quot;:&quot;C&quot;"));
+
+    // Новая заметка ссылается на B — граф заметки устарел и пересобирается.
+    std::fs::write(dir.path().join("C.typ"), format!("{head}#see(\"B\")\n")).unwrap();
+    assert_ne!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "версия — по всему хранилищу");
+    let body = notes.page(&id("Граф"), OPTS).unwrap().rendered.clone().unwrap().body.clone();
+    assert!(body.contains("&quot;id&quot;:&quot;C&quot;"));
+}
+
+#[test]
 fn concurrent_requests_share_one_build() {
     let notes = Notes::open(&NotesConfig {
         vault: repo().join("tests/vault"),
@@ -261,4 +316,37 @@ fn preview_of_note_and_section() {
     let p = NOTES.preview(&id("Книга"), Some("Итоги-2")).unwrap();
     assert!(p.text.contains("второй главы"), "{}", p.text);
     assert!(NOTES.preview(&id("Нет/такой"), None).is_err());
+}
+
+#[test]
+fn decoration_words_follow_note_language() {
+    let page = NOTES.page(&id("Особые случаи/English"), OPTS).unwrap();
+    assert!(page.errors.is_empty(), "{:?}", page.errors);
+    let body = &page.rendered.as_ref().unwrap().body;
+    assert!(body.contains(r#"data-doc="book" lang="en""#), "язык — атрибутом <article>");
+    for word in [
+        r#"<div class="k-title-kind">Notes</div>"#,
+        r#"data-word="Chapter""#,
+        "Definition 1.1 (limit).",
+        "Theorem 1.2.",
+        "Why this holds.",
+        "Example 1.1 (squeeze).",
+        "Step 1. Estimate.",
+        "Answer:",
+        "In this chapter",
+        "Key points",
+        "Check yourself",
+        "Answers",
+        "Mistake",
+        "How to avoid",
+        "Complexity:",
+        "Fig. 2.1.",
+        "frame 1 of 2",
+    ] {
+        assert!(body.contains(word), "нет «{word}»");
+    }
+    for word in ["Определение", "Теорема", "Шаг", "Ответ", "Рис.", "Глава", "Сложность", "кадр"]
+    {
+        assert!(!body.contains(word), "русское «{word}» в английской заметке");
+    }
 }

@@ -14,11 +14,11 @@ links:
 styles: 18795 байт, fnv 5e2aa60ed615fa6e
 ---
 <svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…90374 байт, fnv 1ad153d13facd200…</svg>
-<article class="k-doc" data-k-figs="ae106963" data-doc="book">
+<article class="k-doc" data-k-figs="ae106963" data-doc="book" lang="ru">
 <header class="k-title">
 <div class="k-title-kind">Конспект</div>
 <h1>Визуализация</h1></header>
-<h2 class="k-h k-h1" data-num="1" id="Инструменты-визуализации" data-k-anchor="Инструменты-визуализации"><span class="k-num">1</span>Инструменты визуализации</h2>
+<h2 class="k-h k-h1" data-num="1" id="Инструменты-визуализации" data-k-anchor="Инструменты-визуализации"><span class="k-num" data-word="Глава">1</span>Инструменты визуализации</h2>
 <div class="k-lead">Всё, что чаще всего нужно рисовать в конспектах, уже есть готовым: диаграммы по данным, графики функций в 2D и 3D, массивы, матрицы, графы и деревья, таблицы с подсветкой. Каждый инструмент берёт цвета из темы, поэтому одна и та же страница собирается и светлой, и тёмной.</div>
 <div class="k-plan">
 <div class="k-plan-head">В этой главе</div>
@@ -74,7 +74,7 @@ styles: 18795 байт, fnv 5e2aa60ed615fa6e
 <div class="k-frame k-fig">
 <svg style="overflow: visible; width: 13.657838225em; height: 8.698109846em; display: block" viewBox="0 0 150.236220472 95.679208307" width="150.236220472pt" height="95.679208307pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…6889 байт, fnv b7c43e1542e15320…</svg></div>
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 10.491821761em; height: 8.246459843em; display: block" viewBox="0 0 115.41003937 90.711058268" width="115.41003937pt" height="90.711058268pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…9499 байт, fnv 2d1b9ad752c3fbd8…</svg></div></div>
+<svg style="overflow: visible; width: 10.491821761em; height: 8.246459843em; display: block" viewBox="0 0 115.41003937 90.711058268" width="115.41003937pt" height="90.711058268pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…9502 байт, fnv a346b060b7871ed2…</svg></div></div>
 <figcaption><span class="k-fig-num">Рис. 1.6.</span> Слева — декартово дерево: по ключам это дерево поиска (слева направо <math><mn>1</mn><mi>…</mi><mn>7</mn></math>), по приоритетам (серым) — куча, у корня приоритет наибольший. Справа — взвешенный граф: жирным выделены рёбра кратчайшего пути <math><mi>𝑠</mi><mo stretchy="false">→</mo><mi>𝑎</mi><mo stretchy="false">→</mo><mi>𝑏</mi><mo stretchy="false">→</mo><mi>𝑐</mi><mo stretchy="false">→</mo><mi>𝑡</mi></math>, у вершин подписаны расстояния от <math><mi>𝑠</mi></math></figcaption></figure>
 <h3 class="k-h k-h2" id="Таблицы-с-подсветкой" data-k-anchor="Таблицы-с-подсветкой"><span class="k-num">1.6</span>Таблицы с подсветкой</h3>
 <p><code>data-table</code> — обычная таблица темы плюс подсветка клеток, строк и столбцов: готовая трассировка алгоритма.</p>

@@ -22,6 +22,7 @@
 #import "@preview/cetz:0.4.2"
 #import "theme.typ": current-theme, is-dark
 #import "web.typ": is-web, elem, frame
+#import "i18n.typ": word
 
 #let _draw = cetz.draw
 
@@ -60,7 +61,7 @@
 /// «рис. N» в тексте: они перестают оставлять дыры внизу страниц.
 #let fig(body, caption, label: none, floating: false) = context {
   // В HTML плавающий рисунок пропал бы целиком: у страницы нет верха и низа.
-  let fig-el = figure(body, caption: caption, kind: image, supplement: [Рис.],
+  let fig-el = figure(body, caption: caption, kind: image, supplement: word("figure"),
     placement: if floating and not is-web() { auto } else { none })
   if label != none [#fig-el#std.label(label)] else { fig-el }
 }
@@ -506,6 +507,12 @@
     let (u, v) = (e.at(0), e.at(1))
     let style = e.at(2, default: "normal")
     let label = e.at(3, default: none)
+    // Подпись ребра: сторона от направления u → v и место вдоль ребра (0 — у u, 1 — у v).
+    let opts = e.at(4, default: (:))
+    assert(type(opts) == dictionary, message: "graph: пятый элемент ребра — словарь (side: \"left\"/\"right\", at: 0…1)")
+    let side = opts.at("side", default: "left")
+    assert(side in ("left", "right"), message: "graph: side — \"left\" или \"right\"")
+    let at = opts.at("at", default: 0.5)
     let (x1, y1) = vertices.at(u)
     let (x2, y2) = vertices.at(v)
     let (dx, dy) = (x2 - x1, y2 - y1)
@@ -528,7 +535,8 @@
     line(p, q, stroke: (paint: col, thickness: thickness, dash: dash),
       mark: if directed { (end: "stealth", fill: col, stroke: 0pt, scale: 0.55) } else { none })
     if label != none {
-      let m = ((p.at(0) + q.at(0)) / 2 - uy * 0.16, (p.at(1) + q.at(1)) / 2 + ux * 0.16)
+      let sgn = if side == "left" { 1 } else { -1 }
+      let m = (p.at(0) + (q.at(0) - p.at(0)) * at - sgn * uy * 0.16, p.at(1) + (q.at(1) - p.at(1)) * at + sgn * ux * 0.16)
       content(m, box(fill: theme.color.bg, inset: 1.2pt, radius: 1.5pt, text(size: 0.78em, fill: if style in ("bold", "second") { col } else { theme.color.text }, label)))
     }
   }

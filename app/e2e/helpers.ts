@@ -20,3 +20,9 @@ export async function open(page: Page, id: string, anchor?: string) {
 
 /** Заголовок заметки (h1 титула). */
 export const title = (page: Page) => page.locator("#note .k-title h1");
+
+/** Настройки общие для всех сценариев: вернуть тему «как в системе». */
+export async function resetTheme(page: Page) {
+  const res = await page.request.put("/api/settings", { data: { "appearance.theme": "auto" } });
+  if (!res.ok()) throw new Error(`тема не сброшена: ${res.status()}`);
+}

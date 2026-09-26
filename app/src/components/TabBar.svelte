@@ -3,12 +3,16 @@
   открывается в новой вкладке; средняя кнопка на вкладке — закрыть.
 -->
 <script lang="ts">
+  import Plus from "@lucide/svelte/icons/plus";
+  import X from "@lucide/svelte/icons/x";
   import { app } from "../lib/app.svelte";
   import { parseRoute, splitId } from "../lib/ids";
 
   function title(url: string): string {
-    const route = parseRoute(new URL(url, location.origin).pathname);
+    const u = new URL(url, location.origin);
+    const route = parseRoute(u.pathname, u.search);
     if (route.kind === "home") return "Главная";
+    if (route.kind === "graph") return route.around ? `Граф: ${splitId(route.around).name}` : "Граф";
     if (route.kind === "tags") return route.tag ? `#${route.tag}` : "Теги";
     const note = app.notes.find((n) => n.id === route.id);
     return note?.title ?? note?.name ?? splitId(route.id).name;
@@ -49,10 +53,10 @@
           onclick={(e) => {
             e.stopPropagation();
             app.closeTab(i);
-          }}>×</button
+          }}><X size={14} strokeWidth={2} aria-hidden="true" /></button
         >
       </div>
     {/each}
-    <button type="button" class="tab-new" title="Новая вкладка (Alt+T)" aria-label="Новая вкладка" onclick={() => app.go("/", { newTab: true })}>+</button>
+    <button type="button" class="tab-new" title="Новая вкладка (Alt+T)" aria-label="Новая вкладка" onclick={() => app.go("/", { newTab: true })}><Plus size={16} strokeWidth={2} aria-hidden="true" /></button>
   </div>
 {/if}

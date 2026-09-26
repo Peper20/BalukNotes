@@ -7,13 +7,21 @@ export const encodeId = (id: string): string => id.split("/").map(encodeURICompo
 export const noteHref = (id: string, anchor?: string | null): string =>
   `/n/${encodeId(id)}${anchor ? `#${encodeURIComponent(anchor)}` : ""}`;
 
-export type Route = { kind: "home" } | { kind: "note"; id: string } | { kind: "tags"; tag: string | null };
+export type Route =
+  | { kind: "home" }
+  | { kind: "note"; id: string }
+  | { kind: "tags"; tag: string | null }
+  | { kind: "graph"; around: string | null; depth: number };
 
 /** Адрес страницы тегов (или одного тега). */
 export const tagHref = (tag?: string | null): string => (tag ? `/tags/${encodeURIComponent(tag)}` : "/tags");
 
-/** Маршрут по адресу страницы. Неверное кодирование — главная. */
-export function parseRoute(pathname: string): Route {
+/** Адрес графа: весь или соседи заметки на `depth` шагов. */
+export const graphHref = (around?: string | null, depth = 1): string =>
+  around ? `/graph?around=${encodeURIComponent(around)}${depth === 1 ? "" : `&depth=${depth}`}` : "/graph";
+
+/** Маршрут по адресу страницы (`search` — для графа). Неверное кодирование — главная. */
+export function parseRoute(pathname: string, search = ""): Route {
   let path: string;
   try {
     path = decodeURIComponent(pathname);
@@ -21,6 +29,11 @@ export function parseRoute(pathname: string): Route {
     return { kind: "home" };
   }
   if (path === "/tags" || path.startsWith("/tags/")) return { kind: "tags", tag: path.slice(6) || null };
+  if (path === "/graph" || path === "/graph/") {
+    const q = new URLSearchParams(search);
+    const depth = Math.round(Number(q.get("depth") ?? 1));
+    return { kind: "graph", around: q.get("around") || null, depth: depth >= 1 && depth <= 5 ? depth : 1 };
+  }
   const id = path.startsWith("/n/") ? path.slice(3).replace(/\/+$/, "") : "";
   return id ? { kind: "note", id } : { kind: "home" };
 }

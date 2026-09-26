@@ -32,6 +32,9 @@ pub mod search;
 pub mod settings;
 pub mod themes;
 pub mod vault;
+pub mod vault_graph;
+pub mod warm;
+pub mod webfonts;
 pub mod world;
 
 pub use error::{Error, Result};

@@ -6,12 +6,16 @@
 //! а ставить шрифты в систему не нужно. Системные — для всего остального.
 //!
 //! Браузер рисует текст и формулы сам, поэтому ему нужны те же файлы
-//! шрифтов, что и Typst, — их отдаёт [`Fonts::web_font`].
+//! шрифтов, что и Typst, — их отдаёт [`Fonts::web_face`]: в WOFF2 и по
+//! частям (наборам знаков), см. [`crate::webfonts`].
 
 use std::any::Any;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, OnceLock};
+
+use parking_lot::Mutex;
 
 use rust_embed::RustEmbed;
 use typst::foundations::Bytes;
@@ -37,18 +41,23 @@ fn bundled_fonts() -> impl Iterator<Item = (Font, FontInfo)> {
     })
 }
 
+/// Семейство и начертание.
+type WebKey = (String, WebVariant);
+
 pub struct Fonts {
     store: FontStore,
+    /// Шрифты для браузера: план частей и уже сжатые части.
+    web: Mutex<HashMap<WebKey, Option<Arc<WebFace>>>>,
 }
 
 impl std::fmt::Debug for Fonts {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Fonts").field("families", &self.store.book().families().count()).finish()
+        f.debug_struct("Fonts").field("families", &self.store.book().families().count()).finish_non_exhaustive()
     }
 }
 
 /// Начертание для `@font-face`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WebVariant {
     pub italic: bool,
     pub bold: bool,
@@ -85,12 +94,45 @@ impl WebVariant {
     }
 }
 
-/// Файл шрифта для браузера.
-#[derive(Debug, Clone)]
-pub struct WebFont {
-    pub data: Bytes,
-    /// MIME-тип: `font/ttf` или `font/otf`.
-    pub mime: &'static str,
+/// Шрифт одного начертания для браузера: части по наборам знаков. Части
+/// сжимаются при первом запросе (Gentium — ~0,1 с на часть, математический
+/// шрифт целиком — ~2 с) и дальше отдаются из памяти.
+pub struct WebFace {
+    data: Bytes,
+    pub chunks: Vec<crate::webfonts::Chunk>,
+    files: Vec<OnceLock<Option<Arc<[u8]>>>>,
+}
+
+impl std::fmt::Debug for WebFace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WebFace").field("chunks", &self.chunks.len()).finish_non_exhaustive()
+    }
+}
+
+impl WebFace {
+    fn new(data: Bytes) -> Self {
+        let chunks = crate::webfonts::plan(&data);
+        let files = chunks.iter().map(|_| OnceLock::new()).collect();
+        Self { data, chunks, files }
+    }
+
+    /// WOFF2 части `name` (`latin`, `cyrillic`, …, `all`).
+    pub fn file(&self, name: &str) -> Option<Arc<[u8]>> {
+        let i = self.chunks.iter().position(|c| c.name == name)?;
+        self.files[i]
+            .get_or_init(|| {
+                let started = std::time::Instant::now();
+                let file = crate::webfonts::chunk_woff2(&self.data, &self.chunks[i]).map(Arc::from);
+                tracing::debug!(
+                    chunk = name,
+                    bytes = file.as_ref().map(|f: &Arc<[u8]>| f.len()),
+                    ms = started.elapsed().as_millis(),
+                    "шрифт для браузера"
+                );
+                file
+            })
+            .clone()
+    }
 }
 
 impl Fonts {
@@ -108,7 +150,32 @@ impl Fonts {
         // Иначе системный шрифт того же семейства мог бы победить при выборе
         // (Typst предпочитает вариативный файл статическому).
         store.extend(fonts::system().filter(|(_, info)| !shadowed.contains(&info.family.to_lowercase())));
-        Self { store }
+        Self { store, web: Mutex::new(HashMap::new()) }
+    }
+
+    /// Шрифт семейства `family` этого начертания для браузера (см. [`Self::web_font`]
+    /// — когда его нет). План частей строится один раз.
+    pub fn web_face(&self, family: &str, variant: WebVariant) -> Option<Arc<WebFace>> {
+        // Под замком целиком: сервер при запуске сжимает части в фоне, и
+        // запрос страницы должен попасть в тот же кэш, а не начать заново.
+        let mut web = self.web.lock();
+        web.entry((family.to_owned(), variant))
+            .or_insert_with(|| self.web_font(family, variant).map(|data| Arc::new(WebFace::new(data))))
+            .clone()
+    }
+
+    /// Сжать все части шрифтов `families` заранее (в фоне при запуске
+    /// сервера: первая страница не ждёт сжатия).
+    pub fn warm_web(&self, families: &[&str]) {
+        for family in families {
+            for v in WebVariant::ALL {
+                if let Some(face) = self.web_face(family, v) {
+                    for c in &face.chunks {
+                        face.file(&c.name);
+                    }
+                }
+            }
+        }
     }
 
     pub fn book(&self) -> &LazyHash<FontBook> {
@@ -123,7 +190,7 @@ impl Fonts {
     /// такого начертания нет (браузер достроит курсив и жирный сам — не
     /// нужно отдавать ему обычный файл под видом жирного) или шрифт лежит в
     /// коллекции (`.ttc`), из которой браузер не умеет выбирать.
-    pub fn web_font(&self, family: &str, variant: WebVariant) -> Option<WebFont> {
+    fn web_font(&self, family: &str, variant: WebVariant) -> Option<Bytes> {
         let book = self.store.book();
         let index = book.select(&family.to_lowercase(), variant.typst())?;
         let found = book.info(index)?.variant;
@@ -145,12 +212,10 @@ impl Fonts {
             }
             font.data().clone()
         };
-        let mime = match data.get(..4)? {
-            b"ttcf" => return None,
-            b"OTTO" => "font/otf",
-            _ => "font/ttf",
-        };
-        Some(WebFont { data, mime })
+        if data.get(..4)? == b"ttcf" {
+            return None;
+        }
+        Some(data)
     }
 }
 
@@ -168,9 +233,17 @@ mod tests {
         }
         for family in ["Gentium Plus", "JetBrains Mono"] {
             for v in WebVariant::ALL {
-                let font = fonts.web_font(family, v).unwrap_or_else(|| panic!("{family} {}", v.slug()));
-                assert_eq!(font.mime, "font/ttf");
+                let face = fonts.web_face(family, v).unwrap_or_else(|| panic!("{family} {}", v.slug()));
+                let names: Vec<_> = face.chunks.iter().map(|c| c.name.as_str()).collect();
+                assert_eq!(&names[..2], ["latin", "cyrillic"], "{family} {}: по наборам знаков", v.slug());
             }
         }
+        // Математический шрифт не режется (нет подмножеств для MATH и CFF).
+        let math = fonts.web_face("New Computer Modern Math", WebVariant::ALL[0]).unwrap();
+        assert_eq!(math.chunks.len(), 1);
+        assert!(
+            Arc::ptr_eq(&math, &fonts.web_face("New Computer Modern Math", WebVariant::ALL[0]).unwrap()),
+            "план — один раз"
+        );
     }
 }
