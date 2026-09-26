@@ -11,7 +11,9 @@ const pageUrl = (id: string) => pathToFileURL(`${site}${id}.html`).href;
 test.beforeAll(() => {
   // В фикстуре есть заметка с ошибкой — сборка кончается ошибкой, остальное собрано.
   try {
-    execFileSync("cargo", ["run", "-q", "-p", "notes-cli", "--", "--vault", "tests/vault", "build", site], { cwd: repo, stdio: "pipe" });
+    // Данные (кэш сборки) — в tests/.data, не в data/ пользователя.
+    const data = `${repo}tests/.data/e2e-site-data`;
+    execFileSync("cargo", ["run", "-q", "-p", "notes-cli", "--", "--data", data, "--vault", "tests/vault", "build", site], { cwd: repo, stdio: "pipe" });
   } catch {
     // проверяем то, что собралось
   }
