@@ -8,7 +8,8 @@
 // Typst собирает рисунок для каждого значения параметра. В приложении под
 // рисунком — ползунок, «▶» проигрывает кадры по очереди (анимация, шаги
 // алгоритма); в PDF и без JS — кадр при значении по умолчанию и подпись
-// «n = 3». Считает всё Typst: годится любой рисунок, не только формула.
+// «n = 3» (или несколько кадров в ряд: `pdf: (1, 4, 8)`). Считает всё
+// Typst: годится любой рисунок, не только формула.
 //
 // В HTML — `div.k-frames` с `data-k-frames` (JSON: имя, число кадров, номер
 // по умолчанию, скорость) и кадрами `div.k-frames-item` внутри; кадр по
@@ -19,6 +20,7 @@
 #import "web.typ": is-web, elem
 #import "plots/common.typ": _num
 #import "i18n.typ": word
+#import "figures/canvas.typ": in-row
 
 /// Больше кадров — страница тяжелеет (каждый кадр — свой SVG).
 #let _max-frames = 60
@@ -82,7 +84,9 @@
 ///   k: (values: (1, 2, 4, 8), value: 4)        — явные значения (или просто массив)
 /// label: auto — «n = 5» под кадром; none — без подписи; функция v => [...] — своя.
 /// fps — кадров в секунду при проигрывании; loop — по кругу.
-#let frames(body, label: auto, fps: 2, loop: false, ..param) = {
+/// pdf: auto — в PDF кадр по умолчанию; номера кадров (с 1), например
+///   (1, 4, 8), — эти кадры в ряд, каждый со своей подписью (HTML не меняется).
+#let frames(body, label: auto, fps: 2, loop: false, pdf: auto, ..param) = {
   if param.pos().len() > 0 { panic("frames: лишние позиционные аргументы; параметр — именованный: n: (from: 1, to: 10)") }
   let named = param.named()
   if named.len() != 1 {
@@ -95,6 +99,10 @@
   let (name, spec) = named.pairs().first()
   let (values, default, step) = _values(name, spec)
   let count = values.len()
+  if pdf != auto {
+    let bad = type(pdf) != array or pdf.len() == 0 or pdf.any(k => type(k) != int or k < 1 or k > count)
+    if bad { panic("frames: pdf — auto или номера кадров от 1 до " + str(count) + ", например (1, " + str(calc.min(count, 4)) + ")") }
+  }
   let caption(v, i) = if label == none { none } else if label == auto {
     _default-label(name, v, i, count, step)
   } else if type(label) == function { label(v) } else {
@@ -114,15 +122,21 @@
     ))
   } else {
     let theme = current-theme()
-    let value = values.at(default)
-    block(breakable: false, {
+    // Кадр с подписью под ним.
+    let shot(i) = {
+      let value = values.at(i)
       body(value)
-      let c = caption(value, default)
+      let c = caption(value, i)
       if c != none {
         set text(size: theme.size.small)
         v(0.2em, weak: true)
         align(center, text(fill: theme.color.muted, c))
       }
-    })
+    }
+    if pdf == auto {
+      block(breakable: false, shot(default))
+    } else {
+      block(breakable: false, in-row(..pdf.map(k => block(shot(k - 1)))))
+    }
   }
 }

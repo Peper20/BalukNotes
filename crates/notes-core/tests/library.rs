@@ -119,3 +119,19 @@ fn own_words_are_checked() {
     assert!(error("\"Abb.\"").contains("words — словарь"));
     assert_eq!(error("(figure: \"Abb.\")"), "");
 }
+
+/// `frames(…, pdf:)`: номера кадров от 1 до числа кадров.
+#[test]
+fn frames_pdf_is_checked() {
+    let error = |pdf: &str| {
+        let page = compile(&format!(
+            "#import \"/_baluk/lib.typ\": *\n#show: note.with()\n#frames(n => [#n], n: (from: 1, to: 5), pdf: {pdf})\n"
+        ));
+        page.errors.first().map(|e| e.message.clone()).unwrap_or_default()
+    };
+    assert_eq!(error("(1, 3, 5)"), "");
+    assert_eq!(error("auto"), "");
+    for bad in ["(0, 2)", "(6,)", "()", "\"strip\"", "(1.5,)"] {
+        assert!(error(bad).contains("номера кадров от 1 до 5"), "{bad}: {}", error(bad));
+    }
+}
