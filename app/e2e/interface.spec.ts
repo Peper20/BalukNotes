@@ -92,6 +92,17 @@ test("оглавление: сбоку на широком экране, всп�
   await expect(page.locator(`[id="${target}"]`)).toBeInViewport();
 });
 
+test("оглавление: заголовок с формулой — формулой, а не текстом", async ({ page }) => {
+  await page.setViewportSize({ width: 1700, height: 900 });
+  await open(page, "Формулы и теги");
+  const item = page.locator(".toc a", { hasText: "Пространство" });
+  await expect(item.locator("math")).toHaveCount(2);
+  await expect(item.locator("strong")).toHaveText("норма");
+  await expect(item.locator(".k-num")).toHaveCount(0);
+  await item.click();
+  await expect(page.locator("#note h2", { hasText: "Пространство" })).toBeInViewport();
+});
+
 test("новая заметка появляется в дереве без перезагрузки", async ({ page }) => {
   const dir = join(VAULT, "Новое");
   try {

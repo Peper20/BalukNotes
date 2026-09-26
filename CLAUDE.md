@@ -148,16 +148,32 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
 - HTML заметки вставляется в DOM напрямую (`NoteView.svelte`), не шаблоном.
 - Настройки вида — атрибутами на `<html>` (`data-numbering`, `data-header-*`,
   …), правила — в `baluk.css`. Новая настройка = запись в
-  `notes-core::settings::Schema` + строка в `src/lib/appearance.ts` + CSS.
-- Стили заметки — только внутри `.k-note { … }` (`public/assets/baluk.css`,
-  общий со статическим сайтом); интерфейс — `src/app.css`.
-- Живые части заметки (интерактивные рисунки, кадры) — `src/lib/live.ts`,
-  общий для клиента и статического сайта: `src/static.ts` →
-  `dist/assets/static.js` (второй шаг `npm run build`,
-  `vite.static.config.ts`). Сценарии сайта — `e2e/static.spec.ts` (с диска).
+  `notes-core::settings::Schema` (с `.attr("data-…")` или `.var("--…",
+  "px")` — как применить) + CSS; `src/lib/appearance.ts` применяет по
+  схеме, правок TS не нужно (типы — `npm run types`).
+- Стили заметки — только внутри `.k-note { … }`: файлы блоков
+  `src/baluk-css/` (`note/*` — заметка, `graph.css`, `site/*` — сайт;
+  порядок — `@import` в `src/baluk-css/baluk.css`), при сборке (и в
+  `npm run dev`) склеиваются в один `assets/baluk.css`, общий со
+  статическим сайтом (плагин `baluk-css/plugin.ts`). Новый блок — файл +
+  строка `@import`. Интерфейс — `src/app.css`.
+- Живые части заметки (интерактивные рисунки, кадры, граф) — реестр
+  `src/lib/live/` (блок = модуль с `LiveBlock` + селектор в `selectors.ts`
+  + строка в `BLOCKS`), общий для клиента и статического сайта. Скрипт сайта
+  — части `src/static/*` → `dist/assets/static*.js` (второй шаг `npm run
+  build`, `scripts/build-static.mjs`): `static.js` (тема, оглавление) у
+  каждой страницы, остальные (`static-live`, `-search`, `-graph`) — по
+  требованию (`static/parts.ts`); данные сборки (поиск, граф) —
+  `assets/data/*.js` (`notes-site::data`). Поиск сайта
+  (`lib/site-search.ts`) повторяет поиск ядра: правишь `search.rs` — обнови
+  эталон (`UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test
+  search_parity`), Vitest сверит клиента. Сценарии сайта —
+  `e2e/static.spec.ts` (с диска).
 - Значки интерфейса — `@lucide/svelte` (`import X from "@lucide/svelte/icons/x"`),
-  не текстовые глифы (▸ ◐ ⎙); на статическом сайте — те же пути CSS-маской
-  (`baluk.css`). Вид проверять в Chrome (Claude in Chrome) в обеих темах.
+  не текстовые глифы (▸ ◐ ⎙); на статическом сайте — те же значки
+  CSS-маской: `lucide("имя", толщина)` в `src/baluk-css/site/icons.css`,
+  сборка берёт путь из пакета `@lucide/icons` (держать его версию равной
+  `@lucide/svelte`). Вид проверять в Chrome (Claude in Chrome) в обеих темах.
 - Граф — `Graph.svelte` (разметка и связки) рисует готовую раскладку: фильтр и раскладка — в
   ядре (`notes-core::vault_graph`, `POST /api/graph/layout`), одни и те же
   для главной, `/graph` и `#vault-graph` в заметках (`baluk/graph.typ`,
@@ -189,7 +205,7 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   `=` — глава). В HTML весь документ — `<article class="k-doc" data-doc>`.
 - У каждого блока две ветки: `context if is-web() { … HTML … } else { … PDF … }`.
   В HTML — только разметка с классами `k-…` (помощник `elem` из `web.typ`),
-  без цветов и размеров: их задаёт `app/public/assets/baluk.css`.
+  без цветов и размеров: их задаёт `app/src/baluk-css/`, сборка — `assets/baluk.css`.
 - В HTML-экспорте `grid`, `stack`, `align`, `place` **выбрасываются вместе с
   содержимым**. В HTML-ветке их не использовать; для чужой вёрстки шаблон
   ставит страховку (SVG-кадр `k-layout`).

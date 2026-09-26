@@ -1,0 +1,22 @@
+/* Настройки клиента — атрибуты на <html> (appearance.ts). */
+
+.k-note {
+  /* По умолчанию номера заголовков видны только в книгах (вид документа
+     ставит библиотека: <article class="k-doc" data-doc="book|note">). */
+  :root:not([data-numbering="all"]) & .k-doc:not([data-doc="book"]) .k-num,
+  :root[data-numbering="none"] & .k-num { display: none; }
+
+  :root[data-chapters="plain"] & {
+    .k-h1 { border-bottom: none; font-size: 1.6em; margin-top: 1.8em; }
+    .k-h1::after { content: none; }
+    .k-h1 .k-num { display: inline; margin: 0 0.35em 0 0; font-size: inherit; font-weight: bold; letter-spacing: 0; text-transform: none; }
+    .k-h1 .k-num::before { content: none; }
+  }
+
+  :root[data-header-title="false"] & .k-title h1,
+  :root[data-header-title="false"] & .k-title::after { display: none; }
+  :root[data-header-kind="false"] & .k-title-kind,
+  :root[data-header-description="false"] & .k-description,
+  :root[data-header-byline="false"] & .k-byline,
+  :root[data-header-tags="false"] & .k-tags { display: none; }
+}

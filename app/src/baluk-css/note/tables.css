@@ -1,0 +1,20 @@
+/* Таблицы. */
+
+.k-note {
+  table {
+    width: 100%; margin: 1em 0 1.2em; border-collapse: collapse;
+    font-size: 0.94em; line-height: 1.35;
+    border-top: 1pt solid var(--k-table-rule); border-bottom: 1pt solid var(--k-table-rule);
+  }
+  th, td { padding: 0.3em 0.6em; text-align: left; vertical-align: middle; }
+  th { font-weight: bold; border-bottom: 0.5pt solid var(--k-table-head-rule); }
+  tbody tr + tr td { border-top: 0.3pt solid var(--k-line); }
+  .k-hl { background: var(--k-hl-line); }
+  .k-hl-second { background: var(--k-hl-second); }
+  .k-hl-third { background: var(--k-hl-third); }
+  .k-pitfalls td { width: 50%; vertical-align: top; }
+  .k-bad { color: var(--k-box-pitfall); }
+  .k-good { color: var(--k-box-example); }
+  /* Широкая таблица на телефоне прокручивается сама, а не страница. */
+  @media (max-width: 640px) { table { display: block; overflow-x: auto; } }
+}

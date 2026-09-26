@@ -27,7 +27,7 @@ fn visit(ctx: &mut Context<'_>, el: &mut HtmlElement) {
     el.attrs.push(*DATA_ANCHOR, anchor.as_str());
     // Класс k-hN — уровень оформления (глава, раздел, …), не тег.
     let level = class_level(el).or_else(|| tag_level(el)).unwrap_or(2);
-    ctx.headings.push(Heading { level, id, anchor, text });
+    ctx.headings.push(Heading { level, id, anchor, text, html: None });
 }
 
 fn is_heading(el: &HtmlElement) -> bool {

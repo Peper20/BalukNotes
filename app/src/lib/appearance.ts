@@ -1,8 +1,9 @@
 // Настройки вида — атрибутами и переменными на <html>; правила — в
-// baluk.css (вид заметки) и app.css (интерфейс). Новая настройка =
-// запись в notes-core::settings::Schema + строка здесь + CSS.
+// baluk.css (вид заметки, src/baluk-css/) и app.css (интерфейс). Как
+// применить настройку, говорит схема (`apply` у SettingDef, из
+// notes-core::settings): новая настройка = запись в схеме + CSS, без правок здесь.
 
-import type { SettingValues, Theme } from "./api";
+import type { SettingDef, SettingValues, Theme } from "./api";
 
 /** Тема по значению настройки: «auto» — первая тема нужной светлоты. */
 export function resolveTheme(value: unknown, themes: Theme[], systemDark: boolean): string {
@@ -20,15 +21,14 @@ export function nextTheme(shown: string, themes: Theme[]): string {
   return themes[(i + 1) % themes.length]?.name ?? shown;
 }
 
-export function applyAppearance(root: HTMLElement, v: SettingValues, theme: string): void {
+/** Применить настройки вида по схеме (`apply`) и тему. */
+export function applyAppearance(root: HTMLElement, defs: readonly SettingDef[], v: SettingValues, theme: string): void {
   root.dataset.theme = theme;
-  root.style.setProperty("--k-size", `${v["appearance.font_size"]}px`);
-  root.style.setProperty("--k-measure", `${v["appearance.measure"]}em`);
-  root.dataset.numbering = String(v["headings.numbering"]);
-  root.dataset.chapters = String(v["headings.chapters"]);
-  for (const part of ["title", "kind", "description", "byline", "tags"]) {
-    root.dataset[`header${part[0]!.toUpperCase()}${part.slice(1)}`] = String(v[`header.${part}`]);
+  for (const def of defs) {
+    const apply = def.apply;
+    const value = v[def.key] ?? def.default;
+    if (!apply) continue;
+    if (apply.to === "attr") root.setAttribute(apply.name, String(value));
+    else root.style.setProperty(apply.name, `${String(value)}${apply.unit}`);
   }
-  root.dataset.toc = String(v["panels.toc"]);
-  root.dataset.backlinks = String(v["panels.backlinks"]);
 }

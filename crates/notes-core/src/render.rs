@@ -32,6 +32,11 @@ pub struct Heading {
     /// Слаг текста заголовка — по нему ссылка находит раздел.
     pub anchor: String,
     pub text: String,
+    /// HTML заголовка для оглавления (формулы, выделение) — без номера и
+    /// ссылок; `None` — заголовок из одного текста (`passes::heading_html`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub html: Option<String>,
 }
 
 /// Ссылка из заметки, как она написана в `#see(…)`.

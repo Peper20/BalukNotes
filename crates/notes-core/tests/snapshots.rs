@@ -86,6 +86,9 @@ fn snapshot(page: &NotePage) -> String {
     s.push_str("headings:\n");
     for h in &r.headings {
         let _ = writeln!(s, "  {} #{} [{}] {}", h.level, h.id, h.anchor, h.text);
+        if let Some(html) = &h.html {
+            let _ = writeln!(s, "    html: {html}");
+        }
     }
     s.push_str("links:\n");
     for l in &r.links {

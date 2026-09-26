@@ -20,6 +20,7 @@
 mod anchors;
 mod code_colors;
 mod fences;
+mod heading_html;
 mod links;
 mod tags;
 mod themes;
@@ -35,7 +36,7 @@ use crate::render::{Heading, LinkRef, LinkResolver, Rendered, walk_mut};
 pub const TREE: &[TreePass] = &[themes::PASS, anchors::PASS, links::PASS, fences::PASS, tags::PASS];
 
 /// Проходы по тексту сырой страницы — по порядку.
-pub const TEXT: &[TextPass] = &[code_colors::PASS];
+pub const TEXT: &[TextPass] = &[code_colors::PASS, heading_html::PASS];
 
 /// Проход по дереву: `visit` вызывается для каждого элемента (сначала
 /// родитель, потом дети — уже после его правки).

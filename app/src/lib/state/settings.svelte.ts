@@ -52,7 +52,7 @@ class Settings {
   }
 
   apply(root: HTMLElement): void {
-    applyAppearance(root, this.values, this.theme);
+    applyAppearance(root, this.schema?.settings ?? [], this.values, this.theme);
   }
 }
 

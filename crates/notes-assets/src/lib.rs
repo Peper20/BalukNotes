@@ -36,3 +36,13 @@ pub fn index_html() -> Option<File> {
 pub fn asset(path: &str) -> Option<File> {
     get(&format!("assets/{path}"))
 }
+
+/// Имена файлов `assets/`, начинающихся с `prefix` (части скрипта сайта
+/// `static*.js`), по алфавиту.
+pub fn asset_names(prefix: &str) -> Vec<String> {
+    let mut names: Vec<String> = Dist::iter()
+        .filter_map(|p| p.strip_prefix("assets/").filter(|n| n.starts_with(prefix)).map(str::to_owned))
+        .collect();
+    names.sort();
+    names
+}
