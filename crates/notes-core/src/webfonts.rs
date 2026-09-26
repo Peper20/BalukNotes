@@ -14,9 +14,10 @@
 //! строит `fontcull` (порт hb-subset), а он не умеет CFF и `MATH`. Такие
 //! шрифты (New Computer Modern Math) отдаются целиком — но тоже в WOFF2.
 //!
-//! Кодировщик WOFF2 здесь свой и простой: таблицы без преобразований (так
-//! можно — версия преобразования «null»), общий поток brotli. Преобразование
-//! `glyf` дало бы ещё ~10 %, но для него нужен разбор контуров.
+//! WOFF2 шрифтов TrueType (`glyf`) — `ttf2woff2`, с преобразованием `glyf` и
+//! `loca` из спецификации: на ~11 % меньше, чем без него (замер —
+//! `docs/research/E3.md`). Для прочих (CFF) — свой простой кодировщик:
+//! таблицы без преобразований (версия «null»), общий поток brotli.
 
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write as _;
@@ -55,7 +56,7 @@ const MARKS: (u32, u32) = (0x0300, 0x036F);
 /// Версия кодировщика для кэша частей на диске ([`chunk_key`]): менять при
 /// любом изменении того, как часть превращается в байты (подмножество,
 /// WOFF2, brotli).
-const ENCODER: u64 = 1;
+const ENCODER: u64 = 2;
 
 /// Часть шрифта для браузера.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -223,8 +224,20 @@ fn base128(out: &mut Vec<u8>, mut v: u32) {
     }
 }
 
-/// Шрифт TrueType/CFF → WOFF2 без преобразований таблиц. `None` — не sfnt.
+/// Шрифт → WOFF2. TrueType — с преобразованием `glyf` (`ttf2woff2`), прочие
+/// (и если `ttf2woff2` не справился) — без преобразований. `None` — не sfnt.
 pub fn woff2(font: &[u8]) -> Option<Vec<u8>> {
+    let tables = table_records(font)?;
+    if tables.iter().any(|t| &t.tag == b"glyf")
+        && let Ok(w) = ttf2woff2::encode(font, ttf2woff2::BrotliQuality::from(11))
+    {
+        return Some(w);
+    }
+    woff2_plain(font)
+}
+
+/// Шрифт TrueType/CFF → WOFF2 без преобразований таблиц. `None` — не sfnt.
+fn woff2_plain(font: &[u8]) -> Option<Vec<u8>> {
     let mut tables = table_records(font)?;
     // Порядок в каталоге = порядок в потоке; `loca` — после `glyf` (по тегам так и есть).
     tables.sort_by_key(|t| t.tag);
@@ -279,7 +292,8 @@ mod tests {
 
     const GENTIUM: &[u8] = include_bytes!("../../../fonts/GentiumPlus-Regular.ttf");
 
-    /// Обратно из WOFF2 (только без преобразований): тег → данные таблицы.
+    /// Обратно из WOFF2: тег → данные таблицы (у преобразованных `glyf` и
+    /// `loca` — как в потоке, преобразованные).
     fn decode(w: &[u8]) -> Vec<([u8; 4], Vec<u8>)> {
         assert_eq!(&w[..4], b"wOF2");
         assert_eq!(be_u32(w, 8).unwrap() as usize, w.len());
@@ -297,17 +311,25 @@ mod tests {
             } else {
                 *KNOWN_TAGS[usize::from(flags & 63)]
             };
-            let mut len = 0u32;
-            loop {
-                let b = w[at];
-                at += 1;
-                len = (len << 7) | u32::from(b & 0x7F);
-                if b & 0x80 == 0 {
-                    break;
+            let mut read = || {
+                let mut len = 0u32;
+                loop {
+                    let b = w[at];
+                    at += 1;
+                    len = (len << 7) | u32::from(b & 0x7F);
+                    if b & 0x80 == 0 {
+                        return len;
+                    }
                 }
-            }
+            };
+            let mut len = read();
+            let glyf_loca = &tag == b"glyf" || &tag == b"loca";
             let transform = flags >> 6;
-            assert_eq!(transform, if &tag == b"glyf" || &tag == b"loca" { 3 } else { 0 }, "без преобразований");
+            if glyf_loca && transform == 0 {
+                len = read(); // преобразованная: в потоке — transformLength
+            } else {
+                assert_eq!(transform, if glyf_loca { 3 } else { 0 }, "других преобразований нет");
+            }
             entries.push((tag, len as usize));
         }
         let mut stream = Vec::new();
@@ -324,7 +346,7 @@ mod tests {
 
     #[test]
     fn woff2_keeps_every_table() {
-        let w = woff2(GENTIUM).unwrap();
+        let w = woff2_plain(GENTIUM).unwrap();
         assert!(w.len() < GENTIUM.len() / 2, "сжатие: {} из {}", w.len(), GENTIUM.len());
         let tables = decode(&w);
         let original = table_records(GENTIUM).unwrap();
@@ -333,6 +355,42 @@ mod tests {
             let (_, data) = tables.iter().find(|(tag, _)| *tag == t.tag).unwrap();
             assert_eq!(data.as_slice(), &GENTIUM[t.offset..t.offset + t.length]);
         }
+    }
+
+    /// TrueType — с преобразованием `glyf` и `loca`: меньше, чем без него.
+    #[test]
+    fn truetype_woff2_transforms_glyf() {
+        let w = woff2(GENTIUM).unwrap();
+        let plain = woff2_plain(GENTIUM).unwrap();
+        assert!(w.len() * 100 < plain.len() * 95, "с преобразованием {} Б, без {} Б", w.len(), plain.len());
+        assert_eq!(&w[..4], b"wOF2");
+        // Каталог: у glyf (10) и loca (11) версия преобразования 0 — «преобразована».
+        let n = usize::from(be_u16(&w, 12).unwrap());
+        let mut at = 48;
+        let mut transformed = Vec::new();
+        for _ in 0..n {
+            let flags = w[at];
+            at += 1;
+            if flags & 63 == 63 {
+                at += 4;
+            }
+            let tag = flags & 63;
+            let null = flags >> 6 == 3;
+            // длина: base128; у преобразованных glyf/loca — ещё transformLength
+            let mut lengths = 1;
+            if (tag == 10 || tag == 11) && !null {
+                lengths = 2;
+                transformed.push(tag);
+            }
+            for _ in 0..lengths {
+                while w[at] & 0x80 != 0 {
+                    at += 1;
+                }
+                at += 1;
+            }
+        }
+        transformed.sort_unstable();
+        assert_eq!(transformed, [10, 11]);
     }
 
     #[test]

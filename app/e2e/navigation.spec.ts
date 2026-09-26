@@ -122,7 +122,7 @@ test("ошибка и предупреждения сборки", async ({ page 
   await open(page, "Особые случаи/Ошибка компиляции");
   await expect(page.locator("#problems .errors")).toContainText("unknown variable: no-such-function");
   await open(page, "Особые случаи/Предупреждение");
-  await expect(page.locator("#problems summary")).toHaveText("Предупреждения: 2");
+  await expect(page.locator("#problems summary")).toHaveText("Предупреждения: 3");
 });
 
 test("несуществующая заметка", async ({ page }) => {

@@ -6,7 +6,7 @@
 #import "code.typ": tm-theme, code-theme
 #import "blocks.typ": small-caps
 #import "web.typ": is-web, elem, frame
-#import "i18n.typ": word
+#import "i18n.typ": word, _own-words, _check-words
 
 // ── Мелочи ────────────────────────────────────────────────────────────────
 #let _margin-left(theme) = theme.page.margin.at("left", default: theme.page.margin.at("x", default: 2cm))
@@ -143,6 +143,21 @@
   n => numbering("1.1", counter(heading).get().first(), n)
 }
 
+/// Первое семейство шрифта из `text.font` (строка, массив, словарь с `name`).
+#let _family(font) = {
+  let first = if type(font) == array { font.first() } else { font }
+  if type(first) == dictionary { first.name } else { first }
+}
+
+/// Длина Typst (pt, em или их сумма) → длина CSS.
+#let _css-length(len) = {
+  let num(x) = str(calc.round(x, digits: 4)).replace("−", "-")
+  let parts = ()
+  if len.em != 0 { parts.push(num(len.em) + "em") }
+  if len.abs != 0pt or parts.len() == 0 { parts.push(num(len.abs.pt()) + "pt") }
+  if parts.len() == 1 { parts.first() } else { "calc(" + parts.join(" + ") + ")" }
+}
+
 #let _web-template(theme, doc-kind, kind, title, subtitle, author, date, description, tags, body) = {
   // Шрифт, кегль и цвет в HTML-разметку не попадают (их задаёт CSS), но их
   // наследуют рисунки: html.frame верстается как страница PDF. Без этого
@@ -197,6 +212,19 @@
   show grid: it => context if is-web() { frame(it, kind: "layout") } else { it }
   show stack: it => context if is-web() { frame(it, kind: "layout") } else { it }
   show place: it => context if is-web() { frame(it.body, kind: "layout") } else { it }
+  // Отступы `h`/`v` HTML-экспорт выбрасывает (с предупреждением). Абсолютная
+  // величина (pt, em и их сумма) — пустой элемент с отступом: размер —
+  // переменной `--k-h`/`--k-v`, правило — в CSS. Доли (`1fr`) и проценты
+  // без страницы смысла не имеют — остаются как есть (и предупреждение).
+  // В формулах `h` (и `quad`, `thin`) Typst сам делает `<mspace>` — их не
+  // трогаем: внутри формулы шрифт — математический темы.
+  let math-font = lower(_family(theme.font.math))
+  show h: it => context if is-web() and type(it.amount) == length and lower(_family(text.font)) != math-font {
+    elem("span", "k-h", ..("style": "--k-h: " + _css-length(it.amount)), [])
+  } else { it }
+  show v: it => context if is-web() and type(it.amount) == length {
+    elem("div", "k-v", ..("style": "--k-v: " + _css-length(it.amount)), [])
+  } else { it }
 
   // Весь документ — в <article data-doc>: по виду документа (а не по месту
   // файла в хранилище) CSS решает, показывать ли номера и «Главу N».
@@ -358,12 +386,14 @@
   themes.at(name)
 }
 
-#let _document(doc-kind, theme, lang, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body) = {
+#let _document(doc-kind, theme, lang, words, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body) = {
   assert(type(lang) == str, message: "lang — код языка строкой, например \"en\"")
   let theme = if theme == auto { _theme-from-input() } else { theme }
   set text(lang: lang)
   _theme-state.update(theme)
   _doc-kind.update(doc-kind)
+  // Без своих слов состояние не трогаем: документ тот же, что и без `words:`.
+  if _check-words(words) != (:) { _own-words.update(words) }
 
   set document(title: title, author: if author == none { () } else if type(author) == str { author } else { () })
   show: it => context {
@@ -381,6 +411,7 @@
 /// #show: book.with(
 ///   theme: auto,              // auto — из --input theme=…; или themes.night, своя
 ///   lang: "ru",               // язык: слова оформления («Глава», «Рис.») и переносы
+///   words: (:),               // свои слова поверх словаря: (chapter: "Kapitel", figure: "Abb.")
 ///   kind: auto,               // надпись над названием (auto — «Конспект»): Задачник, Шпаргалка…
 ///   title: [...], subtitle: [...], author: [...], date: [...],
 ///   description: [...],          // 2–3 фразы на титул: для кого и как читать
@@ -389,6 +420,7 @@
 #let book(
   theme: auto,
   lang: "ru",
+  words: (:),
   kind: auto,
   title: none,
   subtitle: none,
@@ -400,7 +432,7 @@
   toc: true,
   depth: 2,
   body,
-) = _document("book", theme, lang, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body)
+) = _document("book", theme, lang, words, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body)
 
 /// Заметка — одна тема целиком: `=` — раздел, нумерация сквозная.
 ///   #import "/_baluk/lib.typ": *
@@ -408,8 +440,9 @@
 #let note(
   theme: auto,
   lang: "ru",
+  words: (:),
   title: none,
   description: none,
   tags: (),
   body,
-) = _document("note", theme, lang, none, title, none, none, none, description, tags, false, false, 2, body)
+) = _document("note", theme, lang, words, none, title, none, none, none, description, tags, false, false, 2, body)

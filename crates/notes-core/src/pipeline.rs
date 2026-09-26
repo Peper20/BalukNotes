@@ -88,7 +88,7 @@ impl TypstPipeline {
                 continue;
             }
             let Ok(text) = self.vault.read_text(path) else { continue };
-            for l in crate::lint::lint(&text) {
+            for l in crate::lint::lint(&text, self.themes.languages()) {
                 let (line, column) = crate::lint::line_column(&text, l.offset);
                 out.push(Diagnostic::warning_at(l.message, format!("/{path}"), line, column, l.hint));
             }
