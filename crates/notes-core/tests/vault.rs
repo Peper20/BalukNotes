@@ -166,7 +166,19 @@ fn swallowed_semicolon_is_a_warning() {
     let page = NOTES.page(&id("Особые случаи/Предупреждение"), OPTS).unwrap();
     let lint = page.warnings.iter().find(|w| w.message.contains("«;»")).expect("предупреждение о «;»");
     assert_eq!(lint.file.as_deref(), Some("/Особые случаи/Предупреждение.typ"));
-    assert_eq!(lint.line, Some(8));
+    assert_eq!(lint.line, Some(15));
+}
+
+#[test]
+fn lang_without_dictionary_is_a_warning() {
+    let page = NOTES.page(&id("Особые случаи/Предупреждение"), OPTS).unwrap();
+    let lint =
+        page.warnings.iter().find(|w| w.message.contains("нет слов оформления")).expect("предупреждение о языке");
+    assert_eq!((lint.line, lint.column), (Some(3), Some(18)), "место — аргумент lang:");
+    // Свои слова — не предупреждение.
+    let own = NOTES.page(&id("Особые случаи/Свои слова"), OPTS).unwrap();
+    assert!(own.warnings.is_empty(), "{:?}", own.warnings);
+    assert!(own.rendered.as_ref().unwrap().body.contains("Abb. 1."));
 }
 
 #[test]
