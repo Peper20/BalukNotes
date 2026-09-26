@@ -6,6 +6,10 @@
 //! регистра, «ё» = «е»). Вес: название > заголовок раздела > число вхождений в
 //! тексте. Результат — раздел заметки (ссылка ведёт к нему) и фрагмент текста
 //! с отмеченными совпадениями.
+//!
+//! Поиск в одной заметке ([`search_in`], «в этой книге» палитры) — все
+//! подходящие разделы по порядку текста: браузерный Ctrl+F видит только
+//! показанную главу книги.
 
 use std::collections::HashSet;
 
@@ -47,12 +51,31 @@ pub struct Fragment {
 }
 
 pub fn search(snap: &Snapshot, query: &str, limit: usize) -> Vec<SearchHit> {
+    let mut hits = scoped(snap, query, None);
+    hits.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.title.cmp(&b.title)));
+    hits.truncate(limit);
+    hits
+}
+
+/// Поиск в одной заметке (книге): все подходящие разделы по порядку текста.
+pub fn search_in(snap: &Snapshot, id: &NoteId, query: &str, limit: usize) -> Vec<SearchHit> {
+    let mut hits = scoped(snap, query, Some(id));
+    hits.truncate(limit);
+    hits
+}
+
+/// Разделы, где нашлись все слова: у каждой заметки — лучшие [`PER_NOTE`];
+/// с `only` — только она, все разделы по порядку.
+fn scoped(snap: &Snapshot, query: &str, only: Option<&NoteId>) -> Vec<SearchHit> {
     let words: Vec<Vec<char>> = query.split_whitespace().map(|w| w.chars().map(fold).collect()).collect();
     if words.is_empty() {
         return Vec::new();
     }
     let mut hits = Vec::new();
     for (entry, outline) in snap.outlines() {
+        if only.is_some_and(|id| *id != entry.id) {
+            continue;
+        }
         let title = outline.title.clone().unwrap_or_else(|| entry.id.name().to_owned());
         let head: Vec<char> = format!("{title} {}", entry.id).chars().map(fold).collect();
         let mut own: Vec<SearchHit> = Vec::new();
@@ -62,16 +85,16 @@ pub fn search(snap: &Snapshot, query: &str, limit: usize) -> Vec<SearchHit> {
                 own.push(hit);
             }
         }
-        own.sort_by_key(|h| std::cmp::Reverse(h.score));
         // Совпало только название — одна строка на заметку, а не по разделу.
         if own.iter().all(|h| h.snippet.iter().all(|f| !f.hit)) {
             own.truncate(1);
         }
-        own.truncate(PER_NOTE);
+        if only.is_none() {
+            own.sort_by_key(|h| std::cmp::Reverse(h.score));
+            own.truncate(PER_NOTE);
+        }
         hits.extend(own);
     }
-    hits.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.title.cmp(&b.title)));
-    hits.truncate(limit);
     hits
 }
 

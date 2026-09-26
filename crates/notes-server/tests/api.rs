@@ -197,6 +197,15 @@ async fn search_preview_and_note_meta() {
     assert_eq!(hits[0]["id"], "Книга");
     assert_eq!(hits[0]["anchor"], "Итоги-2");
 
+    // В одной книге — все разделы по порядку.
+    let (status, inside) =
+        call(app.clone(), "GET", &format!("/api/search?q={}&note={}", uri("итоги"), uri("Книга")), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(inside.as_array().unwrap().iter().all(|h| h["id"] == "Книга"));
+    let q = format!("/api/search?q=x&note={}", uri("Нет/такой"));
+    assert_eq!(call(app.clone(), "GET", &q, None).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(call(app.clone(), "GET", "/api/search?q=x&note=../x", None).await.0, StatusCode::BAD_REQUEST);
+
     let (status, p) =
         call(app.clone(), "GET", &format!("{}?anchor={}", uri("/api/preview/Сеть/SSH"), uri("Смена порта")), None)
             .await;

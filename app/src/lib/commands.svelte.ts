@@ -57,6 +57,13 @@ export function commands(): Command[] {
   const list: Command[] = [
     { id: "open", group: "Переход", title: "Быстрый переход к заметке", keys: keys("Ctrl+KeyO", "Ctrl+KeyP"), run: () => ui.openPalette("") },
     { id: "search", group: "Переход", title: "Поиск по тексту всех заметок", keys: keys("Ctrl+Shift+KeyF"), run: () => ui.openPalette("/") },
+    {
+      id: "search-book",
+      group: "Переход",
+      title: "Поиск в этой книге",
+      available: () => router.currentNote?.kind === "book",
+      run: () => ui.openPalette("", router.currentId),
+    },
     { id: "commands", group: "Переход", title: "Команды", keys: keys("Ctrl+KeyK"), run: () => ui.openPalette(">") },
     { id: "home", group: "Переход", title: "Главная: граф и все заметки", keys: keys("KeyH"), run: () => router.go("/") },
     { id: "tags", group: "Переход", title: "Теги", run: () => router.go(tagHref()) },

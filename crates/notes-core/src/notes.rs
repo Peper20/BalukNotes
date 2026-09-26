@@ -157,6 +157,15 @@ impl Notes {
         Ok(crate::search::search(&self.index()?, query, limit))
     }
 
+    /// Поиск в одной заметке (книге): все разделы по порядку текста.
+    pub fn search_in(&self, id: &NoteId, query: &str, limit: usize) -> Result<Vec<crate::search::SearchHit>> {
+        let index = self.index()?;
+        if !index.exists(id.as_str()) {
+            return Err(Error::NotFound(id.to_string()));
+        }
+        Ok(crate::search::search_in(&index, id, query, limit))
+    }
+
     /// Страница заметки для сервера: из кэша, если её файлы не менялись
     /// (см. [`Pages::page`]).
     pub fn page(&self, id: &NoteId, opts: FigureOptions) -> Result<Arc<NotePage>> {

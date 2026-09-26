@@ -1,8 +1,10 @@
-//! Поиск по тексту всех заметок.
+//! Поиск по тексту всех заметок (`?q=&limit=`) или одной (`&note=<путь>` —
+//! «в этой книге»: все разделы по порядку текста).
 
 use axum::extract::{Query, State};
 use axum::routing::get;
 use axum::{Json, Router};
+use notes_core::NoteId;
 use notes_core::search::SearchHit;
 
 use crate::AppState;
@@ -16,10 +18,18 @@ pub(crate) fn routes() -> Router<AppState> {
 struct SearchQuery {
     q: String,
     limit: Option<usize>,
+    note: Option<String>,
 }
 
 async fn search(State(s): State<AppState>, Query(q): Query<SearchQuery>) -> ApiResult<Json<Vec<SearchHit>>> {
     let notes = s.notes.clone();
     let limit = q.limit.unwrap_or(30).min(200);
-    Ok(Json(blocking(move || notes.search(&q.q, limit)).await?))
+    let note = q.note.as_deref().map(NoteId::new).transpose()?;
+    Ok(Json(
+        blocking(move || match &note {
+            Some(id) => notes.search_in(id, &q.q, limit),
+            None => notes.search(&q.q, limit),
+        })
+        .await?,
+    ))
 }

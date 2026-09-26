@@ -323,6 +323,20 @@ fn search_finds_sections_with_exact_anchors() {
 }
 
 #[test]
+fn search_in_book_lists_all_sections_in_text_order() {
+    let book = id("Книга");
+    let all = NOTES.search("итоги", 50).unwrap();
+    let inside = NOTES.search_in(&book, "итоги", 50).unwrap();
+    assert!(inside.iter().all(|h| h.id == book), "только эта книга");
+    assert!(inside.len() >= all.iter().filter(|h| h.id == book).count(), "не меньше, чем в общем поиске");
+    let anchors: Vec<_> = inside.iter().filter_map(|h| h.anchor.as_deref()).collect();
+    let first = anchors.iter().position(|a| *a == "Итоги").unwrap();
+    let second = anchors.iter().position(|a| *a == "Итоги-2").unwrap();
+    assert!(first < second, "по порядку текста: {anchors:?}");
+    assert!(NOTES.search_in(&id("Нет такой"), "итоги", 5).is_err());
+}
+
+#[test]
 fn computed_links_come_from_built_pages() {
     let notes = Notes::open(&NotesConfig {
         vault: repo().join("tests/vault"),

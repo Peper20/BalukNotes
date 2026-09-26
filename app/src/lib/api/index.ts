@@ -95,8 +95,9 @@ export const api = {
   graph: () => request<Graph>("/api/graph"),
   /** Граф по фильтру, уже разложенный (фильтр и раскладка — в ядре). */
   graphLayout: (filter: Partial<GraphFilter> = {}) => request<GraphLayout>("/api/graph/layout", json("POST", filter)),
-  search: (q: string, signal?: AbortSignal, limit = 30) =>
-    request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`, { signal }),
+  /** Поиск по тексту всех заметок; с `note` — только в ней (все разделы по порядку). */
+  search: (q: string, signal?: AbortSignal, limit = 30, note?: string | null) =>
+    request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}${note ? `&note=${encodeURIComponent(note)}` : ""}`, { signal }),
   preview: (id: string, anchor?: string | null, signal?: AbortSignal) =>
     request<Preview>(`/api/preview/${encodeId(id)}${anchor ? `?anchor=${encodeURIComponent(anchor)}` : ""}`, { signal }),
   themes: () => request<Theme[]>("/api/themes"),
