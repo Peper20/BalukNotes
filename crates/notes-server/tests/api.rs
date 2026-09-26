@@ -178,3 +178,42 @@ async fn search_preview_and_note_meta() {
         "клиент или «не собран»"
     );
 }
+
+#[tokio::test]
+async fn book_by_chapters() {
+    let (app, _dir) = app();
+    let get = |q: &'static str| {
+        let app = app.clone();
+        async move { call(app, "GET", &format!("{}{q}", uri("/api/notes/Книга")), None).await }
+    };
+    let (status, whole) = get("").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(whole["book"].is_null(), "без chapter — целиком");
+    let whole_body = whole["rendered"]["body"].as_str().unwrap();
+    assert!(whole_body.contains("id=\"гл-основы\"") && whole_body.contains("id=\"Приложение\""));
+
+    let (status, second) = get("?chapter=1").await;
+    assert_eq!(status, StatusCode::OK);
+    let book = &second["book"];
+    assert_eq!(book["chapter"], 1);
+    let titles: Vec<_> = book["chapters"].as_array().unwrap().iter().map(|c| c["title"].as_str().unwrap()).collect();
+    assert_eq!(titles, ["Основы", "Продолжение", "Приложение"]);
+    assert_eq!(book["chapters"][2]["num"], "3");
+    assert_eq!(book["anchors"]["особый"], 1);
+    assert_eq!(book["anchors"]["Итоги-3"], 2);
+    let body = second["rendered"]["body"].as_str().unwrap();
+    assert!(body.contains("id=\"Продолжение\"") && !body.contains("id=\"гл-основы\"") && !body.contains("k-title"));
+    assert_eq!(second["version"], whole["version"]);
+    assert_eq!(second["rendered"]["headings"], whole["rendered"]["headings"], "оглавление — всей книги");
+
+    // По якорю — его глава; неизвестный якорь — первая (с титулом).
+    let (_, by_anchor) = get("?anchor=%D0%98%D1%82%D0%BE%D0%B3%D0%B8-3").await;
+    assert_eq!(by_anchor["book"]["chapter"], 2);
+    let (_, unknown) = get("?anchor=nope").await;
+    assert_eq!(unknown["book"]["chapter"], 0);
+    assert!(unknown["rendered"]["body"].as_str().unwrap().contains("k-title"));
+
+    // Не книга — целиком и с chapter.
+    let (_, note) = call(app.clone(), "GET", &format!("{}?chapter=1", uri("/api/notes/Сеть/SSH")), None).await;
+    assert!(note["book"].is_null() && note["rendered"]["title"] == "SSH");
+}

@@ -66,6 +66,10 @@ pub struct NotePage {
     pub rendered: Option<Arc<Rendered>>,
     pub errors: Vec<Diagnostic>,
     pub warnings: Vec<Diagnostic>,
+    /// Книга по главам: какая глава в `rendered` и где остальные. Только у
+    /// ответа на запрос главы ([`crate::book::chapter_page`]); у страницы
+    /// целиком — `None`.
+    pub book: Option<crate::book::BookView>,
 }
 
 #[derive(Debug)]
@@ -206,6 +210,7 @@ impl Notes {
             rendered,
             errors: page.errors.clone(),
             warnings: page.warnings.clone(),
+            book: None,
         });
         self.cache.lock().insert(id.clone(), Cached { page: page.clone(), raw, opts, deps, files });
         Some(page)
@@ -223,6 +228,7 @@ impl Notes {
             rendered: Some(Arc::new(self.finish(&raw, opts))),
             errors: vec![],
             warnings: stored.warnings,
+            book: None,
         });
         let cached = Cached { page: page.clone(), raw: Some(raw), opts, deps: stored.deps, files: stored.files };
         self.cache.lock().insert(entry.id.clone(), cached);
@@ -276,6 +282,7 @@ impl Notes {
             rendered: None,
             errors,
             warnings,
+            book: None,
         };
         Built { page, rendered, raw, deps: compilation.deps, files }
     }

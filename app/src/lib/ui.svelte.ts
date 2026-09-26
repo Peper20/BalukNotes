@@ -1,11 +1,11 @@
 // Состояние интерфейса вокруг заметки: главы книги, оглавление, панели.
 
-import type { Book } from "./book";
+import type { BookView } from "./api";
 import { load, save } from "./storage";
 
 class Ui {
-  /** Показанная книга по главам (DOM глав — вне страницы) или null. */
-  book = $state.raw<Book | null>(null);
+  /** Показанная книга по главам (список глав и карта якорей — с сервера) или null. */
+  book = $state.raw<BookView | null>(null);
   chapter = $state(0);
   /** id заголовка, который сейчас читают (подсветка в оглавлении). */
   currentHeading = $state<string | null>(null);

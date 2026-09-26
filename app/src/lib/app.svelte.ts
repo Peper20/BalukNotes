@@ -1,14 +1,15 @@
 // Состояние клиента: маршрут, список заметок, показанная заметка, настройки.
 //
 // Сервер отдаёт готовый HTML заметки (/api/notes/…); клиент вставляет его и
-// применяет настройки вида атрибутами на <html>. Обновление — по кнопке и
+// применяет настройки вида атрибутами на <html>. Книгу (настройка
+// `books.pages`) сервер отдаёт по главе: `?chapter=N` или `?anchor=`. Обновление — по кнопке и
 // раз в N секунд сверкой версии (/api/version/… — дёшево: сервер ничего не
 // компилирует, если файлы не менялись).
 //
 // <html data-state="loading|ready">: заметка или главная дорисована. По нему
 // ждут tools/visual.mjs и e2e-тесты — договорённость для любого клиента.
 
-import { api, ApiError, type NoteListItem, type NotePage, type Schema, type SettingValues, type Theme } from "./api";
+import { api, ApiError, type ChapterSelect, type NoteListItem, type NotePage, type Schema, type SettingValues, type Theme } from "./api";
 import { applyAppearance, resolveTheme } from "./appearance";
 import { hashAnchor, noteHref, parseRoute, type Route } from "./ids";
 import { load, save } from "./storage";
@@ -214,8 +215,11 @@ class App {
    * Показать заметку. Большая заметка собирается секунды; если за это время
    * выбрали другую, прежний запрос отменяется, а его ответ (если успел)
    * отбрасывается — иначе клиент «перепрыгнул» бы назад.
+   *
+   * `chapter` и `scroll` — перейти к главе книги (она уже собрана: ответ —
+   * из кэша сервера) и как её прокрутить.
    */
-  async load(id: string, { keepScroll = false } = {}): Promise<void> {
+  async load(id: string, { keepScroll = false, chapter, scroll }: { keepScroll?: boolean; chapter?: number; scroll?: ScrollIntent } = {}): Promise<void> {
     this.#cancel();
     const ctrl = new AbortController();
     this.#ctrl = ctrl;
@@ -232,19 +236,21 @@ class App {
     document.documentElement.dataset.state = "loading";
     this.#setStatus("собираю…", true);
     document.title = `${this.currentNote?.name ?? id} — Заметки`;
+    const place = this.#place;
+    this.#place = null;
     try {
-      const page = await api.note(id, ctrl.signal);
+      const page = await api.note(id, ctrl.signal, this.#chapterSelect({ keepScroll, chapter, place }));
       if (this.#ctrl !== ctrl) return;
       this.#version = page.version;
-      const place = this.#place;
-      this.#place = null;
-      this.scroll = keepScroll
-        ? { mode: "keep", y: scrollY, chapter: this.chapter }
-        : this.anchor
-          ? { mode: "anchor" }
-          : place
-            ? { mode: "keep", ...place }
-            : { mode: "top" };
+      this.scroll =
+        scroll ??
+        (keepScroll
+          ? { mode: "keep", y: scrollY, chapter: this.chapter }
+          : this.anchor
+            ? { mode: "anchor" }
+            : place
+              ? { mode: "keep", ...place }
+              : { mode: "top" });
       this.page = page;
       this.recent = [id, ...this.recent.filter((r) => r !== id)].slice(0, MAX_RECENT);
       save("k-recent", this.recent);
@@ -266,6 +272,20 @@ class App {
         this.pending = null;
       }
     }
+  }
+
+  /** Какую главу просить у сервера (не книга — сервер отдаст целиком). */
+  #chapterSelect({ keepScroll, chapter, place }: { keepScroll: boolean; chapter?: number; place: Place | null }): ChapterSelect {
+    if (this.settings["books.pages"] !== "chapters") return {};
+    if (chapter != null) return { chapter };
+    if (keepScroll && this.chapter != null) return { chapter: this.chapter };
+    if (this.anchor) return { anchor: this.anchor };
+    return { chapter: place?.chapter ?? 0 };
+  }
+
+  /** Перейти к главе показанной книги. */
+  showChapter(chapter: number, scroll: ScrollIntent): void {
+    if (this.currentId) void this.load(this.currentId, { chapter, scroll });
   }
 
   #setStatus(text: string, busy = false): void {

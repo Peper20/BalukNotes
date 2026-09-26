@@ -12,6 +12,8 @@ import type { SettingsResponse } from "./types/SettingsResponse";
 import type { Theme } from "./types/Theme";
 import type { VersionResponse } from "./types/VersionResponse";
 
+export type { BookView } from "./types/BookView";
+export type { Chapter } from "./types/Chapter";
 export type { Diagnostic } from "./types/Diagnostic";
 export type { Graph } from "./types/Graph";
 export type { Heading } from "./types/Heading";
@@ -24,6 +26,12 @@ export type { SearchHit } from "./types/SearchHit";
 export type { Schema } from "./types/Schema";
 export type { SettingDef } from "./types/SettingDef";
 export type { Theme } from "./types/Theme";
+
+/** Какую главу книги запросить: по номеру или ту, где якорь. */
+export interface ChapterSelect {
+  chapter?: number | null;
+  anchor?: string | null;
+}
 
 /** Значения настроек: ключ → число, строка или флаг. */
 export type SettingValues = SettingsResponse["values"];
@@ -50,7 +58,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   notes: () => request<NoteListItem[]>("/api/notes"),
-  note: (id: string, signal?: AbortSignal) => request<NotePage>(`/api/notes/${encodeId(id)}`, { signal }),
+  /** Заметка; с `chapter` или `anchor` книга приходит одной главой. */
+  note: (id: string, signal?: AbortSignal, select: ChapterSelect = {}) => {
+    const q = select.chapter != null ? `?chapter=${select.chapter}` : select.anchor != null ? `?anchor=${encodeURIComponent(select.anchor)}` : "";
+    return request<NotePage>(`/api/notes/${encodeId(id)}${q}`, { signal });
+  },
   version: (id: string) => request<VersionResponse>(`/api/version/${encodeId(id)}`),
   links: (id: string) => request<LinksResponse>(`/api/links/${encodeId(id)}`),
   graph: () => request<Graph>("/api/graph"),

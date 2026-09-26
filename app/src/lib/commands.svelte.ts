@@ -25,7 +25,7 @@ const hasBook = () => ui.book != null;
 function chapter(delta: number) {
   const book = ui.book;
   const target = book?.chapters[ui.chapter + delta];
-  if (target) app.go(`#${encodeURIComponent(target.heading.id)}`);
+  if (target) app.go(`#${encodeURIComponent(target.id)}`);
 }
 
 function fontSize(delta: number) {

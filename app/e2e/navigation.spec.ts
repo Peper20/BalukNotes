@@ -47,6 +47,33 @@ test("главы книги: следующая, предыдущая, огла�
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Основы/);
 });
 
+test("главу книги отдаёт сервер: в странице одна глава, перезагрузка — та же глава", async ({ page }) => {
+  const requested: string[] = [];
+  page.on("request", (r) => {
+    const url = new URL(r.url());
+    if (url.pathname.startsWith("/api/notes/")) requested.push(decodeURIComponent(url.pathname + url.search));
+  });
+  await open(page, "Книга");
+  await expect(page.locator("#note h2.k-h1")).toHaveCount(1);
+  await expect(page.locator("#note .k-title")).toBeAttached();
+  await page.keyboard.press("BracketRight");
+  await ready(page);
+  await expect(page.locator("#note h2.k-h1")).toHaveText(/Продолжение/);
+  await expect(page.locator("#note h2.k-h1")).toHaveCount(1);
+  await expect(page.locator("#note .k-title")).not.toBeAttached();
+  expect(requested).toContain("/api/notes/Книга?chapter=1");
+
+  // Оглавление — всей книги; пункт из другой главы грузит её.
+  await page.locator(".toc a", { hasText: "Картинка из файла" }).first().dispatchEvent("click");
+  await ready(page);
+  await expect(page.locator("#Картинка-из-файла")).toBeInViewport();
+
+  await page.reload();
+  await ready(page);
+  await expect(page.locator("#note h2.k-h1")).toHaveText(/Приложение/);
+  expect(requested.at(-1)).toBe("/api/notes/Книга?anchor=Картинка-из-файла");
+});
+
 test("имена с + # % и глубокая вложенность", async ({ page }) => {
   await open(page, "Особые случаи/Ссылки");
   for (const name of ["C++ и C#", "50% готово", "Дно"]) {

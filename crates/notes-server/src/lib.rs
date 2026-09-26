@@ -15,6 +15,7 @@
 //! | `GET /assets/{*path}`        | файлы клиента (сборка `app/dist/assets`)     |
 //! | `GET /api/notes`             | список заметок и книг                        |
 //! | `GET /api/notes/{*id}`       | заметка: HTML, заголовки, ссылки, ошибки     |
+//! | `…?chapter=N`, `…?anchor=`   | книга — одной главой (N-й или с якорем)      |
 //! | `GET /api/version/{*id}`     | версия заметки — дёшево, без компиляции      |
 //! | `GET /api/links/{*id}`       | ссылки заметки и обратные ссылки на неё      |
 //! | `GET /api/graph`             | граф заметок: узлы и рёбра                   |
@@ -38,6 +39,7 @@ use axum::http::{StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
+use notes_core::book::{Select, chapter_page};
 use notes_core::fonts::WebVariant;
 use notes_core::graph::Graph;
 use notes_core::search::{Preview, SearchHit};
@@ -222,10 +224,24 @@ async fn search(State(s): State<AppState>, Query(q): Query<SearchQuery>) -> ApiR
     Ok(Json(blocking(move || notes.search(&q.q, limit)).await?))
 }
 
-async fn note(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Response> {
+#[derive(Debug, serde::Deserialize)]
+struct NoteQuery {
+    chapter: Option<usize>,
+    anchor: Option<String>,
+}
+
+/// Заметка. С `chapter` или `anchor` книга приходит одной главой (с
+/// оглавлением книги в `book`); не книга — целиком, как без них.
+async fn note(State(s): State<AppState>, Path(id): Path<String>, Query(q): Query<NoteQuery>) -> ApiResult<Response> {
     let id = NoteId::new(id)?;
     let (notes, opts) = (s.notes.clone(), s.settings.figure_options());
-    let page = blocking(move || notes.page(&id, opts)).await?;
+    let by_chapter = q.chapter.is_some() || q.anchor.is_some();
+    let page = blocking(move || {
+        let page = notes.page(&id, opts)?;
+        let select = Select { chapter: q.chapter, anchor: q.anchor.as_deref() };
+        Ok(if by_chapter { chapter_page(&page, select).map(Arc::new) } else { None }.unwrap_or(page))
+    })
+    .await?;
     Ok(Json(page).into_response())
 }
 

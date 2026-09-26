@@ -8,7 +8,7 @@
 </script>
 
 {#snippet link(c: NonNullable<typeof prev>, cls: string, label: string)}
-  <a class={cls} href="#{encodeURIComponent(c.heading.id)}">
+  <a class={cls} href="#{encodeURIComponent(c.id)}">
     <small>{label}</small>{c.num ? `${c.num}. ` : ""}{c.title}
   </a>
 {/snippet}

@@ -1,12 +1,11 @@
 <!--
-  Заметка: вставка готового HTML с сервера (у книги — одной главы), прокрутка
-  к якорю, переход между главами. HTML заметки большой и чужой — вставляется
+  Заметка: вставка готового HTML с сервера (у книги — одной главы: главы режет
+  сервер), прокрутка к якорю, переход между главами. HTML заметки большой и чужой — вставляется
   напрямую в DOM, а не шаблоном Svelte.
 -->
 <script lang="ts">
   import { untrack } from "svelte";
   import { app } from "../lib/app.svelte";
-  import { showChapter, splitBook } from "../lib/book";
   import type { NotePage } from "../lib/api";
   import { tagHref } from "../lib/ids";
   import { ui } from "../lib/ui.svelte";
@@ -32,27 +31,20 @@
       // «Назад» к месту без якоря — туда, где были; иначе — к началу.
       const place = app.restore;
       app.restore = null;
-      if (ui.book) setChapter(place?.chapter ?? 0);
-      scrollTo(0, place?.y ?? 0);
+      const chapter = place?.chapter ?? 0;
+      if (ui.book && chapter !== ui.chapter) app.showChapter(chapter, { mode: "keep", y: place?.y ?? 0, chapter });
+      else scrollTo(0, place?.y ?? 0);
     });
   });
 
   function render(page: NotePage, el: HTMLDivElement) {
     const r = page.rendered;
-    const html = r ? r.styles + r.body : "";
     const intent = app.scroll;
-    const book = r && app.settings["books.pages"] === "chapters" ? splitBook(html) : null;
-    ui.book = book;
-    if (book) {
-      for (const n of book.intro) if (n instanceof Element) linkTags(n);
-      el.replaceChildren(book.fragment);
-      const byHash = app.anchor != null ? book.byAnchor.get(app.anchor) : undefined;
-      setChapter(intent.mode === "keep" && intent.chapter != null ? intent.chapter : (byHash ?? 0));
-    } else {
-      el.innerHTML = html;
-      linkTags(el);
-      app.chapter = null;
-    }
+    el.innerHTML = r ? r.styles + r.body : "";
+    linkTags(el);
+    ui.book = page.book;
+    ui.chapter = page.book?.chapter ?? 0;
+    app.chapter = page.book ? page.book.chapter : null;
     if (intent.mode === "keep") scrollTo(0, intent.y);
     else if (intent.mode === "anchor" && scrollToAnchor(app.anchor)) holdAnchor(page.id);
     else scrollTo(0, 0);
@@ -67,19 +59,15 @@
     }
   }
 
-  function setChapter(k: number) {
-    if (!ui.book) return;
-    const n = Math.min(Math.max(k, 0), ui.book.chapters.length - 1);
-    showChapter(ui.book, n);
-    ui.chapter = n;
-    app.chapter = n;
-  }
-
-  /** Прокрутить к разделу (у книги — сначала открыть его главу). */
+  /** Прокрутить к разделу; раздел в другой главе книги — загрузить её (прокрутит сама). */
   function scrollToAnchor(name: string | null): boolean {
     if (!name || !content) return false;
-    const k = ui.book?.byAnchor.get(name);
-    if (k != null && k !== ui.chapter) setChapter(k);
+    const k = ui.book?.anchors[name];
+    if (k != null && k !== ui.chapter) {
+      // Уже грузится (глава или сборка) — после загрузки прокрутит сама.
+      if (!app.pending) app.showChapter(k, { mode: "anchor" });
+      return true;
+    }
     const el = document.getElementById(name) ?? content.querySelector(`[data-k-anchor="${CSS.escape(name)}"]`);
     el?.scrollIntoView();
     return Boolean(el);
