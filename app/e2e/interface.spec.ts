@@ -108,6 +108,35 @@ test("изменение файла подхватывается по ⟳ без
   }
 });
 
+test("правка файла приходит событием сервера — без опроса и кнопки", async ({ page }) => {
+  const dir = join(VAULT, "События");
+  const file = join(dir, "Заметка.typ");
+  const text = (n: number) => `#import "/_baluk/lib.typ": *\n#show: note.with(title: [События])\n\nВерсия ${n}.\n`;
+  // Опрос — раз в 10 минут: обновить может только событие.
+  const interval = async (seconds: number) =>
+    expect((await page.request.put("/api/settings", { data: { "refresh.interval": seconds, "refresh.on_focus": seconds < 600 } })).ok()).toBe(true);
+  try {
+    await interval(600);
+    const events = page.waitForResponse((r) => r.url().includes("/api/events"));
+    await page.goto("/");
+    await ready(page);
+    await events;
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, text(1));
+    // Новая заметка — в дереве, правка — на экране, без ⟳.
+    const link = page.locator("#tree").getByRole("link", { name: "Заметка" });
+    await expect(link).toBeVisible();
+    await link.click();
+    await ready(page);
+    await expect(page.locator("#note")).toContainText("Версия 1.");
+    writeFileSync(file, text(2));
+    await expect(page.locator("#note")).toContainText("Версия 2.");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    await interval(5);
+  }
+});
+
 test("PDF заметки в текущей теме", async ({ page }) => {
   await open(page, "Сеть/SSH");
   const [popup] = await Promise.all([page.waitForEvent("popup"), page.locator("#pdf").click()]);

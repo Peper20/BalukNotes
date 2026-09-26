@@ -1,10 +1,11 @@
 // Обновление: изменились файлы показанной заметки — перезагрузить её.
 // Проверка — сверка версии (/api/version/… — дёшево: сервер ничего не
 // компилирует, если файлы не менялись) по кнопке, при возврате в окно и по
-// сигналу источника изменений (../changes.ts: опрос раз в N секунд).
+// сигналу источника изменений (../changes.ts): событие сервера (он следит за
+// файлами), а без событий — опрос раз в N секунд. N = 0 — только вручную.
 
-import { api } from "../api";
-import { polling, type ChangeSource } from "../changes";
+import { api, apiUrl } from "../api";
+import { polling, serverEvents, type ChangeSource } from "../changes";
 import { notes } from "./notes.svelte";
 import { reader } from "./reader.svelte";
 import { router } from "./router.svelte";
@@ -36,7 +37,9 @@ class Updates {
 
   /** Источник изменений по настройкам. */
   #source(): ChangeSource {
-    return polling(Number(settings.values["refresh.interval"]));
+    const seconds = Number(settings.values["refresh.interval"]);
+    if (!(seconds > 0)) return polling(0);
+    return serverEvents(apiUrl("/api/events", { withToken: true }), polling(seconds));
   }
 
   #schedule(): void {
@@ -45,7 +48,7 @@ class Updates {
   }
 
   #settingsSaved(keys: string[]): void {
-    this.#schedule();
+    if (keys.includes("refresh.interval")) this.#schedule();
     // Настройки отрисовки (figures.*) меняют версию страницы на сервере,
     // вид книги (books.*) — раскладку уже полученной страницы.
     if (keys.some((k) => k.startsWith("figures."))) void this.check();
