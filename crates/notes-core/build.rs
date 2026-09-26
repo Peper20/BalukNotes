@@ -19,6 +19,7 @@ const AFTER_CACHE: &[&str] = &[
     "cache.rs",   // сам кэш
     "check.rs",   // проверка хранилища
     "figures.rs", // обработка рисунков — после кэша, по настройкам
+    "finish.rs",  // проходы после кэша
     "notes.rs",   // фасад
     "page_cache.rs",
     "pages.rs",

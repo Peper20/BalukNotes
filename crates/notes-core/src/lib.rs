@@ -8,8 +8,10 @@
 //! - [`vault_data`] — данные хранилища для заметок `/_vault/…` (реестр
 //!   поставщиков: граф — [`vault_graph`]);
 //! - [`themes`] — темы оформления из `baluk/theme.typ` → CSS;
-//! - [`render`] — HTML-документы тем → одна страница (склейка рисунков,
-//!   якоря заголовков, ссылки между заметками);
+//! - [`render`] — HTML-документы тем → одна страница; обработка —
+//!   цепочка проходов [`passes`] (склейка рисунков, якоря заголовков,
+//!   ссылки между заметками, …);
+//! - [`finish`] — проходы после кэша, под настройки: [`figures`] (рисунки);
 //! - [`book`] — книга по главам: страница одной главы;
 //! - [`storage`] — файлы хранилища за интерфейсом (каталог, в тестах — память);
 //! - [`version`] — версии заметок по файлам, стабильный хэш;
@@ -29,6 +31,7 @@ pub mod check;
 pub mod diag;
 mod error;
 pub mod figures;
+pub mod finish;
 pub mod fonts;
 mod fsutil;
 pub mod graph;
@@ -37,6 +40,7 @@ pub mod notes;
 pub mod outline;
 pub mod page_cache;
 pub mod pages;
+pub mod passes;
 pub mod pipeline;
 pub mod render;
 pub mod search;
