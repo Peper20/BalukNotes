@@ -8,7 +8,7 @@ use serde::Serialize;
 use crate::diag::Diagnostic;
 use crate::figures::FigureOptions;
 use crate::notes::Notes;
-use crate::render::slug;
+use crate::render::{LinkRef, slug};
 use crate::vault::NoteId;
 use crate::{Error, Result};
 
@@ -37,22 +37,36 @@ impl Report {
     pub fn is_clean(&self) -> bool {
         self.notes.iter().all(|n| n.errors.is_empty() && n.broken_links.is_empty())
     }
+
+    /// Итог одной строкой: `заметок: 19, ошибок: 1, предупреждений: 2, битых ссылок: 3`.
+    /// Его печатает `notes check`; ожидаемый итог фикстуры — в `tests/vault/README.md`.
+    pub fn summary(&self) -> String {
+        let count = |f: fn(&NoteReport) -> usize| self.notes.iter().map(f).sum::<usize>();
+        format!(
+            "заметок: {}, ошибок: {}, предупреждений: {}, битых ссылок: {}",
+            self.notes.len(),
+            count(|n| n.errors.len()),
+            count(|n| n.warnings.len()),
+            count(|n| n.broken_links.len()),
+        )
+    }
 }
 
 pub fn check(notes: &Notes) -> Result<Report> {
     let mut out = Vec::new();
     for entry in notes.entries()? {
         let page = notes.page(&entry.id, FigureOptions::default())?;
+        // Собралась — ссылки собранной страницы (с вычисляемыми путями);
+        // нет — из индекса исходников (буквальные `#see` и ссылки прошлой
+        // удачной сборки): ссылки проверяются и у несобравшейся заметки.
+        let links: Vec<LinkRef> = match &page.rendered {
+            Some(rendered) if page.errors.is_empty() => rendered.links.clone(),
+            _ => notes.index()?.outgoing(&entry.id).to_vec(),
+        };
         let mut broken = Vec::new();
-        // При ошибке компиляции ссылки берутся из прошлой удачной сборки —
-        // в свежем процессе её нет, и ссылки не проверяются (видна ошибка).
-        if page.errors.is_empty()
-            && let Some(rendered) = &page.rendered
-        {
-            for link in &rendered.links {
-                if let Some(reason) = link_problem(notes, &link.target, link.anchor.as_deref())? {
-                    broken.push(BrokenLink { target: link.target.clone(), anchor: link.anchor.clone(), reason });
-                }
+        for link in &links {
+            if let Some(reason) = link_problem(notes, &link.target, link.anchor.as_deref())? {
+                broken.push(BrokenLink { target: link.target.clone(), anchor: link.anchor.clone(), reason });
             }
         }
         out.push(NoteReport {

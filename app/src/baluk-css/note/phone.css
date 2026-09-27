@@ -1,0 +1,14 @@
+/* Узкий экран (телефон). */
+
+.k-note {
+  /* Выключка по ширине в узкой колонке без переносов даёт дыры между словами;
+   * ужатый рисунок нечитаем — пусть лучше прокручивается пальцем. */
+  @media (max-width: 640px) {
+    p, .k-box, .k-proof, .k-lead { text-align: left; }
+    .k-frame { overflow-x: auto; justify-content: flex-start; }
+    .k-frame svg { max-width: none !important; }
+    .k-fig { font-size: 1em; }
+    .k-h1 { font-size: 1.9em; }
+    .k-title h1 { font-size: 2em; }
+  }
+}

@@ -74,3 +74,24 @@ pub struct ErrorResponse {
     pub error: String,
     pub errors: Vec<Diagnostic>,
 }
+
+/// Событие `change` потока `GET /api/events`: файлы хранилища изменились
+/// (пачкой, см. `notes_core::watch`) — клиенту пора сверить версию заметки.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct ChangeEvent {
+    /// Растёт с каждым изменением.
+    #[cfg_attr(feature = "ts", ts(type = "number"))]
+    pub seq: u64,
+    /// Изменившиеся файлы хранилища; пусто — неизвестно какие (проверить всё).
+    pub paths: Vec<String>,
+}
+
+/// Первое событие `hello` потока `GET /api/events`.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct EventsHello {
+    /// Сервер следит за файлами: события `change` будут. Иначе — только
+    /// опрос версии.
+    pub watching: bool,
+}

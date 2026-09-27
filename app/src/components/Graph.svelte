@@ -11,11 +11,16 @@
   фон — сдвиг. Без него (главная, граф в заметке) — картинка во всю ширину:
   узел тянется, но не дальше рамки рисунка; колесо и касание фона — странице.
   Щелчок по узлу — открыть заметку.
+
+  Здесь — разметка и связки: жесты — `graph-gesture.ts`, переезд, появление
+  и кадры — `graph-motion.ts`, физика — `graph-physics.ts`, вид — `graph-view.ts`.
 -->
 <script lang="ts">
   import { untrack } from "svelte";
   import { fade } from "svelte/transition";
   import type { GraphLayout } from "../lib/api";
+  import { Pointers } from "../lib/graph-gesture";
+  import { anyMoving, blendView, Frames, glide, introDelays } from "../lib/graph-motion";
   import { extentOf, Physics, type Point, type Rect } from "../lib/graph-physics";
   import { fitView, groupColor, LABEL_GAP, LABEL_SIZE, zoomAt, type View } from "../lib/graph-view";
 
@@ -25,6 +30,7 @@
     interactive = false,
     highlight = null,
     titles = null,
+    moved = $bindable(false),
   }: {
     /** Граф с раскладкой из ядра (`POST /api/graph/layout` или `#vault-graph` заметки). */
     layout: GraphLayout;
@@ -34,6 +40,8 @@
     highlight?: Set<string> | null;
     /** Названия заметок для подсказки. */
     titles?: Map<string, string> | null;
+    /** Узлы переставлены руками — картинка разошлась с раскладкой ядра. */
+    moved?: boolean;
   } = $props();
 
   const graph = $derived(layout);
@@ -58,16 +66,10 @@
   /** Длительность переезда и угасания, мс. */
   const GLIDE = reduced ? 0 : 500;
   const FADE = reduced ? 0 : 200;
-  const ease = (t: number) => 1 - (1 - t) ** 3;
 
-  // Один кадр анимации на граф: переезд или физика (новое отменяет старое).
-  let frame = 0;
-  function animate(tick: (now: number) => boolean) {
-    cancelAnimationFrame(frame);
-    const run = (now: number) => (frame = tick(now) ? requestAnimationFrame(run) : 0);
-    frame = requestAnimationFrame(run);
-  }
-  $effect(() => () => cancelAnimationFrame(frame));
+  // Один цикл кадров на узлы графа: переезд или физика (новое отменяет старое).
+  const frames = new Frames();
+  $effect(() => () => frames.stop());
 
   // Новая раскладка (фильтр): оставшиеся узлы переезжают со своих мест.
   let sim: Physics | null = null;
@@ -75,34 +77,19 @@
     const target = base;
     untrack(() => {
       sim = null;
+      moved = false;
       const from = at;
-      const moving = [...target].filter(([id]) => from.has(id));
-      if (!GLIDE || !moving.length) {
-        cancelAnimationFrame(frame);
+      if (!GLIDE || !anyMoving(from, target)) {
+        frames.stop();
         at = target;
         return;
       }
-      const start = performance.now();
-      animate((now) => {
-        const t = Math.min((now - start) / GLIDE, 1);
-        const e = ease(t);
-        const next = new Map(target);
-        for (const [id, [x, y]] of moving) {
-          const [fx, fy] = from.get(id)!;
-          next.set(id, [fx + (x - fx) * e, fy + (y - fy) * e]);
-        }
-        at = next;
-        return t < 1;
-      });
+      frames.tween(GLIDE, (e) => (at = glide(from, target, e)));
     });
   });
 
   // Появление: узлы вспыхивают от середины к краям; добавленные потом — чуть позже переезда.
-  const intro = untrack(() => {
-    const [x0, y0, x1, y1] = layout.bounds;
-    const [cx, cy, far] = [(x0 + x1) / 2, (y0 + y1) / 2, Math.max(Math.hypot(x1 - x0, y1 - y0) / 2, 1)];
-    return new Map(layout.nodes.map((n) => [n.id, Math.min(Math.hypot(n.x - cx, n.y - cy) / far, 1) * 0.35]));
-  });
+  const intro = untrack(() => introDelays(layout.nodes, layout.bounds));
   const delay = (id: string) => `${intro.get(id) ?? 0.15}s`;
 
   /** Границы нарисованного (с подписями) — в единицах раскладки. */
@@ -132,6 +119,24 @@
   export function zoom(factor: number) {
     view = zoomAt(view, factor, width / 2, height / 2);
   }
+  /**
+   * Вернуть раскладку ядра: узлы плавно переезжают на свои места (с
+   * замедлением, без перелёта), физика забывает перестановки.
+   */
+  export function restore() {
+    pull = null;
+    sim = null;
+    moved = false;
+    const from = at;
+    if (!GLIDE) {
+      frames.stop();
+      at = base;
+      return;
+    }
+    const target = base;
+    // Последний кадр — ровно раскладка (без ошибки округления).
+    frames.tween(GLIDE, (e) => (at = e < 1 ? glide(from, target, e) : target));
+  }
   /** Показать узел: в центр окна, не мельче 1:1. */
   export function show(id: string) {
     const [x, y] = pos(id);
@@ -141,26 +146,20 @@
   }
   // Новый граф (фильтр) или первый замер окна — вписать (при смене графа — плавно, вместе с узлами).
   let fitted: unknown = null;
-  let viewFrame = 0;
+  const viewFrames = new Frames();
   $effect(() => {
     if (!interactive || width <= 0 || height <= 0) return;
     if (fitted === base) return;
     const first = fitted === null;
     fitted = base;
     untrack(() => {
-      cancelAnimationFrame(viewFrame);
+      viewFrames.stop();
       if (first || !GLIDE) return fit();
-      const [from, to, start] = [view, fitView(bounds, width, height), performance.now()];
-      const step = (now: number) => {
-        const t = Math.min((now - start) / GLIDE, 1);
-        const e = ease(t);
-        view = { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e, k: from.k + (to.k - from.k) * e };
-        viewFrame = t < 1 ? requestAnimationFrame(step) : 0;
-      };
-      viewFrame = requestAnimationFrame(step);
+      const [from, to] = [view, fitView(bounds, width, height)];
+      viewFrames.tween(GLIDE, (e) => (view = blendView(from, to, e)));
     });
   });
-  $effect(() => () => cancelAnimationFrame(viewFrame));
+  $effect(() => () => viewFrames.stop());
 
   let svg: SVGSVGElement | undefined = $state();
   let layer: SVGGElement | undefined = $state();
@@ -213,7 +212,7 @@
   let pull: { i: number; to: Point } | null = null;
   function run() {
     const p = sim!;
-    animate(() => {
+    frames.run(() => {
       if (pull) p.drag(pull.i, ...pull.to);
       // Без движения: только сам узел, соседи стоят.
       const fastest = reduced ? 0 : p.step();
@@ -222,18 +221,8 @@
     });
   }
 
-  type Gesture =
-    | { kind: "pan"; start: Point; view: View }
-    | { kind: "node"; id: string; start: Point; grab: Point; far: boolean }
-    | { kind: "pinch"; dist: number; mid: Point; view: View };
-  const pointers = new Map<number, Point>();
-  let gesture: Gesture | null = null;
+  const pointers = new Pointers();
   let dragging = $state(false);
-
-  function pinchStart(): Gesture {
-    const [a, b] = [...pointers.values()] as [Point, Point];
-    return { kind: "pinch", dist: Math.max(Math.hypot(a[0] - b[0], a[1] - b[1]), 1), mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], view };
-  }
 
   function onpointerdown(e: PointerEvent) {
     if (e.button > 1) return;
@@ -245,46 +234,30 @@
     } catch {
       return; // указателя уже нет — жеста не будет
     }
-    const p = local(e);
-    pointers.set(e.pointerId, p);
-    if (pointers.size === 2) {
-      releaseNode();
-      gesture = pinchStart();
-      return;
-    }
-    if (pointers.size > 2) return;
+    let node = null;
     if (id) {
       const [x, y] = pos(id);
       const [wx, wy] = world(e);
-      gesture = { kind: "node", id, start: p, grab: [wx - x, wy - y], far: false };
-    } else gesture = { kind: "pan", start: p, view };
+      node = { id, grab: [wx - x, wy - y] as Point };
+    }
+    if (pointers.down(e.pointerId, local(e), view, node) === "pinch") releaseNode();
   }
 
   function onpointermove(e: PointerEvent) {
-    if (!pointers.has(e.pointerId) || !gesture) return;
-    const p = local(e);
-    pointers.set(e.pointerId, p);
-    if (gesture.kind === "pinch" && pointers.size === 2) {
-      const [a, b] = [...pointers.values()] as [Point, Point];
-      const mid: Point = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-      const v = zoomAt(gesture.view, Math.hypot(a[0] - b[0], a[1] - b[1]) / gesture.dist, gesture.mid[0], gesture.mid[1]);
-      view = { ...v, x: v.x + mid[0] - gesture.mid[0], y: v.y + mid[1] - gesture.mid[1] };
-    } else if (gesture.kind === "pan") {
-      view = { ...gesture.view, x: gesture.view.x + p[0] - gesture.start[0], y: gesture.view.y + p[1] - gesture.start[1] };
-      dragging = true;
-    } else if (gesture.kind === "node") {
-      if (!gesture.far && Math.hypot(p[0] - gesture.start[0], p[1] - gesture.start[1]) < 4) return;
-      const i = index.get(gesture.id);
-      if (i == null) return;
-      if (!gesture.far || !sim) {
-        gesture.far = true;
+    const move = pointers.move(e.pointerId, local(e), (id) => index.has(id));
+    if (move.kind === "view") {
+      view = move.view;
+      if (move.pan) dragging = true;
+    } else if (move.kind === "drag") {
+      if (move.first || !sim) {
         dragging = true;
-        focused = gesture.id;
+        moved = true;
+        focused = move.id;
         physics();
       }
       const [wx, wy] = world(e);
-      pull = { i, to: [wx - gesture.grab[0], wy - gesture.grab[1]] };
-      if (!frame) run();
+      pull = { i: index.get(move.id)!, to: [wx - move.grab[0], wy - move.grab[1]] };
+      if (!frames.active) run();
     }
   }
 
@@ -293,19 +266,13 @@
     if (!pull) return;
     pull = null;
     sim?.release();
-    if (sim && !frame) run();
+    if (sim && !frames.active) run();
   }
 
   function onpointerup(e: PointerEvent) {
-    if (!pointers.delete(e.pointerId)) return;
-    const g = gesture;
-    if (pointers.size === 1 && g?.kind === "pinch") {
-      // остался один палец — дальше сдвиг от него
-      gesture = { kind: "pan", start: [...pointers.values()][0]!, view };
-      return;
-    }
-    if (pointers.size > 0) return;
-    gesture = null;
+    const up = pointers.up(e.pointerId, view);
+    if (up.kind !== "end") return;
+    const g = up.gesture;
     dragging = false;
     releaseNode();
     // Узел упёрся в рамку, а указатель ушёл дальше — подсветку снять.

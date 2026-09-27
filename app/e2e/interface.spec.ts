@@ -30,6 +30,33 @@ test("раскрытые «Ответы» не сворачиваются, ко�
   await expect(answers).toHaveAttribute("open", "");
 });
 
+test("раскрытые «Ответы» — по разделу и тексту: блок выше не раскрывает чужой", async ({ page }) => {
+  const dir = join(VAULT, "Ответы");
+  const file = join(dir, "Заметка.typ");
+  const text = (extra: boolean) =>
+    `#import "/_baluk/lib.typ": *\n#show: note.with(title: [Ответы])\n\n= Первый\n\n${extra ? "#quiz(([Новый вопрос], [Добавлены выше.]))\n\n" : ""}` +
+    `= Второй\n\n#quiz(([Вопрос], [Раскрытые.]))\n`;
+  try {
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, text(false));
+    await page.goto("/");
+    await ready(page);
+    await page.locator("#refresh").click();
+    await page.locator("#tree").getByRole("link", { name: "Заметка" }).click();
+    await ready(page);
+    const answers = page.locator("#note details", { hasText: "Раскрытые." });
+    await answers.locator("summary").click();
+    await expect(answers).toHaveAttribute("open", "");
+    writeFileSync(file, text(true));
+    await page.locator("#refresh").click();
+    await expect(page.locator("#note details")).toHaveCount(2);
+    await expect(answers).toHaveAttribute("open", "");
+    await expect(page.locator("#note details", { hasText: "Добавлены выше." })).not.toHaveAttribute("open", "");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("настройки: кегль меняется сразу и сохраняется", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await page.locator("#open-settings").click();
@@ -63,6 +90,17 @@ test("оглавление: сбоку на широком экране, всп�
   await last.click();
   await expect(toc).toBeHidden();
   await expect(page.locator(`[id="${target}"]`)).toBeInViewport();
+});
+
+test("оглавление: заголовок с формулой — формулой, а не текстом", async ({ page }) => {
+  await page.setViewportSize({ width: 1700, height: 900 });
+  await open(page, "Формулы и теги");
+  const item = page.locator(".toc a", { hasText: "Пространство" });
+  await expect(item.locator("math")).toHaveCount(2);
+  await expect(item.locator("strong")).toHaveText("норма");
+  await expect(item.locator(".k-num")).toHaveCount(0);
+  await item.click();
+  await expect(page.locator("#note h2", { hasText: "Пространство" })).toBeInViewport();
 });
 
 test("новая заметка появляется в дереве без перезагрузки", async ({ page }) => {
@@ -105,6 +143,35 @@ test("изменение файла подхватывается по ⟳ без
     expect(Math.abs((await page.evaluate(() => scrollY)) - y)).toBeLessThan(5);
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("правка файла приходит событием сервера — без опроса и кнопки", async ({ page }) => {
+  const dir = join(VAULT, "События");
+  const file = join(dir, "Заметка.typ");
+  const text = (n: number) => `#import "/_baluk/lib.typ": *\n#show: note.with(title: [События])\n\nВерсия ${n}.\n`;
+  // Опрос — раз в 10 минут: обновить может только событие.
+  const interval = async (seconds: number) =>
+    expect((await page.request.put("/api/settings", { data: { "refresh.interval": seconds, "refresh.on_focus": seconds < 600 } })).ok()).toBe(true);
+  try {
+    await interval(600);
+    const events = page.waitForResponse((r) => r.url().includes("/api/events"));
+    await page.goto("/");
+    await ready(page);
+    await events;
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(file, text(1));
+    // Новая заметка — в дереве, правка — на экране, без ⟳.
+    const link = page.locator("#tree").getByRole("link", { name: "Заметка" });
+    await expect(link).toBeVisible();
+    await link.click();
+    await ready(page);
+    await expect(page.locator("#note")).toContainText("Версия 1.");
+    writeFileSync(file, text(2));
+    await expect(page.locator("#note")).toContainText("Версия 2.");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    await interval(5);
   }
 });
 

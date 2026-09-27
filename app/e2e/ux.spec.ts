@@ -32,6 +32,37 @@ test("поиск по тексту ведёт в раздел нужной гл�
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Продолжение/);
 });
 
+test("поиск в этой книге: разделы всех глав по порядку, переход — в нужную главу", async ({ page }) => {
+  await open(page, "Сеть/SSH");
+  // У обычной заметки такой команды нет.
+  await page.keyboard.press("Control+k");
+  await page.locator(".palette input").pressSequentially("в этой книге");
+  await expect(page.locator(".palette-list li[role=option]")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+
+  await open(page, "Книга");
+  await expect(page.locator("#note h2.k-h1")).toHaveText(/Основы/);
+  await page.keyboard.press("Control+k");
+  await page.locator(".palette input").pressSequentially("в этой книге");
+  await page.keyboard.press("Enter");
+  const input = page.locator(".palette input");
+  await expect(input).toHaveAttribute("placeholder", /Тестовая книга/);
+  await input.fill("итоги");
+  const hits = page.locator(".palette-list li[role=option]");
+  await expect(page.locator(".palette-group")).toContainText("В книге «Тестовая книга»");
+  // «Итоги» всех трёх глав — по порядку текста (в общем поиске — только лучшие).
+  const order = ["первой", "второй", "третьей"];
+  await expect(hits.filter({ hasText: /Итоги (первой|второй|третьей)/ })).toHaveCount(3);
+  const texts = await hits.allTextContents();
+  const at = order.map((w) => texts.findIndex((t) => t.includes(`Итоги ${w}`)));
+  expect(at).toEqual([...at].sort((a, b) => a - b));
+  await hits.filter({ hasText: "Итоги второй" }).click();
+  await ready(page);
+  await expect(page).toHaveURL(noteUrl("Книга", "Итоги-2"));
+  await expect(page.locator("#note h2.k-h1")).toHaveText(/Продолжение/);
+  await expect(page.locator("#Итоги-2")).toBeInViewport();
+});
+
 test("команды: сменить тему из палитры", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await page.keyboard.press("Control+k");
@@ -145,6 +176,9 @@ test("дерево: свёрнутая папка запоминается, пу
   const folder = page.locator("#tree details", { has: page.locator("summary .tree-name").getByText("Глубоко", { exact: true }) });
   await folder.locator("> summary").click();
   await expect(folder).not.toHaveAttribute("open");
+  // Событие toggle приходит задачей после щелчка: без ожидания reload
+  // изредка успевал раньше, и свёрнутость не запоминалась.
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("k-collapsed") ?? "")).toContain("Глубоко");
   await page.reload();
   await ready(page);
   await expect(folder).not.toHaveAttribute("open");

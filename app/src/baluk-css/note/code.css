@@ -1,0 +1,37 @@
+/* Код: строчный, блоки, листинги с номерами строк и метками. */
+
+.k-note {
+  code { font-family: var(--k-font-code); font-variant-ligatures: none; font-feature-settings: "calt" 0; }
+  :not(pre) > code {
+    font-size: 0.86em; padding: 0.05em 0.25em; border-radius: 2pt;
+    background: var(--k-surface); color: var(--k-code-text);
+  }
+  pre {
+    margin: 0.9em 0; padding: 0.6em 0.8em; overflow-x: auto;
+    background: var(--k-surface); border-radius: 3pt;
+    font-size: 0.8em; line-height: 1.5; color: var(--k-code-text);
+    hyphens: none; text-align: left;
+  }
+  pre code strong { font-weight: 700; }
+
+  .k-listing { margin: 0.9em 0; }
+  .k-listing pre { margin: 0; counter-reset: k-line; }
+  .k-listing-cap, .k-listing-cx { font-size: 0.84em; color: var(--k-muted); }
+  .k-listing-cap { margin-bottom: 0.35em; }
+  .k-listing-cx { margin-top: 0.35em; }
+  .k-lang { font-weight: bold; color: var(--k-accent); margin-right: 0.3em; }
+  .k-line { display: inline-block; min-width: 100%; box-sizing: border-box; padding: 0 0.3em; margin: 0 -0.3em; }
+  .k-line.k-hl { background: var(--k-code-hl); }
+  .k-numbered .k-line { counter-increment: k-line; }
+  .k-numbered .k-line::before {
+    content: counter(k-line); display: inline-block; width: 1.6em; margin-right: 1em;
+    text-align: right; color: var(--k-muted); opacity: 0.75;
+  }
+  .k-mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.25em; height: 1.25em; margin-left: 0.5em; vertical-align: 0.05em;
+    border-radius: 50%; background: var(--k-accent); color: var(--k-bg);
+    font-family: var(--k-font-text); font-size: 0.72em; font-weight: bold; line-height: 1;
+  }
+  pre .k-mark { float: right; margin-top: 0.15em; }
+}

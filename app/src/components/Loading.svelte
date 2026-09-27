@@ -4,7 +4,7 @@
   сборки — счётчик секунд и объяснение.
 -->
 <script lang="ts">
-  import { app } from "../lib/app.svelte";
+  import { notes } from "../lib/state";
 
   let { id, since }: { id: string; since: number } = $props();
   let now = $state(Date.now());
@@ -14,7 +14,7 @@
     return () => clearInterval(timer);
   });
 
-  const note = $derived(app.notes.find((n) => n.id === id));
+  const note = $derived(notes.all.find((n) => n.id === id));
   const seconds = $derived(Math.round((now - since) / 1000));
 </script>
 

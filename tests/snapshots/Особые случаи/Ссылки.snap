@@ -14,8 +14,10 @@ links:
   Книга / Код из файла
   Книга / особый
   Имена/C++ и C#
+  Имена/C++ и C# / C++
   Имена/50% готово
   Глубоко/а/б/в/г/Дно
+  Формулы и теги
   Сеть/UFW
   Нет/Такой заметки
   Сеть/SSH / Нет такого раздела
@@ -35,8 +37,10 @@ styles: 0 байт, fnv cbf29ce484222325
 <li>на раздел книги во второй главе: <a class="k-link" data-k-target="Книга" data-k-anchor="Код из файла" href="/n/Книга#Код-из-файла">Код из файла</a>;</li>
 <li>на раздел по метке: <a class="k-link" data-k-target="Книга" data-k-anchor="особый" href="/n/Книга#особый">особый</a>;</li>
 <li>на имя с пробелами, <code>+</code> и <code>#</code>: <a class="k-link" data-k-target="Имена/C++ и C#" href="/n/Имена/C++%20и%20C%23">C++ и C#</a>;</li>
+<li>на раздел со знаками в названии: <a class="k-link" data-k-target="Имена/C++ и C#" data-k-anchor="C++" href="/n/Имена/C++%20и%20C%23#C-plus-plus">C++</a>;</li>
 <li>на имя с <code>%</code>: <a class="k-link" data-k-target="Имена/50% готово" href="/n/Имена/50%25%20готово">50% готово</a>;</li>
 <li>на глубоко вложенную: <a class="k-link" data-k-target="Глубоко/а/б/в/г/Дно" href="/n/Глубоко/а/б/в/г/Дно">Дно</a>;</li>
+<li>вычисляемый путь (в обратные ссылки и граф — из собранной страницы): <a class="k-link" data-k-target="Формулы и теги" href="/n/Формулы%20и%20теги">Формулы и теги</a>;</li>
 <li>своя подпись: <a class="k-link" data-k-target="Сеть/UFW" href="/n/Сеть/UFW">межсетевой экран</a>.</li></ul>
 <h2 class="k-h k-h2" id="Битые" data-k-anchor="Битые"><span class="k-num">2</span>Битые</h2>
 <ul>

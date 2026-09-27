@@ -37,6 +37,8 @@ fn themes_come_from_library() {
     assert_eq!(names, ["classic", "night"]);
     assert!(NOTES.themes().themes()[1].dark);
     assert!(NOTES.themes().css().contains("--k-box-def:"));
+    // Браузеру — основные шрифты тем (первые в списках `font`), без запасных.
+    assert_eq!(NOTES.themes().web_fonts(), ["Gentium Plus", "JetBrains Mono", "New Computer Modern Math"]);
 }
 
 #[test]
@@ -116,6 +118,7 @@ fn check_finds_exactly_the_planted_problems() {
     assert_eq!(
         broken,
         [
+            ("Особые случаи/Ошибка компиляции", "Нет/Из несобравшейся", None),
             ("Особые случаи/Ссылки", "Нет/Такой заметки", None),
             ("Особые случаи/Ссылки", "Сеть/SSH", Some("Нет такого раздела")),
             ("Сеть/UFW", "Сеть/Nginx", None),
@@ -126,6 +129,15 @@ fn check_finds_exactly_the_planted_problems() {
     assert_eq!(failing, ["Особые случаи/Ошибка компиляции"]);
     let warned: Vec<_> = report.notes.iter().filter(|n| !n.warnings.is_empty()).map(|n| n.id.as_str()).collect();
     assert_eq!(warned, ["Особые случаи/Предупреждение"]);
+    assert_eq!(report.summary(), expected_summary(), "итог в tests/vault/README.md");
+}
+
+/// Ожидаемый итог `notes check` — строка «Итог: `…`» в `tests/vault/README.md`
+/// (её же сверяет `tools/check.sh`).
+fn expected_summary() -> String {
+    let readme = std::fs::read_to_string(repo().join("tests/vault/README.md")).unwrap();
+    let line = readme.lines().find_map(|l| l.strip_prefix("Итог: `")).expect("строка «Итог: `…`» в README");
+    line.trim_end_matches('`').to_owned()
 }
 
 #[test]
@@ -154,7 +166,19 @@ fn swallowed_semicolon_is_a_warning() {
     let page = NOTES.page(&id("Особые случаи/Предупреждение"), OPTS).unwrap();
     let lint = page.warnings.iter().find(|w| w.message.contains("«;»")).expect("предупреждение о «;»");
     assert_eq!(lint.file.as_deref(), Some("/Особые случаи/Предупреждение.typ"));
-    assert_eq!(lint.line, Some(8));
+    assert_eq!(lint.line, Some(15));
+}
+
+#[test]
+fn lang_without_dictionary_is_a_warning() {
+    let page = NOTES.page(&id("Особые случаи/Предупреждение"), OPTS).unwrap();
+    let lint =
+        page.warnings.iter().find(|w| w.message.contains("нет слов оформления")).expect("предупреждение о языке");
+    assert_eq!((lint.line, lint.column), (Some(3), Some(18)), "место — аргумент lang:");
+    // Свои слова — не предупреждение.
+    let own = NOTES.page(&id("Особые случаи/Свои слова"), OPTS).unwrap();
+    assert!(own.warnings.is_empty(), "{:?}", own.warnings);
+    assert!(own.rendered.as_ref().unwrap().body.contains("Abb. 1."));
 }
 
 #[test]
@@ -193,10 +217,24 @@ fn disk_cache_survives_restart() {
         .unwrap()
     };
     let first = open().page(&id("Сеть/UFW"), OPTS).unwrap();
-    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1, "страница записана в кэш");
+    let files = walkdir(dir.path());
+    assert_eq!(files.len(), 2, "страница записана в кэш: запись и отрисовка — {files:?}");
     let second = open().page(&id("Сеть/UFW"), OPTS).unwrap();
     assert_eq!(first.version, second.version);
     assert_eq!(first.rendered.as_ref().unwrap().body, second.rendered.as_ref().unwrap().body);
+}
+
+/// Все файлы каталога (рекурсивно).
+fn walkdir(dir: &std::path::Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for e in std::fs::read_dir(dir).unwrap().flatten() {
+        if e.path().is_dir() {
+            out.extend(walkdir(&e.path()));
+        } else {
+            out.push(e.path());
+        }
+    }
+    out
 }
 
 #[test]
@@ -214,17 +252,17 @@ fn warm_builds_everything_once_across_restarts() {
     let first = open();
     let all = first.entries().unwrap().len();
     first.hint_warm(vec![id("Книга")]);
-    let stats = first.warm_pass(|| OPTS);
+    let stats = first.warm_pass();
     assert_eq!((stats.built, stats.skipped), (all, 0), "первый проход собирает всё");
-    assert_eq!(first.warm_pass(|| OPTS).built, 0, "второй — ничего");
+    assert_eq!(first.memory().0, 0, "прогрев — только на диск");
+    assert_eq!(first.warm_pass().built, 0, "второй — ничего");
 
-    // Новый запуск: собранное лежит на диске. Заново — только заметки с
-    // ошибкой (их отрисовка в кэш не пишется).
+    // Новый запуск: собранное (и заметки с ошибкой) лежит на диске.
     let failed =
         first.entries().unwrap().iter().filter(|e| !first.page(&e.id, OPTS).unwrap().errors.is_empty()).count();
     assert!(failed > 0, "в tests/vault есть заметка с ошибкой");
-    let stats = open().warm_pass(|| OPTS);
-    assert_eq!((stats.built, stats.skipped), (failed, all - failed));
+    let stats = open().warm_pass();
+    assert_eq!((stats.built, stats.skipped), (0, all));
 }
 
 #[test]
@@ -247,9 +285,15 @@ fn vault_graph_follows_the_vault() {
     assert!(body.contains(r#"class="k-graph""#) && body.contains("data-k-graph"), "разметка для клиента");
     assert!(body.contains("&quot;id&quot;:&quot;A&quot;") && !body.contains("&quot;id&quot;:&quot;C&quot;"));
 
+    // Правка, не меняющая граф (текст, новая заметка без связей в той же
+    // папке, — вне соседей B), заметку с графом не трогает.
+    std::fs::write(dir.path().join("A.typ"), format!("{head}Текст. #see(\"B\")\n")).unwrap();
+    std::fs::write(dir.path().join("D.typ"), head).unwrap();
+    assert_eq!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "версия — по ответу графа");
+
     // Новая заметка ссылается на B — граф заметки устарел и пересобирается.
     std::fs::write(dir.path().join("C.typ"), format!("{head}#see(\"B\")\n")).unwrap();
-    assert_ne!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "версия — по всему хранилищу");
+    assert_ne!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "граф изменился");
     let body = notes.page(&id("Граф"), OPTS).unwrap().rendered.clone().unwrap().body.clone();
     assert!(body.contains("&quot;id&quot;:&quot;C&quot;"));
 }
@@ -288,6 +332,38 @@ fn search_finds_sections_with_exact_anchors() {
 
     assert!(NOTES.search("нетакогословавхранилище", 10).unwrap().is_empty());
     assert!(NOTES.search("   ", 10).unwrap().is_empty());
+}
+
+#[test]
+fn search_in_book_lists_all_sections_in_text_order() {
+    let book = id("Книга");
+    let all = NOTES.search("итоги", 50).unwrap();
+    let inside = NOTES.search_in(&book, "итоги", 50).unwrap();
+    assert!(inside.iter().all(|h| h.id == book), "только эта книга");
+    assert!(inside.len() >= all.iter().filter(|h| h.id == book).count(), "не меньше, чем в общем поиске");
+    let anchors: Vec<_> = inside.iter().filter_map(|h| h.anchor.as_deref()).collect();
+    let first = anchors.iter().position(|a| *a == "Итоги").unwrap();
+    let second = anchors.iter().position(|a| *a == "Итоги-2").unwrap();
+    assert!(first < second, "по порядку текста: {anchors:?}");
+    assert!(NOTES.search_in(&id("Нет такой"), "итоги", 5).is_err());
+}
+
+#[test]
+fn computed_links_come_from_built_pages() {
+    let notes = Notes::open(&NotesConfig {
+        vault: repo().join("tests/vault"),
+        library: LibrarySource::Dir(repo().join("baluk")),
+        font_dirs: vec![],
+        cache: None,
+    })
+    .unwrap();
+    let target = id("Формулы и теги");
+    let from = |notes: &Notes| -> Vec<String> {
+        notes.index().unwrap().backlinks(&target).into_iter().map(|b| b.from.to_string()).collect()
+    };
+    assert!(!from(&notes).contains(&"Особые случаи/Ссылки".to_owned()), "в исходнике путь вычисляемый");
+    notes.page(&id("Особые случаи/Ссылки"), OPTS).unwrap();
+    assert!(from(&notes).contains(&"Особые случаи/Ссылки".to_owned()), "после сборки — из её ссылок");
 }
 
 #[test]
@@ -349,4 +425,27 @@ fn decoration_words_follow_note_language() {
     {
         assert!(!body.contains(word), "русское «{word}» в английской заметке");
     }
+}
+
+#[test]
+fn storage_in_memory_compiles_and_follows_edits() {
+    let mem = std::sync::Arc::new(notes_core::storage::MemStorage::new());
+    let head = "#import \"/_baluk/lib.typ\": *\n#show: note.with(title: [x])\n";
+    mem.write("A.typ", format!("{head}= Раз\n#include \"часть.typ\"\n"));
+    mem.write("часть.typ", "первая часть");
+    let config = NotesConfig {
+        vault: PathBuf::new(),
+        library: LibrarySource::Dir(repo().join("baluk")),
+        font_dirs: vec![],
+        cache: None,
+    };
+    let notes = Notes::with_storage(mem.clone(), &config).unwrap();
+    let page = notes.page(&id("A"), OPTS).unwrap();
+    assert!(page.errors.is_empty(), "{:?}", page.errors);
+    assert!(page.rendered.as_ref().unwrap().body.contains("первая часть"));
+
+    // Правка включённого файла — новая версия и новый текст.
+    mem.write("часть.typ", "вторая часть");
+    assert_ne!(notes.version(&id("A"), OPTS).unwrap(), page.version);
+    assert!(notes.page(&id("A"), OPTS).unwrap().rendered.as_ref().unwrap().body.contains("вторая часть"));
 }

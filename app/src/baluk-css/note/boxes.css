@@ -1,0 +1,61 @@
+/* Врезки, ответ, доказательство, формула в рамке, заметка на полях, «сбоку». */
+
+.k-note {
+  .k-box {
+    --c: var(--k-box-def); --c-bg: var(--k-box-def-bg);
+    margin: 1.1em 0; padding: 0.75em 0.9em;
+    background: var(--c-bg);
+    border-left: 2.5pt solid var(--c);
+    border-radius: 0 2pt 2pt 0;
+    text-align: justify;
+  }
+  .k-box.k-thm { --c: var(--k-box-thm); --c-bg: var(--k-box-thm-bg); }
+  .k-box.k-example { --c: var(--k-box-example); --c-bg: var(--k-box-example-bg); }
+  .k-box.k-remark { --c: var(--k-box-remark); --c-bg: var(--k-box-remark-bg); }
+  .k-box.k-pitfall { --c: var(--k-box-pitfall); --c-bg: var(--k-box-pitfall-bg); }
+  .k-box.k-idea { --c: var(--k-box-idea); --c-bg: var(--k-box-idea-bg); }
+  .k-box.k-algo { --c: var(--k-box-algo); --c-bg: var(--k-box-algo-bg); }
+  .k-box > :first-child { margin-top: 0; }
+  .k-box > :last-child { margin-bottom: 0; }
+  .k-box p + p { text-indent: 0; margin-top: 0.45em; }
+  .k-label { font-weight: bold; color: var(--c); }
+  .k-step { font-weight: bold; color: var(--k-step); }
+
+  .k-answer {
+    width: fit-content; margin: 0.6em 0 0 auto; padding: 0.3em 0.7em;
+    border: 0.7pt solid var(--k-box-example); border-radius: 3pt;
+    background: var(--k-box-example-bg);
+  }
+  .k-answer-label { font-weight: bold; color: var(--k-box-example); }
+
+  .k-proof {
+    margin: 0.8em 0 1em; padding: 0.1em 0 0.1em 0.9em;
+    border-left: 0.6pt solid var(--k-line); font-size: 0.94em;
+    text-align: justify;
+  }
+  .k-proof-head { font-style: italic; color: var(--k-muted); }
+  .k-qed { float: right; color: var(--k-muted); font-family: var(--k-font-math); } /* ∎ нет в Gentium */
+
+  .k-formula {
+    margin: 1.1em 0; padding: 0.8em 0.9em;
+    background: var(--k-accent-bg); border: 0.7pt solid var(--k-accent); border-radius: 3pt;
+    text-align: center;
+  }
+  .k-formula-label {
+    text-align: left; margin-bottom: 0.2em;
+    font-size: 0.72em; font-weight: bold; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--k-accent);
+  }
+  .k-formula math[display="block"] { margin: 0.2em 0; }
+
+  .k-aside {
+    margin: 0.8em 0; padding: 0.05em 0 0.05em 0.9em;
+    border-left: 0.5pt solid var(--k-line);
+    font-size: 0.84em; line-height: 1.4; color: var(--k-muted);
+  }
+
+  .k-side { display: grid; grid-template-columns: 1fr var(--k-side-w, 40%); gap: 1.2em; align-items: center; }
+  @media (max-width: 640px) { .k-side { grid-template-columns: 1fr; } }
+
+  .k-caps { font-size: 0.8em; letter-spacing: 0.07em; text-transform: uppercase; }
+}

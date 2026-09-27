@@ -3,6 +3,9 @@ kind: Note
 title: C++ и C#
 tags: имена
 headings:
+  2 #C [C] C
+  2 #C-plus-plus [C-plus-plus] C++
+  2 #C-sharp [C-sharp] C#
 links:
   Особые случаи/Ссылки
 styles: 0 байт, fnv cbf29ce484222325
@@ -12,4 +15,8 @@ styles: 0 байт, fnv cbf29ce484222325
 <h1>C++ и C#</h1>
 <ul class="k-tags">
 <li>имена</li></ul></header>
-<p>Имя файла с пробелами, <code>+</code> и <code>#</code>: адрес в браузере должен кодироваться. Обратно: <a class="k-link" data-k-target="Особые случаи/Ссылки" href="/n/Особые%20случаи/Ссылки">Ссылки</a>.</p></article>
+<p>Имя файла с пробелами, <code>+</code> и <code>#</code>: адрес в браузере должен кодироваться. Обратно: <a class="k-link" data-k-target="Особые случаи/Ссылки" href="/n/Особые%20случаи/Ссылки">Ссылки</a>.</p>
+<h2 class="k-h k-h2" id="C" data-k-anchor="C"><span class="k-num">1</span>C</h2>
+<p>Разделы «C», «C++» и «C#» получают разные якоря: <code>C</code>, <code>C-plus-plus</code>, <code>C-sharp</code> — знаки становятся словами.</p>
+<h2 class="k-h k-h2" id="C-plus-plus" data-k-anchor="C-plus-plus"><span class="k-num">2</span>C++</h2>
+<h2 class="k-h k-h2" id="C-sharp" data-k-anchor="C-sharp"><span class="k-num">3</span>C#</h2></article>

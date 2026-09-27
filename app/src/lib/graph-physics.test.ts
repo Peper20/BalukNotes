@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extentOf, Physics, type PhysicsNode, type Rect } from "./graph-physics";
+import { extentOf, GRID_FROM, nearPairs, Physics, type PhysicsNode, type Rect } from "./graph-physics";
 
 // Цепочка a — b — c — d по горизонтали и e без связей в стороне.
 const node = (x: number, y: number, name = "узел"): PhysicsNode => ({ x, y, extent: extentOf(6, name, 11, 2) });
@@ -153,5 +153,63 @@ describe("физика графа", () => {
     const p = new Physics(nodes(), edges, [0, 0, 100, 100]);
     expect(p.settled(p.step())).toBe(true);
     expect(p.at(3)).toEqual([210, 0]);
+  });
+});
+
+/** Большой граф, как у ядра: узлы по сетке с разбросом, подписи разной длины, ~1,5 ребра на узел. */
+function bigGraph(n: number): { nodes: PhysicsNode[]; edges: [number, number][] } {
+  let seed = 1;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+  const side = Math.ceil(Math.sqrt(n));
+  const nodes = Array.from({ length: n }, (_, i) => ({
+    x: (i % side) * 70 + rnd() * 30,
+    y: Math.floor(i / side) * 45 + rnd() * 20,
+    extent: extentOf(4 + rnd() * 6, "узел".repeat(1 + Math.floor(rnd() * 3)), 11, 2),
+  }));
+  const edges = Array.from({ length: Math.round(n * 1.5) }, (): [number, number] => [Math.floor(rnd() * n), Math.floor(rnd() * n)]);
+  return { nodes, edges };
+}
+
+describe("физика большого графа", () => {
+  it("решётка находит те же наехавшие пары и в том же порядке", () => {
+    const { nodes } = bigGraph(600);
+    // Сжатая раскладка — наездов много.
+    const pos = new Float64Array(nodes.flatMap((p) => [p.x * 0.4, p.y * 0.4]));
+    const extents = nodes.map((p) => p.extent);
+    const overlapping = (grid: boolean) => {
+      const out: string[] = [];
+      nearPairs(
+        pos,
+        extents,
+        (i, j) => {
+          const [a, b] = [extents[i]!, extents[j]!];
+          const dx = Math.abs(pos[2 * j]! - pos[2 * i]!);
+          const dy = pos[2 * j + 1]! - pos[2 * i + 1]!;
+          const h = dy >= 0 ? a.bottom + b.top : a.top + b.bottom;
+          if (a.half + b.half > dx && h > Math.abs(dy)) out.push(`${i}-${j}`);
+        },
+        grid,
+      );
+      return out;
+    };
+    const all = overlapping(false);
+    expect(all.length).toBeGreaterThan(100);
+    expect(overlapping(true)).toEqual(all);
+  });
+
+  it(`1000 узлов: шаг меньше 4 мс (решётка с ${GRID_FROM} узлов)`, () => {
+    const { nodes, edges } = bigGraph(1000);
+    const p = new Physics(nodes, edges);
+    p.setExtents(nodes.map((n) => n.extent));
+    const times: number[] = [];
+    for (let i = 0; i < 80; i++) {
+      p.drag(500, nodes[500]!.x + i * 4, nodes[500]!.y + i * 2);
+      const t = performance.now();
+      p.step();
+      times.push(performance.now() - t);
+    }
+    times.sort((a, b) => a - b);
+    const median = times[times.length >> 1]!;
+    expect(median).toBeLessThan(4);
   });
 });

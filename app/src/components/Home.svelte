@@ -1,7 +1,7 @@
 <!-- Главная: сколько заметок, граф связей и список по папкам. -->
 <script lang="ts">
   import { api, type GraphLayout } from "../lib/api";
-  import { app } from "../lib/app.svelte";
+  import { notes, router } from "../lib/state";
   import { noteHref } from "../lib/ids";
   import Graph from "./Graph.svelte";
   import GraphLegend from "./GraphLegend.svelte";
@@ -18,8 +18,8 @@
       .finally(() => requestAnimationFrame(() => (document.documentElement.dataset.state = "ready")));
   });
 
-  const books = $derived(app.notes.filter((n) => n.kind === "book").length);
-  const byFolder = $derived(Map.groupBy(app.notes, (n) => n.folder || "—"));
+  const books = $derived(notes.all.filter((n) => n.kind === "book").length);
+  const byFolder = $derived(Map.groupBy(notes.all, (n) => n.folder || "—"));
   const plural = (n: number, one: string, few: string, many: string) => {
     const m10 = n % 10;
     const m100 = n % 100;
@@ -30,21 +30,21 @@
 <main class="k-note" id="note">
   <div class="home">
     <h1>Заметки</h1>
-    {#if !app.notes.length}
+    {#if !notes.all.length}
       <p>Хранилище пусто: положите .typ-файлы в data/vault/.</p>
     {:else}
       <p class="home-lead">
-        {app.notes.length - books}
-        {plural(app.notes.length - books, "заметка", "заметки", "заметок")} и {books}
+        {notes.all.length - books}
+        {plural(notes.all.length - books, "заметка", "заметки", "заметок")} и {books}
         {plural(books, "книга", "книги", "книг")}.
-        {#if app.notes.some((n) => n.id === "Начало")}
+        {#if notes.all.some((n) => n.id === "Начало")}
           Начните с <a href={noteHref("Начало")}>экскурсии по возможностям</a>.
         {/if}
       </p>
       {#if !graphFailed}
         <section class="graph">
           {#if graph}
-            <Graph layout={graph} onopen={(id, newTab) => app.open(id, null, { newTab })} />
+            <Graph layout={graph} onopen={(id, newTab) => router.open(id, null, { newTab })} />
             <GraphLegend groups={graph.groups} />
           {/if}
         </section>
@@ -56,11 +56,11 @@
       {/if}
       <h2>Все заметки</h2>
       <div class="home-list">
-        {#each byFolder as [folder, notes] (folder)}
+        {#each byFolder as [folder, list] (folder)}
           <div>
             <h3>{folder}</h3>
             <ul>
-              {#each notes as n (n.id)}
+              {#each list as n (n.id)}
                 <li>
                   <a href={noteHref(n.id)}>{n.name}</a>
                   {#if n.kind === "book"}<span class="home-kind"> книга</span>{/if}

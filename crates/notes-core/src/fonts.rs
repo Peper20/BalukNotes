@@ -11,6 +11,7 @@
 
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Write as _;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
@@ -48,6 +49,9 @@ pub struct Fonts {
     store: FontStore,
     /// Шрифты для браузера: план частей и уже сжатые части.
     web: Mutex<HashMap<WebKey, Option<Arc<WebFace>>>>,
+    /// Кэш сжатых частей на диске (`data/cache/fonts`): сервер и
+    /// `notes build` не сжимают их при каждом запуске заново.
+    web_cache: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for Fonts {
@@ -94,13 +98,21 @@ impl WebVariant {
     }
 }
 
+/// Имя файла части шрифта у статического сайта: `Gentium-Plus-regular-latin.woff2`.
+pub fn font_file_name(family: &str, variant: WebVariant, chunk: &str) -> String {
+    format!("{}-{}-{chunk}.woff2", family.replace(' ', "-"), variant.slug())
+}
+
 /// Шрифт одного начертания для браузера: части по наборам знаков. Части
 /// сжимаются при первом запросе (Gentium — ~0,1 с на часть, математический
-/// шрифт целиком — ~2 с) и дальше отдаются из памяти.
+/// шрифт целиком — ~2 с) и дальше отдаются из памяти; с кэшем на диске —
+/// берутся оттуда (имя файла — хэш шрифта и части, [`crate::webfonts::chunk_key`]).
 pub struct WebFace {
     data: Bytes,
     pub chunks: Vec<crate::webfonts::Chunk>,
     files: Vec<OnceLock<Option<Arc<[u8]>>>>,
+    /// Каталог кэша и хэш файла шрифта.
+    cache: Option<(PathBuf, u64)>,
 }
 
 impl std::fmt::Debug for WebFace {
@@ -110,10 +122,17 @@ impl std::fmt::Debug for WebFace {
 }
 
 impl WebFace {
-    fn new(data: Bytes) -> Self {
+    fn new(data: Bytes, cache: Option<&PathBuf>) -> Self {
         let chunks = crate::webfonts::plan(&data);
         let files = chunks.iter().map(|_| OnceLock::new()).collect();
-        Self { data, chunks, files }
+        let cache = cache.map(|dir| (dir.clone(), crate::version::StableHasher::new().bytes(&data).finish()));
+        Self { data, chunks, files, cache }
+    }
+
+    /// Файл части в кэше на диске.
+    fn cached_path(&self, i: usize) -> Option<PathBuf> {
+        let (dir, hash) = self.cache.as_ref()?;
+        Some(dir.join(format!("{}.woff2", crate::webfonts::chunk_key(*hash, &self.chunks[i]))))
     }
 
     /// WOFF2 части `name` (`latin`, `cyrillic`, …, `all`).
@@ -121,8 +140,17 @@ impl WebFace {
         let i = self.chunks.iter().position(|c| c.name == name)?;
         self.files[i]
             .get_or_init(|| {
+                let cached = self.cached_path(i);
+                if let Some(data) = cached.as_ref().and_then(|p| fs::read(p).ok()).filter(|d| d.starts_with(b"wOF2")) {
+                    return Some(Arc::from(data));
+                }
                 let started = std::time::Instant::now();
                 let file = crate::webfonts::chunk_woff2(&self.data, &self.chunks[i]).map(Arc::from);
+                if let (Some(path), Some(data)) = (&cached, &file)
+                    && let Err(e) = crate::fsutil::write_atomic(path, data)
+                {
+                    tracing::warn!("кэш шрифтов: {e}");
+                }
                 tracing::debug!(
                     chunk = name,
                     bytes = file.as_ref().map(|f: &Arc<[u8]>| f.len()),
@@ -150,7 +178,14 @@ impl Fonts {
         // Иначе системный шрифт того же семейства мог бы победить при выборе
         // (Typst предпочитает вариативный файл статическому).
         store.extend(fonts::system().filter(|(_, info)| !shadowed.contains(&info.family.to_lowercase())));
-        Self { store, web: Mutex::new(HashMap::new()) }
+        Self { store, web: Mutex::new(HashMap::new()), web_cache: None }
+    }
+
+    /// Хранить сжатые части шрифтов для браузера в каталоге `dir`.
+    #[must_use]
+    pub fn with_web_cache(mut self, dir: Option<PathBuf>) -> Self {
+        self.web_cache = dir;
+        self
     }
 
     /// Шрифт семейства `family` этого начертания для браузера (см. [`Self::web_font`]
@@ -160,16 +195,48 @@ impl Fonts {
         // запрос страницы должен попасть в тот же кэш, а не начать заново.
         let mut web = self.web.lock();
         web.entry((family.to_owned(), variant))
-            .or_insert_with(|| self.web_font(family, variant).map(|data| Arc::new(WebFace::new(data))))
+            .or_insert_with(|| {
+                self.web_font(family, variant).map(|data| Arc::new(WebFace::new(data, self.web_cache.as_ref())))
+            })
             .clone()
+    }
+
+    /// `@font-face` на каждую часть шрифтов `families` (браузер качает только
+    /// части со знаками страницы — `unicode-range`). `base` — путь к файлам:
+    /// `/fonts/` у сервера (файл части — `{base}{семейство}/{начертание}/{часть}.woff2`),
+    /// `fonts/` у статического сайта (файл — [`font_file_name`]).
+    pub fn font_faces(&self, families: &[impl AsRef<str>], base: &str) -> String {
+        let mut out = String::from("/* Шрифты оформления: те же файлы, что у Typst, в WOFF2 и по наборам знаков. */\n");
+        for family in families {
+            let family = family.as_ref();
+            for v in WebVariant::ALL {
+                let Some(face) = self.web_face(family, v) else { continue };
+                for chunk in &face.chunks {
+                    let url = if base.starts_with('/') {
+                        format!("{base}{}/{}/{}.woff2", family.replace(' ', "%20"), v.slug(), chunk.name)
+                    } else {
+                        format!("{base}{}", font_file_name(family, v, &chunk.name))
+                    };
+                    let range =
+                        chunk.unicode_range.as_ref().map(|r| format!(" unicode-range: {r};")).unwrap_or_default();
+                    let _ = writeln!(
+                        out,
+                        "@font-face {{ font-family: \"{family}\"; src: url(\"{url}\") format(\"woff2\"); font-style: {}; font-weight: {}; font-display: swap;{range} }}",
+                        if v.italic { "italic" } else { "normal" },
+                        if v.bold { 700 } else { 400 },
+                    );
+                }
+            }
+        }
+        out
     }
 
     /// Сжать все части шрифтов `families` заранее (в фоне при запуске
     /// сервера: первая страница не ждёт сжатия).
-    pub fn warm_web(&self, families: &[&str]) {
+    pub fn warm_web(&self, families: &[impl AsRef<str>]) {
         for family in families {
             for v in WebVariant::ALL {
-                if let Some(face) = self.web_face(family, v) {
+                if let Some(face) = self.web_face(family.as_ref(), v) {
                     for c in &face.chunks {
                         face.file(&c.name);
                     }
@@ -180,6 +247,17 @@ impl Fonts {
 
     pub fn book(&self) -> &LazyHash<FontBook> {
         self.store.book()
+    }
+
+    /// Отпечаток набора шрифтов (семейства и число начертаний) — для метки
+    /// кэша на диске: поставили или убрали шрифт — отрисовка могла
+    /// измениться.
+    pub fn fingerprint(&self) -> u64 {
+        let mut h = crate::version::StableHasher::new();
+        for (family, infos) in self.store.book().families() {
+            h.str(family).u64(infos.count() as u64);
+        }
+        h.finish()
     }
 
     pub fn font(&self, index: usize) -> Option<Font> {
@@ -244,6 +322,31 @@ mod tests {
         assert!(
             Arc::ptr_eq(&math, &fonts.web_face("New Computer Modern Math", WebVariant::ALL[0]).unwrap()),
             "план — один раз"
+        );
+    }
+
+    #[test]
+    fn web_chunks_are_cached_on_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = Fonts::load(&[]).with_web_cache(Some(dir.path().to_path_buf()));
+        let face = first.web_face("JetBrains Mono", WebVariant::ALL[0]).unwrap();
+        let latin = face.file("latin").unwrap();
+        let files: Vec<_> = fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.path()).collect();
+        assert_eq!(files.len(), 1);
+        // Подменённый файл кэша читается как есть — значит, не сжимается заново.
+        let mut marked = fs::read(&files[0]).unwrap();
+        assert_eq!(&marked[..], &latin[..]);
+        marked.extend_from_slice(b"from-cache");
+        fs::write(&files[0], &marked).unwrap();
+        let second = Fonts::load(&[]).with_web_cache(Some(dir.path().to_path_buf()));
+        let again = second.web_face("JetBrains Mono", WebVariant::ALL[0]).unwrap().file("latin").unwrap();
+        assert!(again.ends_with(b"from-cache"));
+        // Испорченный (не WOFF2) — сжимается заново.
+        fs::write(&files[0], b"junk").unwrap();
+        let third = Fonts::load(&[]).with_web_cache(Some(dir.path().to_path_buf()));
+        assert_eq!(
+            &third.web_face("JetBrains Mono", WebVariant::ALL[0]).unwrap().file("latin").unwrap()[..],
+            &latin[..]
         );
     }
 }

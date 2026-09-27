@@ -1,0 +1,27 @@
+/* Рисунки: подписи, кадры SVG (`k-frame`), ряды, варианты по темам. */
+
+.k-note {
+  figure { margin: 1.3em 0; }
+  figcaption {
+    width: fit-content; max-width: 90%; margin: 0.7em auto 0;
+    font-size: 0.84em; line-height: 1.4; text-align: left;
+  }
+  .k-fig-num { font-weight: bold; color: var(--k-accent); }
+  .k-frame { display: flex; justify-content: center; max-width: 100%; }
+  /* Подписи рисунков в PDF — 9.2pt при тексте 11pt; с экрана это мелко,
+   * поэтому рисунок крупнее на 15% (SVG задан в em — растёт целиком). */
+  .k-fig { font-size: 1.15em; }
+  .k-layout { justify-content: flex-start; }
+  /* Размер SVG задан инлайн в em: на узком экране ужимаем по ширине. */
+  .k-frame svg { max-width: 100% !important; height: auto !important; }
+  .k-row {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.8em;
+  }
+  .k-row-sep { font-size: 1.4em; }
+  .k-center { text-align: center; }
+  .k-right { text-align: right; }
+  .k-center > .k-frame { justify-content: center; }
+
+  /* Варианты рисунка по темам: видим только вариант текущей темы. */
+  .k-frame-v { display: none; }
+}

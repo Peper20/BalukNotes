@@ -13,6 +13,7 @@ ts = ["dep:ts-rs"]
 
 [dependencies]
 brotli.workspace = true
+ttf2woff2.workspace = true
 fontcull.workspace = true
 ttf-parser.workspace = true
 typst.workspace = true
@@ -22,13 +23,19 @@ typst-pdf.workspace = true
 typst-kit.workspace = true
 comemo.workspace = true
 ecow.workspace = true
+notify.workspace = true
 parking_lot.workspace = true
 rust-embed.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+siphasher.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 ts-rs = { workspace = true, optional = true }
+
+[build-dependencies]
+# Метка кода отрисовки для кэша на диске (build.rs).
+siphasher.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

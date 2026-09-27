@@ -5,7 +5,7 @@
   import FileText from "@lucide/svelte/icons/file-text";
   import FolderIcon from "@lucide/svelte/icons/folder";
   import FolderOpen from "@lucide/svelte/icons/folder-open";
-  import { app } from "../lib/app.svelte";
+  import { router } from "../lib/state";
   import { noteHref } from "../lib/ids";
   import { countNotes, type Folder } from "../lib/tree";
   import { ui } from "../lib/ui.svelte";
@@ -28,7 +28,7 @@
   </details>
 {/each}
 {#each folder.notes as n (n.id)}
-  <a href={noteHref(n.id)} data-id={n.id} class:book={n.kind === "book"} class:active={n.id === app.currentId} title={n.kind === "book" ? `${n.name} — книга` : n.name}>
+  <a href={noteHref(n.id)} data-id={n.id} class:book={n.kind === "book"} class:active={n.id === router.currentId} title={n.kind === "book" ? `${n.name} — книга` : n.name}>
     {#if n.kind === "book"}<BookIcon class="tree-icon" {...icon} />{:else}<FileText class="tree-icon" {...icon} />{/if}
     <span class="tree-name">{n.name}</span>
   </a>

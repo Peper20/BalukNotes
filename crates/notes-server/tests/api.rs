@@ -7,6 +7,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use notes_core::settings::{Schema, SettingsStore};
+use notes_core::storage::MemStorage;
 use notes_core::{LibrarySource, Notes, NotesConfig};
 use notes_server::{AppState, router};
 use serde_json::Value;
@@ -29,7 +30,14 @@ static NOTES: LazyLock<Arc<Notes>> = LazyLock::new(|| {
 fn app() -> (axum::Router, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
     let settings = SettingsStore::open(dir.path().join("settings.json"), Schema::new(NOTES.themes().themes())).unwrap();
-    (router(AppState { notes: NOTES.clone(), settings: Arc::new(settings) }), dir)
+    (router(AppState::new(NOTES.clone(), Arc::new(settings))), dir)
+}
+
+/// То же с токеном доступа.
+fn app_with_token(token: &str) -> (axum::Router, tempfile::TempDir) {
+    let dir = tempfile::tempdir().unwrap();
+    let settings = SettingsStore::open(dir.path().join("settings.json"), Schema::new(NOTES.themes().themes())).unwrap();
+    (router(AppState::new(NOTES.clone(), Arc::new(settings)).with_token(Some(token.into()))), dir)
 }
 
 async fn call(app: axum::Router, method: &str, uri: &str, body: Option<&str>) -> (StatusCode, Value) {
@@ -146,7 +154,7 @@ async fn links_and_graph() {
     assert_eq!(status, StatusCode::OK);
     let missing: Vec<_> =
         graph["nodes"].as_array().unwrap().iter().filter(|n| n["kind"].is_null()).map(|n| &n["id"]).collect();
-    assert_eq!(missing, ["Нет/Такой заметки", "Сеть/Nginx"]);
+    assert_eq!(missing, ["Нет/Из несобравшейся", "Нет/Такой заметки", "Сеть/Nginx"]);
     assert!(graph["edges"].as_array().unwrap().iter().any(|e| e["from"] == "Сеть/UFW" && e["to"] == "Сеть/SSH"));
 
     // Граф по фильтру — уже разложенный: соседи SSH на шаг, без ненаписанных.
@@ -189,6 +197,15 @@ async fn search_preview_and_note_meta() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(hits[0]["id"], "Книга");
     assert_eq!(hits[0]["anchor"], "Итоги-2");
+
+    // В одной книге — все разделы по порядку.
+    let (status, inside) =
+        call(app.clone(), "GET", &format!("/api/search?q={}&note={}", uri("итоги"), uri("Книга")), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(inside.as_array().unwrap().iter().all(|h| h["id"] == "Книга"));
+    let q = format!("/api/search?q=x&note={}", uri("Нет/такой"));
+    assert_eq!(call(app.clone(), "GET", &q, None).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(call(app.clone(), "GET", "/api/search?q=x&note=../x", None).await.0, StatusCode::BAD_REQUEST);
 
     let (status, p) =
         call(app.clone(), "GET", &format!("{}?anchor={}", uri("/api/preview/Сеть/SSH"), uri("Смена порта")), None)
@@ -247,4 +264,114 @@ async fn book_by_chapters() {
     // Не книга — целиком и с chapter.
     let (_, note) = call(app.clone(), "GET", &format!("{}?chapter=1", uri("/api/notes/Сеть/SSH")), None).await;
     assert!(note["book"].is_null() && note["rendered"]["title"] == "SSH");
+}
+
+#[tokio::test]
+async fn token_is_required_when_set() {
+    let (open, _open_dir) = app();
+    let (app, _dir) = app_with_token("s3cret");
+    let get = |uri: &str| Request::get(uri).body(Body::empty()).unwrap();
+    let status = |res: axum::response::Response| res.status();
+
+    // Без токена или с чужим — 401 на всём: API, клиент, шрифты.
+    for path in ["/api/notes", "/", "/api/fonts.css", "/assets/baluk.css"] {
+        assert_eq!(status(app.clone().oneshot(get(path)).await.unwrap()), StatusCode::UNAUTHORIZED, "{path}");
+    }
+    let (code, body) = call(app.clone(), "GET", "/api/notes", None).await;
+    assert_eq!(code, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["error"], "нужен токен доступа");
+    let wrong = Request::get("/api/notes").header("authorization", "Bearer s3cre").body(Body::empty()).unwrap();
+    assert_eq!(status(app.clone().oneshot(wrong).await.unwrap()), StatusCode::UNAUTHORIZED);
+
+    // С токеном — 200: заголовком, параметром адреса (ставит cookie) и cookie.
+    let bearer = Request::get("/api/notes").header("authorization", "Bearer s3cret").body(Body::empty()).unwrap();
+    let res = app.clone().oneshot(bearer).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert!(res.headers().get("set-cookie").is_none());
+
+    let res = app.clone().oneshot(get("/api/notes?token=s3cret")).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let cookie = res.headers()["set-cookie"].to_str().unwrap().to_owned();
+    assert!(cookie.starts_with("notes_token=s3cret;") && cookie.contains("HttpOnly"), "{cookie}");
+
+    let with_cookie =
+        Request::get("/api/fonts.css").header("cookie", "theme=x; notes_token=s3cret").body(Body::empty());
+    assert_eq!(status(app.oneshot(with_cookie.unwrap()).await.unwrap()), StatusCode::OK);
+
+    // Без токена в настройках — проверки нет.
+    assert_eq!(status(open.oneshot(get("/api/notes")).await.unwrap()), StatusCode::OK);
+}
+
+/// Следующий кадр тела ответа как текст (с тайм-аутом).
+async fn next_frame(body: &mut Body) -> String {
+    let frame =
+        tokio::time::timeout(std::time::Duration::from_secs(10), body.frame()).await.expect("событие не пришло");
+    String::from_utf8(frame.unwrap().unwrap().into_data().unwrap().to_vec()).unwrap()
+}
+
+#[tokio::test]
+async fn events_report_file_changes() {
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let vault = tempfile::tempdir().unwrap();
+    std::fs::write(vault.path().join("A.typ"), "a").unwrap();
+    let notes = Arc::new(
+        Notes::open(&NotesConfig {
+            vault: vault.path().to_owned(),
+            library: LibrarySource::Dir(repo.join("baluk")),
+            font_dirs: vec![],
+            cache: None,
+        })
+        .unwrap(),
+    );
+    let dir = tempfile::tempdir().unwrap();
+    let settings = SettingsStore::open(dir.path().join("settings.json"), Schema::new(notes.themes().themes())).unwrap();
+    let state = AppState::new(notes.clone(), Arc::new(settings));
+    assert!(notes.watch(), "каталог на диске — с наблюдателем");
+    let res = router(state.clone()).oneshot(Request::get("/api/events").body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(res.headers()["content-type"], "text/event-stream");
+    let mut body = res.into_body();
+    assert_eq!(next_frame(&mut body).await, "event: hello\ndata: {\"watching\":true}\n\n");
+
+    std::fs::write(vault.path().join("B.typ"), "b").unwrap();
+    let change = next_frame(&mut body).await;
+    assert!(
+        change.starts_with("event: change\ndata: {\"seq\":") && change.contains(r#""paths":["B.typ"]"#),
+        "{change}"
+    );
+
+    // Остановка сервера закрывает поток.
+    state.closing.send_replace(true);
+    let end = tokio::time::timeout(std::time::Duration::from_secs(10), body.frame()).await.unwrap();
+    assert!(end.is_none());
+}
+
+#[tokio::test]
+async fn broken_watcher_closes_events() {
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mem = Arc::new(MemStorage::new());
+    mem.write("A.typ", "a");
+    let config = NotesConfig {
+        vault: PathBuf::new(),
+        library: LibrarySource::Dir(repo.join("baluk")),
+        font_dirs: vec![],
+        cache: None,
+    };
+    let notes = Arc::new(Notes::with_storage(mem.clone(), &config).unwrap());
+    let dir = tempfile::tempdir().unwrap();
+    let settings = SettingsStore::open(dir.path().join("settings.json"), Schema::new(notes.themes().themes())).unwrap();
+    let state = AppState::new(notes.clone(), Arc::new(settings));
+    assert!(notes.watch());
+    let res = router(state.clone()).oneshot(Request::get("/api/events").body(Body::empty()).unwrap()).await.unwrap();
+    let mut body = res.into_body();
+    assert_eq!(next_frame(&mut body).await, "event: hello\ndata: {\"watching\":true}\n\n");
+
+    // Изменения потеряны: «проверь всё», и поток закрывается — клиент
+    // переподключится и перейдёт на опрос.
+    mem.lose_changes();
+    assert!(!notes.watching());
+    let change = next_frame(&mut body).await;
+    assert!(change.starts_with("event: change\n") && change.contains(r#""paths":[]"#), "{change}");
+    let end = tokio::time::timeout(std::time::Duration::from_secs(10), body.frame()).await.unwrap();
+    assert!(end.is_none());
 }

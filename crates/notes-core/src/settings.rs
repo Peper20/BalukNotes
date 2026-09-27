@@ -1,8 +1,10 @@
 //! Настройки клиента: схема, проверка, хранение.
 //!
 //! Схема описана здесь, а клиент рисует форму **по схеме** — новая настройка
-//! добавляется одной записью в [`Schema::new`] и её применением в клиенте
-//! (`app/src/lib/appearance.ts`). Значения хранятся в JSON-файле плоским словарём
+//! добавляется одной записью в [`Schema::new`]. Настройка вида говорит, как
+//! её применить ([`Apply`]: атрибут `data-…` или CSS-переменная на `<html>`),
+//! — клиент (`app/src/lib/appearance.ts`) применяет её по схеме, а правило
+//! пишется в CSS (`app/src/baluk-css/`); правок TS не нужно. Значения хранятся в JSON-файле плоским словарём
 //! «ключ → значение»; неизвестные ключи и неверные значения при загрузке
 //! отбрасываются (с предупреждением в журнал), вместо них — значения по умолчанию.
 
@@ -31,6 +33,37 @@ pub struct SettingDef {
     #[serde(flatten)]
     pub kind: Kind,
     pub default: Value,
+    /// Как клиент применяет настройку к странице; `None` — сам, в своём коде
+    /// (тема, книги, обновление) или она для сервера (рисунки).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub apply: Option<Apply>,
+}
+
+/// Применение настройки вида: значение — на `<html>`, правило — в CSS.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(tag = "to", rename_all = "lowercase")]
+pub enum Apply {
+    /// Атрибут `name` (`data-…`) со значением строкой: `data-numbering="all"`,
+    /// `data-toc="false"`.
+    Attr { name: &'static str },
+    /// CSS-переменная `name` (`--…`) — значение с единицей: `--k-size: 19px`.
+    Var { name: &'static str, unit: &'static str },
+}
+
+impl SettingDef {
+    /// Применять атрибутом `data-…` на `<html>`.
+    fn attr(mut self, name: &'static str) -> Self {
+        self.apply = Some(Apply::Attr { name });
+        self
+    }
+
+    /// Применять CSS-переменной на `<html>`.
+    fn var(mut self, name: &'static str, unit: &'static str) -> Self {
+        self.apply = Some(Apply::Var { name, unit });
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -80,6 +113,7 @@ impl Schema {
             help: None,
             kind: Kind::Bool,
             default: json!(default),
+            apply: None,
         };
 
         Self {
@@ -99,6 +133,7 @@ impl Schema {
                     help: None,
                     kind: Kind::Choice { options: theme_options },
                     default: json!("auto"),
+                    apply: None,
                 },
                 SettingDef {
                     key: "appearance.font_size",
@@ -106,19 +141,23 @@ impl Schema {
                     help: Some("Рисунки масштабируются вместе с текстом"),
                     kind: Kind::Number { min: 12.0, max: 32.0, step: 1.0 },
                     default: json!(19),
-                },
+                    apply: None,
+                }
+                .var("--k-size", "px"),
                 SettingDef {
                     key: "appearance.measure",
                     label: "Ширина колонки, em",
                     help: Some("Удобно читать при 35–45 em"),
                     kind: Kind::Number { min: 25.0, max: 80.0, step: 1.0 },
                     default: json!(40),
-                },
-                bool_def("header.title", "Название", true),
-                bool_def("header.kind", "Надпись над названием («Конспект»)", true),
-                bool_def("header.description", "Описание", true),
-                bool_def("header.byline", "Автор и дата", true),
-                bool_def("header.tags", "Теги", true),
+                    apply: None,
+                }
+                .var("--k-measure", "em"),
+                bool_def("header.title", "Название", true).attr("data-header-title"),
+                bool_def("header.kind", "Надпись над названием («Конспект»)", true).attr("data-header-kind"),
+                bool_def("header.description", "Описание", true).attr("data-header-description"),
+                bool_def("header.byline", "Автор и дата", true).attr("data-header-byline"),
+                bool_def("header.tags", "Теги", true).attr("data-header-tags"),
                 SettingDef {
                     key: "headings.numbering",
                     label: "Номера заголовков",
@@ -131,7 +170,9 @@ impl Schema {
                         ],
                     },
                     default: json!("books"),
-                },
+                    apply: None,
+                }
+                .attr("data-numbering"),
                 SettingDef {
                     key: "headings.chapters",
                     label: "Главы книг",
@@ -143,7 +184,9 @@ impl Schema {
                         ],
                     },
                     default: json!("decorated"),
-                },
+                    apply: None,
+                }
+                .attr("data-chapters"),
                 SettingDef {
                     key: "books.pages",
                     label: "Показывать книгу",
@@ -152,6 +195,7 @@ impl Schema {
                         options: vec![choice("chapters", "по главам"), choice("whole", "целиком")]
                     },
                     default: json!("chapters"),
+                    apply: None,
                 },
                 SettingDef {
                     key: "figures.precision",
@@ -166,22 +210,25 @@ impl Schema {
                         ],
                     },
                     default: json!("2"),
+                    apply: None,
                 },
-                bool_def("panels.toc", "Оглавление сбоку, если хватает места", true),
+                bool_def("panels.toc", "Оглавление сбоку, если хватает места", true).attr("data-toc"),
                 SettingDef {
                     key: "panels.toc_depth",
                     label: "Уровней в оглавлении",
                     help: Some("1 — только главы книги или разделы заметки"),
                     kind: Kind::Number { min: 1.0, max: 4.0, step: 1.0 },
                     default: json!(2),
+                    apply: None,
                 },
-                bool_def("panels.backlinks", "«Ссылаются сюда» под заметкой", true),
+                bool_def("panels.backlinks", "«Ссылаются сюда» под заметкой", true).attr("data-backlinks"),
                 SettingDef {
                     key: "refresh.interval",
                     label: "Проверять изменения, раз в N секунд",
-                    help: Some("0 — только по кнопке «Обновить»"),
+                    help: Some("Если сервер следит за файлами — сразу, без опроса. 0 — только по кнопке «Обновить»"),
                     kind: Kind::Number { min: 0.0, max: 600.0, step: 1.0 },
                     default: json!(5),
+                    apply: None,
                 },
                 bool_def("refresh.on_focus", "Проверять при возврате в окно", true),
             ],
@@ -315,6 +362,36 @@ mod tests {
             assert!(s.groups.iter().any(|g| g.key == group), "{} без группы", d.key);
             assert_eq!(s.validate(d.key, &d.default).unwrap(), d.default, "{}: неверное значение по умолчанию", d.key);
         }
+    }
+
+    #[test]
+    fn appearance_applies_by_schema() {
+        let s = schema();
+        let mut names: Vec<_> = s
+            .settings
+            .iter()
+            .filter_map(|d| match d.apply {
+                Some(Apply::Attr { name }) => {
+                    assert!(name.starts_with("data-"), "{}: атрибут {name} — не data-…", d.key);
+                    Some(name)
+                }
+                Some(Apply::Var { name, .. }) => {
+                    assert!(name.starts_with("--"), "{}: переменная {name} — не --…", d.key);
+                    Some(name)
+                }
+                None => None,
+            })
+            .collect();
+        let n = names.len();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), n, "два применения на один атрибут");
+        // Так схему видит клиент (appearance.ts).
+        let json = serde_json::to_value(s.get("headings.numbering").unwrap()).unwrap();
+        assert_eq!(json["apply"], json!({ "to": "attr", "name": "data-numbering" }));
+        let json = serde_json::to_value(s.get("appearance.font_size").unwrap()).unwrap();
+        assert_eq!(json["apply"], json!({ "to": "var", "name": "--k-size", "unit": "px" }));
+        assert!(serde_json::to_value(s.get("appearance.theme").unwrap()).unwrap().get("apply").is_none());
     }
 
     #[test]

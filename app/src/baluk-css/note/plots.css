@@ -1,0 +1,60 @@
+/* Интерактивные рисунки (baluk/plots.typ) и ползунки (общие с кадрами). */
+
+.k-note {
+  /* Интерактивный рисунок (baluk/plots.typ): кадр Typst и подпись значений
+   * видны без JS (статический сайт); клиент ставит data-live и рисует живой. */
+  .k-plot-values { text-align: center; font-size: 0.8em; color: var(--k-muted); }
+  .k-plot[data-live] > :not(.k-plot-live) { display: none; }
+  .k-plot-legend {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 0.2em 1.2em;
+    font-size: 0.8em; font-style: italic;
+  }
+  .k-plot-live .k-plot-legend { font-size: 0.72em; }
+  .k-plot-live {
+    display: flex; flex-direction: column; align-items: center; gap: 0.35em;
+    font-size: 1.15em; /* как .k-fig: рисунок крупнее текста */
+  }
+  .k-plot-svg, .k-plot-canvas { display: block; max-width: 100%; height: auto; font-family: var(--k-font-text); }
+  .k-plot-svg { touch-action: pan-y; cursor: crosshair; }
+  .k-plot-canvas { touch-action: none; cursor: grab; }
+  .k-plot-canvas:active { cursor: grabbing; }
+  .k-plot-canvas:focus-visible { outline: 1px dashed var(--k-accent); outline-offset: 2px; }
+  .k-plot-readout, .k-plot-sliders { font-size: 0.72em; }
+  .k-plot-readout {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 0.2em 1.2em;
+    min-height: 1.5em; font-variant-numeric: tabular-nums; font-style: italic; text-align: center;
+  }
+  .k-plot-hint { color: var(--k-muted); font-style: normal; }
+  .k-plot-sliders {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 0.3em 1.6em;
+    max-width: 100%;
+  }
+  .k-plot-slider { display: flex; align-items: center; gap: 0.5em; }
+  .k-plot-param { font-style: italic; min-width: 1em; text-align: right; }
+  .k-plot-slider input { width: 9em; max-width: 40vw; accent-color: var(--k-accent); }
+  .k-plot-slider output { min-width: 3em; font-variant-numeric: tabular-nums; }
+
+  /* Ползунки кадров и интерактивных рисунков: тонкая дорожка, пройденная
+   * часть — цветом акцента (--k-fill ставит клиент). */
+  .k-frames-controls input[type="range"], .k-plot-slider input[type="range"] {
+    appearance: none; height: 1.4em; background: none; cursor: pointer;
+  }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(to right, var(--k-accent) var(--k-fill, 0%), color-mix(in srgb, var(--k-muted) 35%, transparent) var(--k-fill, 0%));
+  }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]::-moz-range-track {
+    height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--k-muted) 35%, transparent);
+  }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--k-accent); }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]::-webkit-slider-thumb {
+    appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%;
+    background: var(--k-accent); border: 2px solid var(--k-bg); box-shadow: 0 0 0 1px var(--k-accent);
+  }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]::-moz-range-thumb {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--k-accent); border: 2px solid var(--k-bg); box-shadow: 0 0 0 1px var(--k-accent);
+  }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]:focus-visible { outline: none; }
+  :is(.k-frames-controls, .k-plot-slider) input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--k-accent) 45%, transparent); }
+}

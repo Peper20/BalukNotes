@@ -5,8 +5,9 @@
 -->
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
-  import { app } from "../lib/app.svelte";
+  import { reader, router } from "../lib/state";
   import type { NotePage } from "../lib/api";
+  import { openDetails, restoreDetails } from "../lib/details";
   import { tagHref } from "../lib/ids";
   import { mountLive } from "../lib/live";
   import { ui } from "../lib/ui.svelte";
@@ -20,46 +21,47 @@
   onDestroy(() => unmountLive());
 
   $effect(() => {
-    const page = app.page;
+    const page = reader.page;
     const el = content;
     if (page && el) untrack(() => render(page, el));
   });
 
   // Переход по якорю в той же заметке (ссылка, оглавление, «назад»).
   $effect(() => {
-    const seq = app.anchorSeq;
+    const seq = router.anchorSeq;
     if (seq === seenAnchorSeq) return;
     seenAnchorSeq = seq;
     untrack(() => {
-      if (!app.page) return;
-      if (scrollToAnchor(app.anchor)) return;
+      if (!reader.page) return;
+      if (scrollToAnchor(router.anchor)) return;
       // «Назад» к месту без якоря — туда, где были; иначе — к началу.
-      const place = app.restore;
-      app.restore = null;
+      const place = reader.restore;
+      reader.restore = null;
       const chapter = place?.chapter ?? 0;
-      if (ui.book && chapter !== ui.chapter) app.showChapter(chapter, { mode: "keep", y: place?.y ?? 0, chapter });
+      if (ui.book && chapter !== ui.chapter) reader.showChapter(chapter, { mode: "keep", y: place?.y ?? 0, chapter });
       else scrollTo(0, place?.y ?? 0);
     });
   });
 
   function render(page: NotePage, el: HTMLDivElement) {
     const r = page.rendered;
-    const intent = app.scroll;
+    const intent = reader.scroll;
     unmountLive();
     // Та же заметка пересобрана (правка файла, «обновить») — раскрытые
-    // «Ответы» и прочие <details> не должны свернуться сами.
+    // «Ответы» и прочие <details> не должны свернуться сами (по разделу и
+    // тексту summary — lib/details.ts).
     const key = `${page.id}#${page.book?.chapter ?? ""}`;
-    const open = key === shown ? [...el.querySelectorAll("details")].map((d) => d.open) : [];
+    const open = key === shown ? openDetails(el) : new Set<string>();
     shown = key;
     el.innerHTML = r ? r.styles + r.body : "";
-    el.querySelectorAll("details").forEach((d, i) => open[i] && (d.open = true));
+    restoreDetails(el, open);
     linkTags(el);
-    unmountLive = mountLive(el, (id, newTab) => app.open(id, null, { newTab }));
+    unmountLive = mountLive(el, (id, newTab) => router.open(id, null, { newTab }));
     ui.book = page.book;
     ui.chapter = page.book?.chapter ?? 0;
-    app.chapter = page.book ? page.book.chapter : null;
+    reader.chapter = page.book ? page.book.chapter : null;
     if (intent.mode === "keep") scrollTo(0, intent.y);
-    else if (intent.mode === "anchor" && scrollToAnchor(app.anchor)) holdAnchor(page.id);
+    else if (intent.mode === "anchor" && scrollToAnchor(router.anchor)) holdAnchor(page.id);
     else scrollTo(0, 0);
     document.documentElement.dataset.state = "ready";
   }
@@ -78,7 +80,7 @@
     const k = ui.book?.anchors[name];
     if (k != null && k !== ui.chapter) {
       // Уже грузится (глава или сборка) — после загрузки прокрутит сама.
-      if (!app.pending) app.showChapter(k, { mode: "anchor" });
+      if (!reader.pending) reader.showChapter(k, { mode: "anchor" });
       return true;
     }
     const el = document.getElementById(name) ?? content.querySelector(`[data-k-anchor="${CSS.escape(name)}"]`);
@@ -92,8 +94,8 @@
    * перехода возвращаемся к нему после каждой догрузки шрифтов.
    */
   function holdAnchor(id: string) {
-    const anchor = app.anchor;
-    const again = () => app.page?.id === id && app.anchor === anchor && scrollToAnchor(anchor);
+    const anchor = router.anchor;
+    const again = () => reader.page?.id === id && router.anchor === anchor && scrollToAnchor(anchor);
     document.fonts.addEventListener("loadingdone", again);
     requestAnimationFrame(() => void document.fonts.ready.then(again));
     setTimeout(() => document.fonts.removeEventListener("loadingdone", again), 2000);
@@ -101,11 +103,11 @@
 </script>
 
 <main class="k-note" id="note">
-  {#if app.page}
+  {#if reader.page}
     <div class="note-body" bind:this={content}></div>
-  {:else if app.failure}
-    <p class="welcome">{app.failure}</p>
-  {:else if app.pending}
-    <Loading id={app.pending.id} since={app.pending.since} />
+  {:else if reader.failure}
+    <p class="welcome">{reader.failure}</p>
+  {:else if reader.pending}
+    <Loading id={reader.pending.id} since={reader.pending.since} />
   {/if}
 </main>

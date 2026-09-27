@@ -1,0 +1,20 @@
+/* Страница тегов сайта (tags.html): облако и разделы по тегам — как
+ * страница тегов приложения. */
+.k-note {
+  .k-site-tag-cloud { display: flex; flex-wrap: wrap; gap: 0.5em; text-indent: 0; text-align: left; }
+  .k-site-tag {
+    display: inline-block; padding: 0.15em 0.7em; border-radius: 1em; font-size: 0.85em;
+    background: var(--k-surface); color: var(--k-muted); border: 1px solid var(--k-line); text-decoration: none;
+  }
+  .k-site-tag:hover { color: var(--k-accent); border-color: var(--k-accent); }
+  .k-site-tag small { opacity: 0.7; }
+  .k-site-tag-notes { margin-top: 1.6em; }
+  .k-site-tag-notes h2 { margin: 0 0 0.3em; font-size: 1.1em; color: var(--k-accent); }
+  .k-site-tag-notes ul { list-style: none; padding: 0; margin: 0; }
+  .k-site-tag-notes li { margin: 0.35em 0; }
+  .k-site-tag-notes li::marker { content: none; }
+  .k-site-tag-notes a { color: var(--k-text); }
+  .k-site-tag-notes a:hover { color: var(--k-accent); }
+  .k-site-tag-notes span { color: var(--k-muted); font-size: 0.8em; }
+  .k-site-tags-empty { color: var(--k-muted); }
+}

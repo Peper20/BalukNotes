@@ -1,7 +1,7 @@
 <!-- «Ссылаются сюда»: кто ссылается на заметку — из индекса ссылок (без компиляции). -->
 <script lang="ts">
   import { api, type LinksResponse } from "../lib/api";
-  import { app } from "../lib/app.svelte";
+  import { notes } from "../lib/state";
   import { graphHref, noteHref, splitId } from "../lib/ids";
 
   let { id }: { id: string } = $props();
@@ -24,7 +24,7 @@
     <h2>Ссылаются сюда · {links.backlinks.length} <a class="backlinks-graph" href={graphHref(id)}>на графе</a></h2>
     <ul>
       {#each links.backlinks as b}
-        {@const note = app.notes.find((n) => n.id === b.from)}
+        {@const note = notes.all.find((n) => n.id === b.from)}
         <li>
           <a href={noteHref(b.from)}>{note?.name ?? splitId(b.from).name}</a>
           {#if note?.folder}<span class="anchor"> · {note.folder}</span>{/if}

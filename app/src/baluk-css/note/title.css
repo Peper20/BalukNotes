@@ -1,0 +1,21 @@
+/* Шапка заметки: надпись, название, описание, автор. */
+
+.k-note {
+  .k-title { margin: 1em 0 2.4em; text-align: center; }
+  .k-title-kind {
+    font-size: 0.82em; letter-spacing: 0.3em; text-transform: uppercase;
+    color: var(--k-accent);
+  }
+  .k-title h1 {
+    margin: 0.3em 0 0.25em; font-size: 2.4em; line-height: 1.15;
+    color: var(--k-accent); hyphens: manual;
+  }
+  .k-title::after {
+    content: ""; display: block; width: 40%; margin: 1.1em auto 0;
+    border-top: 0.6pt solid var(--k-accent);
+  }
+  .k-subtitle { font-size: 1.2em; text-align: center; margin: 0; text-indent: 0; }
+  .k-description, .k-byline { color: var(--k-muted); text-align: center; text-indent: 0; }
+  .k-description { font-style: italic; font-size: 0.92em; max-width: 80%; margin: 0.8em auto 0; }
+  .k-byline { font-size: 0.9em; }
+}

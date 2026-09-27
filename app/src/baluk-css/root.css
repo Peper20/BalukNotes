@@ -1,0 +1,15 @@
+/* Переменные оформления и фон страницы (кегль и ширину колонки меняют настройки). */
+
+:root {
+  --k-font-text: "Gentium Plus", "Gentium Book", "New Computer Modern", serif;
+  --k-font-code: "JetBrains Mono", "DejaVu Sans Mono", monospace;
+  --k-font-math: "New Computer Modern Math", "Libertinus Math", math;
+  --k-size: 19px;
+  --k-measure: 40em;
+}
+
+html {
+  background: var(--k-bg);
+  color: var(--k-text);
+  -webkit-text-size-adjust: 100%;
+}

@@ -1,38 +1,48 @@
-//! Заметки как сервис: ленивая компиляция, кэш и версии.
+//! Заметки как сервис — фасад ядра для сервера и CLI.
 //!
-//! Заметка собирается, когда её запросили (или заранее — прогрев сервера,
-//! [`crate::warm`]). Вместе с результатом
-//! запоминается список файлов, которые прочитала компиляция (сама заметка,
-//! библиотека, код из `код-из-файла`, картинки…). **Версия** — хэш времён
-//! изменения и размеров этих файлов: узнать, изменилась ли заметка, стоит
-//! нескольких `stat`, без компиляции. Никаких фоновых наблюдателей: см.
-//! `docs/architecture.md`, «Обновление — по запросу».
+//! Слои (каждый со своими тестами, без компиляции Typst):
 //!
-//! Обработка рисунков ([`crate::figures`]) зависит от настроек, поэтому в
-//! кэше лежит и сырая отрисовка: смена точности не перекомпилирует заметку.
-//! Настройки входят в версию страницы — клиент перезапросит её сам.
+//! - [`crate::storage`] — файлы хранилища ([`Storage`]: каталог на диске, в
+//!   тестах — память);
+//! - [`crate::pipeline`] — сборка: исходник → компиляция по темам →
+//!   отрисовка, обработка рисунков;
+//! - [`crate::page_cache`] — кэш страниц: память (LRU) + диск
+//!   ([`crate::cache`]), версии по файлам ([`crate::version`]);
+//! - [`crate::pages`] — страница по запросу: сборки по одной, ошибка поверх
+//!   прежней отрисовки;
+//! - [`crate::warm`] — прогрев поверх `pages`.
+//!
+//! Здесь они собираются вместе; сюда же — индекс исходников (ссылки,
+//! поиск), PDF и страницы статического сайта. Наблюдатель файлов
+//! ([`crate::watch`]) включает только сервер ([`Notes::watch`]): индекс не
+//! обходит хранилище без изменений, прогрев просыпается от них; CLI
+//! обходится без него.
 
-use std::collections::HashMap;
 use std::fs;
-use std::hash::{DefaultHasher, Hash, Hasher};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{Duration, SystemTime};
-
-use parking_lot::Mutex;
-use serde::Serialize;
 
 use crate::cache::DiskCache;
 use crate::diag::Diagnostic;
-use crate::figures::{self, FigureOptions};
+use crate::figures::FigureOptions;
 use crate::fonts::Fonts;
 use crate::graph::{Snapshot, SourceIndex};
-use crate::render::{self, LinkResolver, Rendered};
+use crate::page_cache::{MEMORY_BUDGET, PageCache};
+use crate::pages::Pages;
+use crate::pipeline::{Pipeline, TypstPipeline};
+use crate::storage::Storage;
 use crate::themes::ThemeSet;
-use crate::vault::{Entry, NoteId, NoteKind, Vault};
-use crate::world::{Compiler, LibrarySource, VAULT_DIR, VirtualFiles};
+use crate::vault::{Entry, NoteId, Vault};
+use crate::vault_data::VaultData;
+use crate::vault_graph::{GraphData, GraphFilter, GraphLayout, Layouts};
+use crate::version::Versions;
+use crate::warm::{RESCAN, RESCAN_UNWATCHED, WarmStats, Warmer};
+use crate::watch::{Change, Changes};
+use crate::world::{Compiler, LibrarySource};
 use crate::{Error, Result};
+
+pub use crate::pages::NotePage;
+pub use crate::pipeline::{LinkStyle, encode, static_path};
 
 #[derive(Debug, Clone)]
 pub struct NotesConfig {
@@ -42,67 +52,33 @@ pub struct NotesConfig {
     pub library: LibrarySource,
     /// Дополнительные каталоги шрифтов (к системным и встроенным в Typst).
     pub font_dirs: Vec<PathBuf>,
-    /// Кэш отрисовки на диске (`None` — только в памяти).
+    /// Каталог кэша на диске (`data/cache`, `None` — только в памяти):
+    /// `pages/` — отрисовка заметок, `fonts/` — части шрифтов для браузера.
     pub cache: Option<PathBuf>,
-}
-
-/// Куда ведут ссылки между заметками.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LinkStyle {
-    /// `/n/Сеть/SSH#якорь` — для сервера и клиента-SPA.
-    Server,
-    /// `../Сеть/SSH.html#якорь` — для статического сайта (`notes build`).
-    Static,
-}
-
-/// Заметка, готовая к показу.
-#[derive(Debug, Serialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-pub struct NotePage {
-    pub id: NoteId,
-    pub kind: NoteKind,
-    /// Версия файлов заметки и настроек отрисовки.
-    pub version: String,
-    /// Последняя удачная отрисовка. При ошибке компиляции — предыдущая
-    /// удачная (если была): читатель видит заметку и ошибку поверх неё.
-    pub rendered: Option<Arc<Rendered>>,
-    pub errors: Vec<Diagnostic>,
-    pub warnings: Vec<Diagnostic>,
-    /// Книга по главам: какая глава в `rendered` и где остальные. Только у
-    /// ответа на запрос главы ([`crate::book::chapter_page`]); у страницы
-    /// целиком — `None`.
-    pub book: Option<crate::book::BookView>,
-}
-
-#[derive(Debug)]
-struct Cached {
-    page: Arc<NotePage>,
-    /// Отрисовка до обработки рисунков (последняя удачная).
-    raw: Option<Arc<Rendered>>,
-    opts: FigureOptions,
-    deps: Vec<PathBuf>,
-    /// Версия файлов, по которой собрана страница.
-    files: String,
 }
 
 #[derive(Debug)]
 pub struct Notes {
-    vault: Vault,
-    compiler: Compiler,
-    themes: ThemeSet,
-    cache: Mutex<HashMap<NoteId, Cached>>,
-    /// Держится на время сборки заметки (см. [`Notes::page`]).
-    building: Mutex<()>,
-    disk: Option<DiskCache>,
+    pages: Pages,
+    typst: Arc<TypstPipeline>,
     links: Arc<SourceIndex>,
-    /// Сколько запросов страниц сейчас ждут: прогрев им уступает.
-    waiting: AtomicUsize,
-    warm: crate::warm::WarmQueue,
+    layouts: Arc<Layouts>,
+    warmer: Arc<Warmer>,
+    changes: Arc<Changes>,
 }
 
 impl Notes {
+    /// Хранилище — каталог `config.vault`.
     pub fn open(config: &NotesConfig) -> Result<Self> {
-        let vault = Vault::open(&config.vault)?;
+        Self::with_vault(Vault::open(&config.vault)?, config)
+    }
+
+    /// Хранилище — любой [`Storage`] (`config.vault` не используется).
+    pub fn with_storage(storage: Arc<dyn Storage>, config: &NotesConfig) -> Result<Self> {
+        Self::with_vault(Vault::new(storage), config)
+    }
+
+    fn with_vault(vault: Vault, config: &NotesConfig) -> Result<Self> {
         let library = match &config.library {
             LibrarySource::Dir(dir) => LibrarySource::Dir(fs::canonicalize(dir).map_err(|e| Error::io(dir, e))?),
             LibrarySource::Embedded => LibrarySource::Embedded,
@@ -110,51 +86,65 @@ impl Notes {
         if !library.is_valid() {
             return Err(Error::Library(format!("в библиотеке {library:?} нет lib.typ")));
         }
-        let fonts = Arc::new(Fonts::load(&config.font_dirs));
+        let fonts =
+            Arc::new(Fonts::load(&config.font_dirs).with_web_cache(config.cache.as_ref().map(|c| c.join("fonts"))));
         let links = Arc::new(SourceIndex::default());
-        // Данные хранилища для заметок (`/_vault/graph/…` — граф по фильтру).
-        let virtuals = {
-            let (links, vault) = (links.clone(), vault.clone());
-            VirtualFiles(Arc::new(move |path: &str| {
-                crate::vault_graph::virtual_file(|| links.snapshot(&vault).map_err(|e| e.to_string()), path)
-            }))
-        };
-        let compiler = Compiler::new(vault.root(), library, fonts, Some(virtuals));
+        let changes = Arc::new(Changes::default());
+        links.set_changes(changes.clone());
+        let layouts = Arc::new(Layouts::default());
+        // Данные хранилища для заметок: `/_vault/<префикс>/…`.
+        let data = VaultData::new().with(
+            crate::vault_graph::DATA_PREFIX,
+            GraphData { vault: vault.clone(), index: links.clone(), layouts: layouts.clone() },
+        );
+        let versions = Versions::new(vault.storage().clone()).with_data(data);
+        let stamp = crate::cache::stamp(&[library.fingerprint(), fonts.fingerprint()]);
+        let compiler = Compiler::new(versions.clone(), library, fonts);
         let themes = ThemeSet::load(&compiler)?;
-        let disk = config.cache.as_ref().map(|dir| DiskCache::new(dir, vault.root()));
-        Ok(Self {
-            vault,
-            compiler,
-            themes,
-            cache: Mutex::default(),
-            building: Mutex::new(()),
-            disk,
-            links,
-            waiting: AtomicUsize::new(0),
-            warm: crate::warm::WarmQueue::default(),
-        })
+        let disk = config.cache.as_ref().map(|dir| DiskCache::new(dir.join("pages"), &vault.location(), stamp));
+        let cache = PageCache::new(versions, disk, MEMORY_BUDGET);
+        let typst = Arc::new(TypstPipeline::new(vault.clone(), compiler, themes));
+        let pages = Pages::new(vault, typst.clone(), cache);
+        // Индекс ссылок дополняется ссылками собранных страниц (вычисляемые
+        // пути). Слабая ссылка: кэш страниц сам держит индекс через граф.
+        let cache = Arc::downgrade(pages.cache());
+        links.set_built(Box::new(move |id: &NoteId| cache.upgrade()?.links(id)));
+        let warmer = Arc::new(Warmer::default());
+        let weak = Arc::downgrade(&warmer);
+        changes.subscribe(move |_| {
+            if let Some(w) = weak.upgrade() {
+                w.poke();
+            }
+        });
+        Ok(Self { pages, typst, links, layouts, warmer, changes })
     }
 
     pub fn vault(&self) -> &Vault {
-        &self.vault
+        self.pages.vault()
     }
 
     pub fn themes(&self) -> &ThemeSet {
-        &self.themes
+        self.typst.themes()
     }
 
     pub fn fonts(&self) -> &Fonts {
-        self.compiler.fonts()
+        self.typst.fonts()
     }
 
     pub fn entries(&self) -> Result<Vec<Entry>> {
-        self.vault.entries()
+        self.vault().entries()
     }
 
     /// Индекс исходников (без компиляции): ссылки, граф, названия и теги,
     /// разделы для поиска.
     pub fn index(&self) -> Result<Snapshot> {
-        self.links.snapshot(&self.vault)
+        self.links.snapshot(self.vault())
+    }
+
+    /// Граф хранилища по фильтру, разложенный (раскладка — из кэша, если
+    /// такой граф уже раскладывали).
+    pub fn graph_layout(&self, filter: &GraphFilter) -> Result<GraphLayout> {
+        Ok((*self.index()?.graph_layout_cached(filter, &self.layouts)).clone())
     }
 
     /// Превью заметки (и раздела) для подсказки при наведении на ссылку.
@@ -167,366 +157,93 @@ impl Notes {
         Ok(crate::search::search(&self.index()?, query, limit))
     }
 
-    /// Страница заметки для сервера: из кэша, если её файлы не менялись.
-    ///
-    /// Сборки идут по одной (под `building`). Второй запрос той же заметки,
-    /// пришедший во время её сборки (пользователь ушёл и вернулся), ждёт
-    /// первую и берёт результат из кэша, а не собирает заново.
+    /// Индекс поиска заметок, для которых `keep` (статический сайт — собранных).
+    pub fn search_documents(&self, keep: impl Fn(&NoteId) -> bool) -> Result<Vec<crate::search::SearchDoc>> {
+        Ok(crate::search::documents(&self.index()?, keep))
+    }
+
+    /// Поиск в одной заметке (книге): все разделы по порядку текста.
+    pub fn search_in(&self, id: &NoteId, query: &str, limit: usize) -> Result<Vec<crate::search::SearchHit>> {
+        let index = self.index()?;
+        if !index.exists(id.as_str()) {
+            return Err(Error::NotFound(id.to_string()));
+        }
+        Ok(crate::search::search_in(&index, id, query, limit))
+    }
+
+    /// Страница заметки для сервера: из кэша, если её файлы не менялись
+    /// (см. [`Pages::page`]).
     pub fn page(&self, id: &NoteId, opts: FigureOptions) -> Result<Arc<NotePage>> {
-        /// Запрос ждёт страницу — прогрев не начнёт новую сборку.
-        struct Waiting<'a>(&'a AtomicUsize);
-        impl Drop for Waiting<'_> {
-            fn drop(&mut self) {
-                self.0.fetch_sub(1, Ordering::SeqCst);
-            }
-        }
-        self.waiting.fetch_add(1, Ordering::SeqCst);
-        let _waiting = Waiting(&self.waiting);
-        self.page_inner(id, opts)
-    }
-
-    fn page_inner(&self, id: &NoteId, opts: FigureOptions) -> Result<Arc<NotePage>> {
-        let entry = self.vault.entry(id)?;
-        if let Some(page) = self.fresh(id, opts) {
-            return Ok(page);
-        }
-        let _building = self.building.lock();
-        if let Some(page) = self.fresh(id, opts) {
-            return Ok(page);
-        }
-        let previous_raw = self.cache.lock().get(id).and_then(|c| c.raw.clone());
-        if previous_raw.is_none()
-            && let Some(page) = self.load_from_disk(&entry, opts)
-        {
-            return Ok(page);
-        }
-        let built = self.build(&entry, LinkStyle::Server, opts);
-        let (rendered, raw) = match built.raw {
-            Some(raw) => (built.rendered, Some(raw)),
-            // Ошибка — показываем прежнюю удачную отрисовку.
-            None => (previous_raw.as_deref().map(|r| Arc::new(self.finish(r, opts))), previous_raw),
-        };
-        let page = Arc::new(NotePage { rendered, ..built.page });
-        if page.errors.is_empty()
-            && let (Some(disk), Some(raw)) = (&self.disk, &raw)
-        {
-            disk.store(id, &built.files, &built.deps, raw, &page.warnings);
-        }
-        let cached = Cached { page: page.clone(), raw, opts, deps: built.deps, files: built.files };
-        self.cache.lock().insert(id.clone(), cached);
-        Ok(page)
-    }
-
-    // ── Прогрев (см. crate::warm) ─────────────────────────────────────────
-
-    pub(crate) fn warm_queue(&self) -> &crate::warm::WarmQueue {
-        &self.warm
-    }
-
-    /// Есть ли у заметки годная сборка — в памяти или на диске.
-    pub(crate) fn is_built(&self, id: &NoteId) -> bool {
-        if let Some(c) = self.cache.lock().get(id) {
-            return version_of(&c.deps) == c.files;
-        }
-        self.disk.as_ref().is_some_and(|d| d.is_fresh(id, version_of))
-    }
-
-    /// Подождать, пока запросы пользователя получат свои страницы.
-    pub(crate) fn wait_for_users(&self) {
-        while self.waiting.load(Ordering::SeqCst) > 0 {
-            std::thread::sleep(Duration::from_millis(50));
-        }
-    }
-
-    /// Собрать заметку в кэш (без учёта в `waiting`).
-    pub(crate) fn warm_one(&self, id: &NoteId, opts: FigureOptions) -> Result<()> {
-        self.page_inner(id, opts).map(drop)
-    }
-
-    /// Страница из кэша в памяти, если файлы заметки не менялись (при
-    /// других настройках — только заново обработанные рисунки).
-    fn fresh(&self, id: &NoteId, opts: FigureOptions) -> Option<Arc<NotePage>> {
-        let cache = self.cache.lock();
-        let c = cache.get(id)?;
-        if version_of(&c.deps) != c.files {
-            return None;
-        }
-        if c.opts == opts {
-            return Some(c.page.clone());
-        }
-        let (page, raw, deps, files) = (c.page.clone(), c.raw.clone(), c.deps.clone(), c.files.clone());
-        drop(cache);
-        let rendered = raw.as_deref().map(|r| Arc::new(self.finish(r, opts)));
-        let page = Arc::new(NotePage {
-            id: page.id.clone(),
-            kind: page.kind,
-            version: page_version(&files, opts),
-            rendered,
-            errors: page.errors.clone(),
-            warnings: page.warnings.clone(),
-            book: None,
-        });
-        self.cache.lock().insert(id.clone(), Cached { page: page.clone(), raw, opts, deps, files });
-        Some(page)
-    }
-
-    /// Страница из кэша на диске, если файлы заметки с тех пор не менялись.
-    fn load_from_disk(&self, entry: &Entry, opts: FigureOptions) -> Option<Arc<NotePage>> {
-        let stored = self.disk.as_ref()?.load(&entry.id, version_of)?;
-        tracing::debug!(id = %entry.id, "из кэша на диске");
-        let raw = Arc::new(stored.raw);
-        let page = Arc::new(NotePage {
-            id: entry.id.clone(),
-            kind: entry.kind,
-            version: page_version(&stored.files, opts),
-            rendered: Some(Arc::new(self.finish(&raw, opts))),
-            errors: vec![],
-            warnings: stored.warnings,
-            book: None,
-        });
-        let cached = Cached { page: page.clone(), raw: Some(raw), opts, deps: stored.deps, files: stored.files };
-        self.cache.lock().insert(entry.id.clone(), cached);
-        Some(page)
+        self.pages.page(id, opts)
     }
 
     /// Текущая версия заметки. Для уже собранной — только `stat` её файлов,
     /// без компиляции; для новой — собирает.
     pub fn version(&self, id: &NoteId, opts: FigureOptions) -> Result<String> {
-        if let Some(c) = self.cache.lock().get(id) {
-            return Ok(page_version(&version_of(&c.deps), opts));
-        }
-        Ok(self.page(id, opts)?.version.clone())
+        self.pages.version(id, opts)
     }
 
     /// Заметка в PDF (вид PDF из baluk) в теме `theme`; без кэша.
     pub fn pdf(&self, id: &NoteId, theme: &str) -> Result<std::result::Result<Vec<u8>, Vec<Diagnostic>>> {
-        let entry = self.vault.entry(id)?;
-        if !self.themes.names().iter().any(|t| t == theme) {
+        let entry = self.vault().entry(id)?;
+        if !self.themes().names().iter().any(|t| t == theme) {
             return Err(Error::Setting { key: "тема".into(), reason: format!("нет темы «{theme}»") });
         }
-        Ok(self.compiler.compile_pdf(&entry.main, theme))
+        Ok(self.typst.compiler().compile_pdf(&entry.main, theme))
     }
 
     /// Страница для статического сайта: без кэша, относительные ссылки.
     pub fn page_static(&self, entry: &Entry, opts: FigureOptions) -> NotePage {
-        let built = self.build(entry, LinkStyle::Static, opts);
-        NotePage { rendered: built.rendered, ..built.page }
-    }
-
-    fn build(&self, entry: &Entry, style: LinkStyle, opts: FigureOptions) -> Built {
-        let started = std::time::Instant::now();
-        let compilation = self.compiler.compile_html(&entry.main, &self.themes.names());
-        let links = VaultLinks { vault: &self.vault, style, from: &entry.id };
-        let (raw, errors) = match compilation.docs {
-            Ok(docs) => match render::render(docs, &links) {
-                Ok(r) => (Some(Arc::new(r)), vec![]),
-                Err(message) => (None, vec![Diagnostic::error(message)]),
-            },
-            Err(errors) => (None, errors),
-        };
-        let rendered = raw.as_deref().map(|r| Arc::new(self.finish(r, opts)));
-        tracing::debug!(id = %entry.id, ms = started.elapsed().as_millis(), errors = errors.len(), "собрана");
-        let files = version_of(&compilation.deps);
-        let mut warnings = compilation.warnings;
-        warnings.extend(self.lint(&compilation.deps));
-        let page = NotePage {
+        let built = self.typst.build(entry, LinkStyle::Static);
+        NotePage {
             id: entry.id.clone(),
             kind: entry.kind,
-            version: page_version(&files, opts),
-            rendered: None,
-            errors,
-            warnings,
+            version: crate::page_cache::page_version(&built.files, opts),
+            rendered: built.raw.map(|raw| Arc::new(self.typst.finish(&raw, opts))),
+            errors: built.errors,
+            warnings: built.warnings,
             book: None,
-        };
-        Built { page, rendered, raw, deps: compilation.deps, files }
-    }
-
-    /// Предупреждения [`lint`](crate::lint) для файлов хранилища, из которых
-    /// собрана заметка (библиотеку и пакеты не проверяем).
-    fn lint(&self, deps: &[PathBuf]) -> Vec<Diagnostic> {
-        let root = self.vault.root();
-        let mut out = Vec::new();
-        for path in deps {
-            let Ok(rel) = path.strip_prefix(root) else { continue };
-            if path.extension().is_none_or(|e| e != "typ") {
-                continue;
-            }
-            let Ok(text) = fs::read_to_string(path) else { continue };
-            for l in crate::lint::lint(&text) {
-                let (line, column) = crate::lint::line_column(&text, l.offset);
-                out.push(Diagnostic::warning_at(l.message, format!("/{}", rel.display()), line, column, l.hint));
-            }
-        }
-        out
-    }
-
-    /// Обработка рисунков: общие глифы, один SVG на темы, округление.
-    fn finish(&self, raw: &Rendered, opts: FigureOptions) -> Rendered {
-        let o = figures::optimize(&raw.body, &self.themes.names(), opts);
-        tracing::debug!(
-            before = raw.body.len(),
-            after = o.body.len(),
-            figures = o.stats.figures,
-            merged = o.stats.merged,
-            glyphs = o.stats.glyphs,
-            colors = o.stats.colors,
-            "рисунки"
-        );
-        Rendered {
-            title: raw.title.clone(),
-            styles: format!("{}{}", raw.styles, o.styles),
-            body: o.body,
-            headings: raw.headings.clone(),
-            links: raw.links.clone(),
-            tags: raw.tags.clone(),
         }
     }
-}
 
-/// Результат сборки: страница без отрисовки (её кладёт вызывающий —
-/// свежую или прежнюю), отрисовка, сырая отрисовка, файлы.
-struct Built {
-    page: NotePage,
-    rendered: Option<Arc<Rendered>>,
-    raw: Option<Arc<Rendered>>,
-    deps: Vec<PathBuf>,
-    files: String,
-}
+    // ── Прогрев (см. crate::warm) ─────────────────────────────────────────
 
-fn page_version(files: &str, opts: FigureOptions) -> String {
-    format!("{files}-{}", opts.key())
-}
-
-/// `<хранилище>/_vault/…` → `<хранилище>`.
-fn vault_data_root(path: &Path) -> Option<&Path> {
-    path.ancestors().find(|a| a.file_name().is_some_and(|n| n == VAULT_DIR))?.parent()
-}
-
-/// Версия всего хранилища: пути, времена и размеры всех `.typ` (кроме
-/// служебных каталогов `_…` и `.…`).
-fn vault_stamp(root: &Path, h: &mut DefaultHasher) {
-    fn walk(dir: &Path, out: &mut Vec<(PathBuf, u64, Option<std::time::Duration>)>) {
-        let Ok(read) = fs::read_dir(dir) else { return };
-        for e in read.flatten() {
-            let path = e.path();
-            let hidden = e.file_name().to_str().is_some_and(|n| n.starts_with(['_', '.']));
-            let Ok(meta) = e.metadata() else { continue };
-            if meta.is_dir() {
-                if !hidden {
-                    walk(&path, out);
-                }
-            } else if path.extension().is_some_and(|x| x == "typ") {
-                let modified = meta.modified().ok().and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok());
-                out.push((path, meta.len(), modified));
-            }
-        }
-    }
-    let mut files = Vec::new();
-    walk(root, &mut files);
-    files.sort();
-    files.hash(h);
-}
-
-/// Хэш (путь, время изменения, размер) по всем файлам. Пропавший файл тоже
-/// меняет версию.
-fn version_of(deps: &[PathBuf]) -> String {
-    let mut h = DefaultHasher::new();
-    for path in deps {
-        path.hash(&mut h);
-        // Данные хранилища (`/_vault/…`, граф) зависят от всех заметок.
-        if let Some(root) = vault_data_root(path) {
-            vault_stamp(root, &mut h);
-            continue;
-        }
-        match fs::metadata(path) {
-            Ok(meta) => {
-                meta.len().hash(&mut h);
-                meta.modified().ok().and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok()).hash(&mut h);
-            }
-            Err(_) => "нет".hash(&mut h),
-        }
-    }
-    format!("{:016x}", h.finish())
-}
-
-/// Адреса ссылок `#see(…)`: существует ли цель, и куда вести.
-struct VaultLinks<'a> {
-    vault: &'a Vault,
-    style: LinkStyle,
-    from: &'a NoteId,
-}
-
-impl LinkResolver for VaultLinks<'_> {
-    fn href(&self, target: &str, anchor: Option<&str>) -> Option<String> {
-        let id = NoteId::new(target).ok()?;
-        self.vault.entry(&id).ok()?;
-        let fragment = anchor.map(|a| format!("#{}", encode(&render::slug(a)))).unwrap_or_default();
-        Some(match self.style {
-            LinkStyle::Server => format!("/n/{}{fragment}", encode(id.as_str())),
-            LinkStyle::Static => {
-                let up = "../".repeat(self.from.as_str().matches('/').count());
-                format!("{up}{}.html{fragment}", encode(id.as_str()))
-            }
-        })
-    }
-}
-
-/// Кодирует то, что в адресе иначе поменяет смысл. Кириллица остаётся как
-/// есть: браузеры её понимают, а адрес читается.
-pub fn encode(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            ' ' => out.push_str("%20"),
-            '#' => out.push_str("%23"),
-            '?' => out.push_str("%3F"),
-            '%' => out.push_str("%25"),
-            '"' => out.push_str("%22"),
-            '<' => out.push_str("%3C"),
-            '>' => out.push_str("%3E"),
-            _ => out.push(ch),
-        }
-    }
-    out
-}
-
-/// Путь страницы заметки в статическом сайте.
-pub fn static_path(id: &NoteId) -> PathBuf {
-    Path::new(id.as_str()).with_extension("html")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn version_changes_with_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let f = dir.path().join("a.typ");
-        fs::write(&f, "1").unwrap();
-        let deps = vec![f.clone()];
-        let v1 = version_of(&deps);
-        assert_eq!(v1, version_of(&deps));
-        fs::write(&f, "12").unwrap();
-        assert_ne!(v1, version_of(&deps));
-        fs::remove_file(&f).unwrap();
-        assert_ne!(v1, version_of(&deps));
+    /// Подсказать прогреву, что собрать первым (заметки во вкладках, недавние).
+    pub fn hint_warm(&self, ids: Vec<NoteId>) {
+        self.warmer.hint(ids);
     }
 
-    #[test]
-    fn link_addresses() {
-        let dir = tempfile::tempdir().unwrap();
-        fs::create_dir_all(dir.path().join("Сеть")).unwrap();
-        fs::write(dir.path().join("Сеть/SSH.typ"), "").unwrap();
-        fs::write(dir.path().join("Итоги 2026.typ"), "").unwrap();
-        let vault = Vault::open(dir.path()).unwrap();
-        let from = NoteId::new("Сеть/UFW").unwrap();
-        let server = VaultLinks { vault: &vault, style: LinkStyle::Server, from: &from };
-        assert_eq!(server.href("Сеть/SSH", Some("Смена порта")).unwrap(), "/n/Сеть/SSH#Смена-порта");
-        assert_eq!(server.href("Итоги 2026", None).unwrap(), "/n/Итоги%202026");
-        assert_eq!(server.href("Сеть/Nginx", None), None);
-        assert_eq!(server.href("../etc/passwd", None), None);
-        let stat = VaultLinks { vault: &vault, style: LinkStyle::Static, from: &from };
-        assert_eq!(stat.href("Сеть/SSH", None).unwrap(), "../Сеть/SSH.html");
+    /// Один проход прогрева: собрать всё несобранное по порядку.
+    pub fn warm_pass(&self) -> WarmStats {
+        self.warmer.pass(&self.pages)
+    }
+
+    /// Прогревать бесконечно (фоновый поток сервера).
+    pub fn warm_forever(&self) -> ! {
+        let changes = self.changes.clone();
+        self.warmer.forever(&self.pages, move || if changes.watching() { RESCAN } else { RESCAN_UNWATCHED })
+    }
+
+    // ── Изменения хранилища (см. crate::watch) ─────────────────────────────
+
+    /// Включить наблюдатель файлов хранилища (сервер). `false` — хранилище
+    /// не умеет или не вышло: всё работает обходом, как без него.
+    pub fn watch(&self) -> bool {
+        self.changes.start(&**self.vault().storage())
+    }
+
+    /// Работает ли наблюдатель.
+    pub fn watching(&self) -> bool {
+        self.changes.watching()
+    }
+
+    /// Звать `f` с каждой пачкой изменений хранилища (из потока наблюдателя).
+    pub fn on_change(&self, f: impl Fn(&Change) + Send + Sync + 'static) {
+        self.changes.subscribe(f);
+    }
+
+    /// Сколько страниц и байт держит кэш в памяти.
+    pub fn memory(&self) -> (usize, usize) {
+        self.pages.cache().memory()
     }
 }

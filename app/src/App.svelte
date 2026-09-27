@@ -1,7 +1,7 @@
 <!-- Каркас приложения: панель, верхняя строка, заметка или главная, настройки. -->
 <script lang="ts">
   import { onMount } from "svelte";
-  import { app } from "./lib/app.svelte";
+  import { reader, router, settings, start } from "./lib/state";
   import { commands } from "./lib/commands.svelte";
   import { typing } from "./lib/keys";
   import { mobile, ui } from "./lib/ui.svelte";
@@ -25,19 +25,18 @@
   let fatal = $state<string | null>(null);
 
   onMount(() => {
-    app
-      .init()
+    start()
       .then(() => (started = true))
       .catch((e: Error) => (fatal = e.message));
   });
 
-  $effect(() => app.applyAppearance(document.documentElement));
+  $effect(() => settings.apply(document.documentElement));
 
   // Место чтения — по ходу прокрутки (к «назад» запись истории уже другая).
   let rememberTimer: ReturnType<typeof setTimeout> | undefined;
   function onScroll() {
     clearTimeout(rememberTimer);
-    rememberTimer = setTimeout(() => app.remember(), 250);
+    rememberTimer = setTimeout(() => reader.remember(), 250);
   }
 
   /**
@@ -55,13 +54,13 @@
       // Якорь в той же заметке: прокрутка — клиентом, запоминаем в истории.
       if (url.hash) {
         e.preventDefault();
-        app.go(url);
+        router.go(url);
       }
       return;
     }
     e.preventDefault();
     if (mobile.matches) ui.sidebarOpen = false;
-    app.go(url.pathname + url.search + url.hash, { newTab });
+    router.go(url.pathname + url.search + url.hash, { newTab });
   }
 
   /** Горячие клавиши — по реестру команд; одиночные — не во время ввода. */
@@ -104,16 +103,16 @@
     <div class="main">
       <Topbar />
       <TabBar />
-      {#if app.route.kind === "note"}
-        {#if app.page}<Problems page={app.page} />{/if}
+      {#if router.route.kind === "note"}
+        {#if reader.page}<Problems page={reader.page} />{/if}
         <NoteView />
         <ChapterNav />
-        {#if app.page}<Backlinks id={app.page.id} />{/if}
+        {#if reader.page}<Backlinks id={reader.page.id} />{/if}
         <Toc />
-      {:else if app.route.kind === "graph" && started}
-        <GraphPage route={app.route} />
-      {:else if app.route.kind === "tags" && started}
-        <Tags tag={app.route.tag} />
+      {:else if router.route.kind === "graph" && started}
+        <GraphPage route={router.route} />
+      {:else if router.route.kind === "tags" && started}
+        <Tags tag={router.route.tag} />
       {:else if started}
         <Home />
       {/if}

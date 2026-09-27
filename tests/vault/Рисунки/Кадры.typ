@@ -38,5 +38,6 @@
 #let passes = ((5, 2, 4, 1), (2, 4, 1, 5), (2, 1, 4, 5), (1, 2, 4, 5))
 #fig(frames(k => canvas(theme => {
   array-cells(passes.at(k), highlight: range(4 - k, 4).map(i => (str(i), "third")).to-dict())
-}), k: (values: (0, 1, 2, 3)), label: k => if k == 0 [исходный массив] else [проход #k]),
+}), k: (values: (0, 1, 2, 3)), label: k => if k == 0 [исходный массив] else [проход #k],
+  pdf: (1, 2, 3, 4)),  // в PDF — все шаги в ряд
   [Пузырьковая сортировка: после прохода $k$ последние $k$ элементов на месте])

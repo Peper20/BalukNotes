@@ -7,8 +7,9 @@
   import Maximize from "@lucide/svelte/icons/maximize";
   import Minus from "@lucide/svelte/icons/minus";
   import Plus from "@lucide/svelte/icons/plus";
+  import Undo2 from "@lucide/svelte/icons/undo-2";
   import { api, type GraphFilter, type GraphLayout } from "../lib/api";
-  import { app } from "../lib/app.svelte";
+  import { notes, router } from "../lib/state";
   import { matches } from "../lib/graph-view";
   import { graphHref, noteHref, splitId } from "../lib/ids";
   import { load, save } from "../lib/storage";
@@ -50,8 +51,8 @@
     return () => (stale = true);
   });
 
-  const titles = $derived(new Map(app.notes.flatMap((n) => (n.title ? [[n.id, n.title] as const] : []))));
-  const allTags = $derived([...new Set(app.notes.flatMap((n) => n.tags))].sort((a, b) => a.localeCompare(b, "ru")));
+  const titles = $derived(new Map(notes.all.flatMap((n) => (n.title ? [[n.id, n.title] as const] : []))));
+  const allTags = $derived([...new Set(notes.all.flatMap((n) => n.tags))].sort((a, b) => a.localeCompare(b, "ru")));
   // Цвета — по всем группам, а не по показанным: фильтр не перекрашивает узлы.
   const groups = $derived(shown?.groups ?? []);
 
@@ -59,6 +60,8 @@
   const hits = $derived(shown && query.trim() ? new Set(shown.nodes.filter((n) => matches(query, n.id, titles.get(n.id))).map((n) => n.id)) : null);
 
   let graph: Graph | undefined = $state();
+  /** Узлы переставлены — есть что вернуть. */
+  let moved = $state(false);
 
   function toggleGroup(g: string) {
     prefs.hidden = prefs.hidden.includes(g) ? prefs.hidden.filter((h) => h !== g) : [...prefs.hidden, g];
@@ -79,7 +82,7 @@
     return () => removeEventListener("resize", measure);
   });
 
-  const centerNote = $derived(route.around ? app.notes.find((n) => n.id === route.around) : null);
+  const centerNote = $derived(route.around ? notes.all.find((n) => n.id === route.around) : null);
   const plural = (n: number, one: string, few: string, many: string) => {
     const m10 = n % 10;
     const m100 = n % 100;
@@ -93,7 +96,7 @@
       <span class="graph-title">
         Соседи
         <a href={noteHref(route.around)} title={centerNote?.title ?? route.around}>{splitId(route.around).name}</a>
-        <select aria-label="Глубина" value={route.depth} onchange={(e) => app.go(graphHref(route.around, Number(e.currentTarget.value)), { replace: true })}>
+        <select aria-label="Глубина" value={route.depth} onchange={(e) => router.go(graphHref(route.around, Number(e.currentTarget.value)), { replace: true })}>
           {#each [1, 2, 3] as d (d)}<option value={d}>{d} {plural(d, "шаг", "шага", "шагов")}</option>{/each}
         </select>
         <a class="graph-all" href="/graph">весь граф</a>
@@ -112,6 +115,7 @@
       <button type="button" class="icon" title="Мельче" aria-label="мельче" onclick={() => graph?.zoom(1 / 1.3)}><Minus size={18} strokeWidth={1.75} aria-hidden="true" /></button>
       <button type="button" class="icon" title="Крупнее" aria-label="крупнее" onclick={() => graph?.zoom(1.3)}><Plus size={18} strokeWidth={1.75} aria-hidden="true" /></button>
       <button type="button" class="icon" title="Вписать в окно" aria-label="вписать" onclick={() => graph?.fit()}><Maximize size={18} strokeWidth={1.75} aria-hidden="true" /></button>
+      <button type="button" class="icon" title="Вернуть раскладку: узлы — на свои места" aria-label="вернуть раскладку" disabled={!moved} onclick={() => graph?.restore()}><Undo2 size={18} strokeWidth={1.75} aria-hidden="true" /></button>
     </span>
     {#if shown}
       <span class="graph-count">
@@ -129,16 +133,17 @@
     {:else if shown}
       <Graph
         bind:this={graph}
+        bind:moved
         layout={shown}
         interactive
         {titles}
         highlight={hits}
-        onopen={(id, newTab) => app.open(id, null, { newTab })}
+        onopen={(id, newTab) => router.open(id, null, { newTab })}
       />
     {/if}
   </section>
   <p class="graph-hint">
-    Колесо или два пальца — масштаб, протянуть фон — сдвиг, протянуть узел — переставить (соседи потянутся за ним),
-    щелчок — открыть (Ctrl — в новой вкладке).
+    Колесо или два пальца — масштаб, протянуть фон — сдвиг, протянуть узел — переставить (соседи потянутся за ним;
+    вернуть всех на места — кнопкой ↶), щелчок — открыть (Ctrl — в новой вкладке).
   </p>
 </main>

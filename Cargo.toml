@@ -12,6 +12,8 @@ publish = false
 [workspace.dependencies]
 notes-core = { path = "crates/notes-core" }
 notes-server = { path = "crates/notes-server" }
+notes-assets = { path = "crates/notes-assets" }
+notes-site = { path = "crates/notes-site" }
 
 # Typst закреплён точно: HTML-экспорт экспериментальный, API меняется между
 # версиями. Обновлять осознанно, с прогоном tests/vault (docs/tech-debt.md).
@@ -31,12 +33,20 @@ axum = "0.8"
 # Шрифты для браузера (notes-core::webfonts): подмножества по наборам знаков
 # и WOFF2. brotli и ttf-parser — те же версии, что уже тянут tower-http и typst.
 brotli = "8"
+# WOFF2 с преобразованием glyf (−11 % к частям шрифтов TrueType); тянет brotli 9.
+ttf2woff2 = { version = "0.13.3", default-features = false }
 fontcull = { version = "2.0.1", default-features = false }
 ttf-parser = "0.25"
 clap = { version = "4.6", features = ["derive", "env"] }
+# Наблюдатель файлов хранилища (notes-core::watch): индекс ссылок, прогрев,
+# события клиенту.
+notify = "8"
 parking_lot = "0.12"
 rust-embed = { version = "8", features = ["mime-guess", "include-exclude"] }
 serde = { version = "1", features = ["derive", "rc"] }
+# Стабильный хэш версий и кэша на диске (notes-core::version) — та же
+# версия, что уже тянет typst.
+siphasher = "1"
 serde_json = { version = "1", features = ["preserve_order"] }
 tempfile = "3"
 thiserror = "2"

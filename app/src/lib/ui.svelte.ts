@@ -18,8 +18,11 @@ class Ui {
   sidebarOpen = $state(false);
   sidebarHidden = $state(false);
   settingsOpen = $state(false);
-  /** Палитра: быстрый переход, команды (`>`), поиск (`/`), теги (`#`). */
-  palette = $state<{ query: string } | null>(null);
+  /**
+   * Палитра: быстрый переход, команды (`>`), поиск (`/`), теги (`#`);
+   * `book` — поиск в одной книге (её id).
+   */
+  palette = $state<{ query: string; book?: string | null } | null>(null);
   helpOpen = $state(false);
   /** Режим чтения: только текст — без панелей, вкладок и оглавления. */
   reading = $state(false);
@@ -34,8 +37,8 @@ class Ui {
     save("k-collapsed", this.collapsed);
   }
 
-  openPalette(query = ""): void {
-    this.palette = { query };
+  openPalette(query = "", book: string | null = null): void {
+    this.palette = { query, book };
   }
 }
 

@@ -3,9 +3,9 @@
 //!
 //! - страница графа и главная клиента (`POST /api/graph/layout`);
 //! - заметка — `#vault-graph(…)` из `baluk/graph.typ`: библиотека читает
-//!   виртуальный файл `/_vault/graph/<фильтр>.json` (его отдаёт
-//!   [`crate::world`]), CeTZ рисует граф в PDF и HTML, а клиент оживляет
-//!   его по тем же координатам.
+//!   виртуальный файл `/_vault/graph/<фильтр>.json` (его отдаёт поставщик
+//!   [`GraphData`] из реестра [`crate::vault_data`]), CeTZ рисует граф в
+//!   PDF и HTML, а клиент оживляет его по тем же координатам.
 //!
 //! Раскладка — простая силовая модель без библиотек: узлы отталкиваются,
 //! рёбра — пружины, слабое притяжение к центру; затем узлы с подписями
@@ -14,11 +14,13 @@
 //! миллисекунды.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::graph::{Edge, Graph, Snapshot};
-use crate::vault::NoteKind;
+use crate::graph::{Edge, Graph, Snapshot, SourceIndex};
+use crate::vault::{NoteKind, Vault};
+use crate::vault_data::DataProvider;
 
 /// Группа заметок в корне хранилища.
 pub const ROOT_GROUP: &str = "в корне";
@@ -34,6 +36,9 @@ const EDGE: f64 = 70.0;
 /// Дальше этого узлы не отталкиваются: иначе несвязанные заметки улетают на
 /// края, а связная часть сжимается в точку.
 const CUTOFF2: f64 = (4.0 * EDGE) * (4.0 * EDGE);
+/// С какого числа узлов пары ищутся по решётке: у маленького графа перебор
+/// всех пар быстрее (итог один и тот же, бит в бит).
+const GRID_FROM: usize = 500;
 
 /// Группа узла — папка верхнего уровня.
 pub fn group_of(id: &str) -> &str {
@@ -169,7 +174,13 @@ pub fn box_rect((x, y): (f64, f64), b: NodeBox) -> [f64; 4] {
 }
 
 /// Раскладка: координаты узлов по порядку `n` узлов, рёбра — пары номеров.
-#[allow(clippy::cast_precision_loss, reason = "узлов — сотни")]
+///
+/// Отталкивание — только в пределах [`CUTOFF2`], поэтому пары ищутся по
+/// решётке с клеткой не меньше этого радиуса (соседние клетки), а не все со
+/// всеми. Силы на узел суммируются в том же порядке, что и перебором всех
+/// пар (партнёры по возрастанию номера, те же выражения): результат совпадает
+/// с ним бит в бит — картинка графа от ускорения не меняется.
+#[allow(clippy::cast_precision_loss, reason = "узлов — тысячи")]
 pub fn layout(n: usize, links: &[(usize, usize)], boxes: Option<&[NodeBox]>) -> Vec<(f64, f64)> {
     let mut pos: Vec<(f64, f64)> = (0..n)
         .map(|i| {
@@ -177,21 +188,44 @@ pub fn layout(n: usize, links: &[(usize, usize)], boxes: Option<&[NodeBox]>) -> 
             (a.cos() * 100.0, a.sin() * 100.0)
         })
         .collect();
+    // Клетка чуть больше радиуса: пары на самой границе тоже в соседних клетках.
+    let cell = CUTOFF2.sqrt() + 1.0;
     let mut t = 30.0;
     for _ in 0..400 {
         let mut force = vec![(0.0, 0.0); n];
-        for i in 0..n {
-            for j in i + 1..n {
-                let (dx, dy) = (pos[i].0 - pos[j].0, pos[i].1 - pos[j].1);
-                let d2 = (dx * dx + dy * dy).max(1.0);
-                if d2 > CUTOFF2 {
-                    continue;
+        // Пары (i, j), j > i, по возрастанию j — как при переборе всех.
+        let mut pair = |i: usize, j: usize| {
+            let (dx, dy) = (pos[i].0 - pos[j].0, pos[i].1 - pos[j].1);
+            let d2 = (dx * dx + dy * dy).max(1.0);
+            if d2 > CUTOFF2 {
+                return;
+            }
+            let f = EDGE * EDGE / d2 * (1.0 - d2 / CUTOFF2);
+            force[i].0 += dx * f;
+            force[i].1 += dy * f;
+            force[j].0 -= dx * f;
+            force[j].1 -= dy * f;
+        };
+        if n < GRID_FROM {
+            for i in 0..n {
+                for j in i + 1..n {
+                    pair(i, j);
                 }
-                let f = EDGE * EDGE / d2 * (1.0 - d2 / CUTOFF2);
-                force[i].0 += dx * f;
-                force[i].1 += dy * f;
-                force[j].0 -= dx * f;
-                force[j].1 -= dy * f;
+            }
+        } else {
+            let grid = Grid::new(&pos, cell, cell);
+            // Соседи клетки (она и восемь вокруг) — один раз на клетку.
+            let mut around: HashMap<(i64, i64), Vec<usize>> = HashMap::new();
+            for i in 0..n {
+                let c = grid.cell(pos[i]);
+                let list = around.entry(c).or_insert_with(|| {
+                    let mut v = Vec::new();
+                    grid.after(usize::MAX, c, &mut v);
+                    v
+                });
+                for &j in &list[list.partition_point(|&j| j <= i)..] {
+                    pair(i, j);
+                }
             }
         }
         for &(a, b) in links {
@@ -221,15 +255,86 @@ pub fn layout(n: usize, links: &[(usize, usize)], boxes: Option<&[NodeBox]>) -> 
     pos
 }
 
+/// Решётка для поиска соседей: клетка → номера узлов по возрастанию.
+struct Grid {
+    w: f64,
+    h: f64,
+    cells: HashMap<(i64, i64), Vec<usize>>,
+}
+
+impl Grid {
+    fn new(pos: &[(f64, f64)], w: f64, h: f64) -> Self {
+        let mut grid = Self { w, h, cells: HashMap::new() };
+        for (i, &p) in pos.iter().enumerate() {
+            grid.cells.entry(grid.cell(p)).or_default().push(i);
+        }
+        grid
+    }
+
+    #[allow(clippy::cast_possible_truncation, reason = "координаты раскладки — тысячи единиц")]
+    fn cell(&self, (x, y): (f64, f64)) -> (i64, i64) {
+        ((x / self.w).floor() as i64, (y / self.h).floor() as i64)
+    }
+
+    /// Узлы с номером больше `i` (`usize::MAX` — все) в клетке `(cx, cy)` и
+    /// восьми соседних, по возрастанию номера.
+    fn after(&self, i: usize, (cx, cy): (i64, i64), out: &mut Vec<usize>) {
+        out.clear();
+        for x in cx - 1..=cx + 1 {
+            for y in cy - 1..=cy + 1 {
+                if let Some(v) = self.cells.get(&(x, y)) {
+                    // Клетки — возрастающие отрезки: слияние, а не сортировка.
+                    let from = if i == usize::MAX { 0 } else { v.partition_point(|&j| j <= i) };
+                    out.extend_from_slice(&v[from..]);
+                }
+            }
+        }
+        out.sort_unstable();
+    }
+
+    /// Узел переехал.
+    fn moved(&mut self, node: usize, from: (f64, f64), to: (f64, f64)) {
+        let (old, new) = (self.cell(from), self.cell(to));
+        if old == new {
+            return;
+        }
+        // Порядок номеров в клетке сохраняется.
+        if let Some(list) = self.cells.get_mut(&old)
+            && let Ok(at) = list.binary_search(&node)
+        {
+            list.remove(at);
+        }
+        let list = self.cells.entry(new).or_default();
+        let at = list.binary_search(&node).unwrap_or_else(|at| at);
+        list.insert(at, node);
+    }
+}
+
 /// Раздвигает пересекающиеся прямоугольники узлов: каждую пару — поровну по
 /// оси с меньшим перекрытием. Нескольких десятков проходов хватает, чтобы
 /// подписи перестали наезжать; связи при этом почти не меняют вид.
+///
+/// Пары — в том же порядке, что перебором всех (`i < j` по возрастанию), и
+/// с теми же сдвигами, но кандидаты `j` берутся из решётки по текущим
+/// местам: клетка шире двух самых широких прямоугольников, так что
+/// пересекающиеся узлы всегда в соседних клетках. Сдвинулся `i` — кандидаты
+/// ищутся заново.
 fn separate(pos: &mut [(f64, f64)], boxes: &[NodeBox]) {
     let n = pos.len();
+    let half = boxes.iter().map(|b| b.r.max(b.label / 2.0)).fold(0.0, f64::max);
+    let radius = boxes.iter().map(|b| b.r).fold(0.0, f64::max);
+    let width = 2.0 * half + PAD + 1.0;
+    let height = 2.0 * radius + LABEL_GAP + LABEL_SIZE * 1.2 + PAD + 1.0;
+    let mut grid = Grid::new(pos, width, height);
+    let mut near = Vec::new();
     for _ in 0..80 {
         let mut moved = false;
         for i in 0..n {
-            for j in i + 1..n {
+            grid.after(i, grid.cell(pos[i]), &mut near);
+            let mut next = 0;
+            while next < near.len() {
+                let j = near[next];
+                next += 1;
                 let [a0, a1, a2, a3] = box_rect(pos[i], boxes[i]);
                 let [b0, b1, b2, b3] = box_rect(pos[j], boxes[j]);
                 let ox = a2.min(b2) - a0.max(b0) + PAD;
@@ -238,6 +343,7 @@ fn separate(pos: &mut [(f64, f64)], boxes: &[NodeBox]) {
                     continue;
                 }
                 moved = true;
+                let (pi, pj) = (pos[i], pos[j]);
                 // Одинаковые центры — первый влево/вверх: детерминированно.
                 if ox < oy {
                     let s = if pos[i].0 <= pos[j].0 { -ox / 2.0 } else { ox / 2.0 };
@@ -248,6 +354,11 @@ fn separate(pos: &mut [(f64, f64)], boxes: &[NodeBox]) {
                     pos[i].1 += s;
                     pos[j].1 -= s;
                 }
+                grid.moved(i, pi, pos[i]);
+                grid.moved(j, pj, pos[j]);
+                // i сдвинулся — соседи другие: дальше — кандидаты больше j.
+                grid.after(j, grid.cell(pos[i]), &mut near);
+                next = 0;
             }
         }
         if !moved {
@@ -305,18 +416,40 @@ fn name_of(id: &str) -> &str {
     id.rsplit_once('/').map_or(id, |(_, name)| name)
 }
 
-/// Файл `/_vault/<path>` для заметки: `graph/<фильтр>.json`, где фильтр —
+/// Префикс графа в данных хранилища: `/_vault/graph/…`.
+pub const DATA_PREFIX: &str = "graph";
+
+/// Поставщик `/_vault/graph/<фильтр>.json` — граф по фильтру.
+#[derive(Debug)]
+pub struct GraphData {
+    pub vault: Vault,
+    pub index: Arc<SourceIndex>,
+    pub layouts: Arc<Layouts>,
+}
+
+/// Отпечаток — по самому ответу (по умолчанию): правка заметки, не
+/// изменившая граф, заметку с графом не пересобирает.
+impl DataProvider for GraphData {
+    fn read(&self, path: &str) -> Result<Vec<u8>, String> {
+        data_file(|| self.index.snapshot(&self.vault).map_err(|e| e.to_string()), &self.layouts, path)
+    }
+}
+
+/// Файл `/_vault/graph/<path>` для заметки: `<фильтр>.json`, где фильтр —
 /// JSON [`GraphFilter`] с экранированными `%`, `/`, `\\` (`baluk/graph.typ`).
 /// Ответ — [`GraphLayout`] в JSON.
-pub fn virtual_file(snapshot: impl FnOnce() -> Result<Snapshot, String>, path: &str) -> Result<Vec<u8>, String> {
+pub fn data_file(
+    snapshot: impl FnOnce() -> Result<Snapshot, String>,
+    layouts: &Layouts,
+    path: &str,
+) -> Result<Vec<u8>, String> {
     let query = path
-        .strip_prefix("graph/")
-        .and_then(|p| p.strip_suffix(".json"))
-        .ok_or_else(|| format!("нет данных хранилища «{path}» (есть только graph/…)"))?;
+        .strip_suffix(".json")
+        .ok_or_else(|| format!("нет данных хранилища «{DATA_PREFIX}/{path}» (граф — {DATA_PREFIX}/<фильтр>.json)"))?;
     let filter: GraphFilter =
         serde_json::from_str(&unescape(query)).map_err(|e| format!("граф: неверный фильтр ({e})"))?;
-    let layout = snapshot()?.graph_layout(&filter);
-    serde_json::to_vec(&layout).map_err(|e| e.to_string())
+    let layout = snapshot()?.graph_layout_cached(&filter, layouts);
+    serde_json::to_vec(&*layout).map_err(|e| e.to_string())
 }
 
 /// Обратное к экранированию в `baluk/graph.typ`: `%25` → `%`, `%2F` → `/`, `%5C` → `\\`.
@@ -324,9 +457,59 @@ fn unescape(s: &str) -> String {
     s.replace("%2F", "/").replace("%5C", "\\").replace("%25", "%")
 }
 
+/// Сколько раскладок помнить.
+const LAYOUTS: usize = 32;
+
+/// Кэш раскладок: тот же показанный граф (узлы, рёбра, группы, центр) —
+/// та же раскладка, считать её заново незачем. Ключ — хэш самого графа,
+/// поэтому кэш не устаревает: изменилось хранилище — другой ключ.
+/// Переключатели страницы `/graph`, версия заметки с `#vault-graph`
+/// ([`GraphData`]) и её сборка берут готовую.
+#[derive(Debug, Default)]
+pub struct Layouts {
+    /// Недавние — в начале.
+    entries: parking_lot::Mutex<std::collections::VecDeque<(u64, Arc<GraphLayout>)>>,
+}
+
+impl Layouts {
+    /// Раскладка графа (см. [`place`]) — из кэша или посчитанная.
+    pub fn place(&self, graph: &Graph, groups: Vec<String>, center: Option<String>) -> Arc<GraphLayout> {
+        let key = {
+            let json = serde_json::to_vec(&(graph, &groups, &center)).unwrap_or_default();
+            crate::version::StableHasher::new().bytes(&json).finish()
+        };
+        {
+            let mut entries = self.entries.lock();
+            if let Some(k) = entries.iter().position(|(h, _)| *h == key) {
+                let hit = entries.remove(k).expect("есть");
+                entries.push_front(hit.clone());
+                return hit.1;
+            }
+        }
+        let layout = Arc::new(place(graph, groups, center));
+        let mut entries = self.entries.lock();
+        entries.push_front((key, layout.clone()));
+        entries.truncate(LAYOUTS);
+        layout
+    }
+}
+
 impl Snapshot {
+    /// Граф хранилища по фильтру, разложенный для рисования; раскладка — из
+    /// кэша `layouts`, если такой граф уже раскладывали.
+    pub fn graph_layout_cached(&self, f: &GraphFilter, layouts: &Layouts) -> Arc<GraphLayout> {
+        let (shown, groups) = self.shown(f);
+        layouts.place(&shown, groups, f.around.clone())
+    }
+
     /// Граф хранилища по фильтру, разложенный для рисования.
     pub fn graph_layout(&self, f: &GraphFilter) -> GraphLayout {
+        let (shown, groups) = self.shown(f);
+        place(&shown, groups, f.around.clone())
+    }
+
+    /// Показанный граф по фильтру и все группы хранилища.
+    fn shown(&self, f: &GraphFilter) -> (Graph, Vec<String>) {
         let full = self.graph();
         let mut groups: Vec<String> = Vec::new();
         for n in &full.nodes {
@@ -336,8 +519,7 @@ impl Snapshot {
             }
         }
         let empty: &[String] = &[];
-        let shown = filter(&full, |id| self.tags_of(id).unwrap_or(empty), f);
-        place(&shown, groups, f.around.clone())
+        (filter(&full, |id| self.tags_of(id).unwrap_or(empty), f), groups)
     }
 }
 
@@ -478,12 +660,111 @@ mod tests {
     }
 
     #[test]
-    fn virtual_file_path() {
+    fn data_file_path() {
         assert_eq!(unescape("a%2Fb%5Cc%25252F"), "a/b\\c%252F");
-        let err = virtual_file(|| Err("не нужен".into()), "graph/{}.txt").unwrap_err();
+        let layouts = Layouts::default();
+        let err = data_file(|| Err("не нужен".into()), &layouts, "{}.txt").unwrap_err();
         assert!(err.contains("graph/"), "{err}");
-        let err = virtual_file(|| Err("не нужен".into()), "graph/{нет.json").unwrap_err();
+        let err = data_file(|| Err("не нужен".into()), &layouts, "{нет.json").unwrap_err();
         assert!(err.contains("фильтр"), "{err}");
+    }
+
+    #[test]
+    fn layouts_are_cached_by_graph() {
+        let layouts = Layouts::default();
+        let g = sample();
+        let a = layouts.place(&g, vec![], None);
+        assert!(Arc::ptr_eq(&a, &layouts.place(&g, vec![], None)), "тот же граф — из кэша");
+        assert_eq!(*a, place(&g, vec![], None));
+        let other = layouts.place(&g, vec![], Some("D".into()));
+        assert!(!Arc::ptr_eq(&a, &other), "другой центр — другая раскладка");
+        let mut g2 = sample();
+        g2.edges.pop();
+        assert!(!Arc::ptr_eq(&a, &layouts.place(&g2, vec![], None)), "другой граф — заново");
+    }
+
+    /// Перебор всех пар — эталон: решётка даёт то же бит в бит.
+    #[test]
+    #[allow(clippy::cast_precision_loss)]
+    fn grid_layout_matches_all_pairs() {
+        let n = GRID_FROM + 40;
+        let links: Vec<_> = (1..n).map(|i| (i, (i * 7919) % i)).collect();
+        let boxes: Vec<_> = (0..n).map(|i| NodeBox { r: 5.5, label: 20.0 + (i % 5) as f64 * 15.0 }).collect();
+        let grid = layout(n, &links, Some(&boxes));
+        // Эталон: layout без решётки на тех же данных.
+        let mut pos: Vec<(f64, f64)> = (0..n)
+            .map(|i| {
+                let a = 2.0 * std::f64::consts::PI * i as f64 / n as f64;
+                (a.cos() * 100.0, a.sin() * 100.0)
+            })
+            .collect();
+        let mut t = 30.0;
+        for _ in 0..400 {
+            let mut force = vec![(0.0, 0.0); n];
+            for i in 0..n {
+                for j in i + 1..n {
+                    let (dx, dy) = (pos[i].0 - pos[j].0, pos[i].1 - pos[j].1);
+                    let d2 = (dx * dx + dy * dy).max(1.0);
+                    if d2 > CUTOFF2 {
+                        continue;
+                    }
+                    let f = EDGE * EDGE / d2 * (1.0 - d2 / CUTOFF2);
+                    force[i].0 += dx * f;
+                    force[i].1 += dy * f;
+                    force[j].0 -= dx * f;
+                    force[j].1 -= dy * f;
+                }
+            }
+            for &(a, b) in &links {
+                let (dx, dy) = (pos[a].0 - pos[b].0, pos[a].1 - pos[b].1);
+                let d = dx.hypot(dy).max(1.0);
+                let f = (d - EDGE) / d / 2.0;
+                force[a].0 -= dx * f;
+                force[a].1 -= dy * f;
+                force[b].0 += dx * f;
+                force[b].1 += dy * f;
+            }
+            for (p, f) in pos.iter_mut().zip(&mut force) {
+                f.0 -= p.0 * 0.02;
+                f.1 -= p.1 * 0.02;
+                let len = f.0.hypot(f.1);
+                if len > 0.0 {
+                    let m = len.min(t) / len;
+                    p.0 += f.0 * m;
+                    p.1 += f.1 * m;
+                }
+            }
+            t *= 0.985;
+        }
+        for _ in 0..80 {
+            let mut moved = false;
+            for i in 0..n {
+                for j in i + 1..n {
+                    let [a0, a1, a2, a3] = box_rect(pos[i], boxes[i]);
+                    let [b0, b1, b2, b3] = box_rect(pos[j], boxes[j]);
+                    let ox = a2.min(b2) - a0.max(b0) + PAD;
+                    let oy = a3.min(b3) - a1.max(b1) + PAD;
+                    if ox <= 0.0 || oy <= 0.0 {
+                        continue;
+                    }
+                    moved = true;
+                    if ox < oy {
+                        let s = if pos[i].0 <= pos[j].0 { -ox / 2.0 } else { ox / 2.0 };
+                        pos[i].0 += s;
+                        pos[j].0 -= s;
+                    } else {
+                        let s = if pos[i].1 <= pos[j].1 { -oy / 2.0 } else { oy / 2.0 };
+                        pos[i].1 += s;
+                        pos[j].1 -= s;
+                    }
+                }
+            }
+            if !moved {
+                break;
+            }
+        }
+        let bits = |v: &[(f64, f64)]| v.iter().map(|p| (p.0.to_bits(), p.1.to_bits())).collect::<Vec<_>>();
+        assert!(bits(&grid) == bits(&pos), "решётка изменила раскладку");
     }
 
     #[test]
