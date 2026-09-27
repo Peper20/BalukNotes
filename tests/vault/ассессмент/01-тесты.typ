@@ -1,6 +1,5 @@
 #import "/_baluk/lib.typ": *
 #show: book.with(title: [Проектирование тестов], title-page: false, toc: false)
-#import "/_baluk/theme.typ": pale
 
 = Проектирование тестов
 

@@ -45,6 +45,7 @@ margin-note
 matrix-cells
 note
 p3
+pale
 parametric
 pitfall
 pitfalls

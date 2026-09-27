@@ -2,7 +2,7 @@
 #show: note.with(
   lang: "de",
   // Словаря немецкого в библиотеке нет: свои слова поверх словаря.
-  // Чего нет в words (Замечание, кадр) — из русского словаря.
+  // Чего нет в words (Remark, frame) — из английского словаря.
   words: (definition: "Definition", example: "Beispiel", step: "Schritt", figure: "Abb."),
   title: [Eigene Wörter],
   tags: ("фикстура", "языки"),
@@ -17,7 +17,7 @@
   #step[Abschätzen] $-1/n <= (sin n)/n <= 1/n$.
 ]
 
-#remark[Нет в `words:` — слово из русского словаря.]
+#remark[Нет в `words:` — слово из английского словаря.]
 
 #fig(canvas(theme => {
   import cetz.draw: *

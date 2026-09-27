@@ -3,7 +3,7 @@
 #
 #   tools/check.sh           # всё: Rust, хранилище-фикстура, типы API, клиент, e2e
 #   tools/check.sh --fast    # без сборки клиента и e2e (минута-две)
-#   tools/check.sh --rust    # только Rust: test, clippy, fmt, notes check, типы API
+#   tools/check.sh --rust    # только Rust: test, clippy, fmt, notes check, заготовки заметок, типы API
 #   tools/check.sh --app     # только клиент: check, Vitest, сборка, e2e
 #
 # Шаги идут все, даже если какой-то упал (кроме зависимых: без сборки
@@ -87,6 +87,18 @@ api_types() {
   fi
 }
 
+# Заготовки `notes new` (навык /new-note) собираются: заметка и книга во
+# временном хранилище, notes check без ошибок и предупреждений.
+new_note() {
+  local dir=tests/.data/new-note notes=(cargo run -q -p notes-cli -- --data tests/.data/new-note)
+  rm -rf "$dir"
+  "${notes[@]}" new --tag проверка "Папка/Заметка" || return 1
+  "${notes[@]}" new --book --lang en --title 'C++ [1] #x $y$ // - z' "Книга" || return 1
+  local actual
+  actual=$("${notes[@]}" check | tee /dev/stderr | tail -n 1)
+  [[ $actual == "заметок: 2, ошибок: 0, предупреждений: 0, битых ссылок: 0" ]]
+}
+
 in_app() { (cd app && "$@"); }
 
 if [[ $rust == 1 ]]; then
@@ -94,6 +106,7 @@ if [[ $rust == 1 ]]; then
   step clippy cargo clippy --workspace --all-targets -- -D warnings
   step fmt cargo fmt --check
   step notes-check vault_check
+  step new-note new_note
   step api-types api_types
 fi
 

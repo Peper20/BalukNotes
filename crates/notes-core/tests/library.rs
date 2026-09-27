@@ -83,6 +83,27 @@ fn every_public_name_is_documented() {
     assert!(missing.is_empty(), "не описаны в baluk/README.md: {missing:?}");
 }
 
+/// Правила написания заметок (`docs/writing.md`, навык `/new-note`) не
+/// устарели: каждый вызов `#имя` из них — публичное имя библиотеки
+/// (кроме ключевых слов Typst).
+#[test]
+fn writing_guide_uses_public_names() {
+    const KEYWORDS: [&str; 5] = ["import", "include", "show", "set", "let"];
+    let guide = std::fs::read_to_string(repo().join("docs/writing.md")).unwrap();
+    let names = public_names();
+    let mut unknown: Vec<&str> = guide
+        .split('#')
+        .skip(1)
+        .map(|rest| {
+            let end = rest.find(|c: char| !(c.is_ascii_lowercase() || c == '-')).unwrap_or(rest.len());
+            rest[..end].trim_end_matches('-')
+        })
+        .filter(|name| !name.is_empty() && !KEYWORDS.contains(name) && !names.iter().any(|n| n == name))
+        .collect();
+    unknown.dedup();
+    assert!(unknown.is_empty(), "docs/writing.md: нет в библиотеке {unknown:?} — поправьте правила");
+}
+
 /// Куски кода Markdown: блоки ``` … ``` и `…` в строке.
 fn code_spans(md: &str) -> Vec<&str> {
     let mut out = Vec::new();
@@ -104,6 +125,38 @@ fn has_word(text: &str, name: &str) -> bool {
         let after = text[i + name.len()..].chars().next();
         !before.is_some_and(is_name_char) && !after.is_some_and(is_name_char)
     })
+}
+
+/// Словари оформления полные: у каждого языка — все ключи всех словарей.
+#[test]
+fn dictionaries_have_same_keys() {
+    let page = compile(
+        "#import \"/_baluk/i18n.typ\": words\n\
+         #let all = words.values().map(d => d.keys()).flatten().dedup()\n\
+         #for (lang, dict) in words { for key in all { if key not in dict [#lang: #key; ] } }\n",
+    );
+    assert!(page.errors.is_empty(), "{:?}", page.errors);
+    let body = &page.rendered.as_ref().expect("нет отрисовки").body;
+    assert!(!body.contains(':'), "в словарях не хватает слов (язык: ключ): {body}");
+}
+
+/// Языка нет в словарях — слова из английского, в том числе те, которых
+/// нет в своих `words:`.
+#[test]
+fn unknown_language_falls_back_to_english() {
+    let body = |template: &str| {
+        let page = compile(&format!(
+            "#import \"/_baluk/lib.typ\": *\n#show: note.with({template})\n#definition[x]\n#remark[y]\n"
+        ));
+        assert!(page.errors.is_empty(), "{:?}", page.errors);
+        page.rendered.as_ref().expect("нет отрисовки").body.clone()
+    };
+    let plain = body("lang: \"uk\"");
+    assert!(plain.contains("Definition") && plain.contains("Remark"), "{plain}");
+    let own = body("lang: \"de\", words: (definition: \"Begriff\")");
+    assert!(own.contains("Begriff") && own.contains("Remark"), "{own}");
+    let russian = body("");
+    assert!(russian.contains("Определение") && russian.contains("Замечание"), "{russian}");
 }
 
 /// `words:` шаблона: неизвестный ключ и не строка — ошибка с подсказкой.

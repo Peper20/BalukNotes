@@ -38,6 +38,9 @@ ttf2woff2 = { version = "0.13.3", default-features = false }
 fontcull = { version = "2.0.1", default-features = false }
 ttf-parser = "0.25"
 clap = { version = "4.6", features = ["derive", "env"] }
+# Каталоги пользователя (данные, настройки) для `notes` — та же версия, что
+# уже тянет typst-kit.
+dirs = "6"
 # Наблюдатель файлов хранилища (notes-core::watch): индекс ссылок, прогрев,
 # события клиенту.
 notify = "8"
@@ -50,6 +53,9 @@ siphasher = "1"
 serde_json = { version = "1", features = ["preserve_order"] }
 tempfile = "3"
 thiserror = "2"
+# Файл настроек `notes` (~/.config/baluk-notes/config.toml) — та же версия,
+# что уже тянет typst.
+toml = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
 tower-http = { version = "0.6", features = ["compression-gzip", "compression-br"] }
 tracing = "0.1"

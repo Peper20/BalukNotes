@@ -16,7 +16,7 @@ styles: 1732 байт, fnv 3b163db2879b43de
 <p>Слова оформления — из <code>words:</code> шаблона. Словаря языка <code>de</code> в библиотеке нет, но свои слова заданы — <code>notes check</code> не предупреждает.</p>
 <div class="k-box k-def"><span class="k-label">Definition 1 (Grenzwert).</span> Eine Folge <math><msub><mi>𝑥</mi><mi>𝑛</mi></msub></math> konvergiert gegen <math><mi>𝑎</mi></math>, wenn <math><mo stretchy="false">|</mo><msub><mi>𝑥</mi><mi>𝑛</mi></msub><mo>−</mo><mi>𝑎</mi><mo lspace="0em" rspace="0em">|</mo><mo stretchy="false">→</mo><mn>0</mn></math>.</div>
 <div class="k-box k-example"><span class="k-label">Beispiel 1.</span> <span class="k-step">Schritt 1. Abschätzen.</span> <math><mo>−</mo><mfrac><mn>1</mn><mi>𝑛</mi></mfrac><mo>≤</mo><mfrac><mrow><mo lspace="0em" rspace="0.16666666666666666em">sin</mo><mi>𝑛</mi></mrow><mi>𝑛</mi></mfrac><mo>≤</mo><mfrac><mn>1</mn><mi>𝑛</mi></mfrac></math>.</div>
-<div class="k-box k-remark"><span class="k-label">Замечание.</span> Нет в <code>words:</code> — слово из русского словаря.</div>
+<div class="k-box k-remark"><span class="k-label">Remark.</span> Нет в <code>words:</code> — слово из английского словаря.</div>
 <figure>
 <div class="k-frame k-fig">
 <svg style="overflow: visible; width: 6.223501217em; height: 4.218231639em; display: block" viewBox="0 0 68.458513386 46.400548031" width="68.458513386pt" height="46.400548031pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…2959 байт, fnv f9add24858436a35…</svg></div>

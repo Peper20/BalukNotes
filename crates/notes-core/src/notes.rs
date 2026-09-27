@@ -52,7 +52,7 @@ pub struct NotesConfig {
     pub library: LibrarySource,
     /// Дополнительные каталоги шрифтов (к системным и встроенным в Typst).
     pub font_dirs: Vec<PathBuf>,
-    /// Каталог кэша на диске (`data/cache`, `None` — только в памяти):
+    /// Каталог кэша на диске (`<данные>/cache`, `None` — только в памяти):
     /// `pages/` — отрисовка заметок, `fonts/` — части шрифтов для браузера.
     pub cache: Option<PathBuf>,
 }

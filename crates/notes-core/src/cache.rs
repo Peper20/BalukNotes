@@ -307,7 +307,7 @@ pub fn new_tag(files: &str) -> String {
     StableHasher::new().str(files).bytes(&nanos.to_le_bytes()).hex()
 }
 
-/// Каталог кэша внутри каталога данных (`data/cache`; отрисовка — в
+/// Каталог кэша внутри каталога данных (`<данные>/cache`; отрисовка — в
 /// `pages/`, шрифты — в `fonts/`).
 pub fn default_dir(data: &Path) -> PathBuf {
     data.join("cache")
