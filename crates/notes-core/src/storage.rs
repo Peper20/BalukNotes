@@ -65,6 +65,14 @@ pub trait Storage: Send + Sync + fmt::Debug {
         PathBuf::from(path)
     }
 
+    /// Создать **новый** файл (каталоги появляются сами); файл уже есть —
+    /// `AlreadyExists`, существующее не перезаписывается. Хранилище только
+    /// для чтения — `Unsupported` (по умолчанию).
+    fn create(&self, path: &str, data: &[u8]) -> io::Result<()> {
+        let _ = (path, data);
+        Err(io::Error::new(io::ErrorKind::Unsupported, "хранилище только для чтения"))
+    }
+
     /// Сообщать об изменениях файлов в `sink`. `Ok(None)` — хранилище так
     /// не умеет (по умолчанию).
     fn watch(&self, sink: ChangeSink) -> io::Result<Option<WatchGuard>> {
@@ -226,6 +234,18 @@ impl Storage for DirStorage {
     fn display(&self, path: &str) -> PathBuf {
         self.root.join(path)
     }
+
+    fn create(&self, path: &str, data: &[u8]) -> io::Result<()> {
+        use std::io::Write;
+        let full = self.full(path)?;
+        if let Some(dir) = full.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&full)?;
+        // Список файлов — заново, не дожидаясь события наблюдателя.
+        self.listed.lock().files = None;
+        file.write_all(data)
+    }
 }
 
 /// Остановить наблюдатель: список файлов больше не помнить.
@@ -332,6 +352,14 @@ impl Storage for MemStorage {
         *self.sink.lock() = Some(sink);
         Ok(Some(Box::new(())))
     }
+
+    fn create(&self, path: &str, data: &[u8]) -> io::Result<()> {
+        if self.files.lock().files.contains_key(path) {
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("файл уже есть: {path}")));
+        }
+        self.write(path, data);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -368,6 +396,23 @@ mod tests {
             mem.write(f, text);
         }
         check(&mem);
+    }
+
+    /// `create`: новый файл с каталогами; существующий не перезаписывается.
+    #[test]
+    fn create_never_overwrites() {
+        let dir = tempfile::tempdir().unwrap();
+        let disk = DirStorage::open(dir.path()).unwrap();
+        let mem = MemStorage::new();
+        for storage in [&disk as &dyn Storage, &mem] {
+            storage.create("Новая/папка/x.typ", b"x").unwrap();
+            assert_eq!(storage.read("Новая/папка/x.typ").unwrap(), b"x");
+            assert!(storage.list().unwrap().contains(&"Новая/папка/x.typ".to_owned()), "список — заново");
+            let again = storage.create("Новая/папка/x.typ", b"y").unwrap_err();
+            assert_eq!(again.kind(), io::ErrorKind::AlreadyExists);
+            assert_eq!(storage.read("Новая/папка/x.typ").unwrap(), b"x");
+        }
+        assert!(disk.create("../x.typ", b"").is_err(), "за пределы каталога — нельзя");
     }
 
     /// Ждать, пока `ok()` не станет истиной (события ОС приходят не сразу).

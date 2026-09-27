@@ -8,11 +8,11 @@
 //    #show: book.with(title: [...])     // книга (большой конспект)
 //
 //  Внешняя зависимость одна: @preview/cetz:0.4.2 (лежит в кэше, работает
-//  офлайн). Правила содержания — в CLAUDE.md в корне проекта, API — в README.md.
+//  офлайн). Правила содержания — docs/writing.md проекта, API — README.md.
 // ═════════════════════════════════════════════════════════════════════════
 
 #import "@preview/cetz:0.4.2"
-#import "theme.typ": themes, customize, current-theme
+#import "theme.typ": themes, customize, current-theme, pale
 #import "template.typ": book, note
 #import "links.typ": see
 #import "blocks.typ": small-caps, data-table, definition, theorem, example, remark, pitfall, idea, algorithm, step, answer, proof, formula, margin-note, side-by-side, lead, plan, summary, quiz, pitfalls

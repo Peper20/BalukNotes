@@ -18,6 +18,9 @@ pub enum Error {
         source: io::Error,
     },
 
+    #[error("не создать «{id}»: {reason}")]
+    Create { id: String, reason: String },
+
     #[error("настройка «{key}»: {reason}")]
     Setting { key: String, reason: String },
 

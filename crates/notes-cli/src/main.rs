@@ -1,30 +1,46 @@
-//! `notes` — заметки на Typst из командной строки.
+//! `notes` — заметки на Typst из командной строки. Работает из любой папки:
+//! хранилище — в каталоге данных пользователя, библиотека, клиент и шрифты
+//! встроены в бинарник (релизная сборка).
 //!
 //!   notes serve            локальный сервер с клиентом (http://127.0.0.1:8421)
-//!   notes check            ошибки компиляции и битые ссылки во всём хранилище
-//!   notes build <каталог>  статический сайт (для VPS без сервера)
-//!   notes pdf <заметка>    заметка в PDF (вид PDF из baluk)
+//!   notes new <путь>       заготовка заметки (--book — книги)
+//!   notes list | tags      заметки хранилища / теги
+//!   notes check [путь]     ошибки компиляции и битые ссылки
+//!   notes pdf <путь>       заметка в PDF (вид PDF из baluk)
+//!   notes docs <тема>      как писать заметки, API библиотеки
+//!   notes info             где хранилище, настройки, библиотека
+//!   notes build <каталог>  статический сайт (решено удалить, roadmap M3)
 //!
-//! Данные — в `--data` (по умолчанию `./data`): `vault/` и `settings.json`;
-//! хранилище можно указать отдельно: `--vault tests/vault`.
+//! Каталог данных (`vault/`, `settings.json`, `cache/`): `--data` или
+//! `NOTES_DATA`, иначе `data` из `~/.config/baluk-notes/config.toml`, иначе
+//! `~/.local/share/baluk-notes`. Хранилище можно указать отдельно:
+//! `--vault tests/vault`.
 
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
-use notes_core::check::check;
+use anyhow::{Context, Result, bail};
+use clap::{Parser, Subcommand, ValueEnum};
+use notes_core::check::{Report, check, check_note};
+use notes_core::new_note::NewNote;
 use notes_core::settings::{Schema, SettingsStore};
+use notes_core::vault::NoteKind;
 use notes_core::{LibrarySource, NoteId, Notes, NotesConfig};
+
+/// Имя каталогов приложения: `~/.config/<APP>`, `~/.local/share/<APP>`.
+const APP: &str = "baluk-notes";
+/// Адрес `notes serve` по умолчанию.
+const ADDR: &str = "127.0.0.1:8421";
 
 #[derive(Debug, Parser)]
 #[command(version, about = "Заметки на Typst")]
 struct Cli {
-    /// Каталог данных: хранилище vault/ и settings.json.
-    #[arg(long, global = true, env = "NOTES_DATA", default_value = "data")]
-    data: PathBuf,
+    /// Каталог данных: хранилище vault/, settings.json, кэш. По умолчанию —
+    /// `data` из ~/.config/baluk-notes/config.toml, иначе ~/.local/share/baluk-notes.
+    #[arg(long, global = true, env = "NOTES_DATA")]
+    data: Option<PathBuf>,
 
     /// Хранилище, если не <data>/vault (например, tests/vault).
     #[arg(long, global = true, env = "NOTES_VAULT")]
@@ -49,7 +65,7 @@ enum Command {
     /// Локальный сервер с клиентом.
     Serve {
         /// Адрес; для доступа из сети — 0.0.0.0:8421.
-        #[arg(long, default_value = "127.0.0.1:8421")]
+        #[arg(long, default_value = ADDR)]
         addr: SocketAddr,
         /// Токен доступа: без него сервер отвечает 401. Передаётся заголовком
         /// `Authorization: Bearer …`, параметром `?token=` (сервер ставит
@@ -57,8 +73,38 @@ enum Command {
         #[arg(long, env = "NOTES_TOKEN", hide_env_values = true)]
         token: Option<String>,
     },
-    /// Проверить хранилище: ошибки компиляции и битые ссылки (код выхода 1).
+    /// Заготовка новой заметки или книги; печатает путь её файла.
+    ///
+    /// Существующее не перезаписывается. Как писать дальше — `notes docs writing`.
+    New {
+        /// Путь от корня хранилища, без .typ: «Сеть/SSH», «Курсы/Матан».
+        id: String,
+        /// Книга: папка с main.typ, главы — файлы рядом (иначе — заметка, один файл).
+        #[arg(long)]
+        book: bool,
+        /// Название; по умолчанию — последний сегмент пути.
+        #[arg(long)]
+        title: Option<String>,
+        /// Тег (можно повторять).
+        #[arg(long = "tag")]
+        tags: Vec<String>,
+        /// Язык заметки (ISO 639: en, de…); по умолчанию — русский.
+        #[arg(long)]
+        lang: Option<String>,
+    },
+    /// Заметки и книги хранилища: путь, вид, название, теги.
+    List {
+        /// В JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Теги хранилища и число заметок с ними.
+    Tags,
+    /// Проверить хранилище или одну заметку: ошибки компиляции,
+    /// предупреждения, битые ссылки (код выхода 1 — ошибки или битые ссылки).
     Check {
+        /// Только эта заметка или книга (ссылки проверяются по всему хранилищу).
+        id: Option<String>,
         /// Отчёт в JSON.
         #[arg(long)]
         json: bool,
@@ -79,6 +125,64 @@ enum Command {
         #[arg(long)]
         theme: Option<String>,
     },
+    /// Документация: как писать заметки, API библиотеки оформления.
+    Docs {
+        /// Что показать.
+        topic: Topic,
+    },
+    /// Где хранилище, настройки и кэш, какая библиотека, адрес сервера.
+    Info,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum Topic {
+    /// Как писать заметки: процесс, текст, рисунки, проверка.
+    Writing,
+    /// Библиотека оформления baluk: шаблоны, блоки, рисунки, интерактив.
+    Library,
+}
+
+impl Topic {
+    fn text(self) -> &'static str {
+        match self {
+            Self::Writing => include_str!("../../../docs/writing.md"),
+            Self::Library => include_str!("../../../baluk/README.md"),
+        }
+    }
+}
+
+/// Файл настроек `notes` (`~/.config/baluk-notes/config.toml`).
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Config {
+    /// Каталог данных; `~/` — домашний, относительный — от файла настроек.
+    data: Option<PathBuf>,
+}
+
+fn config_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|dir| dir.join(APP).join("config.toml"))
+}
+
+/// Каталог данных: явный, из файла настроек или стандартный.
+fn data_dir(explicit: Option<&PathBuf>) -> Result<PathBuf> {
+    if let Some(dir) = explicit {
+        return Ok(dir.clone());
+    }
+    if let Some(path) = config_path().filter(|p| p.is_file()) {
+        let text = std::fs::read_to_string(&path).with_context(|| format!("прочитать {}", path.display()))?;
+        let config: Config = toml::from_str(&text).with_context(|| format!("настройки {}", path.display()))?;
+        if let Some(data) = config.data {
+            let home = dirs::home_dir().unwrap_or_default();
+            return Ok(match data.strip_prefix("~") {
+                Ok(rest) => home.join(rest),
+                Err(_) => path.parent().unwrap_or(Path::new("")).join(data),
+            });
+        }
+    }
+    match dirs::data_dir() {
+        Some(dir) => Ok(dir.join(APP)),
+        None => bail!("не найден каталог данных пользователя — укажите --data"),
+    }
 }
 
 /// Библиотека оформления: явно указанная, в отладочной сборке — из
@@ -101,6 +205,7 @@ fn main() -> ExitCode {
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,notes=info".into()),
         )
         .with_target(false)
+        .with_writer(std::io::stderr)
         .init();
     match run(Cli::parse()) {
         Ok(code) => code,
@@ -112,7 +217,13 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<ExitCode> {
-    let vault = cli.vault.clone().unwrap_or_else(|| cli.data.join("vault"));
+    // Без хранилища: документация.
+    if let Command::Docs { topic } = cli.command {
+        print!("{}", topic.text());
+        return Ok(ExitCode::SUCCESS);
+    }
+    let data = data_dir(cli.data.as_ref())?;
+    let vault = cli.vault.clone().unwrap_or_else(|| data.join("vault"));
     if !vault.exists() {
         std::fs::create_dir_all(&vault).with_context(|| format!("создать {}", vault.display()))?;
         tracing::info!("создано пустое хранилище {}", vault.display());
@@ -122,29 +233,59 @@ fn run(cli: Cli) -> Result<ExitCode> {
         vault,
         library: library(cli.library.as_ref()),
         font_dirs: cli.font_paths.clone(),
-        cache: Some(notes_core::cache::default_dir(&cli.data)),
+        cache: Some(notes_core::cache::default_dir(&data)),
     };
     let notes = Notes::open(&config).context("открыть хранилище")?;
-    tracing::info!(ms = started.elapsed().as_millis(), "хранилище {}", notes.vault().location());
+    tracing::debug!(ms = started.elapsed().as_millis(), "хранилище {}", notes.vault().location());
 
     match cli.command {
-        Command::Serve { addr, token } => serve(notes, &cli.data, addr, token),
-        Command::Check { json } => run_check(&notes, json),
+        Command::Serve { addr, token } => serve(notes, &data, addr, token),
+        Command::New { id, book, title, tags, lang } => {
+            let kind = if book { NoteKind::Book } else { NoteKind::Note };
+            let id = NoteId::new(id)?;
+            let main = NewNote { kind, title, tags, lang }.create(notes.vault(), &id)?;
+            println!("{}", notes.vault().storage().display(&main).display());
+            eprintln!("в приложении: http://{ADDR}/n/{id} (если запущен notes serve)");
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::List { json } => list(&notes, json),
+        Command::Tags => tags(&notes),
+        Command::Check { id, json } => {
+            let report = match id {
+                Some(id) => check_note(&notes, &NoteId::new(id)?)?,
+                None => check(&notes)?,
+            };
+            print_check(&report, json)
+        }
         Command::Build { out } => {
             // Рисунки — с той же точностью, что выбрана в приложении.
-            let opts = open_settings(&notes, &cli.data)?.figure_options();
+            let opts = open_settings(&notes, &data)?.figure_options();
             notes_site::build(&notes, &out, opts).map(|()| ExitCode::SUCCESS)
         }
         Command::Pdf { id, out, theme } => pdf(&notes, &id, out, theme),
+        Command::Info => {
+            let config = config_path().map(|p| p.display().to_string()).unwrap_or_default();
+            let library = match library(cli.library.as_ref()) {
+                LibrarySource::Dir(dir) => dir.display().to_string(),
+                LibrarySource::Embedded => "встроенная в бинарник".into(),
+            };
+            println!("хранилище: {}", notes.vault().location());
+            println!("данные:    {} (settings.json, cache/)", data.display());
+            println!("настройки: {config} (data = \"…\" — другой каталог данных)");
+            println!("библиотека: {library}");
+            println!("сервер:    http://{ADDR}/ (notes serve)");
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Docs { .. } => unreachable!("обработано выше"),
     }
 }
 
-fn open_settings(notes: &Notes, data: &std::path::Path) -> Result<SettingsStore> {
+fn open_settings(notes: &Notes, data: &Path) -> Result<SettingsStore> {
     let schema = Schema::new(notes.themes().themes());
     SettingsStore::open(data.join("settings.json"), schema).context("настройки")
 }
 
-fn serve(notes: Notes, data: &std::path::Path, addr: SocketAddr, token: Option<String>) -> Result<ExitCode> {
+fn serve(notes: Notes, data: &Path, addr: SocketAddr, token: Option<String>) -> Result<ExitCode> {
     let settings = open_settings(&notes, data)?;
     let state = notes_server::AppState::new(Arc::new(notes), Arc::new(settings)).with_token(token);
     if state.token.is_some() {
@@ -160,6 +301,55 @@ fn serve(notes: Notes, data: &std::path::Path, addr: SocketAddr, token: Option<S
         .await?;
         Ok(ExitCode::SUCCESS)
     })
+}
+
+/// Строка списка или объект JSON: заметка из индекса исходников.
+#[derive(Debug, serde::Serialize)]
+struct ListItem<'a> {
+    id: &'a NoteId,
+    kind: NoteKind,
+    title: Option<&'a str>,
+    tags: &'a [String],
+}
+
+fn list(notes: &Notes, json: bool) -> Result<ExitCode> {
+    let index = notes.index()?;
+    let items: Vec<ListItem> = index
+        .outlines()
+        .map(|(entry, outline)| ListItem {
+            id: &entry.id,
+            kind: entry.kind,
+            title: outline.title.as_deref(),
+            tags: &outline.tags,
+        })
+        .collect();
+    if json {
+        println!("{}", serde_json::to_string_pretty(&items)?);
+        return Ok(ExitCode::SUCCESS);
+    }
+    for item in &items {
+        let kind = if item.kind == NoteKind::Book { "  [книга]" } else { "" };
+        let title = item.title.filter(|t| *t != item.id.name()).map(|t| format!("  «{t}»")).unwrap_or_default();
+        let tags: String = item.tags.iter().flat_map(|t| ["  #", t.as_str()]).collect();
+        println!("{}{kind}{title}{tags}", item.id);
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn tags(notes: &Notes) -> Result<ExitCode> {
+    let index = notes.index()?;
+    let mut counts = std::collections::BTreeMap::<&str, usize>::new();
+    for (_, outline) in index.outlines() {
+        for tag in &outline.tags {
+            *counts.entry(tag).or_default() += 1;
+        }
+    }
+    let mut sorted: Vec<_> = counts.into_iter().collect();
+    sorted.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+    for (tag, count) in sorted {
+        println!("{tag}\t{count}");
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn pdf(notes: &Notes, id: &str, out: Option<PathBuf>, theme: Option<String>) -> Result<ExitCode> {
@@ -181,10 +371,9 @@ fn pdf(notes: &Notes, id: &str, out: Option<PathBuf>, theme: Option<String>) -> 
     }
 }
 
-fn run_check(notes: &Notes, json: bool) -> Result<ExitCode> {
-    let report = check(notes)?;
+fn print_check(report: &Report, json: bool) -> Result<ExitCode> {
     if json {
-        println!("{}", serde_json::to_string_pretty(&report)?);
+        println!("{}", serde_json::to_string_pretty(report)?);
     } else {
         for n in &report.notes {
             for e in &n.errors {

@@ -49,7 +49,7 @@ pub struct Fonts {
     store: FontStore,
     /// Шрифты для браузера: план частей и уже сжатые части.
     web: Mutex<HashMap<WebKey, Option<Arc<WebFace>>>>,
-    /// Кэш сжатых частей на диске (`data/cache/fonts`): сервер и
+    /// Кэш сжатых частей на диске (`<данные>/cache/fonts`): сервер и
     /// `notes build` не сжимают их при каждом запуске заново.
     web_cache: Option<PathBuf>,
 }

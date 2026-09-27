@@ -25,6 +25,9 @@ pub fn lint(text: &str, languages: &[String]) -> Vec<Lint> {
 fn visit(node: &LinkedNode, languages: &[String], out: &mut Vec<Lint>) {
     swallowed_semicolon(node, out);
     lang_without_words(node, languages, out);
+    raw_decimal_comma(node, out);
+    latex_decimal_comma(node, out);
+    smallcaps_call(node, out);
     for child in node.children() {
         visit(&child, languages, out);
     }
@@ -48,7 +51,7 @@ fn swallowed_semicolon(node: &LinkedNode, out: &mut Vec<Lint>) {
 
 /// `note.with(lang: "de")` (или `book`, или вызов без `.with`) с языком, для
 /// которого в библиотеке нет слов оформления, и без своих `words:` — слова
-/// «Определение», «Рис.», «Глава» останутся русскими.
+/// оформления будут английскими («Definition», «Fig.», «Chapter»).
 fn lang_without_words(node: &LinkedNode, languages: &[String], out: &mut Vec<Lint>) {
     if languages.is_empty() {
         return;
@@ -91,9 +94,93 @@ fn lang_without_words(node: &LinkedNode, languages: &[String], out: &mut Vec<Lin
         .map_or(node.offset(), |n| n.offset());
     out.push(Lint {
         offset,
-        message: "для этого языка в библиотеке нет слов оформления: «Определение», «Рис.», «Глава» останутся русскими",
+        message: "для этого языка в библиотеке нет слов оформления: «Definition», «Fig.», «Chapter» будут английскими",
         hint: "дайте свои слова: words: (definition: \"…\", figure: \"…\", …) — ключи в baluk/i18n.typ",
     });
+}
+
+/// `$0,5$` — запятая между цифрами без пробелов: Typst напечатает «0, 5».
+/// Десятичная дробь — `dc("0,5")` (`baluk/math.typ`). Не дробь — скобки,
+/// в которых только числа через запятую: кортеж, отрезок, множество,
+/// аргументы и индексы (`(3,6)`, `[0,1]`, `{1,2}`, `N(0,1)`, `x_(1,2)`,
+/// `\{2,3\}`).
+fn raw_decimal_comma(node: &LinkedNode, out: &mut Vec<Lint>) {
+    if node.kind() != SyntaxKind::MathText || node.leaf_text() != "," {
+        return;
+    }
+    let (Some(prev), Some(next)) = (node.prev_sibling_with_trivia(), node.next_sibling_with_trivia()) else {
+        return;
+    };
+    if !is_number(&prev) || !is_number(&next) {
+        return;
+    }
+    let (left, right) = (list_edge(node, false), list_edge(node, true));
+    let escaped_set =
+        left.as_ref().is_some_and(|n| n.leaf_text() == "\\{") && right.as_ref().is_some_and(|n| n.leaf_text() == "\\}");
+    let whole_group = left.is_none()
+        && right.is_none()
+        && node.parent().and_then(LinkedNode::parent).is_some_and(|g| g.kind() != SyntaxKind::Equation);
+    if escaped_set || whole_group {
+        return;
+    }
+    out.push(Lint {
+        offset: prev.offset(),
+        message: "запятая между цифрами в формуле: Typst напечатает «0, 5», а не десятичную дробь",
+        hint: "десятичная дробь — $dc(\"0,5\")$; перечисление — через пробел: $0, 5$",
+    });
+}
+
+fn is_number(node: &LinkedNode) -> bool {
+    node.kind() == SyntaxKind::MathText && node.leaf_text().bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Первый сосед (вперёд или назад), который не число, не запятая и не
+/// пробел; `None` — перечисление дошло до края группы.
+fn list_edge<'a>(node: &LinkedNode<'a>, forward: bool) -> Option<LinkedNode<'a>> {
+    let mut current = node.clone();
+    loop {
+        let step = if forward { current.next_sibling_with_trivia() } else { current.prev_sibling_with_trivia() };
+        match step {
+            Some(n) if is_number(&n) || n.leaf_text() == "," || n.kind() == SyntaxKind::Space => current = n,
+            other => return other,
+        }
+    }
+}
+
+/// `{,}` из LaTeX: в Typst фигурные скобки выводятся буквально.
+fn latex_decimal_comma(node: &LinkedNode, out: &mut Vec<Lint>) {
+    if node.kind() != SyntaxKind::MathDelimited {
+        return;
+    }
+    let children: Vec<LinkedNode> = node.children().collect();
+    let inner_is_comma = |n: &LinkedNode| {
+        let items: Vec<LinkedNode> = n.children().collect();
+        items.len() == 1 && items[0].leaf_text() == ","
+    };
+    if let [open, inner, _close] = children.as_slice()
+        && open.leaf_text() == "{"
+        && inner_is_comma(inner)
+    {
+        out.push(Lint {
+            offset: node.offset(),
+            message: "{,} из LaTeX: в Typst скобки напечатаются как есть",
+            hint: "десятичная дробь — $dc(\"0,5\")$",
+        });
+    }
+}
+
+/// `smallcaps(…)` у шрифтов оформления без кириллической капители: Typst
+/// молча напечатает строчные.
+fn smallcaps_call(node: &LinkedNode, out: &mut Vec<Lint>) {
+    if let Some(call) = node.cast::<ast::FuncCall>()
+        && matches!(call.callee(), ast::Expr::Ident(id) if id.as_str() == "smallcaps")
+    {
+        out.push(Lint {
+            offset: node.offset(),
+            message: "smallcaps не работает с кириллицей: у шрифтов нет капители, выйдут строчные",
+            hint: "капитель из библиотеки — small-caps(…)",
+        });
+    }
 }
 
 fn is_statement(kind: SyntaxKind) -> bool {
@@ -154,6 +241,23 @@ mod tests {
         assert_eq!(found.len(), 2);
         assert_eq!(line_column(text, found[0]), (1, 17));
         assert_eq!(line_column(text, found[1]).0, 2);
+    }
+
+    #[test]
+    fn raw_decimal_comma_in_math() {
+        let found = |text: &str| offsets(text).len();
+        assert_eq!(found("$0,5$"), 1);
+        assert_eq!(found("$x = 1,25 + y$ и $(0,5 + 1)$"), 2);
+        assert_eq!(found("$dc(\"0,5\")$ $0, 5$ $a,b$ 0,5 в тексте"), 0, "не дробь");
+        assert_eq!(found("$(3,6) + [0,1] + {1,2,3} + N(0,1) + x_(1,2) + A = \\{2,3\\}$"), 0, "перечисления");
+        assert_eq!(found("// $0,5$ в комментарии\n"), 0);
+    }
+
+    #[test]
+    fn latex_comma_and_smallcaps() {
+        assert_eq!(offsets("$0{,}5$").len(), 1);
+        assert_eq!(offsets("#smallcaps[Имя] и #small-caps[Имя]").len(), 1);
+        assert_eq!(offsets("#{ smallcaps[a] }").len(), 1);
     }
 
     #[test]

@@ -31,7 +31,7 @@
   <div class="home">
     <h1>Заметки</h1>
     {#if !notes.all.length}
-      <p>Хранилище пусто: положите .typ-файлы в data/vault/.</p>
+      <p>Хранилище пусто: новая заметка — <code>notes new Папка/Название</code> (где хранилище — <code>notes info</code>).</p>
     {:else}
       <p class="home-lead">
         {notes.all.length - books}

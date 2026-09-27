@@ -52,31 +52,36 @@ impl Report {
     }
 }
 
+/// Проверка всего хранилища.
 pub fn check(notes: &Notes) -> Result<Report> {
     let mut out = Vec::new();
     for entry in notes.entries()? {
-        let page = notes.page(&entry.id, FigureOptions::default())?;
-        // Собралась — ссылки собранной страницы (с вычисляемыми путями);
-        // нет — из индекса исходников (буквальные `#see` и ссылки прошлой
-        // удачной сборки): ссылки проверяются и у несобравшейся заметки.
-        let links: Vec<LinkRef> = match &page.rendered {
-            Some(rendered) if page.errors.is_empty() => rendered.links.clone(),
-            _ => notes.index()?.outgoing(&entry.id).to_vec(),
-        };
-        let mut broken = Vec::new();
-        for link in &links {
-            if let Some(reason) = link_problem(notes, &link.target, link.anchor.as_deref())? {
-                broken.push(BrokenLink { target: link.target.clone(), anchor: link.anchor.clone(), reason });
-            }
-        }
-        out.push(NoteReport {
-            id: entry.id,
-            errors: page.errors.clone(),
-            warnings: page.warnings.clone(),
-            broken_links: broken,
-        });
+        out.push(note_report(notes, entry.id)?);
     }
     Ok(Report { notes: out })
+}
+
+/// Проверка одной заметки или книги (ссылки — по всему хранилищу).
+pub fn check_note(notes: &Notes, id: &NoteId) -> Result<Report> {
+    Ok(Report { notes: vec![note_report(notes, id.clone())?] })
+}
+
+fn note_report(notes: &Notes, id: NoteId) -> Result<NoteReport> {
+    let page = notes.page(&id, FigureOptions::default())?;
+    // Собралась — ссылки собранной страницы (с вычисляемыми путями);
+    // нет — из индекса исходников (буквальные `#see` и ссылки прошлой
+    // удачной сборки): ссылки проверяются и у несобравшейся заметки.
+    let links: Vec<LinkRef> = match &page.rendered {
+        Some(rendered) if page.errors.is_empty() => rendered.links.clone(),
+        _ => notes.index()?.outgoing(&id).to_vec(),
+    };
+    let mut broken = Vec::new();
+    for link in &links {
+        if let Some(reason) = link_problem(notes, &link.target, link.anchor.as_deref())? {
+            broken.push(BrokenLink { target: link.target.clone(), anchor: link.anchor.clone(), reason });
+        }
+    }
+    Ok(NoteReport { id, errors: page.errors.clone(), warnings: page.warnings.clone(), broken_links: broken })
 }
 
 /// Что не так со ссылкой, или `None`, если всё в порядке.

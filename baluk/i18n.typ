@@ -2,9 +2,10 @@
 //
 // Язык — параметр `lang:` шаблона (`note`, `book`), по умолчанию "ru"; он
 // же ставит `set text(lang:)` (переносы, кавычки). Языка нет в словаре —
-// русские слова (`notes check` предупреждает). Свои слова поверх словаря —
-// `words: (figure: "Abb.", …)` у шаблона. Новый язык — ещё один словарь с
-// теми же ключами.
+// английские слова (`notes check` предупреждает). Свои слова поверх словаря —
+// `words: (figure: "Abb.", …)` у шаблона; чего нет в `words:`, тоже берётся
+// из английского. Словари полные и с одинаковыми ключами (тест
+// `--test library`); новый язык — ещё один словарь с теми же ключами.
 //
 // Сообщения об ошибках библиотеки — по-русски на любом языке заметки.
 
@@ -70,15 +71,15 @@
 #let _check-words(own) = {
   assert(type(own) == dictionary, message: "words — словарь, например (figure: \"Abb.\", chapter: \"Kapitel\")")
   for (key, value) in own {
-    assert(key in words.ru, message: "words: нет слова «" + key + "»; есть: " + words.ru.keys().join(", "))
-    assert(type(value) == str, message: "words: «" + key + "» — строка, например \"" + words.ru.at(key) + "\"")
+    assert(key in words.en, message: "words: нет слова «" + key + "»; есть: " + words.en.keys().join(", "))
+    assert(type(value) == str, message: "words: «" + key + "» — строка, например \"" + words.en.at(key) + "\"")
   }
   own
 }
 
 /// Слово оформления: своё (`words:` шаблона) или из словаря языка текста
-/// (`text.lang`); нужен `context`.
+/// (`text.lang`), а языка нет в словарях — из английского; нужен `context`.
 #let word(key) = {
   let own = _own-words.get()
-  if key in own { own.at(key) } else { words.at(text.lang, default: words.ru).at(key) }
+  if key in own { own.at(key) } else { words.at(text.lang, default: words.en).at(key) }
 }
