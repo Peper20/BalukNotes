@@ -6,7 +6,8 @@
 //! дальше — `change` ([`ChangeEvent`]) на каждую пачку изменений
 //! (`notes_core::watch`). Токен (если задан) — как у всего API: `EventSource`
 //! не шлёт заголовков, поэтому cookie или `?token=`. При остановке сервера
-//! поток закрывается (иначе плавная остановка ждала бы его вечно).
+//! поток закрывается (иначе плавная остановка ждала бы его вечно); когда
+//! наблюдатель сломался — тоже, после последнего `change`.
 
 use std::convert::Infallible;
 
@@ -25,25 +26,34 @@ pub(crate) fn routes() -> Router<AppState> {
 }
 
 async fn events(State(s): State<AppState>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let hello = Event::default().event("hello").json_data(EventsHello { watching: s.notes.watching() });
+    let watching = s.notes.watching();
+    let hello = Event::default().event("hello").json_data(EventsHello { watching });
     let rx = s.events.subscribe();
     let closing = s.closing.subscribe();
     let first = futures_util::stream::iter(hello.ok().map(Ok));
-    let rest = futures_util::stream::unfold((rx, closing), |(mut rx, mut closing)| async move {
-        if *closing.borrow() {
-            return None;
+    let notes = s.notes.clone();
+    let rest = futures_util::stream::unfold((rx, closing, false), move |(mut rx, mut closing, done)| {
+        let notes = notes.clone();
+        async move {
+            if done || *closing.borrow() {
+                return None;
+            }
+            let change = tokio::select! {
+                got = rx.recv() => match got {
+                    Ok(change) => change,
+                    // Не успели прочитать — значит, что-то точно поменялось.
+                    Err(RecvError::Lagged(_)) => ChangeEvent { seq: 0, paths: Vec::new() },
+                    Err(RecvError::Closed) => return None,
+                },
+                _ = closing.changed() => return None,
+            };
+            let event = Event::default().event("change").json_data(&change).ok()?;
+            // Наблюдатель сломался — после этого события закрыть поток:
+            // клиент переподключится, получит `hello` без наблюдателя и
+            // перейдёт на опрос.
+            let done = watching && !notes.watching();
+            Some((Ok(event), (rx, closing, done)))
         }
-        let change = tokio::select! {
-            got = rx.recv() => match got {
-                Ok(change) => change,
-                // Не успели прочитать — значит, что-то точно поменялось.
-                Err(RecvError::Lagged(_)) => ChangeEvent { seq: 0, paths: Vec::new() },
-                Err(RecvError::Closed) => return None,
-            },
-            _ = closing.changed() => return None,
-        };
-        let event = Event::default().event("change").json_data(&change).ok()?;
-        Some((Ok(event), (rx, closing)))
     });
     Sse::new(futures_util::StreamExt::chain(first, rest)).keep_alive(KeepAlive::default())
 }

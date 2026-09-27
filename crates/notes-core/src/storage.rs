@@ -178,6 +178,13 @@ impl Storage for DirStorage {
                 state.files = None;
             }
             match event {
+                // Очередь событий ОС переполнилась (inotify): что поменялось — неизвестно.
+                Ok(event) if event.need_rescan() => {
+                    tracing::warn!("наблюдатель хранилища: события потеряны; дальше — обход файлов");
+                    state.watching = false;
+                    drop(state);
+                    sink(None);
+                }
                 Ok(event) => {
                     drop(state);
                     let paths: Vec<String> = event
@@ -273,6 +280,14 @@ impl MemStorage {
     pub fn remove(&self, path: &str) {
         self.files.lock().files.remove(path);
         self.changed(path);
+    }
+
+    /// Наблюдатель сломался: изменения могли потеряться (для тестов).
+    pub fn lose_changes(&self) {
+        let sink = self.sink.lock().clone();
+        if let Some(sink) = sink {
+            sink(None);
+        }
     }
 
     fn changed(&self, path: &str) {

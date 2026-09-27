@@ -44,7 +44,7 @@ pub const DISK_LIMIT: u64 = 512 << 20;
 
 /// Чужие записи (другое хранилище, другая сборка приложения), не
 /// обновлявшиеся столько, удаляются при чистке.
-pub const FOREIGN_TTL: Duration = Duration::from_secs(14 * 24 * 3600);
+pub const FOREIGN_TTL: Duration = Duration::from_hours(14 * 24);
 
 /// Что известно о сборке заметки.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -7,6 +7,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use notes_core::settings::{Schema, SettingsStore};
+use notes_core::storage::MemStorage;
 use notes_core::{LibrarySource, Notes, NotesConfig};
 use notes_server::{AppState, router};
 use serde_json::Value;
@@ -341,6 +342,36 @@ async fn events_report_file_changes() {
 
     // Остановка сервера закрывает поток.
     state.closing.send_replace(true);
+    let end = tokio::time::timeout(std::time::Duration::from_secs(10), body.frame()).await.unwrap();
+    assert!(end.is_none());
+}
+
+#[tokio::test]
+async fn broken_watcher_closes_events() {
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mem = Arc::new(MemStorage::new());
+    mem.write("A.typ", "a");
+    let config = NotesConfig {
+        vault: PathBuf::new(),
+        library: LibrarySource::Dir(repo.join("baluk")),
+        font_dirs: vec![],
+        cache: None,
+    };
+    let notes = Arc::new(Notes::with_storage(mem.clone(), &config).unwrap());
+    let dir = tempfile::tempdir().unwrap();
+    let settings = SettingsStore::open(dir.path().join("settings.json"), Schema::new(notes.themes().themes())).unwrap();
+    let state = AppState::new(notes.clone(), Arc::new(settings));
+    assert!(notes.watch());
+    let res = router(state.clone()).oneshot(Request::get("/api/events").body(Body::empty()).unwrap()).await.unwrap();
+    let mut body = res.into_body();
+    assert_eq!(next_frame(&mut body).await, "event: hello\ndata: {\"watching\":true}\n\n");
+
+    // Изменения потеряны: «проверь всё», и поток закрывается — клиент
+    // переподключится и перейдёт на опрос.
+    mem.lose_changes();
+    assert!(!notes.watching());
+    let change = next_frame(&mut body).await;
+    assert!(change.starts_with("event: change\n") && change.contains(r#""paths":[]"#), "{change}");
     let end = tokio::time::timeout(std::time::Duration::from_secs(10), body.frame()).await.unwrap();
     assert!(end.is_none());
 }

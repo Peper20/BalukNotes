@@ -53,8 +53,8 @@ export function serverEvents(url: string, fallback: ChangeSource, connect: (url:
       let lost = false;
       es.addEventListener("hello", (e) => {
         const hello = JSON.parse(e.data) as EventsHello;
-        if (!hello.watching) return void useFallback();
-        quitFallback();
+        if (hello.watching) quitFallback();
+        else useFallback();
         if (lost) onChange();
         lost = false;
       });

@@ -73,3 +73,15 @@ it("сервер не следит за файлами — опрос", () => {
   vi.advanceTimersByTime(10_000);
   expect(seen).toHaveBeenCalledTimes(2);
 });
+
+it("наблюдатель сервера сломался — поток закрыт: одна проверка и опрос", () => {
+  const stream = new FakeStream();
+  const seen = vi.fn();
+  serverEvents("/api/events", polling(5, () => false), () => stream).start(seen);
+  stream.emit("hello", '{"watching":true}');
+  stream.onerror!(new Event("error"));
+  stream.emit("hello", '{"watching":false}');
+  expect(seen).toHaveBeenCalledTimes(1);
+  vi.advanceTimersByTime(10_000);
+  expect(seen).toHaveBeenCalledTimes(3);
+});
