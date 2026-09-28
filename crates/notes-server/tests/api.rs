@@ -6,7 +6,7 @@ use std::sync::{Arc, LazyLock};
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use notes_core::settings::{Schema, SettingsStore};
+use notes_core::settings::{Platform, Schema, SettingsStore};
 use notes_core::storage::MemStorage;
 use notes_core::{LibrarySource, Notes, NotesConfig};
 use notes_server::{AppState, router};
@@ -29,14 +29,18 @@ static NOTES: LazyLock<Arc<Notes>> = LazyLock::new(|| {
 /// Своё хранилище настроек на тест: запись идёт во временный каталог.
 fn app() -> (axum::Router, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
-    let settings = SettingsStore::open(dir.path().join("settings.json"), Schema::new(NOTES.themes().themes())).unwrap();
+    let settings =
+        SettingsStore::open(dir.path().join("settings.json"), Schema::new(NOTES.themes().themes(), Platform::Desktop))
+            .unwrap();
     (router(AppState::new(NOTES.clone(), Arc::new(settings))), dir)
 }
 
 /// То же с токеном доступа.
 fn app_with_token(token: &str) -> (axum::Router, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
-    let settings = SettingsStore::open(dir.path().join("settings.json"), Schema::new(NOTES.themes().themes())).unwrap();
+    let settings =
+        SettingsStore::open(dir.path().join("settings.json"), Schema::new(NOTES.themes().themes(), Platform::Desktop))
+            .unwrap();
     (router(AppState::new(NOTES.clone(), Arc::new(settings)).with_token(Some(token.into()))), dir)
 }
 
@@ -90,9 +94,9 @@ async fn settings_are_validated() {
     let (app, _dir) = app();
     let (status, _) = call(app.clone(), "PUT", "/api/settings", Some(r#"{"appearance.font_size": 99}"#)).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    let (status, values) = call(app.clone(), "PUT", "/api/settings", Some(r#"{"refresh.interval": 0}"#)).await;
+    let (status, values) = call(app.clone(), "PUT", "/api/settings", Some(r#"{"refresh.mode": "manual"}"#)).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(values["refresh.interval"], 0);
+    assert_eq!(values["refresh.mode"], "manual");
     let (_, all) = call(app, "GET", "/api/settings", None).await;
     assert!(all["schema"]["settings"].as_array().unwrap().iter().any(|s| s["key"] == "headings.numbering"));
 }
@@ -324,7 +328,9 @@ async fn events_report_file_changes() {
         .unwrap(),
     );
     let dir = tempfile::tempdir().unwrap();
-    let settings = SettingsStore::open(dir.path().join("settings.json"), Schema::new(notes.themes().themes())).unwrap();
+    let settings =
+        SettingsStore::open(dir.path().join("settings.json"), Schema::new(notes.themes().themes(), Platform::Desktop))
+            .unwrap();
     let state = AppState::new(notes.clone(), Arc::new(settings));
     assert!(notes.watch(), "каталог на диске — с наблюдателем");
     let res = router(state.clone()).oneshot(Request::get("/api/events").body(Body::empty()).unwrap()).await.unwrap();
@@ -359,7 +365,9 @@ async fn broken_watcher_closes_events() {
     };
     let notes = Arc::new(Notes::with_storage(mem.clone(), &config).unwrap());
     let dir = tempfile::tempdir().unwrap();
-    let settings = SettingsStore::open(dir.path().join("settings.json"), Schema::new(notes.themes().themes())).unwrap();
+    let settings =
+        SettingsStore::open(dir.path().join("settings.json"), Schema::new(notes.themes().themes(), Platform::Desktop))
+            .unwrap();
     let state = AppState::new(notes.clone(), Arc::new(settings));
     assert!(notes.watch());
     let res = router(state.clone()).oneshot(Request::get("/api/events").body(Body::empty()).unwrap()).await.unwrap();

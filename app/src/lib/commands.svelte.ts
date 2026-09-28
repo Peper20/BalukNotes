@@ -14,6 +14,8 @@ export interface Command {
   keys?: Combo[];
   /** Доступна ли сейчас (например, только у открытой заметки). */
   available?: () => boolean;
+  /** Работают ли сейчас клавиши (иначе они — браузеру); по умолчанию — `available`. */
+  keysAvailable?: () => boolean;
   run: () => void;
 }
 
@@ -61,7 +63,11 @@ export function commands(): Command[] {
       id: "search-book",
       group: "Переход",
       title: "Поиск в этой книге",
+      // Книга по главам: Ctrl+F браузера видит одну главу — вместо него
+      // поиск по всей книге (повторное Ctrl+F — поиск браузера, Palette).
+      keys: keys("Ctrl+KeyF"),
       available: () => router.currentNote?.kind === "book",
+      keysAvailable: hasBook,
       run: () => ui.openPalette("", router.currentId),
     },
     { id: "commands", group: "Переход", title: "Команды", keys: keys("Ctrl+KeyK"), run: () => ui.openPalette(">") },

@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
+# Копии чужих крейтов с правками (vendor/README.md) — не члены workspace.
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,7 +15,6 @@ publish = false
 notes-core = { path = "crates/notes-core" }
 notes-server = { path = "crates/notes-server" }
 notes-assets = { path = "crates/notes-assets" }
-notes-site = { path = "crates/notes-site" }
 
 # Typst закреплён точно: HTML-экспорт экспериментальный, API меняется между
 # версиями. Обновлять осознанно, с прогоном tests/vault (docs/tech-debt.md).
@@ -86,3 +87,8 @@ opt-level = 2
 # target/debug весил ~9 ГБ, стал ~5. Наши крейты — с полной, как обычно
 # (`debug = "line-tables-only"` и для них даёт лишь ещё −0,7 ГБ).
 debug = "line-tables-only"
+
+# comemo с правкой: после полной очистки кэша (`evict(0)`) память
+# отдаётся, а не остаётся ёмкостью структур — vendor/README.md.
+[patch.crates-io]
+comemo = { path = "vendor/comemo" }

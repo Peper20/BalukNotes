@@ -2,7 +2,7 @@
 
 .k-note {
   /* Интерактивный рисунок (baluk/plots.typ): кадр Typst и подпись значений
-   * видны без JS (статический сайт); клиент ставит data-live и рисует живой. */
+   * видны без JS; клиент ставит data-live и рисует живой. */
   .k-plot-values { text-align: center; font-size: 0.8em; color: var(--k-muted); }
   .k-plot[data-live] > :not(.k-plot-live) { display: none; }
   .k-plot-legend {

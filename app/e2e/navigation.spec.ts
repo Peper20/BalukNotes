@@ -1,5 +1,7 @@
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { noteUrl, open, ready, title } from "./helpers";
+import { VAULT, noteUrl, open, ready, title } from "./helpers";
 
 test("главная: граф и список, клик по узлу открывает заметку", async ({ page }) => {
   await page.goto("/");
@@ -45,6 +47,50 @@ test("главы книги: следующая, предыдущая, огла�
   await expect(page.locator("#Итоги")).not.toBeAttached();
   await page.locator(".chapter-nav a.prev").click();
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Основы/);
+});
+
+test("книгу поправили — переход к главе показывает новую версию, а не запас", async ({ page }) => {
+  const file = join(VAULT, "Книга", "02-продолжение.typ");
+  const before = readFileSync(file, "utf8");
+  // «Только по кнопке»: событие о правке заметку само не перезагрузит.
+  const mode = async (value: "auto" | "manual") =>
+    expect((await page.request.put("/api/settings", { data: { "refresh.mode": value } })).ok()).toBe(true);
+  try {
+    await mode("manual");
+    const prefetched = page.waitForResponse((r) => decodeURIComponent(r.url()).endsWith("/api/notes/Книга?chapter=1"));
+    await open(page, "Книга");
+    await prefetched;
+    appendFileSync(file, "\nПравка второй главы.\n");
+    await page.keyboard.press("BracketRight");
+    await ready(page);
+    await expect(page.locator("#note h2.k-h1")).toHaveText(/Продолжение/);
+    await expect(page.locator("#note")).toContainText("Правка второй главы.");
+    await expect(page.locator("#status")).toContainText("книга обновлена");
+  } finally {
+    writeFileSync(file, before);
+    await mode("auto");
+  }
+});
+
+test("Ctrl+F в книге по главам — поиск по всей книге с номером главы; повторное — браузеру", async ({ page }) => {
+  await open(page, "Книга");
+  await page.keyboard.press("Control+KeyF");
+  const palette = page.locator(".palette");
+  await expect(palette.locator("input")).toHaveAttribute("placeholder", /книги «/);
+  await palette.locator("input").fill("Итоги");
+  // «Итоги» есть в каждой главе — различаются номером главы.
+  const chapters = palette.locator(".p-chapter");
+  for (const n of [1, 2, 3]) await expect(chapters.filter({ hasText: `гл. ${n}` }).first()).toBeVisible();
+  await palette.locator("input").press("Control+KeyF");
+  await expect(palette).toBeHidden();
+  // Выбор результата — переход в главу.
+  await page.keyboard.press("Control+KeyF");
+  await palette.locator("input").fill("Итоги");
+  await expect(chapters.first()).toBeVisible();
+  await palette.locator(".palette-list li[role=option]", { has: page.locator(".p-chapter", { hasText: "гл. 2" }) }).click();
+  await ready(page);
+  await expect(page.locator("#note h2.k-h1")).toHaveText(/Продолжение/);
+  await expect(page.locator("#Итоги-2")).toBeInViewport();
 });
 
 test("главу книги отдаёт сервер: в странице одна глава, перезагрузка — та же глава", async ({ page }) => {

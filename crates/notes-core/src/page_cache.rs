@@ -14,17 +14,19 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use parking_lot::Mutex;
 
-use crate::cache::{DiskCache, Pruned, Record};
+use crate::cache::{DiskCache, DiskLimits, Pruned, Record};
 use crate::figures::FigureOptions;
 use crate::pages::NotePage;
 use crate::render::{LinkRef, Rendered};
 use crate::vault::{Entry, NoteId};
 use crate::version::Versions;
 
-/// Предел страниц в памяти по умолчанию.
+/// Предел страниц в памяти по умолчанию (компьютер; меняется настройкой
+/// устройства — [`PageCache::set_limits`]).
 pub const MEMORY_BUDGET: usize = 64 << 20;
 
 /// Метка сырой отрисовки в памяти, когда кэша на диске нет.
@@ -45,7 +47,9 @@ pub enum Raw {
 pub struct PageCache {
     versions: Versions,
     disk: Option<DiskCache>,
-    budget: usize,
+    /// Предел страниц в памяти, байт.
+    budget: AtomicUsize,
+    disk_limits: Mutex<DiskLimits>,
     state: Mutex<State>,
 }
 
@@ -89,7 +93,25 @@ pub fn page_version(files: &str, opts: FigureOptions) -> String {
 
 impl PageCache {
     pub fn new(versions: Versions, disk: Option<DiskCache>, budget: usize) -> Self {
-        Self { versions, disk, budget, state: Mutex::default() }
+        Self {
+            versions,
+            disk,
+            budget: AtomicUsize::new(budget),
+            disk_limits: Mutex::new(DiskLimits::default()),
+            state: Mutex::default(),
+        }
+    }
+
+    /// Пределы кэша на диске (настройки устройства).
+    pub fn disk_limits(&self) -> DiskLimits {
+        *self.disk_limits.lock()
+    }
+
+    /// Пределы из настроек устройства: память — сразу (лишнее вытеснится
+    /// при следующей записи), диск — при следующей чистке.
+    pub fn set_limits(&self, memory: usize, disk: DiskLimits) {
+        self.budget.store(memory, Ordering::Relaxed);
+        *self.disk_limits.lock() = disk;
     }
 
     pub fn has_disk(&self) -> bool {
@@ -245,7 +267,8 @@ impl PageCache {
         held.measure();
         state.bytes = state.bytes - old_bytes + held.bytes;
         state.held.insert(id.clone(), held);
-        while state.bytes > self.budget && state.held.len() > 1 {
+        let budget = self.budget.load(Ordering::Relaxed);
+        while state.bytes > budget && state.held.len() > 1 {
             let Some(victim) =
                 state.held.iter().filter(|(k, _)| *k != id).min_by_key(|(_, h)| h.used).map(|(k, _)| k.clone())
             else {
@@ -265,7 +288,8 @@ impl PageCache {
 
     /// Чистка кэша на диске (см. [`DiskCache::prune`]).
     pub fn prune(&self, alive: &dyn Fn(&str) -> bool) -> Option<Pruned> {
-        Some(self.disk.as_ref()?.prune(alive, crate::cache::DISK_LIMIT))
+        let limits = *self.disk_limits.lock();
+        Some(self.disk.as_ref()?.prune(alive, limits))
     }
 }
 

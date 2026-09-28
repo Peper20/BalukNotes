@@ -1,12 +1,14 @@
 <!--
   Палитра: быстрый переход (Ctrl+O), команды (Ctrl+K или «>»), поиск по
-  тексту (Ctrl+Shift+F или «/»), теги («#»). ↑↓ — выбор, Enter — открыть,
-  Ctrl+Enter — в новой вкладке, Esc — закрыть.
+  тексту (Ctrl+Shift+F или «/»), теги («#»), поиск в книге (Ctrl+F в книге
+  по главам; повторное Ctrl+F — поиск браузера). ↑↓ — выбор, Enter —
+  открыть, Ctrl+Enter — в новой вкладке, Esc — закрыть.
 -->
 <script lang="ts">
   import { tick } from "svelte";
   import { api, type NoteListItem, type SearchHit } from "../lib/api";
   import { notes, places, router } from "../lib/state";
+  import { chapterLabel, chapterOf } from "../lib/chapters";
   import { commands, openNote, type Command } from "../lib/commands.svelte";
   import { fuzzy, highlight } from "../lib/fuzzy";
   import { tagHref } from "../lib/ids";
@@ -134,6 +136,12 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
+    // Повторное Ctrl+F в поиске по книге — поиск браузера (в показанной главе).
+    if (mode === "book" && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.code === "KeyF") {
+      close();
+      e.stopPropagation();
+      return;
+    }
     if (e.key === "ArrowDown") move(1);
     else if (e.key === "ArrowUp") move(-1);
     else if (e.key === "PageDown") move(8);
@@ -210,7 +218,9 @@
               <span class="p-path">{@render marked(item.note.id, item.path)}</span>
             {:else if item.kind === "hit"}
               {#if book}
+                {@const chapter = book === router.currentId ? chapterOf(ui.book, item.hit.anchor) : null}
                 <span class="p-title">{item.hit.heading ?? "Начало книги"}</span>
+                {#if chapter}<span class="p-badge p-chapter">{chapterLabel(chapter)}</span>{/if}
               {:else}
                 <span class="p-title">{item.hit.title}{#if item.hit.heading}<span class="p-heading">{` › ${item.hit.heading}`}</span>{/if}</span>
               {/if}
@@ -236,6 +246,7 @@
         <span><kbd>&gt;</kbd> команды</span>
         <span><kbd>/</kbd> текст</span>
         <span><kbd>#</kbd> теги</span>
+        {#if mode === "book"}<span><kbd>Ctrl</kbd>+<kbd>F</kbd> поиск браузера в главе</span>{/if}
       </footer>
     </div>
   </div>

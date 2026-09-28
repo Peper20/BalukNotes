@@ -21,8 +21,9 @@
   p + p { text-indent: 1.2em; margin-top: 0; }
   /* Отступы `#h`/`#v` заметки (страховка шаблона): величина — переменной.
    * Пустой `k-v` схлопывает поля с соседями — как `v` в Typst, отступ вместо
-   * промежутка абзацев, а не сверх него; отрицательный — сдвигает вверх. */
-  .k-h { display: inline-block; margin-inline-start: var(--k-h); }
+   * промежутка абзацев, а не сверх него; отрицательный — сдвигает вверх.
+   * Только `span`: класс `k-h` носят и заголовки baluk (они — блоки). */
+  span.k-h { display: inline-block; margin-inline-start: var(--k-h); }
   .k-v { margin-top: var(--k-v); }
   strong { font-weight: bold; }
   a { color: var(--k-accent); text-decoration: none; }

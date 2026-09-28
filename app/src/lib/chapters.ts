@@ -1,10 +1,23 @@
 // Соседние главы книги — заранее: переход «следующая / предыдущая глава»
 // без ожидания сервера (на медленной сети — заметная пауза). Держим только
-// показанную главу и её соседей той же версии книги.
+// показанную главу и её соседей той же версии книги. Перед переходом —
+// сверка версии книги (`fresh`): показанная глава могла устареть (событие
+// ещё не дошло, режим «по кнопке»), а главы разных версий не смешиваются —
+// номера, ссылки и счётчики у книги общие.
 
-import type { NotePage } from "./api";
+import type { BookView, Chapter, NotePage } from "./api";
 
 export type FetchChapter = (id: string, chapter: number, signal: AbortSignal) => Promise<NotePage>;
+
+/** Глава, в которой раздел `anchor` (результат поиска по книге), — `null`, если не знаем. */
+export function chapterOf(book: BookView | null, anchor: string | null): Chapter | null {
+  if (!book || anchor == null) return null;
+  const k = book.anchors[anchor];
+  return k == null ? null : (book.chapters[k] ?? null);
+}
+
+/** Подпись главы в результатах поиска: «гл. 2», у главы без номера — её название. */
+export const chapterLabel = (c: Chapter): string => (c.num ? `гл. ${c.num}` : c.title);
 
 /** Соседи главы `k` из `count` глав. */
 export const neighbours = (k: number, count: number): number[] => [k - 1, k + 1].filter((c) => c >= 0 && c < count);
@@ -26,6 +39,19 @@ export class ChapterCache {
   get(id: string, chapter: number, version: string | null): NotePage | null {
     if (id !== this.#id || version == null || version !== this.#version) return null;
     return this.#pages.get(chapter) ?? null;
+  }
+
+  /**
+   * Глава из запаса для перехода, если книга не изменилась: `current` —
+   * версия книги сейчас (сверка с сервером), `null` — сверить не вышло
+   * (берём запас). Изменилась — запас выброшен, глава — с сервера.
+   */
+  fresh(id: string, chapter: number, shown: string | null, current: string | null): NotePage | null {
+    if (current != null && current !== shown) {
+      this.clear();
+      return null;
+    }
+    return this.get(id, chapter, shown);
   }
 
   /** Показана глава `page`: её и соседей — держать, остальных — забыть, недостающих соседей — загрузить. */

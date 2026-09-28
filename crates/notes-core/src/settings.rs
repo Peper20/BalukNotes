@@ -7,17 +7,26 @@
 //! пишется в CSS (`app/src/baluk-css/`); правок TS не нужно. Значения хранятся в JSON-файле плоским словарём
 //! «ключ → значение»; неизвестные ключи и неверные значения при загрузке
 //! отбрасываются (с предупреждением в журнал), вместо них — значения по умолчанию.
+//!
+//! **Настройки устройства** ([`SettingDef::device`], группа `device`) —
+//! производительность: у каждого устройства свои, со своими значениями по
+//! умолчанию ([`Platform`]), и при синхронизации они не переносятся. Вид —
+//! общий. Ядро применяет их на ходу ([`SettingsStore::device`] →
+//! `Notes::apply_device`).
 
 use std::fs;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use parking_lot::RwLock;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
+use crate::cache::DiskLimits;
 use crate::figures::FigureOptions;
 use crate::fsutil::write_atomic;
 use crate::themes::Theme;
+use crate::warm::WarmMode;
 use crate::{Error, Result};
 
 /// Описание одной настройки.
@@ -38,6 +47,10 @@ pub struct SettingDef {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub apply: Option<Apply>,
+    /// Настройка устройства: своя у каждого устройства, не синхронизируется.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub device: bool,
 }
 
 /// Применение настройки вида: значение — на `<html>`, правило — в CSS.
@@ -100,11 +113,51 @@ fn choice(value: &str, label: &str) -> Choice {
     Choice { value: value.into(), label: label.into() }
 }
 
+/// Устройство, под которое выбираются значения по умолчанию настроек
+/// устройства: что допустимо на компьютере, на телефоне — нет.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Platform {
+    Desktop,
+    Phone,
+}
+
+impl Platform {
+    /// Платформа сборки.
+    pub fn current() -> Self {
+        if cfg!(any(target_os = "android", target_os = "ios")) { Self::Phone } else { Self::Desktop }
+    }
+
+    /// Значение по умолчанию для этой платформы.
+    fn pick<T>(self, desktop: T, phone: T) -> T {
+        match self {
+            Self::Desktop => desktop,
+            Self::Phone => phone,
+        }
+    }
+}
+
+/// Настройки устройства, как их применяет ядро (`Notes::apply_device`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Device {
+    pub warm: WarmMode,
+    /// Сборок разных заметок одновременно.
+    pub builds: usize,
+    /// Предел страниц в памяти, байт.
+    pub memory: usize,
+    pub disk: DiskLimits,
+    /// Сколько сборок Typst помнит рисунки (`comemo::evict`).
+    pub memo: usize,
+}
+
+/// Мегабайт в байтах.
+const MB: u64 = 1 << 20;
+
 impl Schema {
-    /// Схема для набора тем (тема — выбор из того, что есть в `theme.typ`).
+    /// Схема для набора тем (тема — выбор из того, что есть в `theme.typ`) и
+    /// платформы (значения по умолчанию настроек устройства).
     // Длинная, потому что это таблица настроек, а не логика.
     #[allow(clippy::too_many_lines)]
-    pub fn new(themes: &[Theme]) -> Self {
+    pub fn new(themes: &[Theme], platform: Platform) -> Self {
         let mut theme_options = vec![choice("auto", "как в системе")];
         theme_options.extend(themes.iter().map(|t| choice(&t.name, &t.title)));
         let bool_def = |key, label, default: bool| SettingDef {
@@ -114,7 +167,18 @@ impl Schema {
             kind: Kind::Bool,
             default: json!(default),
             apply: None,
+            device: false,
         };
+        let number = |key, label, help, (min, max, step): (f64, f64, f64), default: u64| SettingDef {
+            key,
+            label,
+            help: Some(help),
+            kind: Kind::Number { min, max, step },
+            default: json!(default),
+            apply: None,
+            device: true,
+        };
+        let p = platform;
 
         Self {
             groups: vec![
@@ -125,6 +189,7 @@ impl Schema {
                 Group { key: "figures", label: "Рисунки" },
                 Group { key: "panels", label: "Панели" },
                 Group { key: "refresh", label: "Обновление" },
+                Group { key: "device", label: "Это устройство" },
             ],
             settings: vec![
                 SettingDef {
@@ -134,6 +199,7 @@ impl Schema {
                     kind: Kind::Choice { options: theme_options },
                     default: json!("auto"),
                     apply: None,
+                    device: false,
                 },
                 SettingDef {
                     key: "appearance.font_size",
@@ -142,6 +208,7 @@ impl Schema {
                     kind: Kind::Number { min: 12.0, max: 32.0, step: 1.0 },
                     default: json!(19),
                     apply: None,
+                    device: false,
                 }
                 .var("--k-size", "px"),
                 SettingDef {
@@ -151,6 +218,7 @@ impl Schema {
                     kind: Kind::Number { min: 25.0, max: 80.0, step: 1.0 },
                     default: json!(40),
                     apply: None,
+                    device: false,
                 }
                 .var("--k-measure", "em"),
                 bool_def("header.title", "Название", true).attr("data-header-title"),
@@ -171,6 +239,7 @@ impl Schema {
                     },
                     default: json!("books"),
                     apply: None,
+                    device: false,
                 }
                 .attr("data-numbering"),
                 SettingDef {
@@ -185,6 +254,7 @@ impl Schema {
                     },
                     default: json!("decorated"),
                     apply: None,
+                    device: false,
                 }
                 .attr("data-chapters"),
                 SettingDef {
@@ -196,6 +266,7 @@ impl Schema {
                     },
                     default: json!("chapters"),
                     apply: None,
+                    device: false,
                 },
                 SettingDef {
                     key: "figures.precision",
@@ -211,6 +282,7 @@ impl Schema {
                     },
                     default: json!("2"),
                     apply: None,
+                    device: false,
                 },
                 bool_def("panels.toc", "Оглавление сбоку, если хватает места", true).attr("data-toc"),
                 SettingDef {
@@ -220,17 +292,64 @@ impl Schema {
                     kind: Kind::Number { min: 1.0, max: 4.0, step: 1.0 },
                     default: json!(2),
                     apply: None,
+                    device: false,
                 },
                 bool_def("panels.backlinks", "«Ссылаются сюда» под заметкой", true).attr("data-backlinks"),
                 SettingDef {
-                    key: "refresh.interval",
-                    label: "Проверять изменения, раз в N секунд",
-                    help: Some("Если сервер следит за файлами — сразу, без опроса. 0 — только по кнопке «Обновить»"),
-                    kind: Kind::Number { min: 0.0, max: 600.0, step: 1.0 },
-                    default: json!(5),
+                    key: "refresh.mode",
+                    label: "Показывать изменения заметок",
+                    help: Some("Автоматически — сразу после правки файла и при возврате в окно"),
+                    kind: Kind::Choice {
+                        options: vec![choice("auto", "автоматически"), choice("manual", "только по кнопке «Обновить»")],
+                    },
+                    default: json!("auto"),
                     apply: None,
+                    device: false,
                 },
-                bool_def("refresh.on_focus", "Проверять при возврате в окно", true),
+                SettingDef {
+                    key: "device.warm",
+                    label: "Собирать заметки заранее",
+                    help: Some("В фоне, чтобы открывались сразу. Открытое — вкладки и недавние"),
+                    kind: Kind::Choice {
+                        options: vec![
+                            choice(WarmMode::All.key(), "всё хранилище"),
+                            choice(WarmMode::Open.key(), "только открытое"),
+                            choice(WarmMode::Off.key(), "нет"),
+                        ],
+                    },
+                    default: json!(p.pick(WarmMode::All, WarmMode::Off).key()),
+                    apply: None,
+                    device: true,
+                },
+                number(
+                    "device.builds",
+                    "Сборок одновременно",
+                    "Больше — быстрее прогрев, но больше памяти и нагрузки",
+                    (1.0, 8.0, 1.0),
+                    2,
+                ),
+                number(
+                    "device.memo",
+                    "Память Typst, сборок",
+                    "Сколько последних сборок Typst помнит рисунки: пересборка после правки быстрее, но больше памяти",
+                    (0.0, 50.0, 1.0),
+                    p.pick(10, 3),
+                ),
+                number(
+                    "device.memory",
+                    "Страницы в памяти, МБ",
+                    "Открытые заметки; лишние вытесняются и читаются с диска",
+                    (16.0, 1024.0, 16.0),
+                    p.pick(64, 32),
+                ),
+                number("device.disk", "Кэш на диске, МБ", "Собранные заметки", (64.0, 8192.0, 64.0), p.pick(512, 256)),
+                number(
+                    "device.foreign_days",
+                    "Кэш других хранилищ и версий, дней",
+                    "Столько хранится кэш, который не обновлялся",
+                    (1.0, 365.0, 1.0),
+                    14,
+                ),
             ],
         }
     }
@@ -271,6 +390,21 @@ impl Schema {
     }
 }
 
+/// Старые ключи файла настроек — в нынешние: опрос раз в N секунд и
+/// «проверять при возврате в окно» стали одним выбором `refresh.mode`
+/// (0 секунд — «только по кнопке»).
+fn migrate(mut stored: Map<String, Value>) -> Map<String, Value> {
+    let interval = stored.remove("refresh.interval");
+    stored.remove("refresh.on_focus");
+    if let Some(interval) = interval
+        && !stored.contains_key("refresh.mode")
+    {
+        let manual = interval.as_f64() == Some(0.0);
+        stored.insert("refresh.mode".into(), json!(if manual { "manual" } else { "auto" }));
+    }
+    stored
+}
+
 fn setting_err(key: &str, reason: &str) -> Error {
     Error::Setting { key: key.to_owned(), reason: reason.to_owned() }
 }
@@ -291,7 +425,7 @@ impl SettingsStore {
         match fs::read_to_string(&path) {
             Ok(text) => {
                 let stored: Map<String, Value> = serde_json::from_str(&text)?;
-                for (key, value) in stored {
+                for (key, value) in migrate(stored) {
                     match schema.validate(&key, &value) {
                         Ok(v) => {
                             values.insert(key, v);
@@ -324,6 +458,27 @@ impl SettingsStore {
         }
     }
 
+    /// Настройки устройства для ядра.
+    pub fn device(&self) -> Device {
+        let values = self.values.read();
+        let number = |key: &str| {
+            let n = values.get(key).and_then(Value::as_u64);
+            n.or_else(|| self.schema.get(key)?.default.as_u64()).expect("число в схеме")
+        };
+        let warm = values.get("device.warm").and_then(Value::as_str).and_then(WarmMode::from_key);
+        let size = |n: u64| usize::try_from(n).unwrap_or(usize::MAX);
+        Device {
+            warm: warm.unwrap_or_default(),
+            builds: size(number("device.builds")),
+            memory: size(number("device.memory") * MB),
+            disk: DiskLimits {
+                size: number("device.disk") * MB,
+                foreign_ttl: Duration::from_hours(24 * number("device.foreign_days")),
+            },
+            memo: size(number("device.memo")),
+        }
+    }
+
     /// Меняет несколько настроек разом: либо все верны и записаны, либо ни одна.
     pub fn update(&self, patch: &Map<String, Value>) -> Result<Map<String, Value>> {
         let mut checked = Vec::with_capacity(patch.len());
@@ -343,11 +498,15 @@ impl SettingsStore {
 mod tests {
     use super::*;
 
-    fn schema() -> Schema {
-        Schema::new(&[
+    fn themes() -> [Theme; 2] {
+        [
             Theme { name: "classic".into(), title: "Классика".into(), dark: false },
             Theme { name: "night".into(), title: "Ночь".into(), dark: true },
-        ])
+        ]
+    }
+
+    fn schema() -> Schema {
+        Schema::new(&themes(), Platform::Desktop)
     }
 
     #[test]
@@ -417,20 +576,66 @@ mod tests {
         assert!(!v.contains_key("старое"));
 
         let mut changes = Map::new();
-        changes.insert("refresh.interval".into(), json!(0));
+        changes.insert("refresh.mode".into(), json!("manual"));
         changes.insert("header.tags".into(), json!("нет"));
         assert!(store.update(&changes).is_err());
-        assert_eq!(store.values()["refresh.interval"], json!(5), "частично не применяется");
+        assert_eq!(store.values()["refresh.mode"], json!("auto"), "частично не применяется");
 
         changes.remove("header.tags");
         store.update(&changes).unwrap();
         let reopened = SettingsStore::open(&path, schema()).unwrap();
-        assert_eq!(reopened.values()["refresh.interval"], json!(0));
+        assert_eq!(reopened.values()["refresh.mode"], json!("manual"));
         assert_eq!(reopened.figure_options(), FigureOptions::default());
 
         let mut changes = Map::new();
         changes.insert("figures.precision".into(), json!("full"));
         store.update(&changes).unwrap();
         assert_eq!(store.figure_options(), FigureOptions { precision: None });
+    }
+
+    #[test]
+    fn old_refresh_keys_are_migrated() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let open = |text: &str| {
+            fs::write(&path, text).unwrap();
+            SettingsStore::open(&path, schema()).unwrap().values()
+        };
+        let v = open(r#"{"refresh.interval": 0, "refresh.on_focus": false}"#);
+        assert_eq!(v["refresh.mode"], json!("manual"));
+        assert!(!v.contains_key("refresh.interval") && !v.contains_key("refresh.on_focus"));
+        assert_eq!(open(r#"{"refresh.interval": 30}"#)["refresh.mode"], json!("auto"));
+        assert_eq!(open(r#"{"refresh.interval": 0, "refresh.mode": "auto"}"#)["refresh.mode"], json!("auto"));
+    }
+
+    #[test]
+    fn device_settings_by_platform() {
+        let desktop = schema();
+        let phone = Schema::new(&themes(), Platform::Phone);
+        for s in [&desktop, &phone] {
+            for d in &s.settings {
+                assert_eq!(d.device, d.key.starts_with("device."), "{}: настройка устройства — в группе device", d.key);
+            }
+        }
+        assert_eq!(desktop.get("device.warm").unwrap().default, json!("all"));
+        assert_eq!(phone.get("device.warm").unwrap().default, json!("off"), "на телефоне прогрева нет");
+        assert_eq!(desktop.get("device.builds").unwrap().default, json!(2));
+
+        let dir = tempfile::tempdir().unwrap();
+        let store = SettingsStore::open(dir.path().join("settings.json"), schema()).unwrap();
+        let d = store.device();
+        assert_eq!(d.warm, WarmMode::All);
+        assert_eq!(d.builds, 2);
+        assert_eq!(d.memory, crate::page_cache::MEMORY_BUDGET);
+        assert_eq!(d.disk, DiskLimits::default());
+        assert_eq!(d.memo, crate::world::MEMO);
+        let mut changes = Map::new();
+        changes.insert("device.warm".into(), json!("open"));
+        changes.insert("device.memory".into(), json!(128));
+        store.update(&changes).unwrap();
+        assert_eq!(store.device().warm, WarmMode::Open);
+        assert_eq!(store.device().memory, 128 << 20);
+        assert_eq!(serde_json::to_value(desktop.get("device.warm").unwrap()).unwrap()["device"], json!(true));
+        assert!(serde_json::to_value(desktop.get("header.title").unwrap()).unwrap().get("device").is_none());
     }
 }

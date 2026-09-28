@@ -8,7 +8,7 @@
 //! без компиляции Typst (подменой сборки).
 
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use crate::diag::Diagnostic;
@@ -20,15 +20,7 @@ use crate::themes::ThemeSet;
 use crate::vault::{Entry, NoteId, Vault};
 use crate::version::{Dep, combine};
 use crate::world::Compiler;
-
-/// Куда ведут ссылки между заметками.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LinkStyle {
-    /// `/n/Сеть/SSH#якорь` — для сервера и клиента-SPA.
-    Server,
-    /// `../Сеть/SSH.html#якорь` — для статического сайта (`notes build`).
-    Static,
-}
+pub use crate::world::Priority;
 
 /// Результат сборки.
 #[derive(Debug)]
@@ -47,10 +39,13 @@ pub struct Build {
 /// Сборка заметки.
 pub trait Pipeline: Send + Sync + fmt::Debug {
     /// Собрать заметку (без обработки рисунков).
-    fn build(&self, entry: &Entry, links: LinkStyle) -> Build;
+    fn build(&self, entry: &Entry, priority: Priority) -> Build;
 
     /// Обработать рисунки под настройки.
     fn finish(&self, raw: &Rendered, opts: FigureOptions) -> Rendered;
+
+    /// Освободить память сборок (после прохода прогрева).
+    fn release_memory(&self) {}
 }
 
 /// Сборка компилятором Typst.
@@ -98,11 +93,11 @@ impl TypstPipeline {
 }
 
 impl Pipeline for TypstPipeline {
-    fn build(&self, entry: &Entry, style: LinkStyle) -> Build {
+    fn build(&self, entry: &Entry, priority: Priority) -> Build {
         let started = Instant::now();
         let _span = tracing::debug_span!("сборка", id = %entry.id).entered();
-        let compilation = self.compiler.compile_html(&entry.main, &self.themes.names());
-        let links = VaultLinks { vault: &self.vault, style, from: &entry.id };
+        let compilation = self.compiler.compile_html(&entry.main, &self.themes.names(), priority);
+        let links = VaultLinks { vault: &self.vault };
         let (raw, errors) = match compilation.docs {
             Ok(docs) => match render::render(docs, &links) {
                 Ok(r) => (Some(r), vec![]),
@@ -124,13 +119,16 @@ impl Pipeline for TypstPipeline {
         let themes = self.themes.names();
         finish::finish(raw, &finish::Settings { themes: &themes, opts }, finish::FINISH)
     }
+
+    fn release_memory(&self) {
+        self.compiler.release_memory();
+    }
 }
 
-/// Адреса ссылок `#see(…)`: существует ли цель, и куда вести.
+/// Адреса ссылок `#see(…)`: существует ли цель, и куда вести
+/// (`/n/Сеть/SSH#якорь` — адрес клиента).
 struct VaultLinks<'a> {
     vault: &'a Vault,
-    style: LinkStyle,
-    from: &'a NoteId,
 }
 
 impl LinkResolver for VaultLinks<'_> {
@@ -138,13 +136,7 @@ impl LinkResolver for VaultLinks<'_> {
         let id = NoteId::new(target).ok()?;
         self.vault.entry(&id).ok()?;
         let fragment = anchor.map(|a| format!("#{}", encode(&render::slug(a)))).unwrap_or_default();
-        Some(match self.style {
-            LinkStyle::Server => format!("/n/{}{fragment}", encode(id.as_str())),
-            LinkStyle::Static => {
-                let up = "../".repeat(self.from.as_str().matches('/').count());
-                format!("{up}{}.html{fragment}", encode(id.as_str()))
-            }
-        })
+        Some(format!("/n/{}{fragment}", encode(id.as_str())))
     }
 }
 
@@ -167,11 +159,6 @@ pub fn encode(s: &str) -> String {
     out
 }
 
-/// Путь страницы заметки в статическом сайте.
-pub fn static_path(id: &NoteId) -> PathBuf {
-    Path::new(id.as_str()).with_extension("html")
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -185,13 +172,10 @@ mod tests {
         fs::write(dir.path().join("Сеть/SSH.typ"), "").unwrap();
         fs::write(dir.path().join("Итоги 2026.typ"), "").unwrap();
         let vault = Vault::open(dir.path()).unwrap();
-        let from = NoteId::new("Сеть/UFW").unwrap();
-        let server = VaultLinks { vault: &vault, style: LinkStyle::Server, from: &from };
+        let server = VaultLinks { vault: &vault };
         assert_eq!(server.href("Сеть/SSH", Some("Смена порта")).unwrap(), "/n/Сеть/SSH#Смена-порта");
         assert_eq!(server.href("Итоги 2026", None).unwrap(), "/n/Итоги%202026");
         assert_eq!(server.href("Сеть/Nginx", None), None);
         assert_eq!(server.href("../etc/passwd", None), None);
-        let stat = VaultLinks { vault: &vault, style: LinkStyle::Static, from: &from };
-        assert_eq!(stat.href("Сеть/SSH", None).unwrap(), "../Сеть/SSH.html");
     }
 }

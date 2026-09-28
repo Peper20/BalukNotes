@@ -118,7 +118,7 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
   min-height: 3em; overflow: hidden;
 }
 .k-note .graph-hint { font-size: 0.75em; color: var(--k-muted); text-align: left; margin-top: 0.5em; }
-/* Сам граф (узлы, рёбра, подсветка) — в baluk.css: он общий с графом в заметке и сайтом. */
+/* Сам граф (узлы, рёбра, подсветка) — в baluk.css: он общий с графом в заметке. */
 .graph-page { display: flex; flex-direction: column; min-height: 20rem; box-sizing: border-box; }
 .graph-bar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; padding: 0.5rem 0.8rem 0;
@@ -314,7 +314,7 @@ kbd {
 .help .or { color: var(--k-muted); font-size: 0.8em; }
 
 /* ── Теги ───────────────────────────────────────────────────────────── */
-/* Теги в шапке заметки — ссылками: baluk.css (note/links.css, общий с сайтом). */
+/* Теги в шапке заметки — ссылками: baluk.css (note/links.css). */
 .k-note .tag-cloud { display: flex; flex-wrap: wrap; gap: 0.5em; }
 .k-note .tag-chip {
   display: inline-block; padding: 0.15em 0.7em; border-radius: 1em; font-size: 0.85em;
@@ -342,7 +342,8 @@ kbd {
 .lp-tags { margin-top: 0.4rem; display: flex; gap: 0.5rem; color: var(--k-muted); font-size: 0.9em; }
 
 /* ── Режим чтения: только текст ─────────────────────────────────────── */
-.app.reading { grid-template-columns: 0 1fr; }
+/* Панель скрыта (display: none) — колонка заметки одна: иначе она встала бы в нулевую. */
+.app.reading { grid-template-columns: 1fr; }
 .app.reading .sidebar, .app.reading .tabbar, .app.reading .toc:not(.open) { display: none !important; }
 .app.reading .topbar { opacity: 0; transition: opacity 0.2s; }
 .app.reading .topbar:hover, .app.reading .topbar:focus-within { opacity: 1; }

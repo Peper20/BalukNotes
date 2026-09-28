@@ -13,6 +13,10 @@
 //! сохраняет файл в несколько шагов. Версии заметок по-прежнему — `stat` их
 //! файлов (несколько вызовов на заметку, см. [`crate::version`]).
 //!
+//! Кроме хранилища, можно наблюдать и другой каталог ([`Changes::also`]):
+//! библиотеку оформления на диске (`/_baluk/` отладочной сборки) — её пути
+//! приходят с префиксом (`_baluk/theme.typ`).
+//!
 //! Наблюдатель — ускорение, а не источник правды: сломался (переполнение
 //! очереди, сетевой диск) — [`Changes::watching`] станет ложью, и всё
 //! работает как без него, обходом.
@@ -24,7 +28,7 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 
-use crate::storage::{Storage, WatchGuard};
+use crate::storage::{ChangeSink, Storage, WatchGuard};
 
 /// Сколько ждать тишины, прежде чем раздать пачку изменений.
 pub const SETTLE: Duration = Duration::from_millis(100);
@@ -47,7 +51,9 @@ pub struct Changes {
     seq: AtomicU64,
     watching: AtomicBool,
     listeners: Mutex<Vec<Listener>>,
-    guard: Mutex<Option<WatchGuard>>,
+    guards: Mutex<Vec<WatchGuard>>,
+    /// Куда наблюдатели пишут события (после [`Changes::start`]).
+    sink: Mutex<Option<ChangeSink>>,
 }
 
 impl std::fmt::Debug for Changes {
@@ -62,7 +68,7 @@ impl Changes {
     pub fn start(self: &Arc<Self>, storage: &dyn Storage) -> bool {
         let (tx, rx) = mpsc::channel::<Option<Vec<String>>>();
         let this = Arc::downgrade(self);
-        let sink = Arc::new(move |paths: Option<Vec<String>>| {
+        let sink: ChangeSink = Arc::new(move |paths: Option<Vec<String>>| {
             if let Some(this) = this.upgrade() {
                 // Сразу: индекс не должен отдать прежний список после события.
                 this.seq.fetch_add(1, Ordering::SeqCst);
@@ -72,9 +78,10 @@ impl Changes {
             }
             let _ = tx.send(paths);
         });
-        match storage.watch(sink) {
+        match storage.watch(sink.clone()) {
             Ok(Some(guard)) => {
-                *self.guard.lock() = Some(guard);
+                self.guards.lock().push(guard);
+                *self.sink.lock() = Some(sink);
                 self.watching.store(true, Ordering::SeqCst);
                 let this = Arc::downgrade(self);
                 let spawned = std::thread::Builder::new().name("notes-watch".into()).spawn(move || settle(&rx, &this));
@@ -93,10 +100,33 @@ impl Changes {
         }
     }
 
+    /// Наблюдать ещё и `storage` (после [`Self::start`]): его пути приходят
+    /// с префиксом `prefix` (`_baluk`). Не вышло — только предупреждение:
+    /// изменения там увидит сверка версий по кнопке и при возврате в окно.
+    pub fn also(&self, storage: &dyn Storage, prefix: &str) -> bool {
+        let Some(inner) = self.sink.lock().clone() else { return false };
+        let prefix = prefix.to_owned();
+        let sink: ChangeSink = Arc::new(move |paths: Option<Vec<String>>| {
+            inner(paths.map(|paths| paths.into_iter().map(|p| format!("{prefix}/{p}")).collect()));
+        });
+        match storage.watch(sink) {
+            Ok(Some(guard)) => {
+                self.guards.lock().push(guard);
+                true
+            }
+            Ok(None) => false,
+            Err(e) => {
+                tracing::warn!("наблюдатель {}: {e}", storage.display("").display());
+                false
+            }
+        }
+    }
+
     /// Выключить наблюдатель.
     pub fn stop(&self) {
         self.watching.store(false, Ordering::SeqCst);
-        self.guard.lock().take();
+        self.guards.lock().clear();
+        self.sink.lock().take();
     }
 
     /// Наблюдатель работает: пока [`Self::seq`] тот же, файлы не менялись.
@@ -163,7 +193,16 @@ mod tests {
         let change = rx.recv_timeout(Duration::from_secs(5)).unwrap();
         assert_eq!(change, Change { seq: 3, paths: vec!["a.typ".into(), "b.typ".into()] });
 
+        // Второй каталог — пути с префиксом, в ту же пачку.
+        let library = MemStorage::new();
+        assert!(changes.also(&library, "_baluk"));
+        library.write("theme.typ", "1");
+        storage.write("c.typ", "1");
+        let change = rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(change, Change { seq: 5, paths: vec!["_baluk/theme.typ".into(), "c.typ".into()] });
+
         changes.stop();
         assert!(!changes.watching());
+        assert!(!changes.also(&library, "_baluk"), "после остановки — нет");
     }
 }

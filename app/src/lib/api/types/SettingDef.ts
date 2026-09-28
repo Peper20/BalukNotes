@@ -15,4 +15,8 @@ key: string, label: string, help?: string, default: JsonValue,
  * Как клиент применяет настройку к странице; `None` — сам, в своём коде
  * (тема, книги, обновление) или она для сервера (рисунки).
  */
-apply?: Apply, } & ({ "type": "bool" } | { "type": "number", min: number, max: number, step: number, } | { "type": "choice", options: Array<Choice>, });
+apply?: Apply, 
+/**
+ * Настройка устройства: своя у каждого устройства, не синхронизируется.
+ */
+device?: boolean, } & ({ "type": "bool" } | { "type": "number", min: number, max: number, step: number, } | { "type": "choice", options: Array<Choice>, });

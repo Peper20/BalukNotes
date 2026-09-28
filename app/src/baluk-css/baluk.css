@@ -11,10 +11,9 @@
  * <html> (data-numbering, data-header-title, …) — note/settings.css.
  *
  * Этот файл — порядок блоков: при сборке (`vite build`, и `npm run dev`)
- * `@import` заменяются содержимым файлов (bundle.ts), значки `lucide(…)` —
- * SVG из пакета, и получается один `assets/baluk.css` — общий для
- * приложения и статического сайта. Порядок важен: правила с равной
- * специфичностью — по порядку (телефон и настройки — после блоков).
+ * `@import` заменяются содержимым файлов (bundle.ts), и получается один
+ * `assets/baluk.css`. Порядок важен: правила с равной специфичностью — по
+ * порядку (телефон и настройки — после блоков).
  */
 
 @import "./root.css";
@@ -34,15 +33,5 @@
 @import "./note/settings.css";
 @import "./note/links.css";
 
-/* Граф заметок: приложение, граф в заметке, сайт */
+/* Граф заметок: страница графа и граф в заметке */
 @import "./graph.css";
-
-/* Статический сайт */
-@import "./site/toolbar.css";
-@import "./site/icons.css";
-@import "./site/index.css";
-@import "./site/toc.css";
-@import "./site/backlinks.css";
-@import "./site/tags.css";
-@import "./site/graph.css";
-@import "./site/search.css";

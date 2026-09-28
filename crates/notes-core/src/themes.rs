@@ -5,8 +5,8 @@
 //! превращаются в блоки `:root[data-theme="…"] { --k-…: … }`. Новая тема в
 //! `theme.typ` появляется в приложении без правок Rust и CSS.
 //!
-//! Там же — основные шрифты тем ([`ThemeSet::web_fonts`]): их сервер и
-//! статический сайт отдают браузеру (WOFF2 по частям, `notes-core::webfonts`).
+//! Там же — основные шрифты тем ([`ThemeSet::web_fonts`]): их сервер
+//! отдаёт браузеру (WOFF2 по частям, `notes-core::webfonts`).
 //! Тема со своим шрифтом не требует правки Rust. И языки словарей оформления
 //! ([`ThemeSet::languages`], `<k-langs>`) — для проверки `lang:` в `notes check`.
 
@@ -51,7 +51,7 @@ pub struct ThemeSet {
 impl ThemeSet {
     pub fn load(compiler: &Compiler) -> Result<Self> {
         let main = Path::new(LIB_DIR).join(CSS_FILE);
-        let compilation = compiler.compile_html(&main, &[]);
+        let compilation = compiler.compile_html(&main, &[], crate::world::Priority::User);
         let docs = compilation
             .docs
             .map_err(|errs| Error::Library(errs.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n")))?;

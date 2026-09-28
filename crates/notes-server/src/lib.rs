@@ -73,8 +73,10 @@ pub struct AppState {
 
 impl AppState {
     /// Состояние без токена. Изменения хранилища приходят в `events`, когда
-    /// наблюдатель включён (`Notes::watch`, это делает [`serve`]).
+    /// наблюдатель включён (`Notes::watch`, это делает [`serve`]). Настройки
+    /// устройства сразу применяются к ядру.
     pub fn new(notes: Arc<Notes>, settings: Arc<SettingsStore>) -> Self {
+        notes.apply_device(&settings.device());
         let (events, _) = broadcast::channel(64);
         let tx = events.clone();
         notes.on_change(move |c| {
@@ -120,7 +122,7 @@ pub async fn serve(
     // Шрифты для браузера сжимаются в фоне заранее: иначе первая страница
     // ждала бы сжатия (математический шрифт — ~2 с).
     let notes = state.notes.clone();
-    std::thread::spawn(move || notes.fonts().warm_web(notes.themes().web_fonts()));
+    std::thread::spawn(move || notes.warm_fonts());
     // Заметки — тоже заранее: все, по приоритету, пропуская собранные, в
     // кэш на диске (рисунки обрабатываются при открытии — по настройкам).
     let notes = state.notes.clone();

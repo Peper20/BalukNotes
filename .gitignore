@@ -1,5 +1,3 @@
-# Результат notes build
-/build/
 # Rust, Node
 /target/
 node_modules/
@@ -12,3 +10,5 @@ __pycache__/
 /app/dist/
 /app/test-results/
 /app/playwright-report/
+# Отдельный прогон тестов копии (vendor/README.md)
+/vendor/*/Cargo.lock

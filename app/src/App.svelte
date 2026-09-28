@@ -75,7 +75,7 @@
     if (plain && typing(e)) return;
     if (document.querySelector("dialog[open]") && plain) return;
     for (const c of commands()) {
-      if (!c.keys?.some((k) => k.test(e)) || !(c.available?.() ?? true)) continue;
+      if (!c.keys?.some((k) => k.test(e)) || !((c.keysAvailable ?? c.available)?.() ?? true)) continue;
       e.preventDefault();
       c.run();
       return;
