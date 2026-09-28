@@ -211,4 +211,5 @@ pdftoppm -r 70 -png $TMP/k.pdf $TMP/стр            # и ПОСМОТРЕТЬ 
 
 Разработчикам BalukNotes: меняется библиотека, шаблоны `note`/`book` или
 команды `notes` — поправь этот файл (`docs/writing.md`) и навык
-(`skills/new-note/`) в том же изменении и переустанови (`tools/install.sh`).
+(`skills/new-note/`: `SKILL.md` — краткая выжимка этих правил, и примеры
+`examples/`) в том же изменении и переустанови (`tools/install.sh`).

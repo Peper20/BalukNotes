@@ -224,7 +224,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
     }
     let started = std::time::Instant::now();
     let config = NotesConfig {
-        vault,
+        vault: vault.clone(),
         library: library(cli.library.as_ref()),
         font_dirs: cli.font_paths.clone(),
         cache: Some(notes_core::cache::default_dir(&data)),
@@ -236,7 +236,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Command::Serve { addr, token } => serve(notes, &data, addr, token),
         Command::New { id, book, title, tags, lang } => {
             let kind = if book { NoteKind::Book } else { NoteKind::Note };
-            let id = NoteId::new(id)?;
+            let id = new_note_id(&id, &vault)?;
             let main = NewNote { kind, title, tags, lang }.create(notes.vault(), &id)?;
             println!("{}", notes.vault().storage().display(&main).display());
             eprintln!("в приложении: http://{ADDR}/n/{id} (если запущен notes serve)");
@@ -248,12 +248,12 @@ fn run(cli: Cli) -> Result<ExitCode> {
             // Сборок одновременно и память Typst — как в приложении.
             notes.apply_device(&open_settings(&notes, &data)?.device());
             let report = match id {
-                Some(id) => check_note(&notes, &NoteId::new(id)?)?,
+                Some(id) => check_note(&notes, &note_id(&id, &vault)?)?,
                 None => check(&notes)?,
             };
             print_check(&report, json)
         }
-        Command::Pdf { id, out, theme } => pdf(&notes, &id, out, theme),
+        Command::Pdf { id, out, theme } => pdf(&notes, &note_id(&id, &vault)?, out, theme),
         Command::Info => {
             let config = config_path().map(|p| p.display().to_string()).unwrap_or_default();
             let library = match library(cli.library.as_ref()) {
@@ -269,6 +269,43 @@ fn run(cli: Cli) -> Result<ExitCode> {
         }
         Command::Docs { .. } => unreachable!("обработано выше"),
     }
+}
+
+/// Путь заметки из командной строки. Частая ошибка (особенно у агентов) —
+/// путь на диске вместо пути от корня хранилища: подсказать нужный.
+fn note_id(raw: &str, vault: &Path) -> Result<NoteId> {
+    let path = Path::new(raw);
+    if path.is_absolute() {
+        let inside = std::iter::once(vault.to_path_buf())
+            .chain(vault.canonicalize().ok())
+            .find_map(|v| path.strip_prefix(v).ok().map(|rest| rest.to_string_lossy().into_owned()))
+            .filter(|rest| !rest.is_empty());
+        match inside {
+            Some(rest) => {
+                let rest = rest.strip_suffix(".typ").unwrap_or(&rest);
+                bail!("«{raw}» — путь на диске; нужен путь от корня хранилища: «{rest}»")
+            }
+            None => bail!(
+                "«{raw}» — путь на диске; нужен путь от корня хранилища ({}), например «Папка/Название»",
+                vault.display()
+            ),
+        }
+    }
+    Ok(NoteId::new(raw)?)
+}
+
+/// Путь новой заметки: вдобавок к `note_id` — не начинается с имени
+/// каталога хранилища («vault/Тема» из каталога данных создало бы
+/// `vault/vault/Тема.typ`), если такой папки в хранилище нет.
+fn new_note_id(raw: &str, vault: &Path) -> Result<NoteId> {
+    let id = note_id(raw, vault)?;
+    if let Some(name) = vault.file_name().and_then(|n| n.to_str())
+        && let Some(rest) = id.as_str().strip_prefix(&format!("{name}/"))
+        && !vault.join(name).is_dir()
+    {
+        bail!("«{raw}» начинается с имени каталога хранилища; путь — от его корня: «{rest}»");
+    }
+    Ok(id)
 }
 
 fn open_settings(notes: &Notes, data: &Path) -> Result<SettingsStore> {
@@ -343,11 +380,10 @@ fn tags(notes: &Notes) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn pdf(notes: &Notes, id: &str, out: Option<PathBuf>, theme: Option<String>) -> Result<ExitCode> {
-    let id = NoteId::new(id)?;
+fn pdf(notes: &Notes, id: &NoteId, out: Option<PathBuf>, theme: Option<String>) -> Result<ExitCode> {
     let theme = theme.unwrap_or_else(|| notes.themes().names().first().cloned().unwrap_or_default());
     let out = out.unwrap_or_else(|| PathBuf::from(format!("{}.pdf", id.name())));
-    match notes.pdf(&id, &theme)? {
+    match notes.pdf(id, &theme)? {
         Ok(bytes) => {
             std::fs::write(&out, bytes).with_context(|| format!("записать {}", out.display()))?;
             println!("{} → {}", id, out.display());
@@ -381,4 +417,32 @@ fn print_check(report: &Report, json: bool) -> Result<ExitCode> {
         println!("{}", report.summary());
     }
     Ok(if report.is_clean() { ExitCode::SUCCESS } else { ExitCode::from(1) })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn err(result: Result<NoteId>) -> String {
+        result.unwrap_err().to_string()
+    }
+
+    #[test]
+    fn disk_path_gets_a_hint() {
+        let vault = Path::new("/нет/data/vault");
+        assert_eq!(note_id("Сеть/SSH", vault).unwrap().as_str(), "Сеть/SSH");
+        assert!(
+            err(note_id("/нет/data/vault/Сеть/SSH.typ", vault)).ends_with("нужен путь от корня хранилища: «Сеть/SSH»")
+        );
+        assert!(err(note_id("/elsewhere/SSH", vault)).contains("(/нет/data/vault)"));
+        assert!(err(note_id("/нет/data/vault", vault)).contains("например"));
+    }
+
+    #[test]
+    fn new_note_is_not_under_vault_name() {
+        let vault = Path::new("/нет/data/vault");
+        assert!(err(new_note_id("vault/Тема", vault)).ends_with("путь — от его корня: «Тема»"));
+        assert_eq!(new_note_id("vaults/Тема", vault).unwrap().as_str(), "vaults/Тема");
+        assert_eq!(new_note_id("Тема", vault).unwrap().as_str(), "Тема");
+    }
 }
