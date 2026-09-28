@@ -49,8 +49,8 @@ pub struct Fonts {
     store: FontStore,
     /// Шрифты для браузера: план частей и уже сжатые части.
     web: Mutex<HashMap<WebKey, Option<Arc<WebFace>>>>,
-    /// Кэш сжатых частей на диске (`<данные>/cache/fonts`): сервер и
-    /// `notes build` не сжимают их при каждом запуске заново.
+    /// Кэш сжатых частей на диске (`<данные>/cache/fonts`): сервер не
+    /// сжимает их при каждом запуске заново.
     web_cache: Option<PathBuf>,
 }
 
@@ -96,11 +96,6 @@ impl WebVariant {
             ..FontVariant::default()
         }
     }
-}
-
-/// Имя файла части шрифта у статического сайта: `Gentium-Plus-regular-latin.woff2`.
-pub fn font_file_name(family: &str, variant: WebVariant, chunk: &str) -> String {
-    format!("{}-{}-{chunk}.woff2", family.replace(' ', "-"), variant.slug())
 }
 
 /// Шрифт одного начертания для браузера: части по наборам знаков. Части
@@ -202,9 +197,8 @@ impl Fonts {
     }
 
     /// `@font-face` на каждую часть шрифтов `families` (браузер качает только
-    /// части со знаками страницы — `unicode-range`). `base` — путь к файлам:
-    /// `/fonts/` у сервера (файл части — `{base}{семейство}/{начертание}/{часть}.woff2`),
-    /// `fonts/` у статического сайта (файл — [`font_file_name`]).
+    /// части со знаками страницы — `unicode-range`). `base` — путь к файлам
+    /// (`/fonts/`): файл части — `{base}{семейство}/{начертание}/{часть}.woff2`.
     pub fn font_faces(&self, families: &[impl AsRef<str>], base: &str) -> String {
         let mut out = String::from("/* Шрифты оформления: те же файлы, что у Typst, в WOFF2 и по наборам знаков. */\n");
         for family in families {
@@ -212,11 +206,7 @@ impl Fonts {
             for v in WebVariant::ALL {
                 let Some(face) = self.web_face(family, v) else { continue };
                 for chunk in &face.chunks {
-                    let url = if base.starts_with('/') {
-                        format!("{base}{}/{}/{}.woff2", family.replace(' ', "%20"), v.slug(), chunk.name)
-                    } else {
-                        format!("{base}{}", font_file_name(family, v, &chunk.name))
-                    };
+                    let url = format!("{base}{}/{}/{}.woff2", family.replace(' ', "%20"), v.slug(), chunk.name);
                     let range =
                         chunk.unicode_range.as_ref().map(|r| format!(" unicode-range: {r};")).unwrap_or_default();
                     let _ = writeln!(
@@ -243,6 +233,37 @@ impl Fonts {
                 }
             }
         }
+    }
+
+    /// Чистка кэша частей на диске: файлы, которых нет в плане частей
+    /// шрифтов `families` (старый шрифт, прежний кодировщик), — если они
+    /// старше `max_age`: сборка приложения, делящая каталог данных (отладочная
+    /// и релизная), пользуется своими частями. Сколько удалено.
+    pub fn prune_web(&self, families: &[impl AsRef<str>], max_age: std::time::Duration) -> usize {
+        let Some(dir) = &self.web_cache else { return 0 };
+        let mut keep = HashSet::new();
+        for family in families {
+            for v in WebVariant::ALL {
+                let Some(face) = self.web_face(family.as_ref(), v) else { continue };
+                keep.extend((0..face.chunks.len()).filter_map(|i| face.cached_path(i)));
+            }
+        }
+        let now = std::time::SystemTime::now();
+        let mut removed = 0;
+        for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+            let path = entry.path();
+            let old = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .is_ok_and(|t| now.duration_since(t).is_ok_and(|age| age > max_age));
+            if path.extension().is_some_and(|e| e == "woff2") && !keep.contains(&path) && old {
+                match fs::remove_file(&path) {
+                    Ok(()) => removed += 1,
+                    Err(e) => tracing::warn!("кэш шрифтов {}: не удалён: {e}", path.display()),
+                }
+            }
+        }
+        removed
     }
 
     pub fn book(&self) -> &LazyHash<FontBook> {
@@ -348,5 +369,26 @@ mod tests {
             &third.web_face("JetBrains Mono", WebVariant::ALL[0]).unwrap().file("latin").unwrap()[..],
             &latin[..]
         );
+    }
+
+    #[test]
+    fn prune_keeps_current_and_recent_chunks() {
+        let dir = tempfile::tempdir().unwrap();
+        let fonts = Fonts::load(&[]).with_web_cache(Some(dir.path().to_path_buf()));
+        let face = fonts.web_face("JetBrains Mono", WebVariant::ALL[0]).unwrap();
+        face.file("latin").unwrap();
+        let current = face.cached_path(0).unwrap();
+        let day = std::time::Duration::from_hours(24);
+        let old = std::time::SystemTime::now() - 30 * day;
+        for name in ["старая.woff2", "чужая-свежая.woff2"] {
+            fs::write(dir.path().join(name), b"wOF2").unwrap();
+        }
+        fs::File::options().write(true).open(dir.path().join("старая.woff2")).unwrap().set_modified(old).unwrap();
+        fs::File::options().write(true).open(&current).unwrap().set_modified(old).unwrap();
+
+        assert_eq!(fonts.prune_web(&["JetBrains Mono"], 14 * day), 1);
+        assert!(current.exists(), "часть нынешнего шрифта — даже старая");
+        assert!(dir.path().join("чужая-свежая.woff2").exists(), "чужая — пока свежая");
+        assert!(!dir.path().join("старая.woff2").exists());
     }
 }

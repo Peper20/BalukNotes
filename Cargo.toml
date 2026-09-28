@@ -13,7 +13,6 @@ publish = false
 notes-core = { path = "crates/notes-core" }
 notes-server = { path = "crates/notes-server" }
 notes-assets = { path = "crates/notes-assets" }
-notes-site = { path = "crates/notes-site" }
 
 # Typst закреплён точно: HTML-экспорт экспериментальный, API меняется между
 # версиями. Обновлять осознанно, с прогоном tests/vault (docs/tech-debt.md).

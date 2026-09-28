@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { polling, serverEvents, type EventStream } from "./changes";
+import { changeSource, POLL_SECONDS, polling, serverEvents, type EventStream } from "./changes";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -84,4 +84,31 @@ it("наблюдатель сервера сломался — поток зак
   expect(seen).toHaveBeenCalledTimes(1);
   vi.advanceTimersByTime(10_000);
   expect(seen).toHaveBeenCalledTimes(3);
+});
+
+it("настройка: автоматически — события, без них опрос; по кнопке — ничего", () => {
+  const streams: FakeStream[] = [];
+  const connect = () => {
+    const s = new FakeStream();
+    streams.push(s);
+    return s;
+  };
+  const manual = vi.fn();
+  changeSource("manual", "/api/events", connect).start(manual);
+  vi.advanceTimersByTime(POLL_SECONDS * 10_000);
+  expect(manual).not.toHaveBeenCalled();
+  expect(streams).toHaveLength(0);
+
+  const auto = vi.fn();
+  const stop = changeSource("auto", "/api/events", connect).start(auto);
+  streams[0]!.emit("hello", JSON.stringify({ watching: false }));
+  vi.advanceTimersByTime(POLL_SECONDS * 1000);
+  expect(auto).toHaveBeenCalledTimes(1);
+  streams[0]!.emit("hello", JSON.stringify({ watching: true }));
+  vi.advanceTimersByTime(POLL_SECONDS * 10_000);
+  expect(auto).toHaveBeenCalledTimes(1);
+  streams[0]!.emit("change");
+  expect(auto).toHaveBeenCalledTimes(2);
+  stop();
+  expect(streams[0]!.closed).toBe(true);
 });

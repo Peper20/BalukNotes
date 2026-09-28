@@ -146,15 +146,15 @@ test("изменение файла подхватывается по ⟳ без
   }
 });
 
-test("правка файла приходит событием сервера — без опроса и кнопки", async ({ page }) => {
+test("правка файла приходит событием сервера — без кнопки; «только по кнопке» — нет", async ({ page }) => {
   const dir = join(VAULT, "События");
   const file = join(dir, "Заметка.typ");
   const text = (n: number) => `#import "/_baluk/lib.typ": *\n#show: note.with(title: [События])\n\nВерсия ${n}.\n`;
-  // Опрос — раз в 10 минут: обновить может только событие.
-  const interval = async (seconds: number) =>
-    expect((await page.request.put("/api/settings", { data: { "refresh.interval": seconds, "refresh.on_focus": seconds < 600 } })).ok()).toBe(true);
+  // Сервер следит за файлами: опроса нет, обновляет событие.
+  const mode = async (value: "auto" | "manual") =>
+    expect((await page.request.put("/api/settings", { data: { "refresh.mode": value } })).ok()).toBe(true);
   try {
-    await interval(600);
+    await mode("auto");
     const events = page.waitForResponse((r) => r.url().includes("/api/events"));
     await page.goto("/");
     await ready(page);
@@ -169,9 +169,20 @@ test("правка файла приходит событием сервера �
     await expect(page.locator("#note")).toContainText("Версия 1.");
     writeFileSync(file, text(2));
     await expect(page.locator("#note")).toContainText("Версия 2.");
+
+    // «Только по кнопке»: событие пришло, а заметка прежняя — до «Обновить».
+    await mode("manual");
+    await page.reload();
+    await ready(page);
+    writeFileSync(file, text(3));
+    // В автоматическом режиме правка приходит за доли секунды.
+    await page.waitForTimeout(1500);
+    await expect(page.locator("#note")).toContainText("Версия 2.");
+    await page.locator("#refresh").click();
+    await expect(page.locator("#note")).toContainText("Версия 3.");
   } finally {
     rmSync(dir, { recursive: true, force: true });
-    await interval(5);
+    await mode("auto");
   }
 });
 

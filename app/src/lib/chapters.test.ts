@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { NotePage } from "./api";
-import { ChapterCache, neighbours } from "./chapters";
+import { ChapterCache, chapterLabel, chapterOf, neighbours } from "./chapters";
 
 const page = (chapter: number, version = "v1", id = "Книга"): NotePage => ({
   id,
@@ -54,4 +54,25 @@ it("новая версия книги — запас заново; устаре
   expect(cache.held).toEqual([0, 1]);
   cache.clear();
   expect(cache.held).toEqual([]);
+});
+
+it("переход к главе: книга изменилась — запас выброшен; сверить не вышло — запас", async () => {
+  const cache = new ChapterCache(async (_id, k) => page(k), 0);
+  cache.shown(page(0));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(cache.fresh("Книга", 1, "v1", "v1")?.book?.chapter).toBe(1);
+  expect(cache.fresh("Книга", 1, "v1", null)?.book?.chapter).toBe(1);
+  expect(cache.fresh("Книга", 1, "v1", "v2")).toBeNull();
+  expect(cache.held).toEqual([]);
+});
+
+it("глава раздела для результатов поиска по книге", () => {
+  const book = { chapter: 0, chapters: [{ id: "г0", num: "1", title: "Основы" }, { id: "г1", num: "", title: "Приложение" }], anchors: { Итоги: 0, "Итоги-2": 1 } };
+  expect(chapterOf(book, "Итоги")).toEqual(book.chapters[0]);
+  expect(chapterOf(book, "Итоги-2")).toEqual(book.chapters[1]);
+  expect(chapterOf(book, "нет")).toBeNull();
+  expect(chapterOf(book, null)).toBeNull();
+  expect(chapterOf(null, "Итоги")).toBeNull();
+  expect(chapterLabel(book.chapters[0]!)).toBe("гл. 1");
+  expect(chapterLabel(book.chapters[1]!)).toBe("Приложение");
 });

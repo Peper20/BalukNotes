@@ -11,7 +11,7 @@ import { balukCss } from "./src/baluk-css/plugin.ts";
 const api = process.env.NOTES_API ?? "http://127.0.0.1:8432";
 
 export default defineConfig({
-  // Вид заметки — assets/baluk.css из блоков src/baluk-css/ (общий с сайтом).
+  // Вид заметки — assets/baluk.css из блоков src/baluk-css/.
   plugins: [svelte(), balukCss()],
   build: { outDir: "dist", emptyOutDir: true, assetsDir: "assets", target: "es2023" },
   server: {

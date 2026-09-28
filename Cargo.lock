@@ -2075,7 +2075,6 @@ dependencies = [
  "dirs",
  "notes-core",
  "notes-server",
- "notes-site",
  "serde",
  "serde_json",
  "tokio",
@@ -2095,6 +2094,7 @@ dependencies = [
  "notify",
  "parking_lot",
  "rust-embed",
+ "rustix",
  "serde",
  "serde_json",
  "siphasher",
@@ -2129,17 +2129,6 @@ dependencies = [
  "tower-http",
  "tracing",
  "ts-rs",
-]
-
-[[package]]
-name = "notes-site"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "notes-assets",
- "notes-core",
- "serde",
- "serde_json",
 ]
 
 [[package]]

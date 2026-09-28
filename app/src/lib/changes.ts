@@ -1,7 +1,7 @@
 // Откуда клиент узнаёт, что файлы заметок могли измениться: события сервера
-// (`/api/events`, сервер следит за файлами) или опрос раз в N секунд.
-// Проверку (сверку версии) делает state/updates — источнику достаточно
-// сказать «проверь».
+// (`/api/events`, сервер следит за файлами), а без них — опрос раз в
+// `POLL_SECONDS`. Проверку (сверку версии) делает state/updates — источнику
+// достаточно сказать «проверь».
 
 import type { EventsHello } from "./api/types/EventsHello";
 
@@ -19,6 +19,20 @@ export function polling(seconds: number, hidden: () => boolean = () => document.
       return () => clearInterval(timer);
     },
   };
+}
+
+/** Опрос, когда событий нет (сервер не следит за файлами, связь потеряна). */
+export const POLL_SECONDS = 5;
+
+/** Настройка `refresh.mode`: «автоматически» или «только по кнопке». */
+export type RefreshMode = "auto" | "manual";
+
+/**
+ * Источник изменений по настройке: автоматически — события сервера, без
+ * них опрос; по кнопке — никакого (проверяет только «Обновить»).
+ */
+export function changeSource(mode: RefreshMode, eventsUrl: string, connect?: (url: string) => EventStream): ChangeSource {
+  return mode === "manual" ? polling(0) : serverEvents(eventsUrl, polling(POLL_SECONDS), connect);
 }
 
 /** Что нужно от `EventSource` (в тестах — подделка). */

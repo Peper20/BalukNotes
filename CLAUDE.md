@@ -102,13 +102,16 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
 ## Rust
 
 - Workspace: `notes-core` (без async и HTTP), `notes-server` (axum),
-  `notes-site` (статический сайт), `notes-assets` (клиент `app/dist` для
-  сервера и сайта), `notes-cli`. Логика — в ядре; остальное — тонкие обёртки.
+  `notes-assets` (клиент `app/dist` для сервера), `notes-cli`. Логика — в
+  ядре; остальное — тонкие обёртки.
 - Сервер — модуль на область API (`notes`, `graph`, `search`, `settings`,
   `assets`, `fonts`, `events`) со своими `routes()`; общие — `AppState`
   (`lib.rs`), `error.rs`, токен — `auth.rs`. Новая область — модуль + `merge`.
 - Typst закреплён `=0.15.1` (HTML-экспорт экспериментальный). Обновление —
   отдельной задачей, с прогоном тестов и проверкой глазами.
+- Настройки производительности — **настройки устройства** (`device.*`,
+  `SettingDef::device`, значения по умолчанию по `settings::Platform`);
+  ядро применяет их на ходу (`Notes::apply_device`), не константами.
 - Ошибки ядра — `notes_core::Error` (thiserror); ошибки компиляции заметок —
   не ошибки, а `Diagnostic` в `NotePage`.
 - Шрифты оформления — `fonts/` (Gentium Plus, JetBrains Mono, OFL), встроены в
@@ -159,16 +162,11 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   правок TS не нужно.
 - Стили заметки — только внутри `.k-note { … }`: файлы блоков
   `src/baluk-css/` (порядок — `@import` в `baluk.css` там же), склеиваются в
-  `assets/baluk.css`, общий со статическим сайтом. Интерфейс — `src/app.css`.
+  `assets/baluk.css`. Интерфейс — `src/app.css`.
 - Живые блоки (интерактивные рисунки, кадры, граф) — реестр `src/lib/live/`
-  (модуль с `LiveBlock` + селектор в `selectors.ts` + строка в `BLOCKS`),
-  общий для клиента и сайта. Скрипт сайта — части `src/static/*` →
-  `assets/static*.js`, лишние грузятся по требованию. Поиск сайта
-  (`lib/site-search.ts`) повторяет `search.rs`: правишь ядро — обнови эталон
-  (`UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test search_parity`).
+  (модуль с `LiveBlock` + селектор в `selectors.ts` + строка в `BLOCKS`).
 - Значки — `@lucide/svelte` (`import X from "@lucide/svelte/icons/x"`), не
-  текстовые глифы (▸ ◐ ⎙); на сайте — CSS-маска `lucide("имя", толщина)` в
-  `src/baluk-css/site/icons.css` из `@lucide/icons` (версию держать равной).
+  текстовые глифы (▸ ◐ ⎙).
 - Граф рисует готовую раскладку ядра (`vault_graph`, `POST /api/graph/layout`);
   клиент — вид (`graph-view.ts`), жесты (`graph-gesture.ts`), переезды
   (`graph-motion.ts`), физика (`graph-physics.ts`: раскладка ядра — покой).
@@ -176,8 +174,7 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   без него.
 - Сквозные сценарии — `e2e/*.spec.ts` (Playwright на системном chromium,
   сервер на копии `tests/vault` в `tests/.data/e2e`, прогретый заранее).
-  Новая возможность интерфейса — новый сценарий; сайт — `static.spec.ts`;
-  телефон — `mobile.spec.ts` (400×800: страница не шире окна — замер после
+  Новая возможность интерфейса — новый сценарий; телефон — `mobile.spec.ts` (400×800: страница не шире окна — замер после
   `document.fonts.ready`).
 - Классы интерфейса — уникальные по смыслу: общий `.help` у подсказки
   настройки и диалога справки однажды растянул настройки за край экрана.

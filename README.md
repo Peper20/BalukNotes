@@ -9,7 +9,7 @@ Android и браузер с ядром в WASM; сервер в сети — х
 Сейчас есть: ядро на Rust компилирует хранилище `.typ` в HTML (светлая и
 тёмная темы) и в PDF; локальный сервер с клиентом в браузере — дерево,
 вкладки, поиск, оглавление, обратные ссылки, граф заметок, интерактивные
-рисунки и кадры; статический сайт. Дальше — сервер-хранилище с входом и
+рисунки и кадры. Дальше — сервер-хранилище с входом и
 синхронизацией, затем приложения для десктопа и Android; план —
 `docs/roadmap.md`.
 
@@ -54,7 +54,6 @@ notes check [Папка/Заметка]          # ошибки сборки, п
 notes pdf Папка/Заметка --theme night -o x.pdf
 notes docs writing | library         # как писать заметки, API библиотеки
 notes info                           # где хранилище, настройки, библиотека
-notes build site/                    # статический сайт (решено удалить)
 ```
 
 **Где данные.** Каталог данных — хранилище `vault/`, `settings.json`, кэш
@@ -85,9 +84,8 @@ data = "~/Заметки"
 | `docs/research/` | отчёты исследований (E1–E3) с замерами |
 | `crates/notes-core/` | ядро: хранилище, компиляция Typst, обработка HTML, кэш, прогрев, ссылки, граф, поиск, настройки |
 | `crates/notes-server/` | HTTP API и раздача клиента (axum), модуль на область API |
-| `crates/notes-site/` | статический сайт (`notes build`) |
-| `crates/notes-assets/` | сборка клиента `app/dist` — общая для сервера и сайта |
-| `crates/notes-cli/` | команда `notes`: serve, check, build, pdf |
+| `crates/notes-assets/` | сборка клиента `app/dist` для сервера |
+| `crates/notes-cli/` | команда `notes`: serve, new, list, check, pdf, … |
 | `app/` | клиент: Svelte 5 + TypeScript + Vite; `src/baluk-css/` — вид заметок |
 | `baluk/` | библиотека оформления Typst: блоки, рисунки, шаблоны `note`/`book` |
 | `skills/new-note/` | навык Claude Code `/new-note` (ставит `tools/install.sh`) |

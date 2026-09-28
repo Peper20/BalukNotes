@@ -9,7 +9,6 @@
 //!   notes pdf <путь>       заметка в PDF (вид PDF из baluk)
 //!   notes docs <тема>      как писать заметки, API библиотеки
 //!   notes info             где хранилище, настройки, библиотека
-//!   notes build <каталог>  статический сайт (решено удалить, roadmap M3)
 //!
 //! Каталог данных (`vault/`, `settings.json`, `cache/`): `--data` или
 //! `NOTES_DATA`, иначе `data` из `~/.config/baluk-notes/config.toml`, иначе
@@ -25,7 +24,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use notes_core::check::{Report, check, check_note};
 use notes_core::new_note::NewNote;
-use notes_core::settings::{Schema, SettingsStore};
+use notes_core::settings::{Platform, Schema, SettingsStore};
 use notes_core::vault::NoteKind;
 use notes_core::{LibrarySource, NoteId, Notes, NotesConfig};
 
@@ -108,11 +107,6 @@ enum Command {
         /// Отчёт в JSON.
         #[arg(long)]
         json: bool,
-    },
-    /// Собрать статический сайт.
-    Build {
-        /// Каталог результата (создаётся; существующие файлы перезаписываются).
-        out: PathBuf,
     },
     /// Заметку или книгу — в PDF.
     Pdf {
@@ -251,16 +245,13 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Command::List { json } => list(&notes, json),
         Command::Tags => tags(&notes),
         Command::Check { id, json } => {
+            // Сборок одновременно и память Typst — как в приложении.
+            notes.apply_device(&open_settings(&notes, &data)?.device());
             let report = match id {
                 Some(id) => check_note(&notes, &NoteId::new(id)?)?,
                 None => check(&notes)?,
             };
             print_check(&report, json)
-        }
-        Command::Build { out } => {
-            // Рисунки — с той же точностью, что выбрана в приложении.
-            let opts = open_settings(&notes, &data)?.figure_options();
-            notes_site::build(&notes, &out, opts).map(|()| ExitCode::SUCCESS)
         }
         Command::Pdf { id, out, theme } => pdf(&notes, &id, out, theme),
         Command::Info => {
@@ -281,7 +272,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
 }
 
 fn open_settings(notes: &Notes, data: &Path) -> Result<SettingsStore> {
-    let schema = Schema::new(notes.themes().themes());
+    let schema = Schema::new(notes.themes().themes(), Platform::current());
     SettingsStore::open(data.join("settings.json"), schema).context("настройки")
 }
 

@@ -23,8 +23,13 @@ async fn get_settings(State(s): State<AppState>) -> Json<SettingsResponse> {
 }
 
 async fn put_settings(State(s): State<AppState>, Json(patch): Json<Map<String, Value>>) -> ApiResult<Json<Value>> {
-    let settings = s.settings.clone();
-    let values = blocking(move || settings.update(&patch)).await?;
+    let (settings, notes) = (s.settings.clone(), s.notes.clone());
+    let values = blocking(move || {
+        let values = settings.update(&patch)?;
+        notes.apply_device(&settings.device());
+        Ok(values)
+    })
+    .await?;
     Ok(Json(Value::Object(values)))
 }
 

@@ -26,7 +26,7 @@ use crate::cache::Record;
 use crate::diag::Diagnostic;
 use crate::figures::FigureOptions;
 use crate::page_cache::{PageCache, Raw, page_version};
-use crate::pipeline::{Build, LinkStyle, Pipeline};
+use crate::pipeline::{Build, Pipeline, Priority};
 use crate::render::Rendered;
 use crate::vault::{Entry, NoteId, NoteKind, Vault};
 
@@ -95,7 +95,7 @@ impl Pages {
         if let Some(page) = self.cache.page(&entry, opts, &finish, false) {
             return Ok(page);
         }
-        let built = self.pipeline.build(&entry, LinkStyle::Server);
+        let built = self.pipeline.build(&entry, Priority::User);
         Ok(self.store(&entry, built, Some(opts)).expect("страница с настройками"))
     }
 
@@ -135,9 +135,14 @@ impl Pages {
         if self.cache.is_fresh(id) {
             return Ok(false);
         }
-        let built = self.pipeline.build(&entry, LinkStyle::Server);
+        let built = self.pipeline.build(&entry, Priority::Background);
         self.store(&entry, built, None);
         Ok(true)
+    }
+
+    /// Освободить память сборок (после прохода прогрева).
+    pub fn release_memory(&self) {
+        self.pipeline.release_memory();
     }
 
     /// Замок сборки заметки. Замки несобираемых заметок убираются, чтобы
@@ -211,7 +216,7 @@ pub(crate) mod tests {
     }
 
     impl Pipeline for FakePipeline {
-        fn build(&self, entry: &Entry, _links: LinkStyle) -> Build {
+        fn build(&self, entry: &Entry, _priority: Priority) -> Build {
             self.builds.fetch_add(1, Ordering::SeqCst);
             let main = entry.main.to_string_lossy().into_owned();
             let deps = vec![Dep::Vault(main.clone())];

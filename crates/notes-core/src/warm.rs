@@ -18,6 +18,13 @@
 //! - **Пользователь — вне очереди**: сборки идут по одной, и прогрев не
 //!   берёт следующую заметку, пока кто-то ждёт страницу. Уже начатую сборку
 //!   он не прерывает (см. `docs/tech-debt.md`).
+//! - **Бережно**: сборка прогрева — темы по очереди в одном потоке с
+//!   пониженным приоритетом ([`crate::world::Priority::Background`]). После
+//!   большого прохода (запуск, правка библиотеки) память Typst
+//!   освобождается — редко ([`should_release`]): обычная правка заметки её
+//!   не трогает, иначе пересборка после правки потеряла бы memo.
+//! - **Режим** — настройка устройства ([`WarmMode`]): всё хранилище, только
+//!   подсказанное клиентом (открытое) или выключен.
 //!
 //! Проход повторяется по новой подсказке, по изменению файлов хранилища
 //! ([`Warmer::poke`] от наблюдателя, [`crate::watch`]) и на всякий случай раз
@@ -26,7 +33,7 @@
 //! заметки — несколько `stat`. При запуске фонового потока кэш на диске
 //! чистится ([`crate::cache::DiskCache::prune`]).
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use parking_lot::{Condvar, Mutex};
@@ -41,10 +48,53 @@ pub const RESCAN: Duration = Duration::from_secs(600);
 /// То же без наблюдателя файлов.
 pub const RESCAN_UNWATCHED: Duration = Duration::from_secs(60);
 
+/// Что прогревать (настройка устройства).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WarmMode {
+    /// Всё хранилище (компьютер).
+    #[default]
+    All,
+    /// Только подсказанное клиентом: заметки во вкладках, недавние.
+    Open,
+    /// Ничего: заметки собираются, когда их открыли (телефон).
+    Off,
+}
+
+impl WarmMode {
+    const ALL: [Self; 3] = [Self::All, Self::Open, Self::Off];
+
+    /// Значение настройки: `all`, `open`, `off`.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Open => "open",
+            Self::Off => "off",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|m| m.key() == key)
+    }
+}
+
+/// Освобождать память после прохода, собравшего хотя бы столько заметок.
+pub const RELEASE_MIN_BUILT: usize = 5;
+
+/// И не чаще, чем раз в столько.
+pub const RELEASE_EVERY: Duration = Duration::from_secs(600);
+
+/// Освободить ли память Typst после прохода: только большой проход и не
+/// чаще [`RELEASE_EVERY`] (`last` — прошлое освобождение).
+pub fn should_release(stats: WarmStats, last: Option<Instant>, now: Instant) -> bool {
+    stats.built >= RELEASE_MIN_BUILT && last.is_none_or(|t| now.duration_since(t) >= RELEASE_EVERY)
+}
+
 /// Прогрев: подсказки клиента и будильник фонового потока.
 #[derive(Debug, Default)]
 pub struct Warmer {
     hints: Mutex<Vec<NoteId>>,
+    /// [`WarmMode`] по номеру в [`WarmMode::ALL`].
+    mode: AtomicU8,
     /// Растёт с каждой подсказкой: проход начинается заново.
     generation: AtomicU64,
     wake: Condvar,
@@ -90,6 +140,19 @@ impl Warmer {
         self.wake.notify_all();
     }
 
+    pub fn mode(&self) -> WarmMode {
+        WarmMode::ALL[usize::from(self.mode.load(Ordering::SeqCst))]
+    }
+
+    /// Сменить режим; изменился — пройти заново.
+    pub fn set_mode(&self, mode: WarmMode) {
+        let index = WarmMode::ALL.iter().position(|m| *m == mode).expect("режим из списка");
+        let index = u8::try_from(index).expect("режимов немного");
+        if self.mode.swap(index, Ordering::SeqCst) != index {
+            self.poke();
+        }
+    }
+
     /// Файлы хранилища изменились: пройти заново (подсказки те же).
     pub fn poke(&self) {
         let hints = self.hints.lock();
@@ -98,16 +161,25 @@ impl Warmer {
         self.wake.notify_all();
     }
 
-    /// Один проход: собрать всё несобранное по порядку. Новая подсказка —
-    /// проход начинается заново (собранное пропустится).
+    /// Один проход: собрать всё несобранное по порядку (в режиме
+    /// [`WarmMode::Open`] — только подсказанное). Новая подсказка — проход
+    /// начинается заново (собранное пропустится).
     pub fn pass(&self, pages: &Pages) -> WarmStats {
         let mut stats = WarmStats::default();
         'pass: loop {
+            let mode = self.mode();
+            if mode == WarmMode::Off {
+                return stats;
+            }
             let generation = self.generation.load(Ordering::SeqCst);
             let Ok(entries) = pages.vault().entries() else { return stats };
             let hints = self.hints.lock().clone();
             let vault = pages.vault();
-            for id in order(&entries, |e| vault.source_size(e), |e| pages.last_build(&e.id), &hints) {
+            let mut ids = order(&entries, |e| vault.source_size(e), |e| pages.last_build(&e.id), &hints);
+            if mode == WarmMode::Open {
+                ids.retain(|id| hints.contains(id));
+            }
+            for id in ids {
                 if self.generation.load(Ordering::SeqCst) != generation {
                     continue 'pass;
                 }
@@ -131,9 +203,14 @@ impl Warmer {
     /// кэша на диске. `rescan` — сколько спать без подсказок и изменений.
     pub fn forever(&self, pages: &Pages, rescan: impl Fn() -> Duration) -> ! {
         prune(pages);
+        let mut released = None;
         loop {
             let started = Instant::now();
             let stats = self.pass(pages);
+            if should_release(stats, released, Instant::now()) {
+                pages.release_memory();
+                released = Some(Instant::now());
+            }
             if stats.built > 0 {
                 let (held, bytes) = pages.cache().memory();
                 tracing::info!(
@@ -219,6 +296,36 @@ mod tests {
         s.mem.write("A.typ", "aa");
         assert_eq!(Warmer::default().pass(&restarted), WarmStats { built: 1, skipped: 2 });
         assert_eq!(pipeline.builds.load(Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn modes_open_and_off() {
+        let s = Setup::new(&[("A.typ", "a"), ("B.typ", "b")]);
+        let (pages, _) = s.pages(true, Duration::ZERO);
+        let warmer = Warmer::default();
+        assert_eq!(warmer.mode(), WarmMode::All);
+        warmer.set_mode(WarmMode::Off);
+        warmer.hint(vec![NoteId::new("A").unwrap()]);
+        assert_eq!(warmer.pass(&pages), WarmStats::default(), "выключен");
+        warmer.set_mode(WarmMode::Open);
+        assert_eq!(warmer.pass(&pages), WarmStats { built: 1, skipped: 0 }, "только подсказанное");
+        assert!(!pages.is_built(&NoteId::new("B").unwrap()));
+        warmer.set_mode(WarmMode::All);
+        assert_eq!(warmer.pass(&pages), WarmStats { built: 1, skipped: 1 });
+        for m in WarmMode::ALL {
+            assert_eq!(WarmMode::from_key(m.key()), Some(m));
+        }
+    }
+
+    #[test]
+    fn memory_is_released_rarely() {
+        let t = Instant::now();
+        let big = WarmStats { built: RELEASE_MIN_BUILT, skipped: 0 };
+        let one = WarmStats { built: 1, skipped: 10 };
+        assert!(should_release(big, None, t), "первый большой проход (запуск)");
+        assert!(!should_release(one, None, t), "правка одной заметки — нет");
+        assert!(!should_release(big, Some(t), t + RELEASE_EVERY / 2), "не чаще раза в RELEASE_EVERY");
+        assert!(should_release(big, Some(t), t + RELEASE_EVERY));
     }
 
     #[test]

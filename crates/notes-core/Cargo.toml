@@ -33,6 +33,11 @@ thiserror.workspace = true
 tracing.workspace = true
 ts-rs = { workspace = true, optional = true }
 
+# Пониженный приоритет потока прогрева (`world.rs`) без `unsafe` — та же
+# версия, что уже тянет typst-kit.
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+rustix = { version = "1", features = ["process", "thread"] }
+
 [build-dependencies]
 # Метка кода отрисовки для кэша на диске (build.rs).
 siphasher.workspace = true

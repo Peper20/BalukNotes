@@ -39,12 +39,22 @@ use crate::version::{Dep, StableHasher};
 /// [`Rendered`].
 pub const FORMAT: u32 = 4;
 
-/// Предел размера кэша на диске (все хранилища вместе).
-pub const DISK_LIMIT: u64 = 512 << 20;
+/// Пределы кэша на диске — настройки устройства
+/// ([`crate::settings::Device`]); по умолчанию — компьютера.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DiskLimits {
+    /// Предел размера (все хранилища вместе).
+    pub size: u64,
+    /// Чужие записи (другое хранилище, другая сборка приложения), не
+    /// обновлявшиеся столько, удаляются при чистке.
+    pub foreign_ttl: Duration,
+}
 
-/// Чужие записи (другое хранилище, другая сборка приложения), не
-/// обновлявшиеся столько, удаляются при чистке.
-pub const FOREIGN_TTL: Duration = Duration::from_hours(14 * 24);
+impl Default for DiskLimits {
+    fn default() -> Self {
+        Self { size: 512 << 20, foreign_ttl: Duration::from_hours(14 * 24) }
+    }
+}
 
 /// Что известно о сборке заметки.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -165,11 +175,13 @@ impl DiskCache {
     }
 
     /// Чистка: записи удалённых заметок (`alive` — есть ли заметка),
-    /// сироты и мусор, чужие записи старше [`FOREIGN_TTL`], файлы старого
-    /// формата; затем, если кэш больше `limit`, — самые давние записи.
-    pub fn prune(&self, alive: &dyn Fn(&str) -> bool, limit: u64) -> Pruned {
+    /// сироты и мусор, чужие записи старше `limits.foreign_ttl`, файлы
+    /// старого формата; затем, если кэш больше `limits.size`, — самые давние
+    /// записи.
+    pub fn prune(&self, alive: &dyn Fn(&str) -> bool, limits: DiskLimits) -> Pruned {
+        let limit = limits.size;
         let now = SystemTime::now();
-        let old = |mtime: SystemTime| now.duration_since(mtime).is_ok_and(|age| age > FOREIGN_TTL);
+        let old = |mtime: SystemTime| now.duration_since(mtime).is_ok_and(|age| age > limits.foreign_ttl);
         let mut pruned = Pruned::default();
         let remove = |path: &Path, pruned: &mut Pruned| {
             let result = if path.is_dir() { fs::remove_dir_all(path) } else { fs::remove_file(path) };
@@ -382,7 +394,7 @@ mod tests {
         let fresh_foreign = DiskCache::new(dir.path(), "/другое", "м1".into());
         fresh_foreign.store(&id("Чужая"), &record("v", None), None);
 
-        let pruned = cache.prune(&|id| id == "Живая", DISK_LIMIT);
+        let pruned = cache.prune(&|id| id == "Живая", DiskLimits::default());
         assert_eq!(pruned.removed, 4, "удалённая (2 файла), сирота, старый формат");
         assert!(cache.record(&id("Живая")).is_some());
         assert!(cache.record(&id("Удалённая")).is_none());
@@ -390,7 +402,7 @@ mod tests {
         assert!(fresh_foreign.record(&id("Чужая")).is_some(), "свежую чужую запись не трогаем");
 
         // Предел размера: остаётся не больше предела, давнее — первым.
-        let pruned = cache.prune(&|_| true, 0);
+        let pruned = cache.prune(&|_| true, DiskLimits { size: 0, ..DiskLimits::default() });
         assert_eq!(pruned.bytes, 0);
         assert!(cache.record(&id("Живая")).is_none());
     }

@@ -13,7 +13,7 @@
 //! - [`crate::warm`] — прогрев поверх `pages`.
 //!
 //! Здесь они собираются вместе; сюда же — индекс исходников (ссылки,
-//! поиск), PDF и страницы статического сайта. Наблюдатель файлов
+//! поиск) и PDF. Наблюдатель файлов
 //! ([`crate::watch`]) включает только сервер ([`Notes::watch`]): индекс не
 //! обходит хранилище без изменений, прогрев просыпается от них; CLI
 //! обходится без него.
@@ -29,7 +29,7 @@ use crate::fonts::Fonts;
 use crate::graph::{Snapshot, SourceIndex};
 use crate::page_cache::{MEMORY_BUDGET, PageCache};
 use crate::pages::Pages;
-use crate::pipeline::{Pipeline, TypstPipeline};
+use crate::pipeline::TypstPipeline;
 use crate::storage::Storage;
 use crate::themes::ThemeSet;
 use crate::vault::{Entry, NoteId, Vault};
@@ -42,7 +42,7 @@ use crate::world::{Compiler, LibrarySource};
 use crate::{Error, Result};
 
 pub use crate::pages::NotePage;
-pub use crate::pipeline::{LinkStyle, encode, static_path};
+pub use crate::pipeline::encode;
 
 #[derive(Debug, Clone)]
 pub struct NotesConfig {
@@ -65,6 +65,9 @@ pub struct Notes {
     layouts: Arc<Layouts>,
     warmer: Arc<Warmer>,
     changes: Arc<Changes>,
+    /// Каталог библиотеки на диске (`--library`, отладочная сборка):
+    /// наблюдатель следит и за ним.
+    library_dir: Option<PathBuf>,
 }
 
 impl Notes {
@@ -98,6 +101,10 @@ impl Notes {
             GraphData { vault: vault.clone(), index: links.clone(), layouts: layouts.clone() },
         );
         let versions = Versions::new(vault.storage().clone()).with_data(data);
+        let library_dir = match &library {
+            LibrarySource::Dir(dir) => Some(dir.clone()),
+            LibrarySource::Embedded => None,
+        };
         let stamp = crate::cache::stamp(&[library.fingerprint(), fonts.fingerprint()]);
         let compiler = Compiler::new(versions.clone(), library, fonts);
         let themes = ThemeSet::load(&compiler)?;
@@ -116,7 +123,7 @@ impl Notes {
                 w.poke();
             }
         });
-        Ok(Self { pages, typst, links, layouts, warmer, changes })
+        Ok(Self { pages, typst, links, layouts, warmer, changes, library_dir })
     }
 
     pub fn vault(&self) -> &Vault {
@@ -157,11 +164,6 @@ impl Notes {
         Ok(crate::search::search(&self.index()?, query, limit))
     }
 
-    /// Индекс поиска заметок, для которых `keep` (статический сайт — собранных).
-    pub fn search_documents(&self, keep: impl Fn(&NoteId) -> bool) -> Result<Vec<crate::search::SearchDoc>> {
-        Ok(crate::search::documents(&self.index()?, keep))
-    }
-
     /// Поиск в одной заметке (книге): все разделы по порядку текста.
     pub fn search_in(&self, id: &NoteId, query: &str, limit: usize) -> Result<Vec<crate::search::SearchHit>> {
         let index = self.index()?;
@@ -192,21 +194,28 @@ impl Notes {
         Ok(self.typst.compiler().compile_pdf(&entry.main, theme))
     }
 
-    /// Страница для статического сайта: без кэша, относительные ссылки.
-    pub fn page_static(&self, entry: &Entry, opts: FigureOptions) -> NotePage {
-        let built = self.typst.build(entry, LinkStyle::Static);
-        NotePage {
-            id: entry.id.clone(),
-            kind: entry.kind,
-            version: crate::page_cache::page_version(&built.files, opts),
-            rendered: built.raw.map(|raw| Arc::new(self.typst.finish(&raw, opts))),
-            errors: built.errors,
-            warnings: built.warnings,
-            book: None,
-        }
+    // ── Прогрев (см. crate::warm) ─────────────────────────────────────────
+
+    /// Применить настройки устройства — на ходу: число сборок, память
+    /// Typst, пределы кэша, режим прогрева.
+    pub fn apply_device(&self, device: &crate::settings::Device) {
+        let compiler = self.typst.compiler();
+        compiler.set_parallel(device.builds);
+        compiler.set_memo(device.memo);
+        self.pages.cache().set_limits(device.memory, device.disk);
+        self.warmer.set_mode(device.warm);
     }
 
-    // ── Прогрев (см. crate::warm) ─────────────────────────────────────────
+    /// Сжать части шрифтов для браузера заранее (фон при запуске сервера) и
+    /// почистить их кэш на диске.
+    pub fn warm_fonts(&self) {
+        let families = self.themes().web_fonts();
+        self.fonts().warm_web(families);
+        let removed = self.fonts().prune_web(families, self.pages.cache().disk_limits().foreign_ttl);
+        if removed > 0 {
+            tracing::info!(removed, "кэш шрифтов почищен");
+        }
+    }
 
     /// Подсказать прогреву, что собрать первым (заметки во вкладках, недавние).
     pub fn hint_warm(&self, ids: Vec<NoteId>) {
@@ -226,10 +235,23 @@ impl Notes {
 
     // ── Изменения хранилища (см. crate::watch) ─────────────────────────────
 
-    /// Включить наблюдатель файлов хранилища (сервер). `false` — хранилище
-    /// не умеет или не вышло: всё работает обходом, как без него.
+    /// Включить наблюдатель файлов хранилища (сервер) — и каталога
+    /// библиотеки, если она с диска. `false` — хранилище не умеет или не
+    /// вышло: всё работает обходом, как без него.
     pub fn watch(&self) -> bool {
-        self.changes.start(&**self.vault().storage())
+        if !self.changes.start(&**self.vault().storage()) {
+            return false;
+        }
+        // Правка библиотеки — тоже изменение: заметки пересоберутся сами.
+        if let Some(dir) = &self.library_dir {
+            match crate::storage::DirStorage::open(dir) {
+                Ok(lib) => {
+                    self.changes.also(&lib, crate::world::LIB_DIR);
+                }
+                Err(e) => tracing::warn!("библиотека {}: {e}", dir.display()),
+            }
+        }
+        true
     }
 
     /// Работает ли наблюдатель.

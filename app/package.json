@@ -4,14 +4,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/build-static.mjs",
+    "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json --fail-on-warnings",
     "test": "vitest run",
     "e2e": "playwright test",
     "types": "cd .. && cargo test -q -p notes-core -p notes-server --features ts export_bindings"
   },
   "devDependencies": {
-    "@lucide/icons": "^1.48.0",
     "@lucide/svelte": "^1.48.0",
     "@playwright/test": "^1.63.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",

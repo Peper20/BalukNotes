@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use ecow::eco_format;
 use parking_lot::{Condvar, Mutex, RwLock};
@@ -223,13 +224,14 @@ pub struct Compilation {
 /// Кэши файлов для одновременных сборок: каждая сборка берёт свой
 /// `FileStore` (он сбрасывается перед сборкой, чтобы увидеть изменения
 /// файлов и собрать список зависимостей именно этой заметки) и возвращает
-/// его после. Одновременно — не больше `max` сборок, остальные ждут.
+/// его после. Одновременно — не больше `max` сборок (настройка
+/// устройства), остальные ждут.
 struct Stores {
     storage: Arc<dyn Storage>,
     versions: Versions,
     lib: LibrarySource,
     packages: Arc<SystemPackages>,
-    max: usize,
+    max: AtomicUsize,
     /// Свободные кэши и сколько сейчас занято.
     state: Mutex<(Vec<FileStore<Loader>>, usize)>,
     freed: Condvar,
@@ -239,7 +241,7 @@ impl Stores {
     /// Взять кэш файлов (подождать, если заняты все `max`).
     fn take(&self) -> StoreGuard<'_> {
         let mut state = self.state.lock();
-        while state.1 >= self.max {
+        while state.1 >= self.max.load(Ordering::Relaxed) {
             self.freed.wait(&mut state);
         }
         state.1 += 1;
@@ -289,16 +291,31 @@ impl Drop for StoreGuard<'_> {
     }
 }
 
-/// Сколько сборок разных заметок идёт одновременно: половина ядер, но не
-/// меньше двух (открыть заметку, пока собирается книга). Темы одной
-/// заметки — ещё и параллельно между собой.
-fn max_parallel() -> usize {
-    std::thread::available_parallelism().map_or(2, |n| (n.get() / 2).max(2))
+/// Сколько сборок разных заметок идёт одновременно, пока не пришла
+/// настройка устройства ([`Compiler::set_parallel`]): две — открыть
+/// заметку, пока собирается книга. Темы одной заметки — ещё и параллельно
+/// между собой (кроме сборок прогрева).
+pub const PARALLEL: usize = 2;
+
+/// Сколько сборок помнить рисунки (`comemo::evict`), пока не пришла
+/// настройка устройства ([`Compiler::set_memo`]).
+pub const MEMO: usize = 10;
+
+/// Кто ждёт сборку.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Priority {
+    /// Пользователь: темы — параллельно.
+    User,
+    /// Прогрев: темы по очереди в одном потоке с пониженным приоритетом —
+    /// сборка в фоне не мешает работать на компьютере.
+    Background,
 }
 
 pub struct Compiler {
     /// Кэши файлов: сборки разных заметок идут параллельно, каждая со своим.
     stores: Stores,
+    /// Сколько сборок помнить рисунки: после сборки `comemo::evict(memo)`.
+    memo: AtomicUsize,
     fonts: Arc<Fonts>,
     /// Стандартная библиотека Typst на каждую тему ("" — без темы).
     libraries: RwLock<HashMap<String, Arc<LazyHash<Library>>>>,
@@ -319,11 +336,35 @@ impl Compiler {
             versions,
             lib,
             packages: Arc::new(SystemPackages::new(downloader)),
-            max: max_parallel(),
+            max: AtomicUsize::new(PARALLEL),
             state: Mutex::default(),
             freed: Condvar::new(),
         };
-        Self { stores, fonts, libraries: RwLock::default() }
+        Self { stores, memo: AtomicUsize::new(MEMO), fonts, libraries: RwLock::default() }
+    }
+
+    /// Сколько сборок разных заметок идёт одновременно (не меньше одной).
+    pub fn set_parallel(&self, n: usize) {
+        self.stores.max.store(n.max(1), Ordering::Relaxed);
+        // Под замком: ждущий в `take` не пропустит пробуждение.
+        drop(self.stores.state.lock());
+        self.stores.freed.notify_all();
+    }
+
+    /// Сколько сборок помнить рисунки Typst: больше — быстрее пересборка
+    /// после правки, но больше памяти.
+    pub fn set_memo(&self, n: usize) {
+        self.memo.store(n, Ordering::Relaxed);
+    }
+
+    /// Забыть всё, что помнит Typst (после прохода прогрева).
+    pub fn release_memory(&self) {
+        comemo::evict(0);
+    }
+
+    fn evict(&self) {
+        // Кэш comemo растёт с каждой компиляцией; typst-cli чистит его так же.
+        comemo::evict(self.memo.load(Ordering::Relaxed));
     }
 
     pub fn fonts(&self) -> &Arc<Fonts> {
@@ -332,7 +373,7 @@ impl Compiler {
 
     /// Компилирует `main` (путь от корня хранилища) в HTML по разу на тему.
     /// Пустой список тем — одна компиляция без входа `тема`.
-    pub fn compile_html(&self, main: &Path, themes: &[String]) -> Compilation {
+    pub fn compile_html(&self, main: &Path, themes: &[String], priority: Priority) -> Compilation {
         let no_theme = [String::new()];
         let themes = if themes.is_empty() { &no_theme[..] } else { themes };
         let main = match main_id(main) {
@@ -349,24 +390,25 @@ impl Compiler {
         // Темы собираются параллельно: у каждой свой мир, кэш файлов общий.
         // Typst и сам распараллеливает вёрстку, но рисунки CeTZ считаются
         // в основном в одном потоке — две темы параллельно почти вдвое быстрее.
+        // Прогрев — по очереди, в одном потоке с пониженным приоритетом.
         let store = &*files;
+        let compile = |theme: &String| {
+            let library = self.library(theme);
+            let world = CompileWorld { files: store, fonts: &self.fonts, library: &library, main, time: &time };
+            compile_theme(&world, theme)
+        };
         let results: Vec<ThemeResult> = std::thread::scope(|scope| {
-            let handles: Vec<_> = themes
-                .iter()
-                .map(|theme| {
-                    let library = self.library(theme);
-                    let (fonts, time) = (&*self.fonts, &time);
-                    std::thread::Builder::new()
-                        .name(format!("typst-{theme}"))
-                        .stack_size(COMPILE_STACK)
-                        .spawn_scoped(scope, move || {
-                            let world = CompileWorld { files: store, fonts, library: &library, main, time };
-                            compile_theme(&world, theme)
-                        })
-                        .expect("поток компиляции запускается")
-                })
-                .collect();
-            handles.into_iter().map(|h| h.join().expect("компиляция темы не паникует")).collect()
+            let handles: Vec<_> = match priority {
+                Priority::User => themes
+                    .iter()
+                    .map(|theme| spawn_compile(scope, format!("typst-{theme}"), move || vec![compile(theme)]))
+                    .collect(),
+                Priority::Background => vec![spawn_compile(scope, "typst-прогрев".into(), move || {
+                    lower_priority();
+                    themes.iter().map(compile).collect()
+                })],
+            };
+            handles.into_iter().flat_map(|h| h.join().expect("компиляция темы не паникует")).collect()
         });
 
         let mut docs = Vec::with_capacity(themes.len());
@@ -399,9 +441,7 @@ impl Compiler {
         deps.sort();
         deps.dedup_by(|a, b| a.0 == b.0);
         drop(files);
-
-        // Кэш comemo растёт с каждой компиляцией; typst-cli чистит его так же.
-        comemo::evict(10);
+        self.evict();
 
         Compilation { docs: errors.map_or(Ok(docs), Err), warnings, deps }
     }
@@ -420,7 +460,7 @@ impl Compiler {
         let doc = typst::compile::<PagedDocument>(&world).output.map_err(|e| to_diags(&e))?;
         let pdf = typst_pdf::pdf(&doc, &typst_pdf::PdfOptions::default()).map_err(|e| to_diags(&e));
         drop(files);
-        comemo::evict(10);
+        self.evict();
         pdf
     }
 
@@ -440,6 +480,29 @@ impl Compiler {
 
 /// Стек потока компиляции: глубокая вложенность разметки рекурсивна.
 const COMPILE_STACK: usize = 64 << 20;
+
+/// Поток компиляции (большой стек).
+fn spawn_compile<'scope, T: Send + 'scope>(
+    scope: &'scope std::thread::Scope<'scope, '_>,
+    name: String,
+    job: impl FnOnce() -> T + Send + 'scope,
+) -> std::thread::ScopedJoinHandle<'scope, T> {
+    std::thread::Builder::new()
+        .name(name)
+        .stack_size(COMPILE_STACK)
+        .spawn_scoped(scope, job)
+        .expect("поток компиляции запускается")
+}
+
+/// Понизить приоритет текущего потока (сборка прогрева): `nice` 10. В Linux
+/// (и Android) приоритет — у потока, а не у процесса. Потоки вёрстки самого
+/// Typst (общий пул) остаются как были.
+fn lower_priority() {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if let Err(e) = rustix::process::setpriority_process(Some(rustix::thread::gettid()), 10) {
+        tracing::debug!("приоритет потока прогрева не понижен: {e}");
+    }
+}
 
 struct ThemeResult {
     theme: String,

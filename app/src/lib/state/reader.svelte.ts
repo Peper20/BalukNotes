@@ -91,19 +91,25 @@ class Reader {
     this.#place = null;
     const where = { keepScroll, current: this.chapter, anchor: router.anchor, place };
     const select = chapterSelect(settings.values["books.pages"] === "chapters", { ...where, chapter });
-    // Соседняя глава той же версии книги — уже здесь (пересборку не ждём из запаса).
+    // Другая глава показанной книги: сначала дешёвая сверка версии книги —
+    // не изменилась, глава из запаса; изменилась — новая версия с сервера.
     const k = select.chapter ?? (select.anchor != null ? this.page?.book?.anchors[select.anchor] : undefined);
-    const ready = !keepScroll && k != null ? this.#chapters.get(id, k, this.version) : null;
+    const shown = this.version;
+    const toChapter = !keepScroll && k != null && this.page?.id === id;
     try {
+      const current = toChapter ? await api.version(id).then((v) => v.version, () => null) : null;
+      if (this.#ctrl !== ctrl) return;
+      const ready = toChapter ? this.#chapters.fresh(id, k, shown, current) : null;
       const page = ready ?? (await api.note(id, ctrl.signal, select));
       if (this.#ctrl !== ctrl) return;
+      const updated = toChapter && shown != null && page.version !== shown;
       this.version = page.version;
       this.scroll = scrollIntent(scroll, { ...where, y: scrollY });
       this.page = page;
       this.#chapters.shown(page);
       places.visited(id);
       document.title = `${page.rendered?.title ?? router.currentNote?.name ?? id} — Заметки`;
-      this.setStatus(`собрано ${new Date().toLocaleTimeString("ru-RU")}`);
+      this.setStatus(`${updated ? "книга обновлена" : "собрано"} ${new Date().toLocaleTimeString("ru-RU")}`);
     } catch (e) {
       if (this.#ctrl !== ctrl) return; // отменена или устарела
       this.version = null;

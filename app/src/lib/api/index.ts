@@ -33,8 +33,6 @@ export type { Preview } from "./types/Preview";
 export type { Rendered } from "./types/Rendered";
 export type { SearchHit } from "./types/SearchHit";
 export type { Fragment } from "./types/Fragment";
-export type { SearchDoc } from "./types/SearchDoc";
-export type { SearchSection } from "./types/SearchSection";
 export type { Schema } from "./types/Schema";
 export type { SettingDef } from "./types/SettingDef";
 export type { Apply } from "./types/Apply";

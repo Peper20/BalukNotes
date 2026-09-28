@@ -106,33 +106,28 @@ pub fn render(docs: Vec<(String, HtmlDocument)>, links: &dyn LinkResolver) -> Re
     Ok(page)
 }
 
-/// Знаки, которые в слаге становятся словами: иначе «C» и «C++» получили
-/// бы один слаг (`C` и `C-2` по порядку), а ссылка по тексту — не тот раздел.
-const SIGN_WORDS: [(char, &str); 5] = [('+', "plus"), ('#', "sharp"), ('%', "percent"), ('&', "and"), ('@', "at")];
+/// Обычная пунктуация — разделитель слов в слаге, как пробел. Остальные
+/// знаки (`+ # % & @ = * → <` …) различают заголовки («C» и «C++», «a=b» и
+/// «a b») и остаются в слаге как есть; в адресе их кодирует
+/// [`crate::pipeline::encode`] и `encodeURIComponent` клиента.
+const SEPARATORS: &str = ".,;:!?'\"`«»„“”‘’()[]{}/\\|—–…·";
 
-/// Слаг для якоря: буквы и цифры (любого алфавита), `-` и `_`; знаки из
-/// [`SIGN_WORDS`] — словами (`C++` → `C-plus-plus`); остальное —
-/// разделители, схлопываются в один `-`. Регистр сохраняется.
+/// Слаг для якоря: буквы и цифры (любого алфавита), `-`, `_` и знаки
+/// (`C++` → `C++`, `C#` → `C#`); пробелы и [`SEPARATORS`] — разделители,
+/// схлопываются в один `-`. Регистр сохраняется.
 pub fn slug(text: &str) -> String {
     let mut out = String::new();
     let mut sep = false;
-    let word = |out: &mut String, sep: &mut bool, w: &str| {
-        if *sep && !out.is_empty() {
+    for ch in text.chars() {
+        if ch.is_whitespace() || ch.is_control() || SEPARATORS.contains(ch) {
+            sep = true;
+            continue;
+        }
+        if sep && !out.is_empty() {
             out.push('-');
         }
-        *sep = false;
-        out.push_str(w);
-    };
-    for ch in text.chars() {
-        if ch.is_alphanumeric() || ch == '_' || ch == '-' {
-            word(&mut out, &mut sep, ch.encode_utf8(&mut [0; 4]));
-        } else if let Some((_, w)) = SIGN_WORDS.iter().find(|(c, _)| *c == ch) {
-            sep = true;
-            word(&mut out, &mut sep, w);
-            sep = true;
-        } else {
-            sep = true;
-        }
+        sep = false;
+        out.push(ch);
     }
     if out.is_empty() { "раздел".into() } else { out }
 }
@@ -235,12 +230,17 @@ mod tests {
     fn slugs() {
         assert_eq!(slug("Смена порта"), "Смена-порта");
         assert_eq!(slug("  Вход по ключу. "), "Вход-по-ключу");
-        assert_eq!(slug("C++ и сборка"), "C-plus-plus-и-сборка");
+        assert_eq!(slug("C++ и сборка"), "C++-и-сборка");
         assert_eq!(slug("C"), "C");
-        assert_eq!(slug("C#"), "C-sharp");
-        assert_eq!(slug("50% готово"), "50-percent-готово");
-        assert_eq!(slug("a+b"), "a-plus-b");
-        assert_eq!(slug("+"), "plus");
+        assert_eq!(slug("C#"), "C#");
+        assert_eq!(slug("50% готово"), "50%-готово");
+        assert_eq!(slug("a+b"), "a+b");
+        assert_eq!(slug("+"), "+");
+        assert_eq!(slug("a=b"), "a=b");
+        assert_eq!(slug("a = b"), "a-=-b");
+        assert_ne!(slug("a=b"), slug("a b"));
+        assert_eq!(slug("A → B & C"), "A-→-B-&-C");
+        assert_eq!(slug("Функция f(x), «итог»!"), "Функция-f-x-итог");
         assert_eq!(slug("sec-классы"), "sec-классы");
         assert_eq!(slug("«»"), "раздел");
     }

@@ -1,6 +1,6 @@
 [package]
 name = "notes-assets"
-description = "Сборка клиента app/dist: для сервера и статического сайта"
+description = "Сборка клиента app/dist для сервера"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

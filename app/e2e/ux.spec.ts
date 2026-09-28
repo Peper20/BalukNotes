@@ -167,6 +167,8 @@ test("клавиши: главы, справка, режим чтения", asyn
 
   await page.keyboard.press("f");
   await expect(page.locator("#sidebar")).toBeHidden();
+  // Колонка заметки — во всю доступную ширину, а не в нулевую колонку панели.
+  expect((await page.locator("#note").boundingBox())!.width).toBeGreaterThan(500);
   await page.keyboard.press("Escape");
   await expect(page.locator("#sidebar")).toBeVisible();
 });

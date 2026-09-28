@@ -60,6 +60,6 @@ pub mod webfonts;
 pub mod world;
 
 pub use error::{Error, Result};
-pub use notes::{LinkStyle, NotePage, Notes, NotesConfig};
+pub use notes::{NotePage, Notes, NotesConfig};
 pub use vault::{Entry, NoteId, NoteKind, Vault};
 pub use world::LibrarySource;
