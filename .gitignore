@@ -10,3 +10,5 @@ __pycache__/
 /app/dist/
 /app/test-results/
 /app/playwright-report/
+# Отдельный прогон тестов копии (vendor/README.md)
+/vendor/*/Cargo.lock

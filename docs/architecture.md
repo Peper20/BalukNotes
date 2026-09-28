@@ -336,6 +336,7 @@ crates/notes-cli/    notes serve | new | list | check | pdf — работает
 app/                 интерфейс (Svelte 5 + TS + Vite), общий для всех платформ
 baluk/               библиотека оформления (Typst), в хранилище — виртуально
 fonts/               шрифты оформления (OFL), встроены в бинарник
+vendor/              копии чужих крейтов с правками (comemo) — vendor/README.md
 tests/vault/         хранилище-фикстура: каждый случай отрисовки (каталог — README)
 tests/snapshots/     эталонные снимки: HTML фикстур, API библиотеки, поиск
 tests/.data/         данные тестов и проверки (не в git)

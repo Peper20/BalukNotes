@@ -3,7 +3,7 @@
 #
 #   tools/check.sh           # всё: Rust, хранилище-фикстура, типы API, клиент, e2e
 #   tools/check.sh --fast    # без сборки клиента и e2e (минута-две)
-#   tools/check.sh --rust    # только Rust: test, clippy, fmt, notes check, заготовки заметок, типы API
+#   tools/check.sh --rust    # только Rust: test, clippy, fmt, копии крейтов, notes check, заготовки заметок, типы API
 #   tools/check.sh --app     # только клиент: check, Vitest, сборка, e2e
 #
 # Шаги идут все, даже если какой-то упал (кроме зависимых: без сборки
@@ -87,6 +87,12 @@ api_types() {
   fi
 }
 
+# Копии чужих крейтов с правками (vendor/README.md) — их собственные тесты.
+vendor_tests() {
+  CARGO_TARGET_DIR=target/vendor cargo test -q --manifest-path vendor/comemo/Cargo.toml --features testing || return 1
+  rm -f vendor/comemo/Cargo.lock
+}
+
 # Заготовки `notes new` (навык /new-note) собираются: заметка и книга во
 # временном хранилище, notes check без ошибок и предупреждений.
 new_note() {
@@ -105,6 +111,7 @@ if [[ $rust == 1 ]]; then
   step cargo-test cargo test --workspace
   step clippy cargo clippy --workspace --all-targets -- -D warnings
   step fmt cargo fmt --check
+  step vendor vendor_tests
   step notes-check vault_check
   step new-note new_note
   step api-types api_types
