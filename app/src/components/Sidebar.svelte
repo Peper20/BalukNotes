@@ -8,7 +8,7 @@
   import TreeFolder from "./TreeFolder.svelte";
   import VaultMenu from "./VaultMenu.svelte";
 
-  const tree = $derived(buildTree(notes.all));
+  const tree = $derived(buildTree(notes.all, (path) => notes.folderTitle(path)));
   let aside: HTMLElement | undefined = $state();
 
   // Открытая заметка видна в дереве: её папки раскрыты (при переходе — потом

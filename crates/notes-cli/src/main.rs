@@ -82,16 +82,24 @@ enum Command {
         #[arg(long, env = "NOTES_TOKEN", hide_env_values = true)]
         token: Option<String>,
     },
-    /// Заготовка новой заметки или книги; печатает путь её файла.
+    /// Заготовка новой заметки или книги; печатает путь её файла и, второй
+    /// строкой, путь заметки (для check, pdf, #see).
     ///
-    /// Существующее не перезаписывается. Как писать дальше — `notes docs writing`.
+    /// Имя файла — из названия (без / \ : * ? " < > |; занято — с номером),
+    /// в папке --folder; или путь целиком — аргументом. Существующее не
+    /// перезаписывается. Как писать дальше — `notes docs writing`.
     New {
-        /// Путь от корня хранилища, без .typ: «Сеть/SSH», «Курсы/Матан».
-        id: String,
+        /// Путь от корня хранилища, без .typ: «Сеть/SSH», «Курсы/Матан»;
+        /// без него — из названия.
+        #[arg(required_unless_present = "title", conflicts_with = "folder")]
+        id: Option<String>,
+        /// Папка для заметки с именем из названия: «Сеть», «Курсы/Матан»; по умолчанию — корень.
+        #[arg(long)]
+        folder: Option<String>,
         /// Книга: папка с main.typ, главы — файлы рядом (иначе — заметка, один файл).
         #[arg(long)]
         book: bool,
-        /// Название; по умолчанию — последний сегмент пути.
+        /// Название — любой текст; по умолчанию (с путём) — последний сегмент пути.
         #[arg(long)]
         title: Option<String>,
         /// Тег (можно повторять).
@@ -313,11 +321,22 @@ fn run(cli: Cli) -> Result<ExitCode> {
     tracing::debug!(ms = started.elapsed().as_millis(), "хранилище «{name}»: {}", notes.vault().location());
 
     match cli.command {
-        Command::New { id, book, title, tags, lang } => {
+        Command::New { id, folder, book, title, tags, lang } => {
             let kind = if book { NoteKind::Book } else { NoteKind::Note };
-            let id = new_note_id(&id, &vault)?;
-            let main = NewNote { kind, title, tags, lang }.create(notes.vault(), &id)?;
+            let note = NewNote { kind, title, tags, lang };
+            let id = if let Some(id) = id {
+                new_note_id(&id, &vault)?
+            } else {
+                // Имя файла — из названия, в папке --folder (нет — в корне).
+                let folder = match folder.as_deref().map(|f| f.trim_matches('/')) {
+                    Some(f) if !f.is_empty() => new_note_id(f, &vault)?.to_string(),
+                    _ => String::new(),
+                };
+                note.id_in(notes.vault(), &folder)?
+            };
+            let main = note.create(notes.vault(), &id)?;
             println!("{}", notes.vault().storage().display(&main).display());
+            println!("{id}");
             eprintln!("в приложении: http://{ADDR}/v/{name}/n/{id} (если запущен notes serve)");
             Ok(ExitCode::SUCCESS)
         }
@@ -547,6 +566,9 @@ fn print_check(report: &Report, json: bool) -> Result<ExitCode> {
                 let anchor = l.anchor.as_deref().map(|a| format!(" / {a}")).unwrap_or_default();
                 println!("{}: битая ссылка «{}{anchor}»: {}", n.id, l.target, l.reason);
             }
+        }
+        for f in &report.folders {
+            println!("{}: {}", f.file, f.error);
         }
         println!("{}", report.summary());
     }

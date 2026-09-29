@@ -13,12 +13,15 @@ use notes_core::book::{Select, chapter_page};
 use notes_core::search::Preview;
 
 use crate::AppState;
-use crate::api::{ErrorResponse, LinksResponse, NoteListItem, OutgoingLink, VersionResponse, WarmRequest};
+use crate::api::{
+    ErrorResponse, FolderListItem, LinksResponse, NoteListItem, OutgoingLink, VersionResponse, WarmRequest,
+};
 use crate::error::{ApiResult, blocking};
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/vaults/{vault}/notes", get(list_notes))
+        .route("/api/vaults/{vault}/folders", get(list_folders))
         .route("/api/vaults/{vault}/notes/{*id}", get(note).delete(delete))
         .route("/api/vaults/{vault}/version/{*id}", get(version))
         .route("/api/vaults/{vault}/links/{*id}", get(links))
@@ -38,9 +41,22 @@ async fn list_notes(State(s): State<AppState>, Path(vault): Path<String>) -> Api
                 kind: e.kind,
                 name: e.id.name().to_owned(),
                 folder: e.id.parent().to_owned(),
-                title: o.title.clone(),
+                title: o.title.clone().unwrap_or_else(|| e.id.name().to_owned()),
                 tags: o.tags.clone(),
             })
+            .collect())
+    })
+    .await?;
+    Ok(Json(list))
+}
+
+async fn list_folders(State(s): State<AppState>, Path(vault): Path<String>) -> ApiResult<Json<Vec<FolderListItem>>> {
+    let notes = s.vault(vault).await?.notes.clone();
+    let list = blocking(move || {
+        let index = notes.index()?;
+        Ok(index
+            .folders()
+            .map(|(path, _)| FolderListItem { path: path.to_owned(), title: index.folder_title(path) })
             .collect())
     })
     .await?;

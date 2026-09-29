@@ -5,6 +5,7 @@ import { encodeId } from "../ids";
 import { vault } from "../vault";
 import { apiUrl, authHeaders } from "./config";
 import type { ErrorResponse } from "./types/ErrorResponse";
+import type { FolderListItem } from "./types/FolderListItem";
 import type { Graph } from "./types/Graph";
 import type { GraphFilter } from "./types/GraphFilter";
 import type { GraphLayout } from "./types/GraphLayout";
@@ -30,6 +31,7 @@ export type { PlacedNode } from "./types/PlacedNode";
 export type { Heading } from "./types/Heading";
 export type { LinksResponse } from "./types/LinksResponse";
 export type { NoteListItem } from "./types/NoteListItem";
+export type { FolderListItem } from "./types/FolderListItem";
 export type { NotePage } from "./types/NotePage";
 export type { Preview } from "./types/Preview";
 export type { Rendered } from "./types/Rendered";
@@ -101,6 +103,7 @@ export const api = {
   /** Новое пустое хранилище; ответ — список хранилищ. */
   createVault: (name: string) => request<VaultsResponse>("/api/vaults", json("POST", { name })),
   notes: () => request<NoteListItem[]>(inVault("/notes")),
+  folders: () => request<FolderListItem[]>(inVault("/folders")),
   /** Заметка; с `chapter` или `anchor` книга приходит одной главой. */
   note: (id: string, signal?: AbortSignal, select: ChapterSelect = {}) => {
     const q = select.chapter != null ? `?chapter=${select.chapter}` : select.anchor != null ? `?anchor=${encodeURIComponent(select.anchor)}` : "";

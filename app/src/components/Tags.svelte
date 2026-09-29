@@ -27,8 +27,8 @@
         <ul class="tag-notes">
           {#each tagged as n (n.id)}
             <li>
-              <a href={noteHref(n.id)}>{n.title ?? n.name}</a>
-              <span class="home-kind">{n.folder ? ` · ${n.folder}` : ""}{n.kind === "book" ? " · книга" : ""}</span>
+              <a href={noteHref(n.id)}>{n.title}</a>
+              <span class="home-kind">{n.folder ? ` · ${notes.folderLabel(n.folder)}` : ""}{n.kind === "book" ? " · книга" : ""}</span>
               <span class="tag-others">
                 {#each n.tags.filter((t) => t !== tag) as t}<a class="tag-chip" href={tagHref(t)}>#{t}</a>{/each}
               </span>

@@ -11,6 +11,8 @@
 //!
 //! Файл разбирается заново, только если изменились его время изменения или
 //! размер. Заметке принадлежит её файл; книге — все `.typ` в её папке.
+//! Названия папок — их файлы `_folder.toml` ([`crate::folders`]), так же по
+//! времени и размеру.
 //!
 //! Вычисляемые пути индекс берёт из собранных страниц: ссылки последней
 //! удачной сборки заметки ([`SourceIndex::set_built`], из кэша страниц)
@@ -30,6 +32,7 @@ use serde::Serialize;
 use typst::syntax::{SyntaxNode, ast};
 
 use crate::Result;
+use crate::folders::{FOLDER_FILE, Folder, ancestors, parse_folder};
 use crate::outline::{Outline, parse_outline};
 use crate::render::LinkRef;
 use crate::vault::{Entry, NoteId, NoteKind, Vault};
@@ -57,6 +60,8 @@ pub struct Node {
     pub id: String,
     /// `None` — заметки нет (на неё ссылаются, но её не написали).
     pub kind: Option<NoteKind>,
+    /// Название ([`Snapshot::title`]).
+    pub title: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -83,6 +88,13 @@ struct Parsed {
     outline: Outline,
 }
 
+/// `_folder.toml`, разобранный при таком `(время, размер)`.
+#[derive(Debug)]
+struct ParsedFolder {
+    stamp: (Option<SystemTime>, u64),
+    folder: Folder,
+}
+
 /// Ссылки последней удачной сборки заметки (`None` — не собиралась).
 pub type BuiltLinks = Box<dyn Fn(&NoteId) -> Option<Vec<LinkRef>> + Send + Sync>;
 
@@ -90,6 +102,8 @@ pub type BuiltLinks = Box<dyn Fn(&NoteId) -> Option<Vec<LinkRef>> + Send + Sync>
 pub struct SourceIndex {
     /// Путь файла в хранилище → разбор.
     files: Mutex<HashMap<String, Parsed>>,
+    /// Папка → её `_folder.toml` (только папки, где он есть).
+    folder_files: Mutex<HashMap<String, ParsedFolder>>,
     /// Откуда брать ссылки собранных страниц.
     built: OnceLock<BuiltLinks>,
     /// Наблюдатель файлов: пока счётчик тот же, обход не нужен.
@@ -105,6 +119,7 @@ struct Walk {
     /// Ссылки из исходников.
     links: BTreeMap<NoteId, Vec<LinkRef>>,
     outlines: Arc<BTreeMap<NoteId, Outline>>,
+    folders: Arc<BTreeMap<String, Folder>>,
 }
 
 impl std::fmt::Debug for SourceIndex {
@@ -121,6 +136,8 @@ pub struct Snapshot {
     links: BTreeMap<NoteId, Vec<LinkRef>>,
     /// Заметка → содержание (у книги — всех файлов по порядку).
     outlines: Arc<BTreeMap<NoteId, Outline>>,
+    /// Папки, в которых есть заметки (и все их предки), → название.
+    folders: Arc<BTreeMap<String, Folder>>,
 }
 
 impl SourceIndex {
@@ -154,7 +171,12 @@ impl SourceIndex {
                 }
             }
         }
-        Ok(Snapshot { entries: walk.entries.clone(), links, outlines: walk.outlines.clone() })
+        Ok(Snapshot {
+            entries: walk.entries.clone(),
+            links,
+            outlines: walk.outlines.clone(),
+            folders: walk.folders.clone(),
+        })
     }
 
     fn walk(&self, vault: &Vault) -> Result<Arc<Walk>> {
@@ -211,7 +233,39 @@ impl SourceIndex {
         }
         // Удалённые файлы — из кэша вон.
         files.retain(|path, _| seen.contains(path));
-        Ok(Walk { entries: Arc::new(entries), links, outlines: Arc::new(outlines) })
+        drop(files);
+        let folders = self.walk_folders(vault, &entries);
+        Ok(Walk { entries: Arc::new(entries), links, outlines: Arc::new(outlines), folders: Arc::new(folders) })
+    }
+
+    /// Папки заметок и их `_folder.toml` (перечитываются только изменившиеся).
+    fn walk_folders(&self, vault: &Vault, entries: &[Entry]) -> BTreeMap<String, Folder> {
+        let paths: BTreeSet<&str> = entries.iter().flat_map(|e| ancestors(e.id.as_str())).collect();
+        let mut cache = self.folder_files.lock();
+        let mut out = BTreeMap::new();
+        for path in paths {
+            let file = format!("{path}/{FOLDER_FILE}");
+            let folder = match vault.storage().stat(&file) {
+                Ok(meta) if !meta.is_dir => {
+                    let stamp = (meta.modified, meta.len);
+                    if cache.get(path).is_none_or(|p| p.stamp != stamp) {
+                        let folder = match vault.read_text(&file) {
+                            Ok(text) => match parse_folder(&text) {
+                                Ok(meta) => Folder { title: meta.title, error: None },
+                                Err(e) => Folder { title: None, error: Some(e) },
+                            },
+                            Err(e) => Folder { title: None, error: Some(e.to_string()) },
+                        };
+                        cache.insert(path.to_owned(), ParsedFolder { stamp, folder });
+                    }
+                    cache[path].folder.clone()
+                }
+                _ => Folder::default(),
+            };
+            out.insert(path.to_owned(), folder);
+        }
+        cache.retain(|path, _| out.get(path).is_some_and(|f| *f != Folder::default()));
+        out
     }
 }
 
@@ -224,6 +278,28 @@ impl Snapshot {
     /// Теги заметки по пути (`None` — нет такой заметки).
     pub fn tags_of(&self, id: &str) -> Option<&[String]> {
         self.outlines.get(&NoteId::new(id).ok()?).map(|o| o.tags.as_slice())
+    }
+
+    /// Название заметки для показа: из шаблона (`title: […]`), иначе —
+    /// имя файла. Для ненаписанной (на неё только ссылаются) — последний
+    /// сегмент пути.
+    pub fn title(&self, id: &str) -> String {
+        let fallback = || id.rsplit('/').next().unwrap_or(id).to_owned();
+        let Ok(id) = NoteId::new(id) else { return fallback() };
+        self.outlines.get(&id).and_then(|o| o.title.clone()).unwrap_or_else(fallback)
+    }
+
+    /// Название папки: из `_folder.toml`, иначе — её имя.
+    pub fn folder_title(&self, path: &str) -> String {
+        self.folders
+            .get(path)
+            .and_then(|f| f.title.clone())
+            .unwrap_or_else(|| path.rsplit('/').next().unwrap_or(path).to_owned())
+    }
+
+    /// Папки с заметками (и их предки), по алфавиту путей.
+    pub fn folders(&self) -> impl Iterator<Item = (&str, &Folder)> {
+        self.folders.iter().map(|(path, f)| (path.as_str(), f))
     }
 
     /// Все заметки с содержанием.
@@ -271,9 +347,30 @@ impl Snapshot {
             }
         }
         Graph {
-            nodes: nodes.into_iter().map(|(id, kind)| Node { id, kind }).collect(),
+            nodes: nodes.into_iter().map(|(id, kind)| Node { title: self.title(&id), id, kind }).collect(),
             edges: edges.into_iter().map(|((from, to), count)| Edge { from, to, count }).collect(),
         }
+    }
+}
+
+/// Префикс названий в данных хранилища: `/_vault/title/<путь>`.
+pub const TITLE_PREFIX: &str = "title";
+
+/// Поставщик `/_vault/title/<путь>` — название заметки ([`Snapshot::title`])
+/// текстом: его показывает `#see("путь")` без своей подписи. Ненаписанная
+/// заметка — последний сегмент пути (битую ссылку покажет `notes check`, а
+/// сборка не падает). Отпечаток — по содержимому: заметка пересобирается,
+/// только когда меняется название цели.
+#[derive(Debug)]
+pub struct TitleData {
+    pub vault: Vault,
+    pub index: Arc<SourceIndex>,
+}
+
+impl crate::vault_data::DataProvider for TitleData {
+    fn read(&self, path: &str) -> std::result::Result<Vec<u8>, String> {
+        let snapshot = self.index.snapshot(&self.vault).map_err(|e| e.to_string())?;
+        Ok(snapshot.title(path).into_bytes())
     }
 }
 
@@ -423,5 +520,47 @@ mod tests {
         assert_eq!(snap.outgoing(&a), [link("C", None), link("B", None)], "вычисляемая — после буквальных");
         assert_eq!(snap.backlinks(&NoteId::new("B").unwrap()).len(), 1);
         assert_eq!(snap.graph().edges.len(), 2);
+    }
+
+    #[test]
+    fn titles_of_notes_and_folders() {
+        use crate::storage::MemStorage;
+        let note = |title: &str| format!("#show: note.with(title: [{title}])");
+        let mem = Arc::new(MemStorage::new());
+        mem.write("Сеть/ssh.typ", note("SSH: основы"));
+        mem.write("Сеть/без-названия.typ", "");
+        mem.write("Сеть/_folder.toml", "title = \"Сети и протоколы\"");
+        mem.write("Курсы/Глубже/Матан/main.typ", "#show: book.with(title: [Кратные интегралы])");
+        mem.write("Курсы/Глубже/Матан/_folder.toml", "title = \"не читается: у книги название в main.typ\"");
+        mem.write("Курсы/_folder.toml", "title = \"Учёба\"");
+        mem.write("Курсы/Глубже/_folder.toml", "titel = \"опечатка\"");
+        let vault = Vault::new(mem.clone());
+        let index = SourceIndex::default();
+        let snap = index.snapshot(&vault).unwrap();
+
+        assert_eq!(snap.title("Сеть/ssh"), "SSH: основы");
+        assert_eq!(snap.title("Сеть/без-названия"), "без-названия", "нет title — имя файла");
+        assert_eq!(snap.title("Курсы/Глубже/Матан"), "Кратные интегралы");
+        assert_eq!(snap.title("Нет/такой"), "такой", "ненаписанная — последний сегмент");
+        assert_eq!(snap.title("../x"), "x", "недопустимый путь — тоже");
+
+        assert_eq!(snap.folder_title("Сеть"), "Сети и протоколы");
+        assert_eq!(snap.folder_title("Курсы"), "Учёба", "папка только с подпапками");
+        assert_eq!(snap.folder_title("Курсы/Глубже"), "Глубже", "ошибка в файле — имя папки");
+        let folders: Vec<&str> = snap.folders().map(|(p, _)| p).collect();
+        assert_eq!(folders, ["Курсы", "Курсы/Глубже", "Сеть"], "книга — не папка");
+        let (_, broken) = snap.folders().find(|(p, _)| *p == "Курсы/Глубже").unwrap();
+        assert!(broken.error.as_deref().is_some_and(|e| e.contains("titel")), "{broken:?}");
+
+        let graph = snap.graph();
+        let ssh = graph.nodes.iter().find(|n| n.id == "Сеть/ssh").unwrap();
+        assert_eq!(ssh.title, "SSH: основы", "граф подписывает названием");
+
+        // Правка и удаление `_folder.toml` видны при следующем обходе.
+        mem.write("Сеть/_folder.toml", "title = \"Сеть\"");
+        mem.remove("Курсы/_folder.toml");
+        let snap = index.snapshot(&vault).unwrap();
+        assert_eq!(snap.folder_title("Сеть"), "Сеть");
+        assert_eq!(snap.folder_title("Курсы"), "Курсы");
     }
 }

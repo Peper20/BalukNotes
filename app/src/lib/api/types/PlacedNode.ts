@@ -10,7 +10,7 @@ export type PlacedNode = { id: string,
  */
 kind: NoteKind | null, 
 /**
- * Подпись: последний сегмент пути.
+ * Подпись: название заметки.
  */
 name: string, group: string, x: number, y: number, 
 /**

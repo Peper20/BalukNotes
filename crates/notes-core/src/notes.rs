@@ -102,10 +102,12 @@ impl Notes {
         links.set_changes(changes.clone());
         let layouts = Arc::new(Layouts::default());
         // Данные хранилища для заметок: `/_vault/<префикс>/…`.
-        let data = VaultData::new().with(
-            crate::vault_graph::DATA_PREFIX,
-            GraphData { vault: vault.clone(), index: links.clone(), layouts: layouts.clone() },
-        );
+        let data = VaultData::new()
+            .with(
+                crate::vault_graph::DATA_PREFIX,
+                GraphData { vault: vault.clone(), index: links.clone(), layouts: layouts.clone() },
+            )
+            .with(crate::graph::TITLE_PREFIX, crate::graph::TitleData { vault: vault.clone(), index: links.clone() });
         let versions = Versions::new(vault.storage().clone()).with_data(data);
         let library_dir = match &library {
             LibrarySource::Dir(dir) => Some(dir.clone()),

@@ -35,13 +35,24 @@ pub struct CreateVaultRequest {
 pub struct NoteListItem {
     pub id: NoteId,
     pub kind: NoteKind,
-    /// Последний сегмент пути: `SSH` для `Сеть/SSH`.
+    /// Последний сегмент пути — имя файла: `SSH` для `Сеть/SSH`.
     pub name: String,
     /// Папка: `Сеть`; для корня — пустая строка.
     pub folder: String,
-    /// Название из шаблона (`title: […]`), если есть.
-    pub title: Option<String>,
+    /// Название для показа: из шаблона (`title: […]`), иначе — имя файла.
+    pub title: String,
     pub tags: Vec<String>,
+}
+
+/// Элемент `GET /api/vaults/{хранилище}/folders`: папка, в которой есть
+/// заметки (или папки с ними).
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct FolderListItem {
+    /// Путь от корня: `Сеть/Linux`.
+    pub path: String,
+    /// Название для показа: из `_folder.toml`, иначе — имя папки.
+    pub title: String,
 }
 
 /// `POST /api/vaults/{хранилище}/warm`: что собрать заранее первым (заметки во вкладках,

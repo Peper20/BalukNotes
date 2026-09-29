@@ -31,14 +31,14 @@ roadmap, **дописать техдолг** (что упрощено, чем г
 ## Заметки хранилища
 
 - Заметки пишутся из любой папки через установленную команду `notes`
-  (`tools/install.sh`: `notes` в `~/.local/bin` + навык `/new-note` в
+  (`tools/install.sh`: `notes` в `~/.local/bin` + навык `/baluk-note` в
   `~/.claude/skills`, одной версией): `notes new`, `list`, `tags`,
   `check`, `pdf`, `docs writing|library`, `info`, `vaults [new]`. Исходники BalukNotes
   навыку знать не нужно.
 - Пишешь или правишь заметку — сначала `docs/writing.md` (= `notes docs
   writing`): содержание, рисунки, проверка; продолжение — по
   шапке-комментарию в начале файла (у книги — `main.typ`).
-- Навык `/new-note` самодостаточен — пишут им и слабые модели:
+- Навык `/baluk-note` самодостаточен — пишут им и слабые модели:
   `SKILL.md` (порядок действий, пути, шпаргалка Typst, ошибки `notes
   check`, краткие правила) + `examples/` (заметки и книга, которые вместе
   используют каждое публичное имя библиотеки). В `notes docs` модель не
@@ -47,8 +47,8 @@ roadmap, **дописать техдолг** (что упрощено, чем г
   сверяет `--test library`.
 - Поменял публичный API библиотеки, шаблоны `note`/`book`
   (`notes-core::new_note`), команды `notes` или правила путей (`NoteId`)
-  — поправь `docs/writing.md`, `skills/new-note/SKILL.md` и примеры
-  `skills/new-note/examples/` в том же изменении (шаг `new-note` в
+  — поправь `docs/writing.md`, `skills/baluk-note/SKILL.md` и примеры
+  `skills/baluk-note/examples/` в том же изменении (шаг `baluk-note` в
   `tools/check.sh` собирает заготовки, примеры и блок «Частые вызовы»;
   тест `--test library` сверяет `#имена` из `docs/writing.md` и `SKILL.md`
   и требует каждое публичное имя в примерах), затем `tools/install.sh`.
@@ -143,6 +143,9 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   никогда. Поменял `Record` или `Rendered` — подними `cache::FORMAT`.
 - Версии и ключи кэша — только `version::StableHasher`, не `DefaultHasher`.
 - Пути заметок — только через `NoteId` (проверяет `..`, служебные `_`/`.`).
+  Путь — адрес, а читателю показывается **название** (`title:` шаблона;
+  папка — `_folder.toml`, `folders.rs`): в интерфейсе — `notes.title(id)`,
+  `notes.folderTitle(path)` (`lib/state/notes.svelte.ts`), не имя файла.
 - Линты — `[workspace.lints]` (clippy pedantic); `#[allow]` — точечно и с причиной.
 - Страница заметки — цепочка проходов: `render.rs` + `passes/` (по дереву
   typst-html и по тексту) → кэш → `finish.rs` (под настройки: `figures.rs`,

@@ -6,7 +6,6 @@
   import X from "@lucide/svelte/icons/x";
   import { api, ApiError } from "../lib/api";
   import { deleteNote } from "../lib/commands.svelte";
-  import { splitId } from "../lib/ids";
   import { plural } from "../lib/plural";
   import { notes } from "../lib/state";
   import { ui } from "../lib/ui.svelte";
@@ -20,7 +19,7 @@
 
   const id = $derived(ui.deleting);
   const book = $derived(notes.byId(id)?.kind === "book");
-  const name = $derived(id ? (notes.byId(id)?.title ?? splitId(id).name) : "");
+  const name = $derived(id ? notes.title(id) : "");
 
   $effect(() => {
     if (!dialog) return;

@@ -1,4 +1,5 @@
-//! Проверка хранилища: ошибки компиляции и битые ссылки (с якорями).
+//! Проверка хранилища: ошибки компиляции, битые ссылки (с якорями) и
+//! ошибки в файлах папок `_folder.toml`.
 //!
 //! Obsidian не проверял якоря `[[Заметка#Заголовок]]` — здесь ссылка
 //! считается целой, только если есть и заметка, и раздел в ней.
@@ -15,6 +16,16 @@ use crate::{Error, Result};
 #[derive(Debug, Serialize)]
 pub struct Report {
     pub notes: Vec<NoteReport>,
+    /// Папки с ошибкой в `_folder.toml`.
+    pub folders: Vec<FolderProblem>,
+}
+
+/// Ошибка в файле папки: папка показывается своим именем.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FolderProblem {
+    /// Файл от корня хранилища: `Сеть/_folder.toml`.
+    pub file: String,
+    pub error: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -33,19 +44,21 @@ pub struct BrokenLink {
 }
 
 impl Report {
-    /// Нет ошибок компиляции и битых ссылок (предупреждения допустимы).
+    /// Нет ошибок компиляции, битых ссылок и ошибок папок (предупреждения
+    /// допустимы).
     pub fn is_clean(&self) -> bool {
-        self.notes.iter().all(|n| n.errors.is_empty() && n.broken_links.is_empty())
+        self.folders.is_empty() && self.notes.iter().all(|n| n.errors.is_empty() && n.broken_links.is_empty())
     }
 
-    /// Итог одной строкой: `заметок: 19, ошибок: 1, предупреждений: 2, битых ссылок: 3`.
-    /// Его печатает `notes check`; ожидаемый итог фикстуры — в `tests/vault/README.md`.
+    /// Итог одной строкой: `заметок: 19, ошибок: 1, предупреждений: 2, битых ссылок: 3`
+    /// (ошибки папок — в числе ошибок). Его печатает `notes check`;
+    /// ожидаемый итог фикстуры — в `tests/vault/README.md`.
     pub fn summary(&self) -> String {
         let count = |f: fn(&NoteReport) -> usize| self.notes.iter().map(f).sum::<usize>();
         format!(
             "заметок: {}, ошибок: {}, предупреждений: {}, битых ссылок: {}",
             self.notes.len(),
-            count(|n| n.errors.len()),
+            count(|n| n.errors.len()) + self.folders.len(),
             count(|n| n.warnings.len()),
             count(|n| n.broken_links.len()),
         )
@@ -58,12 +71,26 @@ pub fn check(notes: &Notes) -> Result<Report> {
     for entry in notes.entries()? {
         out.push(note_report(notes, entry.id)?);
     }
-    Ok(Report { notes: out })
+    Ok(Report { notes: out, folders: folder_problems(notes, |_| true)? })
 }
 
 /// Проверка одной заметки или книги (ссылки — по всему хранилищу).
 pub fn check_note(notes: &Notes, id: &NoteId) -> Result<Report> {
-    Ok(Report { notes: vec![note_report(notes, id.clone())?] })
+    // Папки на пути к заметке — их названия она показывает в дереве.
+    let mine: Vec<&str> = crate::folders::ancestors(id.as_str()).collect();
+    Ok(Report { notes: vec![note_report(notes, id.clone())?], folders: folder_problems(notes, |p| mine.contains(&p))? })
+}
+
+fn folder_problems(notes: &Notes, wanted: impl Fn(&str) -> bool) -> Result<Vec<FolderProblem>> {
+    let index = notes.index()?;
+    Ok(index
+        .folders()
+        .filter(|(path, _)| wanted(path))
+        .filter_map(|(path, f)| {
+            let error = f.error.clone()?;
+            Some(FolderProblem { file: format!("{path}/{}", crate::folders::FOLDER_FILE), error })
+        })
+        .collect())
 }
 
 fn note_report(notes: &Notes, id: NoteId) -> Result<NoteReport> {

@@ -6,16 +6,15 @@
   import Plus from "@lucide/svelte/icons/plus";
   import X from "@lucide/svelte/icons/x";
   import { notes, router, tabs } from "../lib/state";
-  import { homeHref, parseRoute, splitId } from "../lib/ids";
+  import { homeHref, parseRoute } from "../lib/ids";
 
   function title(url: string): string {
     const u = new URL(url, location.origin);
     const route = parseRoute(u.pathname, u.search);
     if (route.kind === "home") return "Главная";
-    if (route.kind === "graph") return route.around ? `Граф: ${splitId(route.around).name}` : "Граф";
+    if (route.kind === "graph") return route.around ? `Граф: ${notes.title(route.around)}` : "Граф";
     if (route.kind === "tags") return route.tag ? `#${route.tag}` : "Теги";
-    const note = notes.all.find((n) => n.id === route.id);
-    return note?.title ?? note?.name ?? splitId(route.id).name;
+    return notes.title(route.id);
   }
 
   let bar: HTMLDivElement | undefined = $state();

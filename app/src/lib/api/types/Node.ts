@@ -5,4 +5,8 @@ export type Node = { id: string,
 /**
  * `None` — заметки нет (на неё ссылаются, но её не написали).
  */
-kind: NoteKind | null, };
+kind: NoteKind | null, 
+/**
+ * Название ([`Snapshot::title`]).
+ */
+title: string, };
