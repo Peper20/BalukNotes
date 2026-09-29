@@ -1,10 +1,12 @@
-<!-- Боковая панель: дерево заметок и книг. -->
+<!-- Боковая панель: хранилище (меню хранилищ), дерево заметок и книг. -->
 <script lang="ts">
   import { notes, router } from "../lib/state";
   import { tick, untrack } from "svelte";
   import { ancestors, buildTree } from "../lib/tree";
   import { ui } from "../lib/ui.svelte";
+  import NoteMenu from "./NoteMenu.svelte";
   import TreeFolder from "./TreeFolder.svelte";
+  import VaultMenu from "./VaultMenu.svelte";
 
   const tree = $derived(buildTree(notes.all));
   let aside: HTMLElement | undefined = $state();
@@ -25,6 +27,7 @@
 </script>
 
 <aside class="sidebar" id="sidebar" bind:this={aside}>
-  <div class="sidebar-head"><a href="/" class="brand">Заметки</a></div>
+  <VaultMenu />
   <nav class="tree" id="tree" aria-label="Заметки"><TreeFolder folder={tree} /></nav>
+  <NoteMenu />
 </aside>

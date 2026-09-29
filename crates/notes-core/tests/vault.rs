@@ -17,6 +17,7 @@ fn repo() -> PathBuf {
 /// Одно ядро на все тесты: загрузка шрифтов и тем — самое долгое.
 static NOTES: LazyLock<Notes> = LazyLock::new(|| {
     Notes::open(&NotesConfig {
+        trash: None,
         vault: repo().join("tests/vault"),
         library: LibrarySource::Dir(repo().join("baluk")),
         font_dirs: vec![],
@@ -209,6 +210,7 @@ fn disk_cache_survives_restart() {
     let dir = tempfile::tempdir().unwrap();
     let open = || {
         Notes::open(&NotesConfig {
+            trash: None,
             vault: repo().join("tests/vault"),
             library: LibrarySource::Dir(repo().join("baluk")),
             font_dirs: vec![],
@@ -242,6 +244,7 @@ fn warm_builds_everything_once_across_restarts() {
     let dir = tempfile::tempdir().unwrap();
     let open = || {
         Notes::open(&NotesConfig {
+            trash: None,
             vault: repo().join("tests/vault"),
             library: LibrarySource::Dir(repo().join("baluk")),
             font_dirs: vec![],
@@ -273,6 +276,7 @@ fn vault_graph_follows_the_vault() {
     std::fs::write(dir.path().join("B.typ"), head).unwrap();
     std::fs::write(dir.path().join("Граф.typ"), format!("{head}#vault-graph(around: \"B\")\n")).unwrap();
     let notes = Notes::open(&NotesConfig {
+        trash: None,
         vault: dir.path().to_path_buf(),
         library: LibrarySource::Dir(repo().join("baluk")),
         font_dirs: vec![],
@@ -301,6 +305,7 @@ fn vault_graph_follows_the_vault() {
 #[test]
 fn concurrent_requests_share_one_build() {
     let notes = Notes::open(&NotesConfig {
+        trash: None,
         vault: repo().join("tests/vault"),
         library: LibrarySource::Dir(repo().join("baluk")),
         font_dirs: vec![],
@@ -351,6 +356,7 @@ fn search_in_book_lists_all_sections_in_text_order() {
 #[test]
 fn computed_links_come_from_built_pages() {
     let notes = Notes::open(&NotesConfig {
+        trash: None,
         vault: repo().join("tests/vault"),
         library: LibrarySource::Dir(repo().join("baluk")),
         font_dirs: vec![],
@@ -434,6 +440,7 @@ fn storage_in_memory_compiles_and_follows_edits() {
     mem.write("A.typ", format!("{head}= Раз\n#include \"часть.typ\"\n"));
     mem.write("часть.typ", "первая часть");
     let config = NotesConfig {
+        trash: None,
         vault: PathBuf::new(),
         library: LibrarySource::Dir(repo().join("baluk")),
         font_dirs: vec![],
@@ -448,4 +455,41 @@ fn storage_in_memory_compiles_and_follows_edits() {
     mem.write("часть.typ", "вторая часть");
     assert_ne!(notes.version(&id("A"), OPTS).unwrap(), page.version);
     assert!(notes.page(&id("A"), OPTS).unwrap().rendered.as_ref().unwrap().body.contains("вторая часть"));
+}
+
+/// Удаление: заметка — файл, книга — папка целиком; список и ссылки
+/// обновляются сразу (и с наблюдателем, который помнит обход).
+#[test]
+fn delete_note_and_book() {
+    let mem = std::sync::Arc::new(notes_core::storage::MemStorage::new());
+    let head = "#import \"/_baluk/lib.typ\": *\n#show: note.with(title: [x])\n";
+    mem.write("A.typ", format!("{head}#see(\"Сеть/B\")"));
+    mem.write("Сеть/B.typ", head);
+    mem.write("Книга/main.typ", "#import \"/_baluk/lib.typ\": *\n#show: book.with(title: [К])\n#include \"01.typ\"\n");
+    mem.write("Книга/01.typ", "= Глава");
+    let config = NotesConfig {
+        trash: None,
+        vault: PathBuf::new(),
+        library: LibrarySource::Dir(repo().join("baluk")),
+        font_dirs: vec![],
+        cache: None,
+    };
+    let notes = Notes::with_storage(mem.clone(), &config).unwrap();
+    assert!(notes.watch());
+    assert!(notes.index().unwrap().exists("Сеть/B"));
+
+    notes.delete(&id("Сеть/B")).unwrap();
+    let index = notes.index().unwrap();
+    assert!(!index.exists("Сеть/B"), "список — сразу, без ожидания наблюдателя");
+    assert!(index.exists("A"));
+
+    notes.delete(&id("Книга")).unwrap();
+    assert!(
+        notes_core::storage::Storage::list(&*mem).unwrap().iter().all(|f| !f.starts_with("Книга/")),
+        "книга — папкой целиком"
+    );
+    let ids: Vec<String> = notes.entries().unwrap().into_iter().map(|e| e.id.to_string()).collect();
+    assert_eq!(ids, ["A"]);
+
+    assert!(matches!(notes.delete(&id("Нет")), Err(notes_core::Error::NotFound(_))));
 }

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { noteUrl, open, ready, title } from "./helpers";
+import { noteUrl, open, ready, title, vaultUrl } from "./helpers";
 
 const palette = (page: Page) => page.locator(".palette");
 
@@ -79,7 +79,7 @@ test("tags: из шапки заметки, страница тега, все т
   await open(page, "Сеть/SSH");
   await page.locator("#note .k-tags a", { hasText: "сеть" }).click();
   await ready(page);
-  await expect(page).toHaveURL(`/tags/${encodeURIComponent("сеть")}`);
+  await expect(page).toHaveURL(vaultUrl(`/tags/${encodeURIComponent("сеть")}`));
   const list = page.locator(".tag-notes");
   await expect(list).toContainText("SSH");
   await expect(list).toContainText("UFW");
@@ -180,7 +180,7 @@ test("дерево: свёрнутая папка запоминается, пу
   await expect(folder).not.toHaveAttribute("open");
   // Событие toggle приходит задачей после щелчка: без ожидания reload
   // изредка успевал раньше, и свёрнутость не запоминалась.
-  await expect.poll(() => page.evaluate(() => localStorage.getItem("k-collapsed") ?? "")).toContain("Глубоко");
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("k-collapsed@vault") ?? "")).toContain("Глубоко");
   await page.reload();
   await ready(page);
   await expect(folder).not.toHaveAttribute("open");

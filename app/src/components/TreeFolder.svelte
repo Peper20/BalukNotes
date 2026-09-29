@@ -13,6 +13,12 @@
 
   let { folder }: { folder: Folder } = $props();
   const icon = { size: 16, strokeWidth: 1.75, "aria-hidden": true } as const;
+
+  /** Правый клик (на телефоне — долгое касание): меню заметки. */
+  function menu(e: MouseEvent, id: string) {
+    e.preventDefault();
+    ui.noteMenu = { id, x: e.clientX, y: e.clientY };
+  }
 </script>
 
 {#each folder.folders as f (f.path)}
@@ -28,7 +34,7 @@
   </details>
 {/each}
 {#each folder.notes as n (n.id)}
-  <a href={noteHref(n.id)} data-id={n.id} class:book={n.kind === "book"} class:active={n.id === router.currentId} title={n.kind === "book" ? `${n.name} — книга` : n.name}>
+  <a href={noteHref(n.id)} data-id={n.id} class:book={n.kind === "book"} class:active={n.id === router.currentId} title={n.kind === "book" ? `${n.name} — книга` : n.name} oncontextmenu={(e) => menu(e, n.id)}>
     {#if n.kind === "book"}<BookIcon class="tree-icon" {...icon} />{:else}<FileText class="tree-icon" {...icon} />{/if}
     <span class="tree-name">{n.name}</span>
   </a>

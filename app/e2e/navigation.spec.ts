@@ -1,10 +1,10 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { VAULT, noteUrl, open, ready, title } from "./helpers";
+import { VAULT, apiPath, noteUrl, open, ready, title, vaultUrl } from "./helpers";
 
 test("главная: граф и список, клик по узлу открывает заметку", async ({ page }) => {
-  await page.goto("/");
+  await page.goto(vaultUrl("/"));
   await ready(page);
   await expect(page.locator(".home-lead")).toContainText("2 книги");
   await expect(page.locator(".graph-node")).not.toHaveCount(0);
@@ -57,7 +57,7 @@ test("книгу поправили — переход к главе показ�
     expect((await page.request.put("/api/settings", { data: { "refresh.mode": value } })).ok()).toBe(true);
   try {
     await mode("manual");
-    const prefetched = page.waitForResponse((r) => decodeURIComponent(r.url()).endsWith("/api/notes/Книга?chapter=1"));
+    const prefetched = page.waitForResponse((r) => decodeURIComponent(r.url()).endsWith("/notes/Книга?chapter=1"));
     await open(page, "Книга");
     await prefetched;
     appendFileSync(file, "\nПравка второй главы.\n");
@@ -97,7 +97,7 @@ test("главу книги отдаёт сервер: в странице од�
   const requested: string[] = [];
   page.on("request", (r) => {
     const url = new URL(r.url());
-    if (url.pathname.startsWith("/api/notes/")) requested.push(decodeURIComponent(url.pathname + url.search));
+    if (apiPath(url).startsWith("/api/notes/")) requested.push(decodeURIComponent(apiPath(url) + url.search));
   });
   await open(page, "Книга");
   await expect(page.locator("#note h2.k-h1")).toHaveCount(1);
@@ -124,9 +124,9 @@ test("соседние главы — заранее: переход без за
   const requested: string[] = [];
   page.on("request", (r) => {
     const url = new URL(r.url());
-    if (url.pathname.startsWith("/api/notes/")) requested.push(decodeURIComponent(url.pathname + url.search));
+    if (apiPath(url).startsWith("/api/notes/")) requested.push(decodeURIComponent(apiPath(url) + url.search));
   });
-  const prefetched = page.waitForResponse((r) => decodeURIComponent(r.url()).endsWith("/api/notes/Книга?chapter=1"));
+  const prefetched = page.waitForResponse((r) => decodeURIComponent(r.url()).endsWith("/notes/Книга?chapter=1"));
   await open(page, "Книга");
   // Ответ пришёл целиком и разобран клиентом (запас пополняется после разбора).
   await (await prefetched).finished();

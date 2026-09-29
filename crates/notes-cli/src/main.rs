@@ -9,11 +9,14 @@
 //!   notes pdf <путь>       заметка в PDF (вид PDF из baluk)
 //!   notes docs <тема>      как писать заметки, API библиотеки
 //!   notes info             где хранилище, настройки, библиотека
+//!   notes vaults [new <имя>]  хранилища / создать новое
 //!
-//! Каталог данных (`vault/`, `settings.json`, `cache/`): `--data` или
+//! Каталог данных (`vaults/`, `settings.json`, `cache/`): `--data` или
 //! `NOTES_DATA`, иначе `data` из `~/.config/baluk-notes/config.toml`, иначе
-//! `~/.local/share/baluk-notes`. Хранилище можно указать отдельно:
-//! `--vault tests/vault`.
+//! `~/.local/share/baluk-notes`. Хранилища — `<данные>/vaults/<имя>/`;
+//! хранилища по умолчанию нет: команды заметок — всегда с `--vault <имя>`
+//! (папку вне каталога данных — путём: `--vault tests/vault`), первое
+//! хранилище создаёт пользователь (`notes vaults new`, приложение).
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -26,7 +29,7 @@ use notes_core::check::{Report, check, check_note};
 use notes_core::new_note::NewNote;
 use notes_core::settings::{Platform, Schema, SettingsStore};
 use notes_core::vault::NoteKind;
-use notes_core::{LibrarySource, NoteId, Notes, NotesConfig};
+use notes_core::{LibrarySource, NoteId, Notes, NotesConfig, VaultName, Vaults};
 
 /// Имя каталогов приложения: `~/.config/<APP>`, `~/.local/share/<APP>`.
 const APP: &str = "baluk-notes";
@@ -36,14 +39,21 @@ const ADDR: &str = "127.0.0.1:8421";
 #[derive(Debug, Parser)]
 #[command(version, about = "Заметки на Typst")]
 struct Cli {
-    /// Каталог данных: хранилище vault/, settings.json, кэш. По умолчанию —
+    /// Каталог данных: хранилища vaults/, settings.json, кэш. По умолчанию —
     /// `data` из ~/.config/baluk-notes/config.toml, иначе ~/.local/share/baluk-notes.
     #[arg(long, global = true, env = "NOTES_DATA")]
     data: Option<PathBuf>,
 
-    /// Хранилище, если не <data>/vault (например, tests/vault).
-    #[arg(long, global = true, env = "NOTES_VAULT")]
-    vault: Option<PathBuf>,
+    /// Хранилище: имя (папка в <data>/vaults/) или путь к папке — со «/»
+    /// (tests/vault, ./заметки). Нужно командам заметок (new, list, tags,
+    /// check, pdf); список — `notes vaults`.
+    #[arg(long, global = true)]
+    vault: Option<String>,
+
+    /// Куда уходят удалённые из приложения заметки: по умолчанию — корзина
+    /// системы; каталог — в него (тесты).
+    #[arg(long, global = true, env = "NOTES_TRASH", hide = true)]
+    trash: Option<PathBuf>,
 
     /// Библиотека оформления (baluk/), видна заметкам как /_baluk/.
     /// По умолчанию — встроенная в бинарник; в отладочной сборке — каталог
@@ -126,6 +136,20 @@ enum Command {
     },
     /// Где хранилище, настройки и кэш, какая библиотека, адрес сервера.
     Info,
+    /// Хранилища каталога данных; `new <имя>` — создать новое.
+    Vaults {
+        #[command(subcommand)]
+        action: Option<VaultsAction>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum VaultsAction {
+    /// Новое пустое хранилище: <data>/vaults/<имя>/.
+    New {
+        /// Имя — оно же имя папки: «Учёба», «Работа 2026».
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -157,21 +181,25 @@ fn config_path() -> Option<PathBuf> {
     dirs::config_dir().map(|dir| dir.join(APP).join("config.toml"))
 }
 
-/// Каталог данных: явный, из файла настроек или стандартный.
-fn data_dir(explicit: Option<&PathBuf>) -> Result<PathBuf> {
-    if let Some(dir) = explicit {
-        return Ok(dir.clone());
+/// Файл настроек: нет — пустые настройки.
+fn load_config() -> Result<Config> {
+    let Some(path) = config_path().filter(|p| p.is_file()) else { return Ok(Config::default()) };
+    let text = std::fs::read_to_string(&path).with_context(|| format!("прочитать {}", path.display()))?;
+    let mut config: Config = toml::from_str(&text).with_context(|| format!("настройки {}", path.display()))?;
+    if let Some(data) = config.data.take() {
+        let home = dirs::home_dir().unwrap_or_default();
+        config.data = Some(match data.strip_prefix("~") {
+            Ok(rest) => home.join(rest),
+            Err(_) => path.parent().unwrap_or(Path::new("")).join(data),
+        });
     }
-    if let Some(path) = config_path().filter(|p| p.is_file()) {
-        let text = std::fs::read_to_string(&path).with_context(|| format!("прочитать {}", path.display()))?;
-        let config: Config = toml::from_str(&text).with_context(|| format!("настройки {}", path.display()))?;
-        if let Some(data) = config.data {
-            let home = dirs::home_dir().unwrap_or_default();
-            return Ok(match data.strip_prefix("~") {
-                Ok(rest) => home.join(rest),
-                Err(_) => path.parent().unwrap_or(Path::new("")).join(data),
-            });
-        }
+    Ok(config)
+}
+
+/// Каталог данных: явный, из файла настроек или стандартный.
+fn data_dir(explicit: Option<&PathBuf>, config: &Config) -> Result<PathBuf> {
+    if let Some(dir) = explicit.or(config.data.as_ref()) {
+        return Ok(dir.clone());
     }
     match dirs::data_dir() {
         Some(dir) => Ok(dir.join(APP)),
@@ -210,36 +238,87 @@ fn main() -> ExitCode {
     }
 }
 
+/// Какое хранилище: `--vault` (или `NOTES_VAULT`) и `vault` из config.toml.
+#[derive(Debug, Clone)]
+enum VaultArg {
+    /// Хранилище каталога данных по имени.
+    Name(String),
+    /// Папка где угодно (в аргументе есть `/`).
+    Path(PathBuf),
+}
+
+impl VaultArg {
+    fn parse(raw: &str) -> Self {
+        if raw.contains(['/', '\\']) || raw == "." || raw == ".." {
+            Self::Path(PathBuf::from(raw))
+        } else {
+            Self::Name(raw.to_owned())
+        }
+    }
+}
+
+/// Хранилище для команды: имя и папка. Хранилища по умолчанию нет: не
+/// названо — ошибка со списком. Папку по пути создаёт, если её нет (тесты);
+/// по имени — только существующее.
+fn pick_vault(vaults: &Vaults, arg: Option<&VaultArg>) -> Result<(VaultName, PathBuf)> {
+    match arg {
+        Some(VaultArg::Path(dir)) => {
+            if !dir.exists() {
+                std::fs::create_dir_all(dir).with_context(|| format!("создать {}", dir.display()))?;
+                tracing::info!("создано пустое хранилище {}", dir.display());
+            }
+            let dir = dir.canonicalize().with_context(|| format!("хранилище {}", dir.display()))?;
+            let name = dir.file_name().and_then(|n| n.to_str()).map(VaultName::new);
+            let Some(Ok(name)) = name else {
+                bail!("имя папки {} не годится для хранилища", dir.display())
+            };
+            Ok((name, dir))
+        }
+        Some(VaultArg::Name(name)) => {
+            let name = vaults.find(name)?;
+            Ok((name.clone(), vaults.path(&name)))
+        }
+        None => Err(notes_core::Error::VaultRequired(vaults.list()?).into()),
+    }
+}
+
 fn run(cli: Cli) -> Result<ExitCode> {
     // Без хранилища: документация.
     if let Command::Docs { topic } = cli.command {
         print!("{}", topic.text());
         return Ok(ExitCode::SUCCESS);
     }
-    let data = data_dir(cli.data.as_ref())?;
-    let vault = cli.vault.clone().unwrap_or_else(|| data.join("vault"));
-    if !vault.exists() {
-        std::fs::create_dir_all(&vault).with_context(|| format!("создать {}", vault.display()))?;
-        tracing::info!("создано пустое хранилище {}", vault.display());
-    }
-    let started = std::time::Instant::now();
+    let data = data_dir(cli.data.as_ref(), &load_config()?)?;
+    let vaults = Vaults::new(&data);
+    let arg = cli.vault.as_deref().map(VaultArg::parse);
     let config = NotesConfig {
-        vault: vault.clone(),
+        vault: PathBuf::new(),
         library: library(cli.library.as_ref()),
         font_dirs: cli.font_paths.clone(),
         cache: Some(notes_core::cache::default_dir(&data)),
+        trash: cli.trash.clone(),
     };
-    let notes = Notes::open(&config).context("открыть хранилище")?;
-    tracing::debug!(ms = started.elapsed().as_millis(), "хранилище {}", notes.vault().location());
+
+    // Без открытого хранилища: список хранилищ, сведения, сервер.
+    match cli.command {
+        Command::Vaults { action } => return vaults_command(&vaults, action),
+        Command::Info => return info(&vaults, &data, arg.as_ref(), cli.library.as_ref()),
+        Command::Serve { addr, token } => return serve(vaults, config, &data, arg, addr, token),
+        _ => {}
+    }
+
+    let (name, vault) = pick_vault(&vaults, arg.as_ref())?;
+    let started = std::time::Instant::now();
+    let notes = Notes::open(&NotesConfig { vault: vault.clone(), ..config }).context("открыть хранилище")?;
+    tracing::debug!(ms = started.elapsed().as_millis(), "хранилище «{name}»: {}", notes.vault().location());
 
     match cli.command {
-        Command::Serve { addr, token } => serve(notes, &data, addr, token),
         Command::New { id, book, title, tags, lang } => {
             let kind = if book { NoteKind::Book } else { NoteKind::Note };
             let id = new_note_id(&id, &vault)?;
             let main = NewNote { kind, title, tags, lang }.create(notes.vault(), &id)?;
             println!("{}", notes.vault().storage().display(&main).display());
-            eprintln!("в приложении: http://{ADDR}/n/{id} (если запущен notes serve)");
+            eprintln!("в приложении: http://{ADDR}/v/{name}/n/{id} (если запущен notes serve)");
             Ok(ExitCode::SUCCESS)
         }
         Command::List { json } => list(&notes, json),
@@ -254,21 +333,52 @@ fn run(cli: Cli) -> Result<ExitCode> {
             print_check(&report, json)
         }
         Command::Pdf { id, out, theme } => pdf(&notes, &note_id(&id, &vault)?, out, theme),
-        Command::Info => {
-            let config = config_path().map(|p| p.display().to_string()).unwrap_or_default();
-            let library = match library(cli.library.as_ref()) {
-                LibrarySource::Dir(dir) => dir.display().to_string(),
-                LibrarySource::Embedded => "встроенная в бинарник".into(),
-            };
-            println!("хранилище: {}", notes.vault().location());
-            println!("данные:    {} (settings.json, cache/)", data.display());
-            println!("настройки: {config} (data = \"…\" — другой каталог данных)");
-            println!("библиотека: {library}");
-            println!("сервер:    http://{ADDR}/ (notes serve)");
-            Ok(ExitCode::SUCCESS)
+        Command::Docs { .. } | Command::Info | Command::Vaults { .. } | Command::Serve { .. } => {
+            unreachable!("обработано выше")
         }
-        Command::Docs { .. } => unreachable!("обработано выше"),
     }
+}
+
+fn vaults_command(vaults: &Vaults, action: Option<VaultsAction>) -> Result<ExitCode> {
+    if let Some(VaultsAction::New { name }) = action {
+        let name = VaultName::new(name)?;
+        let path = vaults.create(&name)?;
+        println!("{}", path.display());
+        eprintln!("в приложении: http://{ADDR}/v/{name}/ (если запущен notes serve)");
+        return Ok(ExitCode::SUCCESS);
+    }
+    let list = vaults.list()?;
+    for name in &list {
+        println!("{name}");
+    }
+    if list.is_empty() {
+        eprintln!("хранилищ нет — создайте: notes vaults new \"Имя\" (или в приложении)");
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn info(vaults: &Vaults, data: &Path, arg: Option<&VaultArg>, library_dir: Option<&PathBuf>) -> Result<ExitCode> {
+    let config = config_path().map(|p| p.display().to_string()).unwrap_or_default();
+    let library = match library(library_dir) {
+        LibrarySource::Dir(dir) => dir.display().to_string(),
+        LibrarySource::Embedded => "встроенная в бинарник".into(),
+    };
+    // Хранилище не названо — не ошибка: показать список.
+    match arg {
+        Some(arg) => {
+            let (name, path) = pick_vault(vaults, Some(arg))?;
+            println!("хранилище: {} («{name}»)", path.display());
+        }
+        None => println!("хранилище: не выбрано (--vault \"Имя\")"),
+    }
+    let names: Vec<String> = vaults.list()?.iter().map(ToString::to_string).collect();
+    let names = if names.is_empty() { "нет".to_owned() } else { names.join(", ") };
+    println!("хранилища: {names} ({})", vaults.root().display());
+    println!("данные:    {} (settings.json, cache/)", data.display());
+    println!("настройки: {config} (data = \"…\" — другой каталог данных)");
+    println!("библиотека: {library}");
+    println!("сервер:    http://{ADDR}/ (notes serve)");
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Путь заметки из командной строки. Частая ошибка (особенно у агентов) —
@@ -313,9 +423,33 @@ fn open_settings(notes: &Notes, data: &Path) -> Result<SettingsStore> {
     SettingsStore::open(data.join("settings.json"), schema).context("настройки")
 }
 
-fn serve(notes: Notes, data: &Path, addr: SocketAddr, token: Option<String>) -> Result<ExitCode> {
-    let settings = open_settings(&notes, data)?;
-    let state = notes_server::AppState::new(Arc::new(notes), Arc::new(settings)).with_token(token);
+/// Сервер: все хранилища каталога данных (открываются по запросу;
+/// хранилищ может не быть — первое создают в приложении) или одно
+/// (`--vault <имя или путь>`).
+fn serve(
+    vaults: Vaults,
+    config: NotesConfig,
+    data: &Path,
+    arg: Option<VaultArg>,
+    addr: SocketAddr,
+    token: Option<String>,
+) -> Result<ExitCode> {
+    let set = if let Some(arg) = arg {
+        let (name, vault) = pick_vault(&vaults, Some(&arg))?;
+        let notes = Notes::open(&NotesConfig { vault, ..config }).context("открыть хранилище")?;
+        let settings = Arc::new(open_settings(&notes, data)?);
+        tracing::info!("хранилище «{name}»: {}", notes.vault().location());
+        notes_server::VaultSet::single(name, Arc::new(notes), settings)
+    } else {
+        // Темы и шрифты — у всех хранилищ одни (библиотека): ядро без
+        // хранилища, чтобы сервер работал и без них.
+        let library = Notes::with_storage(Arc::new(notes_core::storage::MemStorage::new()), &config)
+            .context("библиотека оформления")?;
+        let settings = Arc::new(open_settings(&library, data)?);
+        tracing::info!("хранилища: {}", vaults.root().display());
+        notes_server::VaultSet::registry(vaults, config, Arc::new(library), settings)
+    };
+    let state = notes_server::AppState::new(set).with_token(token);
     if state.token.is_some() {
         tracing::info!("доступ — только с токеном");
     }
@@ -444,5 +578,20 @@ mod tests {
         assert!(err(new_note_id("vault/Тема", vault)).ends_with("путь — от его корня: «Тема»"));
         assert_eq!(new_note_id("vaults/Тема", vault).unwrap().as_str(), "vaults/Тема");
         assert_eq!(new_note_id("Тема", vault).unwrap().as_str(), "Тема");
+    }
+
+    /// Хранилища по умолчанию нет: даже единственное — только названное.
+    #[test]
+    fn vault_must_be_named() {
+        let data = tempfile::tempdir().unwrap();
+        let vaults = Vaults::new(data.path());
+        let err = |arg: Option<&VaultArg>| pick_vault(&vaults, arg).unwrap_err().to_string();
+        assert!(err(None).starts_with("хранилищ нет — создайте"), "{}", err(None));
+        vaults.create(&VaultName::new("Учёба").unwrap()).unwrap();
+        assert_eq!(err(None), "укажите хранилище: --vault \"Имя\"; есть: «Учёба»");
+        let (name, path) = pick_vault(&vaults, Some(&VaultArg::parse("Учёба"))).unwrap();
+        assert_eq!((name.as_str(), path), ("Учёба", vaults.root().join("Учёба")));
+        assert!(err(Some(&VaultArg::parse("Нет"))).starts_with("нет хранилища «Нет»"));
+        assert!(!data.path().join("vaults/Нет").exists(), "не создаётся само");
     }
 }

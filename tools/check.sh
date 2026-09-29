@@ -100,9 +100,11 @@ vendor_tests() {
 new_note() {
   local dir=tests/.data/new-note notes=(cargo run -q -p notes-cli -- --data tests/.data/new-note)
   rm -rf "$dir"
+  "${notes[@]}" vaults new Проверка >/dev/null || return 1
+  notes+=(--vault Проверка)
   "${notes[@]}" new --tag проверка "Математика/Заметка" || return 1
   "${notes[@]}" new --book --lang en --title 'C++ [1] #x $y$ // - z' "Книга" || return 1
-  local vault=$dir/vault
+  local vault=$dir/vaults/Проверка
   cp -r skills/new-note/examples "$vault/examples"
   awk '/^## Частые вызовы/ {on = 1} on && /^```$/ {exit} on == 2 {print} on && /^```typst/ {on = 2}' \
     skills/new-note/SKILL.md >>"$vault/Математика/Заметка.typ"

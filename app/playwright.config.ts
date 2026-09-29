@@ -1,6 +1,7 @@
-// Сквозные тесты интерфейса: настоящий сервер notes на копии тестового
-// хранилища (tests/.data/e2e/vault — сценарии могут создавать заметки, не
-// трогая фикстуры), своими данными и портом 8433; клиент — сборка app/dist.
+// Сквозные тесты интерфейса: настоящий сервер notes на каталоге данных
+// tests/.data/e2e с копией тестового хранилища (vaults/vault — сценарии могут
+// создавать заметки и хранилища, не трогая фикстуры; удалённое — в
+// tests/.data/e2e/trash, не в корзину системы), портом 8433; клиент — сборка app/dist.
 // Браузер — системный chromium, Playwright ничего не скачивает. До сценариев
 // сервер прогревается (e2e/global-setup.ts): все заметки уже собраны, поэтому
 // ожидания короткие; первую сборку проверяет 01-switch (сам меняет файлы).
@@ -26,12 +27,12 @@ export default defineConfig({
   webServer: {
     command: [
       "rm -rf tests/.data/e2e",
-      "mkdir -p tests/.data/e2e",
-      "cp -r tests/vault tests/.data/e2e/vault",
-      `cargo run -q -p notes-cli -- --data tests/.data/e2e serve --addr 127.0.0.1:${port}`,
+      "mkdir -p tests/.data/e2e/vaults",
+      "cp -r tests/vault tests/.data/e2e/vaults/vault",
+      `cargo run -q -p notes-cli -- --data tests/.data/e2e --trash tests/.data/e2e/trash serve --addr 127.0.0.1:${port}`,
     ].join(" && "),
     cwd: "..",
-    url: `http://127.0.0.1:${port}/api/notes`,
+    url: `http://127.0.0.1:${port}/api/vaults`,
     timeout: 300_000,
     reuseExistingServer: false,
   },

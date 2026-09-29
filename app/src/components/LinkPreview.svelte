@@ -6,7 +6,10 @@
 <script lang="ts">
   import { api, type Preview } from "../lib/api";
   import { router } from "../lib/state";
-  import { hashAnchor, parseRoute } from "../lib/ids";
+  import { hashAnchor, isAppPath, parseRoute } from "../lib/ids";
+
+  /** Ссылки на заметки: в HTML заметки и в «Ссылаются сюда» (адреса хранилища). */
+  const NOTE_LINKS = [".k-note", ".backlinks"].flatMap((c) => [`${c} a[href^='/v/']`, `${c} a[href^='/n/']`]).join(", ");
 
   const DELAY = 350;
   const cache = new Map<string, Preview | null>();
@@ -20,13 +23,14 @@
 
   function target(a: HTMLAnchorElement) {
     const url = new URL(a.href, location.href);
+    if (!isAppPath(url.pathname)) return null;
     const route = parseRoute(url.pathname);
     return route.kind === "note" ? { id: route.id, anchor: hashAnchor(url.hash) } : null;
   }
 
   function onOver(e: PointerEvent) {
     if (e.pointerType === "touch") return;
-    const a = (e.target as Element).closest?.<HTMLAnchorElement>(".k-note a[href^='/n/'], .backlinks a[href^='/n/']");
+    const a = (e.target as Element).closest?.<HTMLAnchorElement>(NOTE_LINKS);
     if ((a != null && a === link) || card?.contains(e.target as Node)) {
       clearTimeout(hideTimer);
       return;

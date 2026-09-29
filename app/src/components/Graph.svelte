@@ -22,7 +22,7 @@
   import { Pointers } from "../lib/graph-gesture";
   import { anyMoving, blendView, Frames, glide, introDelays } from "../lib/graph-motion";
   import { extentOf, Physics, type Point, type Rect } from "../lib/graph-physics";
-  import { fitView, groupColor, LABEL_GAP, LABEL_SIZE, zoomAt, type View } from "../lib/graph-view";
+  import { FIT_ZOOM, fitView, groupColor, LABEL_GAP, LABEL_SIZE, zoomAt, type View } from "../lib/graph-view";
 
   let {
     layout,
@@ -99,7 +99,10 @@
   const viewBox = $derived.by(() => {
     const [x0, y0, x1, y1] = bounds;
     const pad = 12;
-    return `${x0 - pad} ${y0 - pad} ${x1 - x0 + 2 * pad} ${y1 - y0 + 2 * pad}`;
+    // Заметок мало (новое хранилище) — не крупнее, чем на странице графа:
+    // иначе одна заметка во всю ширину. Лишнее место — по бокам.
+    const w = Math.max(x1 - x0 + 2 * pad, width / FIT_ZOOM);
+    return `${(x0 + x1 - w) / 2} ${y0 - pad} ${w} ${y1 - y0 + 2 * pad}`;
   });
   // Рисунок ужимается по ширине (телефон) — подписи не мельче 9 px на экране.
   let width = $state(0);

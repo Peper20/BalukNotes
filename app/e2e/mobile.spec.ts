@@ -1,6 +1,6 @@
 // Узкий экран (телефон): ничего не шире окна, всплывающие панели работают.
 import { expect, test, type Page } from "@playwright/test";
-import { noteUrl, open, ready } from "./helpers";
+import { noteUrl, open, ready, vaultUrl } from "./helpers";
 
 test.use({ viewport: { width: 400, height: 800 }, hasTouch: true });
 
@@ -15,7 +15,7 @@ async function noSideScroll(page: Page) {
 }
 
 test("узкий экран: страницы и настройки не шире окна", async ({ page }) => {
-  for (const url of ["/", "/tags", "/graph", noteUrl("Формулы и теги"), noteUrl("Книга"), noteUrl("Сеть/SSH"), noteUrl("Рисунки/Интерактив"), noteUrl("Рисунки/Кадры")]) {
+  for (const url of [vaultUrl("/"), vaultUrl("/tags"), vaultUrl("/graph"), noteUrl("Формулы и теги"), noteUrl("Книга"), noteUrl("Сеть/SSH"), noteUrl("Рисунки/Интерактив"), noteUrl("Рисунки/Кадры")]) {
     await page.goto(url);
     await ready(page);
     await noSideScroll(page);
@@ -58,4 +58,26 @@ test("узкий экран: активная вкладка видна цели
   const box = (await palette.boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(400);
+});
+
+test("узкий экран: выбор хранилища, меню хранилищ и диалоги не шире окна", async ({ page }) => {
+  // Адрес без хранилища в новом браузере — экран выбора.
+  await page.goto("/");
+  await expect(page.locator("#vault-picker")).toBeVisible();
+  await ready(page);
+  await noSideScroll(page);
+  await open(page, "Сеть/SSH");
+  await page.locator(".topbar button.icon").first().click();
+  await page.locator("#vault-switch").click();
+  const menu = page.locator("#vault-menu");
+  await expect(menu).toBeVisible();
+  const box = (await menu.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(400);
+  await menu.getByRole("menuitem", { name: "Новое хранилище…" }).click();
+  const dialog = page.locator("#vault-new");
+  await expect(dialog).toBeVisible();
+  expect(await dialog.evaluate((d) => d.scrollWidth - d.clientWidth)).toBeLessThanOrEqual(0);
+  await dialog.getByRole("button", { name: "Отмена" }).click();
+  await noSideScroll(page);
 });

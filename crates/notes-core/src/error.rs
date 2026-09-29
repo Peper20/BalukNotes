@@ -21,6 +21,18 @@ pub enum Error {
     #[error("не создать «{id}»: {reason}")]
     Create { id: String, reason: String },
 
+    #[error("недопустимое имя хранилища «{name}»: {reason}")]
+    InvalidVault { name: String, reason: &'static str },
+
+    #[error("нет хранилища «{name}»; есть: {}", names(known))]
+    VaultNotFound { name: String, known: Vec<crate::vaults::VaultName> },
+
+    #[error("хранилище «{0}» уже есть")]
+    VaultExists(String),
+
+    #[error("{}", vault_required(.0))]
+    VaultRequired(Vec<crate::vaults::VaultName>),
+
     #[error("настройка «{key}»: {reason}")]
     Setting { key: String, reason: String },
 
@@ -35,6 +47,23 @@ pub enum Error {
 impl Error {
     pub(crate) fn io(path: impl Into<PathBuf>, source: io::Error) -> Self {
         Self::Io { path: path.into(), source }
+    }
+}
+
+/// Имена хранилищ через запятую (для сообщений).
+fn names(list: &[crate::vaults::VaultName]) -> String {
+    if list.is_empty() {
+        return "ни одного".into();
+    }
+    list.iter().map(|n| format!("«{n}»")).collect::<Vec<_>>().join(", ")
+}
+
+/// Хранилище не названо: какие есть или как создать первое.
+fn vault_required(list: &[crate::vaults::VaultName]) -> String {
+    if list.is_empty() {
+        "хранилищ нет — создайте: notes vaults new \"Имя\" (или в приложении)".into()
+    } else {
+        format!("укажите хранилище: --vault \"Имя\"; есть: {}", names(list))
     }
 }
 

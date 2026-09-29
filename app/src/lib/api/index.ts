@@ -2,6 +2,7 @@
 // Адрес сервера и токен — config.ts; ошибки сети и сервера — ApiError.
 
 import { encodeId } from "../ids";
+import { vault } from "../vault";
 import { apiUrl, authHeaders } from "./config";
 import type { ErrorResponse } from "./types/ErrorResponse";
 import type { Graph } from "./types/Graph";
@@ -15,6 +16,7 @@ import type { SearchHit } from "./types/SearchHit";
 import type { SettingsResponse } from "./types/SettingsResponse";
 import type { Theme } from "./types/Theme";
 import type { VersionResponse } from "./types/VersionResponse";
+import type { VaultsResponse } from "./types/VaultsResponse";
 import type { WarmRequest } from "./types/WarmRequest";
 
 export { apiConfig, apiUrl, configure, rebaseStylesheets, type ApiConfig } from "./config";
@@ -37,6 +39,7 @@ export type { Schema } from "./types/Schema";
 export type { SettingDef } from "./types/SettingDef";
 export type { Apply } from "./types/Apply";
 export type { Theme } from "./types/Theme";
+export type { VaultsResponse } from "./types/VaultsResponse";
 
 /** Какую главу книги запросить: по номеру или ту, где якорь. */
 export interface ChapterSelect {
@@ -85,28 +88,43 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 const json = (method: string, data: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
 
+/** Путь API показанного хранилища: `/api/vaults/<имя><path>`. */
+const inVault = (path: string): string => {
+  const name = vault();
+  if (name == null) throw new Error("хранилище не выбрано");
+  return `/api/vaults/${encodeURIComponent(name)}${path}`;
+};
+
 export const api = {
-  notes: () => request<NoteListItem[]>("/api/notes"),
+  /** Хранилища и какое открыть по умолчанию. */
+  vaults: () => request<VaultsResponse>("/api/vaults"),
+  /** Новое пустое хранилище; ответ — список хранилищ. */
+  createVault: (name: string) => request<VaultsResponse>("/api/vaults", json("POST", { name })),
+  notes: () => request<NoteListItem[]>(inVault("/notes")),
   /** Заметка; с `chapter` или `anchor` книга приходит одной главой. */
   note: (id: string, signal?: AbortSignal, select: ChapterSelect = {}) => {
     const q = select.chapter != null ? `?chapter=${select.chapter}` : select.anchor != null ? `?anchor=${encodeURIComponent(select.anchor)}` : "";
-    return request<NotePage>(`/api/notes/${encodeId(id)}${q}`, { signal });
+    return request<NotePage>(inVault(`/notes/${encodeId(id)}${q}`), { signal });
   },
-  version: (id: string) => request<VersionResponse>(`/api/version/${encodeId(id)}`),
-  links: (id: string) => request<LinksResponse>(`/api/links/${encodeId(id)}`),
-  graph: () => request<Graph>("/api/graph"),
+  /** Удалить заметку (книгу — папкой) — в корзину системы. */
+  deleteNote: (id: string) => request<unknown>(inVault(`/notes/${encodeId(id)}`), { method: "DELETE" }).then(() => {}),
+  version: (id: string) => request<VersionResponse>(inVault(`/version/${encodeId(id)}`)),
+  links: (id: string) => request<LinksResponse>(inVault(`/links/${encodeId(id)}`)),
+  graph: () => request<Graph>(inVault("/graph")),
   /** Граф по фильтру, уже разложенный (фильтр и раскладка — в ядре). */
-  graphLayout: (filter: Partial<GraphFilter> = {}) => request<GraphLayout>("/api/graph/layout", json("POST", filter)),
+  graphLayout: (filter: Partial<GraphFilter> = {}) => request<GraphLayout>(inVault("/graph/layout"), json("POST", filter)),
   /** Поиск по тексту всех заметок; с `note` — только в ней (все разделы по порядку). */
   search: (q: string, signal?: AbortSignal, limit = 30, note?: string | null) =>
-    request<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}${note ? `&note=${encodeURIComponent(note)}` : ""}`, { signal }),
+    request<SearchHit[]>(inVault(`/search?q=${encodeURIComponent(q)}&limit=${limit}${note ? `&note=${encodeURIComponent(note)}` : ""}`), { signal }),
   preview: (id: string, anchor?: string | null, signal?: AbortSignal) =>
-    request<Preview>(`/api/preview/${encodeId(id)}${anchor ? `?anchor=${encodeURIComponent(anchor)}` : ""}`, { signal }),
+    request<Preview>(inVault(`/preview/${encodeId(id)}${anchor ? `?anchor=${encodeURIComponent(anchor)}` : ""}`), { signal }),
   themes: () => request<Theme[]>("/api/themes"),
   settings: () => request<SettingsResponse>("/api/settings"),
   saveSettings: (patch: SettingValues) => request<SettingValues>("/api/settings", json("PUT", patch)),
   /** Подсказать серверу, что собрать заранее первым (ответ не нужен). */
-  warm: (req: WarmRequest) => request<unknown>("/api/warm", json("POST", req)).then(() => {}),
+  warm: (req: WarmRequest) => request<unknown>(inVault("/warm"), json("POST", req)).then(() => {}),
   /** Адрес PDF — его открывает браузер (новая вкладка), токен — в адресе. */
-  pdfUrl: (id: string, theme: string) => apiUrl(`/api/pdf/${encodeId(id)}?theme=${encodeURIComponent(theme)}`, { withToken: true }),
+  pdfUrl: (id: string, theme: string) => apiUrl(inVault(`/pdf/${encodeId(id)}?theme=${encodeURIComponent(theme)}`), { withToken: true }),
+  /** Адрес потока событий хранилища (`EventSource`), токен — в адресе. */
+  eventsUrl: () => apiUrl(inVault("/events"), { withToken: true }),
 };

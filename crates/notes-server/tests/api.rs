@@ -8,8 +8,8 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use notes_core::settings::{Platform, Schema, SettingsStore};
 use notes_core::storage::MemStorage;
-use notes_core::{LibrarySource, Notes, NotesConfig};
-use notes_server::{AppState, router};
+use notes_core::{LibrarySource, Notes, NotesConfig, VaultName, Vaults};
+use notes_server::{AppState, VaultSet, router};
 use serde_json::Value;
 use tower::ServiceExt;
 
@@ -17,6 +17,7 @@ static NOTES: LazyLock<Arc<Notes>> = LazyLock::new(|| {
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     Arc::new(
         Notes::open(&NotesConfig {
+            trash: None,
             vault: repo.join("tests/vault"),
             library: LibrarySource::Dir(repo.join("baluk")),
             font_dirs: vec![],
@@ -26,22 +27,33 @@ static NOTES: LazyLock<Arc<Notes>> = LazyLock::new(|| {
     )
 });
 
+/// Настройки во временном каталоге `dir`.
+fn settings(dir: &tempfile::TempDir) -> Arc<SettingsStore> {
+    let schema = Schema::new(NOTES.themes().themes(), Platform::Desktop);
+    Arc::new(SettingsStore::open(dir.path().join("settings.json"), schema).unwrap())
+}
+
+/// Сервер на одном хранилище `test`.
+fn single(notes: Arc<Notes>, dir: &tempfile::TempDir) -> AppState {
+    AppState::new(VaultSet::single(VaultName::new("test").unwrap(), notes, settings(dir)))
+}
+
 /// Своё хранилище настроек на тест: запись идёт во временный каталог.
 fn app() -> (axum::Router, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
-    let settings =
-        SettingsStore::open(dir.path().join("settings.json"), Schema::new(NOTES.themes().themes(), Platform::Desktop))
-            .unwrap();
-    (router(AppState::new(NOTES.clone(), Arc::new(settings))), dir)
+    (router(single(NOTES.clone(), &dir)), dir)
 }
 
 /// То же с токеном доступа.
 fn app_with_token(token: &str) -> (axum::Router, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
-    let settings =
-        SettingsStore::open(dir.path().join("settings.json"), Schema::new(NOTES.themes().themes(), Platform::Desktop))
-            .unwrap();
-    (router(AppState::new(NOTES.clone(), Arc::new(settings)).with_token(Some(token.into()))), dir)
+    (router(single(NOTES.clone(), &dir).with_token(Some(token.into()))), dir)
+}
+
+/// Настройки ядра для хранилища `vault` (библиотека — из репозитория).
+fn config(vault: PathBuf, trash: Option<PathBuf>) -> NotesConfig {
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    NotesConfig { vault, library: LibrarySource::Dir(repo.join("baluk")), font_dirs: vec![], cache: None, trash }
 }
 
 async fn call(app: axum::Router, method: &str, uri: &str, body: Option<&str>) -> (StatusCode, Value) {
@@ -71,11 +83,11 @@ fn uri(path: &str) -> String {
 #[tokio::test]
 async fn note_list_and_page() {
     let (app, _dir) = app();
-    let (status, list) = call(app.clone(), "GET", "/api/notes", None).await;
+    let (status, list) = call(app.clone(), "GET", "/api/vaults/test/notes", None).await;
     assert_eq!(status, StatusCode::OK);
     assert!(list.as_array().unwrap().iter().any(|n| n["id"] == "Сеть/SSH" && n["kind"] == "note"));
 
-    let (status, page) = call(app, "GET", &uri("/api/notes/Сеть/SSH"), None).await;
+    let (status, page) = call(app, "GET", &uri("/api/vaults/test/notes/Сеть/SSH"), None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(page["rendered"]["title"], "SSH");
     assert!(page["errors"].as_array().unwrap().is_empty());
@@ -84,9 +96,9 @@ async fn note_list_and_page() {
 #[tokio::test]
 async fn bad_paths_are_rejected() {
     let (app, _dir) = app();
-    assert_eq!(call(app.clone(), "GET", &uri("/api/notes/Нет/такой"), None).await.0, StatusCode::NOT_FOUND);
-    assert_eq!(call(app.clone(), "GET", "/api/notes/..%2Fetc", None).await.0, StatusCode::BAD_REQUEST);
-    assert_eq!(call(app, "GET", "/api/version/_baluk/lib", None).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(call(app.clone(), "GET", &uri("/api/vaults/test/notes/Нет/такой"), None).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(call(app.clone(), "GET", "/api/vaults/test/notes/..%2Fetc", None).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(call(app, "GET", "/api/vaults/test/version/_baluk/lib", None).await.0, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -105,9 +117,10 @@ async fn settings_are_validated() {
 async fn warm_hints_are_accepted() {
     let (app, _dir) = app();
     let (status, _) =
-        call(app.clone(), "POST", "/api/warm", Some(r#"{"ids": ["Сеть/SSH", "../чужое", "Нет такой"]}"#)).await;
+        call(app.clone(), "POST", "/api/vaults/test/warm", Some(r#"{"ids": ["Сеть/SSH", "../чужое", "Нет такой"]}"#))
+            .await;
     assert_eq!(status, StatusCode::NO_CONTENT, "неверные и неизвестные пути пропускаются");
-    let (status, _) = call(app, "POST", "/api/warm", Some("[]")).await;
+    let (status, _) = call(app, "POST", "/api/vaults/test/warm", Some("[]")).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
@@ -138,8 +151,9 @@ async fn client_and_fonts_are_served() {
 #[tokio::test]
 async fn responses_are_compressed() {
     let (app, _dir) = app();
-    let req =
-        Request::get(uri("/api/notes/демо/визуализация")).header("accept-encoding", "br, gzip").body(Body::empty());
+    let req = Request::get(uri("/api/vaults/test/notes/демо/визуализация"))
+        .header("accept-encoding", "br, gzip")
+        .body(Body::empty());
     let res = app.oneshot(req.unwrap()).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     assert_eq!(res.headers()["content-encoding"], "br");
@@ -148,13 +162,13 @@ async fn responses_are_compressed() {
 #[tokio::test]
 async fn links_and_graph() {
     let (app, _dir) = app();
-    let (status, links) = call(app.clone(), "GET", &uri("/api/links/Сеть/SSH"), None).await;
+    let (status, links) = call(app.clone(), "GET", &uri("/api/vaults/test/links/Сеть/SSH"), None).await;
     assert_eq!(status, StatusCode::OK);
     let backlinks = links["backlinks"].as_array().unwrap();
     assert!(backlinks.iter().any(|b| b["from"] == "Сеть/UFW" && b["anchor"] == "Смена порта"), "{backlinks:?}");
     assert!(links["outgoing"].as_array().unwrap().iter().any(|l| l["target"] == "Сеть/UFW" && l["exists"] == true));
 
-    let (status, graph) = call(app.clone(), "GET", "/api/graph", None).await;
+    let (status, graph) = call(app.clone(), "GET", "/api/vaults/test/graph", None).await;
     assert_eq!(status, StatusCode::OK);
     let missing: Vec<_> =
         graph["nodes"].as_array().unwrap().iter().filter(|n| n["kind"].is_null()).map(|n| &n["id"]).collect();
@@ -163,14 +177,14 @@ async fn links_and_graph() {
 
     // Граф по фильтру — уже разложенный: соседи SSH на шаг, без ненаписанных.
     let body = r#"{"around": "Сеть/SSH", "depth": 1, "missing": false}"#;
-    let (status, layout) = call(app.clone(), "POST", "/api/graph/layout", Some(body)).await;
+    let (status, layout) = call(app.clone(), "POST", "/api/vaults/test/graph/layout", Some(body)).await;
     assert_eq!(status, StatusCode::OK);
     let nodes = layout["nodes"].as_array().unwrap();
     assert!(nodes.iter().any(|n| n["id"] == "Сеть/UFW" && n["x"].is_number() && n["group"] == "Сеть"));
     assert!(nodes.iter().all(|n| !n["kind"].is_null()), "ненаписанные скрыты");
     assert_eq!(layout["center"], "Сеть/SSH");
 
-    assert_eq!(call(app, "GET", &uri("/api/links/Нет/такой"), None).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(call(app, "GET", &uri("/api/vaults/test/links/Нет/такой"), None).await.0, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -179,7 +193,9 @@ async fn pdf_export() {
     let res = app
         .clone()
         .oneshot(
-            Request::get(format!("{}?theme={}", uri("/api/pdf/Сеть/SSH"), uri("night"))).body(Body::empty()).unwrap(),
+            Request::get(format!("{}?theme={}", uri("/api/vaults/test/pdf/Сеть/SSH"), uri("night")))
+                .body(Body::empty())
+                .unwrap(),
         )
         .await
         .unwrap();
@@ -189,7 +205,7 @@ async fn pdf_export() {
     let bytes = res.into_body().collect().await.unwrap().to_bytes();
     assert!(bytes.starts_with(b"%PDF-"));
     assert_eq!(
-        call(app, "GET", &format!("{}?theme={}", uri("/api/pdf/Сеть/SSH"), uri("нет")), None).await.0,
+        call(app, "GET", &format!("{}?theme={}", uri("/api/vaults/test/pdf/Сеть/SSH"), uri("нет")), None).await.0,
         StatusCode::BAD_REQUEST
     );
 }
@@ -197,28 +213,40 @@ async fn pdf_export() {
 #[tokio::test]
 async fn search_preview_and_note_meta() {
     let (app, _dir) = app();
-    let (status, hits) = call(app.clone(), "GET", &format!("/api/search?q={}", uri("итоги второй")), None).await;
+    let (status, hits) =
+        call(app.clone(), "GET", &format!("/api/vaults/test/search?q={}", uri("итоги второй")), None).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(hits[0]["id"], "Книга");
     assert_eq!(hits[0]["anchor"], "Итоги-2");
 
     // В одной книге — все разделы по порядку.
     let (status, inside) =
-        call(app.clone(), "GET", &format!("/api/search?q={}&note={}", uri("итоги"), uri("Книга")), None).await;
-    assert_eq!(status, StatusCode::OK);
-    assert!(inside.as_array().unwrap().iter().all(|h| h["id"] == "Книга"));
-    let q = format!("/api/search?q=x&note={}", uri("Нет/такой"));
-    assert_eq!(call(app.clone(), "GET", &q, None).await.0, StatusCode::NOT_FOUND);
-    assert_eq!(call(app.clone(), "GET", "/api/search?q=x&note=../x", None).await.0, StatusCode::BAD_REQUEST);
-
-    let (status, p) =
-        call(app.clone(), "GET", &format!("{}?anchor={}", uri("/api/preview/Сеть/SSH"), uri("Смена порта")), None)
+        call(app.clone(), "GET", &format!("/api/vaults/test/search?q={}&note={}", uri("итоги"), uri("Книга")), None)
             .await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(p["heading"], "Смена порта");
-    assert_eq!(call(app.clone(), "GET", &uri("/api/preview/Нет/такой"), None).await.0, StatusCode::NOT_FOUND);
+    assert!(inside.as_array().unwrap().iter().all(|h| h["id"] == "Книга"));
+    let q = format!("/api/vaults/test/search?q=x&note={}", uri("Нет/такой"));
+    assert_eq!(call(app.clone(), "GET", &q, None).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(
+        call(app.clone(), "GET", "/api/vaults/test/search?q=x&note=../x", None).await.0,
+        StatusCode::BAD_REQUEST
+    );
 
-    let (_, list) = call(app.clone(), "GET", "/api/notes", None).await;
+    let (status, p) = call(
+        app.clone(),
+        "GET",
+        &format!("{}?anchor={}", uri("/api/vaults/test/preview/Сеть/SSH"), uri("Смена порта")),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(p["heading"], "Смена порта");
+    assert_eq!(
+        call(app.clone(), "GET", &uri("/api/vaults/test/preview/Нет/такой"), None).await.0,
+        StatusCode::NOT_FOUND
+    );
+
+    let (_, list) = call(app.clone(), "GET", "/api/vaults/test/notes", None).await;
     let book = list.as_array().unwrap().iter().find(|n| n["id"] == "Книга").unwrap();
     assert_eq!(book["title"], "Тестовая книга");
     assert_eq!(book["tags"][0], "книга");
@@ -236,7 +264,7 @@ async fn book_by_chapters() {
     let (app, _dir) = app();
     let get = |q: &'static str| {
         let app = app.clone();
-        async move { call(app, "GET", &format!("{}{q}", uri("/api/notes/Книга")), None).await }
+        async move { call(app, "GET", &format!("{}{q}", uri("/api/vaults/test/notes/Книга")), None).await }
     };
     let (status, whole) = get("").await;
     assert_eq!(status, StatusCode::OK);
@@ -266,7 +294,8 @@ async fn book_by_chapters() {
     assert!(unknown["rendered"]["body"].as_str().unwrap().contains("k-title"));
 
     // Не книга — целиком и с chapter.
-    let (_, note) = call(app.clone(), "GET", &format!("{}?chapter=1", uri("/api/notes/Сеть/SSH")), None).await;
+    let (_, note) =
+        call(app.clone(), "GET", &format!("{}?chapter=1", uri("/api/vaults/test/notes/Сеть/SSH")), None).await;
     assert!(note["book"].is_null() && note["rendered"]["title"] == "SSH");
 }
 
@@ -278,22 +307,24 @@ async fn token_is_required_when_set() {
     let status = |res: axum::response::Response| res.status();
 
     // Без токена или с чужим — 401 на всём: API, клиент, шрифты.
-    for path in ["/api/notes", "/", "/api/fonts.css", "/assets/baluk.css"] {
+    for path in ["/api/vaults/test/notes", "/", "/api/fonts.css", "/assets/baluk.css"] {
         assert_eq!(status(app.clone().oneshot(get(path)).await.unwrap()), StatusCode::UNAUTHORIZED, "{path}");
     }
-    let (code, body) = call(app.clone(), "GET", "/api/notes", None).await;
+    let (code, body) = call(app.clone(), "GET", "/api/vaults/test/notes", None).await;
     assert_eq!(code, StatusCode::UNAUTHORIZED);
     assert_eq!(body["error"], "нужен токен доступа");
-    let wrong = Request::get("/api/notes").header("authorization", "Bearer s3cre").body(Body::empty()).unwrap();
+    let wrong =
+        Request::get("/api/vaults/test/notes").header("authorization", "Bearer s3cre").body(Body::empty()).unwrap();
     assert_eq!(status(app.clone().oneshot(wrong).await.unwrap()), StatusCode::UNAUTHORIZED);
 
     // С токеном — 200: заголовком, параметром адреса (ставит cookie) и cookie.
-    let bearer = Request::get("/api/notes").header("authorization", "Bearer s3cret").body(Body::empty()).unwrap();
+    let bearer =
+        Request::get("/api/vaults/test/notes").header("authorization", "Bearer s3cret").body(Body::empty()).unwrap();
     let res = app.clone().oneshot(bearer).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     assert!(res.headers().get("set-cookie").is_none());
 
-    let res = app.clone().oneshot(get("/api/notes?token=s3cret")).await.unwrap();
+    let res = app.clone().oneshot(get("/api/vaults/test/notes?token=s3cret")).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let cookie = res.headers()["set-cookie"].to_str().unwrap().to_owned();
     assert!(cookie.starts_with("notes_token=s3cret;") && cookie.contains("HttpOnly"), "{cookie}");
@@ -303,7 +334,7 @@ async fn token_is_required_when_set() {
     assert_eq!(status(app.oneshot(with_cookie.unwrap()).await.unwrap()), StatusCode::OK);
 
     // Без токена в настройках — проверки нет.
-    assert_eq!(status(open.oneshot(get("/api/notes")).await.unwrap()), StatusCode::OK);
+    assert_eq!(status(open.oneshot(get("/api/vaults/test/notes")).await.unwrap()), StatusCode::OK);
 }
 
 /// Следующий кадр тела ответа как текст (с тайм-аутом).
@@ -320,6 +351,7 @@ async fn events_report_file_changes() {
     std::fs::write(vault.path().join("A.typ"), "a").unwrap();
     let notes = Arc::new(
         Notes::open(&NotesConfig {
+            trash: None,
             vault: vault.path().to_owned(),
             library: LibrarySource::Dir(repo.join("baluk")),
             font_dirs: vec![],
@@ -328,12 +360,12 @@ async fn events_report_file_changes() {
         .unwrap(),
     );
     let dir = tempfile::tempdir().unwrap();
-    let settings =
-        SettingsStore::open(dir.path().join("settings.json"), Schema::new(notes.themes().themes(), Platform::Desktop))
-            .unwrap();
-    let state = AppState::new(notes.clone(), Arc::new(settings));
+    let state = single(notes.clone(), &dir);
     assert!(notes.watch(), "каталог на диске — с наблюдателем");
-    let res = router(state.clone()).oneshot(Request::get("/api/events").body(Body::empty()).unwrap()).await.unwrap();
+    let res = router(state.clone())
+        .oneshot(Request::get("/api/vaults/test/events").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     assert_eq!(res.headers()["content-type"], "text/event-stream");
     let mut body = res.into_body();
@@ -358,6 +390,7 @@ async fn broken_watcher_closes_events() {
     let mem = Arc::new(MemStorage::new());
     mem.write("A.typ", "a");
     let config = NotesConfig {
+        trash: None,
         vault: PathBuf::new(),
         library: LibrarySource::Dir(repo.join("baluk")),
         font_dirs: vec![],
@@ -365,12 +398,12 @@ async fn broken_watcher_closes_events() {
     };
     let notes = Arc::new(Notes::with_storage(mem.clone(), &config).unwrap());
     let dir = tempfile::tempdir().unwrap();
-    let settings =
-        SettingsStore::open(dir.path().join("settings.json"), Schema::new(notes.themes().themes(), Platform::Desktop))
-            .unwrap();
-    let state = AppState::new(notes.clone(), Arc::new(settings));
+    let state = single(notes.clone(), &dir);
     assert!(notes.watch());
-    let res = router(state.clone()).oneshot(Request::get("/api/events").body(Body::empty()).unwrap()).await.unwrap();
+    let res = router(state.clone())
+        .oneshot(Request::get("/api/vaults/test/events").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
     let mut body = res.into_body();
     assert_eq!(next_frame(&mut body).await, "event: hello\ndata: {\"watching\":true}\n\n");
 
@@ -382,4 +415,96 @@ async fn broken_watcher_closes_events() {
     assert!(change.starts_with("event: change\n") && change.contains(r#""paths":[]"#), "{change}");
     let end = tokio::time::timeout(std::time::Duration::from_secs(10), body.frame()).await.unwrap();
     assert!(end.is_none());
+}
+
+/// Хранилища каталога данных: у каждого свои заметки; создание нового.
+#[tokio::test]
+async fn vaults_are_separate() {
+    let data = tempfile::tempdir().unwrap();
+    let vaults = Vaults::new(data.path());
+    // Хранилищ ещё нет — сервер работает, список пуст, ничего само не создаётся.
+    let dir = tempfile::tempdir().unwrap();
+    let empty = VaultSet::registry(vaults.clone(), config(PathBuf::new(), None), NOTES.clone(), settings(&dir));
+    let (_, list) = call(router(AppState::new(empty)), "GET", "/api/vaults", None).await;
+    assert_eq!(list, serde_json::json!({ "vaults": [], "can_create": true }));
+    assert!(!data.path().join("vaults").exists());
+
+    for (vault, note) in [("Учёба", "Матан"), ("Работа", "Отчёт")] {
+        let dir = vaults.create(&VaultName::new(vault).unwrap()).unwrap();
+        std::fs::write(dir.join(format!("{note}.typ")), "").unwrap();
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let set = VaultSet::registry(vaults, config(PathBuf::new(), None), NOTES.clone(), settings(&dir));
+    let app = router(AppState::new(set));
+
+    let (status, list) = call(app.clone(), "GET", "/api/vaults", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["vaults"], serde_json::json!(["Работа", "Учёба"]));
+    assert!(list.get("default").is_none(), "хранилища по умолчанию нет");
+    assert_eq!(list["can_create"], true);
+
+    let ids =
+        |list: Value| list.as_array().unwrap().iter().map(|n| n["id"].as_str().unwrap().to_owned()).collect::<Vec<_>>();
+    let (status, study) = call(app.clone(), "GET", &uri("/api/vaults/Учёба/notes"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(ids(study), ["Матан"]);
+    let (_, work) = call(app.clone(), "GET", &uri("/api/vaults/Работа/notes"), None).await;
+    assert_eq!(ids(work), ["Отчёт"]);
+    let (status, body) = call(app.clone(), "GET", &uri("/api/vaults/Нет/notes"), None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(body["error"].as_str().unwrap().contains("«Работа», «Учёба»"), "{body}");
+    assert_eq!(call(app.clone(), "GET", "/api/vaults/..%2Fx/notes", None).await.0, StatusCode::NOT_FOUND);
+
+    let (status, list) = call(app.clone(), "POST", "/api/vaults", Some(r#"{"name": "Новое"}"#)).await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(list["vaults"], serde_json::json!(["Новое", "Работа", "Учёба"]));
+    assert!(data.path().join("vaults/Новое").is_dir());
+    let (_, empty) = call(app.clone(), "GET", &uri("/api/vaults/Новое/notes"), None).await;
+    assert!(ids(empty).is_empty());
+    assert_eq!(call(app.clone(), "POST", "/api/vaults", Some(r#"{"name": "Новое"}"#)).await.0, StatusCode::CONFLICT);
+    let (status, body) = call(app.clone(), "POST", "/api/vaults", Some(r#"{"name": "a/b"}"#)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(body["error"].as_str().unwrap().contains("недопустимое имя хранилища"));
+
+    // Темы и шрифты — общие, без хранилища в адресе.
+    assert_eq!(call(app, "GET", "/api/themes", None).await.0, StatusCode::OK);
+}
+
+/// Сервер на одной папке (`--vault <путь>`): новые хранилища не создаются.
+#[tokio::test]
+async fn single_vault_cannot_create() {
+    let (app, _dir) = app();
+    let (_, list) = call(app.clone(), "GET", "/api/vaults", None).await;
+    assert_eq!(list, serde_json::json!({ "vaults": ["test"], "can_create": false }));
+    assert_eq!(call(app.clone(), "POST", "/api/vaults", Some(r#"{"name": "x"}"#)).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(call(app, "GET", "/api/vaults/other/notes", None).await.0, StatusCode::NOT_FOUND);
+}
+
+/// Удаление — в корзину (в тесте — каталог): заметка файлом, книга папкой.
+#[tokio::test]
+async fn delete_moves_to_trash() {
+    let vault = tempfile::tempdir().unwrap();
+    let trash = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(vault.path().join("Сеть")).unwrap();
+    std::fs::write(vault.path().join("Сеть/SSH.typ"), "ssh").unwrap();
+    std::fs::create_dir_all(vault.path().join("Книга")).unwrap();
+    std::fs::write(vault.path().join("Книга/main.typ"), "").unwrap();
+    std::fs::write(vault.path().join("Книга/01.typ"), "").unwrap();
+    let notes = Arc::new(Notes::open(&config(vault.path().to_owned(), Some(trash.path().to_owned()))).unwrap());
+    let dir = tempfile::tempdir().unwrap();
+    let app = router(single(notes, &dir));
+
+    let (status, _) = call(app.clone(), "DELETE", &uri("/api/vaults/test/notes/Сеть/SSH"), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(std::fs::read_to_string(trash.path().join("SSH.typ")).unwrap(), "ssh");
+    assert_eq!(call(app.clone(), "DELETE", &uri("/api/vaults/test/notes/Книга"), None).await.0, StatusCode::NO_CONTENT);
+    assert!(trash.path().join("Книга/01.typ").is_file());
+    let (_, list) = call(app.clone(), "GET", "/api/vaults/test/notes", None).await;
+    assert_eq!(list, serde_json::json!([]), "список — сразу");
+
+    assert_eq!(
+        call(app.clone(), "DELETE", &uri("/api/vaults/test/notes/Сеть/SSH"), None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(call(app, "DELETE", "/api/vaults/test/notes/..%2Fx", None).await.0, StatusCode::BAD_REQUEST);
 }

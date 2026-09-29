@@ -3,7 +3,7 @@ import type { NoteId } from "./NoteId";
 import type { NoteKind } from "./NoteKind";
 
 /**
- * Элемент `GET /api/notes`.
+ * Элемент `GET /api/vaults/{хранилище}/notes`.
  */
 export type NoteListItem = { id: NoteId, kind: NoteKind, 
 /**

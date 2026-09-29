@@ -3,6 +3,7 @@
 //! Всё, что не зависит от способа показа (браузер, Tauri, CLI):
 //!
 //! - [`vault`] — хранилище: какие файлы — заметки, какие — книги;
+//! - [`vaults`] — хранилища пользователя по именам (`<данные>/vaults/`);
 //! - [`world`] — компилятор Typst поверх хранилища (виртуальная библиотека
 //!   `/_baluk/`, шрифты, пакеты);
 //! - [`vault_data`] — данные хранилища для заметок `/_vault/…` (реестр
@@ -53,6 +54,7 @@ pub mod themes;
 pub mod vault;
 pub mod vault_data;
 pub mod vault_graph;
+pub mod vaults;
 pub mod version;
 pub mod warm;
 pub mod watch;
@@ -62,4 +64,5 @@ pub mod world;
 pub use error::{Error, Result};
 pub use notes::{NotePage, Notes, NotesConfig};
 pub use vault::{Entry, NoteId, NoteKind, Vault};
+pub use vaults::{VaultName, Vaults};
 pub use world::LibrarySource;

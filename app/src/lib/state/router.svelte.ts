@@ -1,7 +1,8 @@
 // Маршрут: адрес страницы → что показать (заметка, главная, граф, теги).
 // Переходы внутри клиента, вкладки, «назад» к месту чтения.
 
-import { hashAnchor, noteHref, parseRoute, type Route } from "../ids";
+import { hashAnchor, homeHref, noteHref, parseRoute, type Route } from "../ids";
+import { inVault } from "../vault";
 import { placeFromHistory } from "../places";
 import { notes } from "./notes.svelte";
 import { places } from "./places.svelte";
@@ -17,8 +18,12 @@ class Router {
   currentId = $derived(this.route.kind === "note" ? this.route.id : null);
   currentNote = $derived(notes.byId(this.currentId));
 
-  /** Перейти внутри клиента (как по ссылке); `newTab` — в новой вкладке. */
+  /**
+   * Перейти внутри клиента (как по ссылке); `newTab` — в новой вкладке.
+   * Адрес без хранилища (`/n/…` из HTML заметки) — в показанном хранилище.
+   */
   go(url: string | URL, { replace = false, newTab = false } = {}): void {
+    url = inVault(String(url));
     reader.remember();
     if (newTab) tabs.openAfter(String(url));
     if (replace) history.replaceState(null, "", url);
@@ -42,7 +47,7 @@ class Router {
   closeTab(i: number): void {
     if (i < 0 || i >= tabs.list.length) return;
     if (tabs.list.length === 1) {
-      this.go("/");
+      this.go(homeHref());
       return;
     }
     if (tabs.close(i)?.wasActive) {

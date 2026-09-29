@@ -1,6 +1,6 @@
 // Страница графа: масштаб, сдвиг, перестановка узла, фильтры, поиск, соседи заметки.
 import { expect, test, type Page } from "@playwright/test";
-import { noteUrl, open, ready, title } from "./helpers";
+import { noteUrl, open, ready, title, vaultUrl } from "./helpers";
 
 const scale = (page: Page) =>
   page.locator(".graph-svg > g").evaluate((g) => Number(/scale\(([\d.]+)\)/.exec(g.getAttribute("transform") ?? "")?.[1]));
@@ -8,12 +8,12 @@ const nodeAt = (page: Page, id: string) =>
   page.locator(`.graph-node[data-id="${id}"]`).evaluate((g) => g.getAttribute("transform"));
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/");
-  await page.evaluate(() => localStorage.removeItem("k-graph"));
+  await page.goto(vaultUrl("/"));
+  await page.evaluate(() => localStorage.removeItem("k-graph@vault"));
 });
 
 test("граф: кнопки и колесо масштабируют, узел переставляется, щелчок открывает заметку", async ({ page }) => {
-  await page.goto("/graph");
+  await page.goto(vaultUrl("/graph"));
   await ready(page);
   await expect(page.locator(".graph-node")).not.toHaveCount(0);
   const k0 = await scale(page);
@@ -45,7 +45,7 @@ test("граф: кнопки и колесо масштабируют, узел 
 });
 
 test("граф: папки, тег, поиск; фильтры запоминаются", async ({ page }) => {
-  await page.goto("/graph");
+  await page.goto(vaultUrl("/graph"));
   await ready(page);
   const nodes = page.locator(".graph-node");
   const all = await nodes.count();
@@ -135,7 +135,7 @@ test.describe("без движения (prefers-reduced-motion)", () => {
   test.use({ reducedMotion: "reduce" });
 
   test("граф не анимируется, протянутый узел соседей не тянет", async ({ page }) => {
-    await page.goto("/graph");
+    await page.goto(vaultUrl("/graph"));
     await ready(page);
     const circle = page.locator('.graph-node[data-id="Сеть/SSH"] circle');
     expect(await circle.evaluate((c) => getComputedStyle(c).animationName)).toBe("none");
@@ -156,7 +156,7 @@ test.describe("без движения (prefers-reduced-motion)", () => {
 });
 
 test("граф: «вернуть раскладку» — узлы плавно, без перелёта, возвращаются на места", async ({ page }) => {
-  await page.goto("/graph");
+  await page.goto(vaultUrl("/graph"));
   await ready(page);
   const restore = page.getByRole("button", { name: "вернуть раскладку" });
   await expect(restore).toBeDisabled();

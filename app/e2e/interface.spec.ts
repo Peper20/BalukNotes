@@ -1,7 +1,7 @@
 import { rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { VAULT, open, ready, resetTheme, title } from "./helpers";
+import { VAULT, open, ready, resetTheme, title, vaultUrl } from "./helpers";
 
 test("тема: каждый клик — сразу другая на вид («как в системе» — в настройках)", async ({ page }) => {
   await open(page, "Сеть/SSH");
@@ -39,7 +39,7 @@ test("раскрытые «Ответы» — по разделу и текст�
   try {
     mkdirSync(dir, { recursive: true });
     writeFileSync(file, text(false));
-    await page.goto("/");
+    await page.goto(vaultUrl("/"));
     await ready(page);
     await page.locator("#refresh").click();
     await page.locator("#tree").getByRole("link", { name: "Заметка" }).click();
@@ -128,7 +128,7 @@ test("изменение файла подхватывается по ⟳ без
   try {
     mkdirSync(dir, { recursive: true });
     writeFileSync(file, text(1));
-    await page.goto("/");
+    await page.goto(vaultUrl("/"));
     await ready(page);
     await page.locator("#refresh").click();
     await page.locator("#tree").getByRole("link", { name: "Заметка" }).click();
@@ -155,8 +155,8 @@ test("правка файла приходит событием сервера �
     expect((await page.request.put("/api/settings", { data: { "refresh.mode": value } })).ok()).toBe(true);
   try {
     await mode("auto");
-    const events = page.waitForResponse((r) => r.url().includes("/api/events"));
-    await page.goto("/");
+    const events = page.waitForResponse((r) => r.url().includes("/events"));
+    await page.goto(vaultUrl("/"));
     await ready(page);
     await events;
     mkdirSync(dir, { recursive: true });
@@ -189,7 +189,7 @@ test("правка файла приходит событием сервера �
 test("PDF заметки в текущей теме", async ({ page }) => {
   await open(page, "Сеть/SSH");
   const [popup] = await Promise.all([page.waitForEvent("popup"), page.locator("#pdf").click()]);
-  expect(decodeURIComponent(popup.url())).toContain("/api/pdf/Сеть/SSH?theme=classic");
+  expect(decodeURIComponent(popup.url())).toContain("/pdf/Сеть/SSH?theme=classic");
   await popup.close();
 });
 

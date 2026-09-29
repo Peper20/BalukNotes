@@ -37,15 +37,18 @@ const encodeId = (id) => id.split("/").map(encodeURIComponent).join("/");
 const fileName = (i, id, view) => `${String(i).padStart(2, "0")}-${id.replace(/[^\p{L}\p{N}]+/gu, "_")}-${view}.png`;
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-let notes;
+let notes, vault;
 try {
-  notes = await (await fetch(`${base}/api/notes`)).json();
+  // Первое хранилище сервера (у tools/test-env.sh — одно: tests/vault).
+  const name = encodeURIComponent((await (await fetch(`${base}/api/vaults`)).json()).vaults[0]);
+  vault = `/v/${name}`;
+  notes = await (await fetch(`${base}/api/vaults/${name}/notes`)).json();
 } catch (e) {
   console.error(`сервер ${base} не отвечает (${e.cause?.code ?? e.message}). Запустите tools/test-env.sh`);
   process.exit(1);
 }
-const pages = [{ id: "", title: "Главная", url: `${base}/` }].concat(
-  notes.filter((n) => !only || n.id.includes(only)).map((n) => ({ id: n.id, title: n.id, url: `${base}/n/${encodeId(n.id)}` })),
+const pages = [{ id: "", title: "Главная", url: `${base}${vault}/` }].concat(
+  notes.filter((n) => !only || n.id.includes(only)).map((n) => ({ id: n.id, title: n.id, url: `${base}${vault}/n/${encodeId(n.id)}` })),
 );
 
 rmSync(out, { recursive: true, force: true });

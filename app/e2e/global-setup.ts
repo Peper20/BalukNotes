@@ -4,18 +4,20 @@
 // сборка (01-switch), сами меняют файл заметки — её кэш устаревает.
 import type { FullConfig } from "@playwright/test";
 import type { NoteListItem } from "../src/lib/api/types/NoteListItem";
+import { VAULT_NAME } from "./helpers";
 
 export default async function warmUp(config: FullConfig) {
   const base = config.projects[0]?.use.baseURL;
   if (!base) throw new Error("нет baseURL в playwright.config.ts");
   const started = Date.now();
-  const res = await fetch(`${base}/api/notes`);
+  const api = `${base}/api/vaults/${VAULT_NAME}`;
+  const res = await fetch(`${api}/notes`);
   if (!res.ok) throw new Error(`прогрев: список заметок — ${res.status}`);
   const notes = (await res.json()) as NoteListItem[];
   // По одной: сервер всё равно собирает заметки по очереди.
   for (const { id } of notes) {
     const path = id.split("/").map(encodeURIComponent).join("/");
-    const note = await fetch(`${base}/api/notes/${path}`);
+    const note = await fetch(`${api}/notes/${path}`);
     if (!note.ok) throw new Error(`прогрев: ${id} — ${note.status}`);
     await note.arrayBuffer();
   }

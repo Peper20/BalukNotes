@@ -24,6 +24,7 @@ fn compile(source: &str) -> Arc<NotePage> {
     let vault = tempfile::tempdir().unwrap();
     std::fs::write(vault.path().join("t.typ"), source).unwrap();
     let notes = Notes::open(&NotesConfig {
+        trash: None,
         vault: vault.path().to_path_buf(),
         library: LibrarySource::Dir(repo().join("baluk")),
         font_dirs: vec![],

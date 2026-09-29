@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import { reader, router, settings, start } from "./lib/state";
   import { commands } from "./lib/commands.svelte";
+  import { isAppPath } from "./lib/ids";
   import { typing } from "./lib/keys";
   import { mobile, ui } from "./lib/ui.svelte";
   import Backlinks from "./components/Backlinks.svelte";
@@ -14,12 +15,14 @@
   import Palette from "./components/Palette.svelte";
   import TabBar from "./components/TabBar.svelte";
   import Tags from "./components/Tags.svelte";
+  import NoteDelete from "./components/NoteDelete.svelte";
   import NoteView from "./components/NoteView.svelte";
   import Problems from "./components/Problems.svelte";
   import Settings from "./components/Settings.svelte";
   import Sidebar from "./components/Sidebar.svelte";
   import Toc from "./components/Toc.svelte";
   import Topbar from "./components/Topbar.svelte";
+  import VaultNew from "./components/VaultNew.svelte";
 
   let started = $state(false);
   let fatal = $state<string | null>(null);
@@ -47,8 +50,7 @@
     const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
     if (!a || a.target || e.defaultPrevented || e.button > 1 || e.shiftKey || e.altKey) return;
     const url = new URL(a.href, location.href);
-    const internal = url.pathname === "/" || url.pathname.startsWith("/n/") || url.pathname.startsWith("/tags") || url.pathname === "/graph";
-    if (url.origin !== location.origin || !internal) return;
+    if (url.origin !== location.origin || !isAppPath(url.pathname)) return;
     const newTab = e.button === 1 || e.ctrlKey || e.metaKey;
     if (url.pathname === location.pathname && url.search === location.search && !newTab) {
       // Якорь в той же заметке: прокрутка — клиентом, запоминаем в истории.
@@ -87,7 +89,7 @@
 <svelte:window onkeydown={onKeydown} onscroll={onScroll} />
 
 {#if fatal}
-  <p class="fatal">Не удалось запустить клиент: {fatal}</p>
+  <p class="fatal">Не удалось запустить клиент: {fatal}. <a href="/">Выбрать хранилище</a></p>
 {:else}
   <div
     class="app"
@@ -120,6 +122,8 @@
   </div>
   <Settings />
   <Help />
+  <VaultNew />
+  <NoteDelete />
   <Palette />
   <LinkPreview />
 {/if}

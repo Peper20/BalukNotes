@@ -6,7 +6,7 @@
   import Plus from "@lucide/svelte/icons/plus";
   import X from "@lucide/svelte/icons/x";
   import { notes, router, tabs } from "../lib/state";
-  import { parseRoute, splitId } from "../lib/ids";
+  import { homeHref, parseRoute, splitId } from "../lib/ids";
 
   function title(url: string): string {
     const u = new URL(url, location.origin);
@@ -57,6 +57,6 @@
         >
       </div>
     {/each}
-    <button type="button" class="tab-new" title="Новая вкладка (Alt+T)" aria-label="Новая вкладка" onclick={() => router.go("/", { newTab: true })}><Plus size={16} strokeWidth={2} aria-hidden="true" /></button>
+    <button type="button" class="tab-new" title="Новая вкладка (Alt+T)" aria-label="Новая вкладка" onclick={() => router.go(homeHref(), { newTab: true })}><Plus size={16} strokeWidth={2} aria-hidden="true" /></button>
   </div>
 {/if}

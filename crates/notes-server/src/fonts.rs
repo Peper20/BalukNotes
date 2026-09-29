@@ -20,7 +20,7 @@ pub(crate) fn routes() -> Router<AppState> {
 /// `@font-face` на каждую часть шрифта: браузер качает только части со
 /// знаками страницы (`unicode-range`).
 async fn fonts_css(State(s): State<AppState>) -> Response {
-    let notes = s.notes.clone();
+    let notes = s.vaults.library().clone();
     let css_text = blocking(move || Ok(notes.fonts().font_faces(notes.themes().web_fonts(), "/fonts/"))).await;
     match css_text {
         Ok(text) => css(text),
@@ -32,10 +32,11 @@ async fn font(State(s): State<AppState>, Path((family, style, file)): Path<(Stri
     let (Some(variant), Some(chunk)) = (WebVariant::from_slug(&style), file.strip_suffix(".woff2")) else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    if !s.notes.themes().web_fonts().contains(&family) {
+    let notes = s.vaults.library().clone();
+    if !notes.themes().web_fonts().contains(&family) {
         return StatusCode::NOT_FOUND.into_response();
     }
-    let (notes, chunk) = (s.notes.clone(), chunk.to_owned());
+    let chunk = chunk.to_owned();
     let data = blocking(move || Ok(notes.fonts().web_face(&family, variant).and_then(|face| face.file(&chunk)))).await;
     match data {
         Ok(Some(data)) => {
