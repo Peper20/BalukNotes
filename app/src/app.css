@@ -12,8 +12,32 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text); ba
   position: sticky; top: 0; height: 100vh; overflow-y: auto; box-sizing: border-box;
   border-right: 1px solid var(--k-line); background: var(--k-surface);
 }
-.sidebar-head { padding: 0.9rem 1rem 0.5rem; }
-.brand { font-weight: 600; color: var(--k-text); text-decoration: none; letter-spacing: 0.02em; }
+.sidebar-head { position: relative; display: flex; align-items: center; gap: 0.3rem; padding: 0.55rem 0.5rem 0.3rem 1rem; }
+.brand {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 600; color: var(--k-text); text-decoration: none; letter-spacing: 0.02em;
+}
+/* Меню хранилищ и меню заметки в дереве — одинаковые строки. */
+.vault-menu, .note-menu {
+  z-index: 30; display: flex; flex-direction: column; padding: 0.3rem; min-width: 12rem; box-sizing: border-box;
+  border: 1px solid var(--k-line); border-radius: 8px; background: var(--k-bg); box-shadow: 0 8px 28px rgb(0 0 0 / 0.22);
+}
+.vault-menu { position: absolute; left: 0.5rem; right: 0.5rem; top: calc(100% + 0.1rem); max-height: 60vh; overflow-y: auto; }
+.note-menu { position: fixed; }
+.vault-menu a, .vault-menu button, .note-menu button {
+  display: flex; align-items: center; gap: 0.45rem; min-height: 1.9rem; padding: 0 0.5rem; border: none; border-radius: 5px;
+  font: inherit; text-align: left; color: var(--k-text); text-decoration: none; background: none; cursor: pointer;
+}
+.vault-menu a:hover, .vault-menu button:hover, .note-menu button:hover,
+.vault-menu a:focus-visible, .vault-menu button:focus-visible, .note-menu button:focus-visible {
+  outline: none; background: color-mix(in srgb, var(--k-accent) 14%, transparent);
+}
+.vault-menu a.current { font-weight: 600; }
+.vault-menu button { color: var(--k-muted); border-top: 1px solid var(--k-line); border-radius: 0 0 5px 5px; margin-top: 0.2rem; }
+.vault-menu-mark { display: inline-flex; width: 16px; flex: none; color: var(--k-accent); }
+.vault-menu-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vault-menu-note { margin: 0.3rem 0.5rem; color: var(--k-muted); }
+.note-menu button.danger { color: var(--k-box-pitfall); }
 /* Строка дерева: [шеврон] значок имя [счётчик]. Отступ уровня — ширина
  * шеврона с зазором: шеврон вложенной папки встаёт под значок родителя,
  * значок заметки — под значок соседней папки; направляющая — под шевроном. */
@@ -229,6 +253,56 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .setting select { max-width: min(16rem, 55vw); text-overflow: ellipsis; }
 .setting input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: var(--k-accent); }
 .settings-error { margin: 0 1rem 1rem; color: var(--k-box-pitfall); }
+
+/* ── Выбор хранилища (адрес без хранилища, первый запуск) ───────────── */
+.vault-picker { box-sizing: border-box; width: min(28rem, 100%); margin: 12vh auto 2rem; padding: 0 1rem; }
+.vault-picker h1 { margin: 0 0 0.4rem; font-size: 1.5rem; }
+.vault-picker-lead { margin: 0 0 1.2rem; color: var(--k-muted); }
+.vault-picker-list { list-style: none; margin: 0 0 1.4rem; padding: 0; border: 1px solid var(--k-line); border-radius: 10px; overflow: hidden; }
+.vault-picker-list li + li { border-top: 1px solid var(--k-line); }
+.vault-picker-list a {
+  display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.9rem;
+  color: var(--k-text); text-decoration: none; font-weight: 600; overflow-wrap: anywhere;
+}
+.vault-picker-list svg { flex: none; color: var(--k-accent); }
+.vault-picker-list a:hover, .vault-picker-list a:focus-visible { outline: none; background: color-mix(in srgb, var(--k-accent) 12%, transparent); }
+.vault-picker-new label { display: block; margin-bottom: 0.35rem; font-weight: 600; }
+.vault-picker-row { display: flex; gap: 0.5rem; }
+.vault-picker-row input {
+  flex: 1; min-width: 0; font: inherit; padding: 0.4rem 0.55rem; border-radius: 6px;
+  border: 1px solid var(--k-line); background: var(--k-surface); color: var(--k-text);
+}
+.vault-picker-row input:focus-visible { outline: 2px solid var(--k-accent); outline-offset: -1px; }
+.vault-picker-row button {
+  font: inherit; padding: 0.4rem 1rem; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--k-accent); background: var(--k-accent); color: var(--k-bg);
+}
+.vault-picker-row button:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Короткие диалоги: новое хранилище, удалить заметку ─────────────── */
+.vault-new, .note-delete { width: min(26rem, 94vw); }
+.vault-new h2, .note-delete h2 { overflow-wrap: anywhere; }
+.dialog-body { padding: 0.8rem 1rem 0.2rem; }
+.dialog-body p { margin: 0 0 0.6rem; }
+.dialog-body label { display: block; margin-bottom: 0.3rem; font-weight: 600; }
+.dialog-body input[type="text"] {
+  width: 100%; box-sizing: border-box; font: inherit; padding: 0.35rem 0.5rem; border-radius: 5px;
+  border: 1px solid var(--k-line); background: var(--k-surface); color: var(--k-text);
+}
+.dialog-body input[type="text"]:focus-visible { outline: 2px solid var(--k-accent); outline-offset: -1px; }
+.dialog-hint { color: var(--k-muted); font-size: 0.85em; overflow-wrap: anywhere; }
+.dialog-hint:first-of-type { margin-top: 0.4rem; }
+.dialog-error { color: var(--k-box-pitfall); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0.4rem 1rem 1rem; }
+.dialog-actions button {
+  font: inherit; padding: 0.35rem 0.9rem; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--k-line); background: var(--k-surface); color: var(--k-text);
+}
+.dialog-actions button:hover { border-color: var(--k-accent); }
+.dialog-actions button:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
+.dialog-actions button:disabled { opacity: 0.5; cursor: default; }
+.dialog-actions .primary { border-color: var(--k-accent); background: var(--k-accent); color: var(--k-bg); }
+.dialog-actions .danger { border-color: var(--k-box-pitfall); background: var(--k-box-pitfall); color: var(--k-bg); }
 
 /* ── Телефон: панель поверх заметки ─────────────────────────────────── */
 .backdrop { display: none; }

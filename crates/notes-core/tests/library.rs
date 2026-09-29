@@ -24,6 +24,7 @@ fn compile(source: &str) -> Arc<NotePage> {
     let vault = tempfile::tempdir().unwrap();
     std::fs::write(vault.path().join("t.typ"), source).unwrap();
     let notes = Notes::open(&NotesConfig {
+        trash: None,
         vault: vault.path().to_path_buf(),
         library: LibrarySource::Dir(repo().join("baluk")),
         font_dirs: vec![],
@@ -83,25 +84,66 @@ fn every_public_name_is_documented() {
     assert!(missing.is_empty(), "не описаны в baluk/README.md: {missing:?}");
 }
 
-/// Правила написания заметок (`docs/writing.md`, навык `/new-note`) не
-/// устарели: каждый вызов `#имя` из них — публичное имя библиотеки
-/// (кроме ключевых слов Typst).
+/// Правила написания заметок (`docs/writing.md`) и навык `/new-note`
+/// (`skills/new-note/SKILL.md`) не устарели: каждый вызов `#имя` из них —
+/// публичное имя библиотеки (кроме ключевых слов Typst).
 #[test]
 fn writing_guide_uses_public_names() {
     const KEYWORDS: [&str; 5] = ["import", "include", "show", "set", "let"];
-    let guide = std::fs::read_to_string(repo().join("docs/writing.md")).unwrap();
     let names = public_names();
-    let mut unknown: Vec<&str> = guide
-        .split('#')
-        .skip(1)
-        .map(|rest| {
-            let end = rest.find(|c: char| !(c.is_ascii_lowercase() || c == '-')).unwrap_or(rest.len());
-            rest[..end].trim_end_matches('-')
-        })
-        .filter(|name| !name.is_empty() && !KEYWORDS.contains(name) && !names.iter().any(|n| n == name))
+    for file in ["docs/writing.md", "skills/new-note/SKILL.md"] {
+        let guide = std::fs::read_to_string(repo().join(file)).unwrap();
+        let mut unknown: Vec<&str> = guide
+            .split('#')
+            .skip(1)
+            .map(|rest| {
+                let end = rest.find(|c: char| !(c.is_ascii_lowercase() || c == '-')).unwrap_or(rest.len());
+                rest[..end].trim_end_matches('-')
+            })
+            .filter(|name| !name.is_empty() && !KEYWORDS.contains(name) && !names.iter().any(|n| n == name))
+            .collect();
+        unknown.dedup();
+        assert!(unknown.is_empty(), "{file}: нет в библиотеке {unknown:?} — поправьте правила");
+    }
+}
+
+/// Оболочки (Claude Code, opencode) подставляют в текст навыка аргументы
+/// вызова: `$ARGUMENTS` — просьба пользователя (без неё модель не знает
+/// задачи), `$0`, `$1`… — отдельные слова. Поэтому `$ARGUMENTS` в навыке
+/// есть, а `$` с цифрой (формула `$0$`) — нет: её испортит подстановка.
+#[test]
+fn skill_gets_arguments_and_has_no_positional_placeholders() {
+    let skill = std::fs::read_to_string(repo().join("skills/new-note/SKILL.md")).unwrap();
+    assert!(skill.contains("$ARGUMENTS"), "SKILL.md: нет $ARGUMENTS — просьба пользователя не попадёт к модели");
+    let bad: Vec<&str> =
+        skill.lines().filter(|l| l.split('$').skip(1).any(|r| r.starts_with(|c: char| c.is_ascii_digit()))).collect();
+    assert!(bad.is_empty(), "SKILL.md: «$цифра» заменится аргументом вызова: {bad:?}");
+}
+
+/// Примеры навыка `/new-note` (`skills/new-note/examples/`) показывают
+/// каждое публичное имя: слабая модель пишет по образцу, а не по описанию.
+/// Что они собираются без ошибок — шаг `new-note` в `tools/check.sh`.
+#[test]
+fn skill_examples_use_every_public_name() {
+    // Своя тема — правка библиотеки, а не заметки: в примерах её нет.
+    const NOT_FOR_NOTES: [&str; 2] = ["customize", "themes"];
+    let mut code = String::new();
+    let mut dirs = vec![repo().join("skills/new-note/examples")];
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().is_some_and(|e| e == "typ") {
+                code += &std::fs::read_to_string(path).unwrap();
+            }
+        }
+    }
+    let missing: Vec<String> = public_names()
+        .into_iter()
+        .filter(|n| is_public(n) && !NOT_FOR_NOTES.contains(&n.as_str()) && !has_word(&code, n))
         .collect();
-    unknown.dedup();
-    assert!(unknown.is_empty(), "docs/writing.md: нет в библиотеке {unknown:?} — поправьте правила");
+    assert!(missing.is_empty(), "нет в примерах навыка skills/new-note/examples: {missing:?}");
 }
 
 /// Куски кода Markdown: блоки ``` … ``` и `…` в строке.

@@ -38,6 +38,11 @@ ts-rs = { workspace = true, optional = true }
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 rustix = { version = "1", features = ["process", "thread"] }
 
+# Корзина системы для удалённых заметок (`storage.rs`); на телефоне и в
+# браузере её нет.
+[target.'cfg(not(any(target_os = "android", target_os = "ios", target_family = "wasm")))'.dependencies]
+trash.workspace = true
+
 [build-dependencies]
 # Метка кода отрисовки для кэша на диске (build.rs).
 siphasher.workspace = true

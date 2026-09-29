@@ -11,6 +11,7 @@
   import { tagHref } from "../lib/ids";
   import { mountLive } from "../lib/live";
   import { ui } from "../lib/ui.svelte";
+  import { inVault } from "../lib/vault";
   import Loading from "./Loading.svelte";
 
   let content: HTMLDivElement | undefined = $state();
@@ -56,6 +57,7 @@
     el.innerHTML = r ? r.styles + r.body : "";
     restoreDetails(el, open);
     linkTags(el);
+    linkVault(el);
     unmountLive = mountLive(el, (id, newTab) => router.open(id, null, { newTab }));
     ui.book = page.book;
     ui.chapter = page.book?.chapter ?? 0;
@@ -72,6 +74,15 @@
       const tag = li.textContent?.trim();
       if (tag) li.replaceChildren(Object.assign(document.createElement("a"), { href: tagHref(tag), textContent: tag }));
     }
+  }
+
+  /**
+   * Ссылки на заметки ядро ставит без хранилища (`/n/…`: HTML один на все
+   * адреса) — в показанное хранилище: «открыть в новой вкладке» и адрес
+   * ссылки ведут туда же, куда клик.
+   */
+  function linkVault(root: Element) {
+    for (const a of root.querySelectorAll<HTMLAnchorElement>('a[href^="/n/"]')) a.setAttribute("href", inVault(a.getAttribute("href")!));
   }
 
   /** Прокрутить к разделу; раздел в другой главе книги — загрузить её (прокрутит сама). */

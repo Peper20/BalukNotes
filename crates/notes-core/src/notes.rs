@@ -32,7 +32,7 @@ use crate::pages::Pages;
 use crate::pipeline::TypstPipeline;
 use crate::storage::Storage;
 use crate::themes::ThemeSet;
-use crate::vault::{Entry, NoteId, Vault};
+use crate::vault::{Entry, NoteId, NoteKind, Vault};
 use crate::vault_data::VaultData;
 use crate::vault_graph::{GraphData, GraphFilter, GraphLayout, Layouts};
 use crate::version::Versions;
@@ -55,6 +55,9 @@ pub struct NotesConfig {
     /// Каталог кэша на диске (`<данные>/cache`, `None` — только в памяти):
     /// `pages/` — отрисовка заметок, `fonts/` — части шрифтов для браузера.
     pub cache: Option<PathBuf>,
+    /// Куда уходят удалённые заметки ([`Notes::delete`]): `None` — корзина
+    /// системы (там их можно восстановить), каталог — в него (тесты).
+    pub trash: Option<PathBuf>,
 }
 
 #[derive(Debug)]
@@ -73,7 +76,10 @@ pub struct Notes {
 impl Notes {
     /// Хранилище — каталог `config.vault`.
     pub fn open(config: &NotesConfig) -> Result<Self> {
-        Self::with_vault(Vault::open(&config.vault)?, config)
+        let root = &config.vault;
+        let storage = crate::storage::DirStorage::open(root).map_err(|e| Error::io(root, e))?;
+        let storage = storage.with_trash(config.trash.clone());
+        Self::with_vault(Vault::new(Arc::new(storage)), config)
     }
 
     /// Хранилище — любой [`Storage`] (`config.vault` не используется).
@@ -192,6 +198,21 @@ impl Notes {
             return Err(Error::Setting { key: "тема".into(), reason: format!("нет темы «{theme}»") });
         }
         Ok(self.typst.compiler().compile_pdf(&entry.main, theme))
+    }
+
+    /// Удалить заметку или книгу (папку целиком) — в корзину
+    /// ([`Storage::trash`]). Список заметок и индекс ссылок обновляются
+    /// сразу, не дожидаясь наблюдателя.
+    pub fn delete(&self, id: &NoteId) -> Result<()> {
+        let entry = self.vault().entry(id)?;
+        let path = match entry.kind {
+            NoteKind::Note => entry.main.to_string_lossy().replace('\\', "/"),
+            NoteKind::Book => id.as_str().to_owned(),
+        };
+        self.vault().storage().trash(&path).map_err(|e| self.vault().io_error(&path, e))?;
+        tracing::info!("удалено в корзину: {}", self.vault().storage().display(&path).display());
+        self.changes.local(vec![path]);
+        Ok(())
     }
 
     // ── Прогрев (см. crate::warm) ─────────────────────────────────────────

@@ -6,11 +6,30 @@
 use notes_core::diag::Diagnostic;
 use notes_core::graph::Backlink;
 use notes_core::settings::Schema;
-use notes_core::{NoteId, NoteKind};
+use notes_core::{NoteId, NoteKind, VaultName};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-/// Элемент `GET /api/notes`.
+/// `GET /api/vaults`, ответ `POST /api/vaults`. Хранилища по умолчанию нет:
+/// какое открыть, решает клиент (открытое последним) или пользователь.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct VaultsResponse {
+    /// Все хранилища по алфавиту (может не быть ни одного).
+    pub vaults: Vec<VaultName>,
+    /// Можно ли создать новое (нельзя, если сервер открыт на одном
+    /// хранилище: `notes serve --vault <путь>`).
+    pub can_create: bool,
+}
+
+/// `POST /api/vaults`: новое пустое хранилище.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct CreateVaultRequest {
+    pub name: String,
+}
+
+/// Элемент `GET /api/vaults/{хранилище}/notes`.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct NoteListItem {
@@ -25,7 +44,7 @@ pub struct NoteListItem {
     pub tags: Vec<String>,
 }
 
-/// `POST /api/warm`: что собрать заранее первым (заметки во вкладках,
+/// `POST /api/vaults/{хранилище}/warm`: что собрать заранее первым (заметки во вкладках,
 /// недавние). Неизвестные и неверные пути пропускаются.
 #[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -33,7 +52,7 @@ pub struct WarmRequest {
     pub ids: Vec<String>,
 }
 
-/// `GET /api/version/{id}`.
+/// `GET /api/vaults/{хранилище}/version/{id}`.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct VersionResponse {
@@ -49,7 +68,7 @@ pub struct OutgoingLink {
     pub exists: bool,
 }
 
-/// `GET /api/links/{id}`.
+/// `GET /api/vaults/{хранилище}/links/{id}`.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct LinksResponse {
@@ -75,7 +94,7 @@ pub struct ErrorResponse {
     pub errors: Vec<Diagnostic>,
 }
 
-/// Событие `change` потока `GET /api/events`: файлы хранилища изменились
+/// Событие `change` потока `GET /api/vaults/{хранилище}/events`: файлы хранилища изменились
 /// (пачкой, см. `notes_core::watch`) — клиенту пора сверить версию заметки.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -87,7 +106,7 @@ pub struct ChangeEvent {
     pub paths: Vec<String>,
 }
 
-/// Первое событие `hello` потока `GET /api/events`.
+/// Первое событие `hello` потока `GET /api/vaults/{хранилище}/events`.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct EventsHello {

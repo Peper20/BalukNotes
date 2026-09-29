@@ -1,5 +1,5 @@
-//! Заметки: список, страница (книга — по главам), версия, ссылки, превью,
-//! PDF и подсказки прогреву.
+//! Заметки хранилища: список, страница (книга — по главам), версия, ссылки,
+//! превью, PDF, удаление и подсказки прогреву.
 
 use std::sync::Arc;
 
@@ -18,17 +18,17 @@ use crate::error::{ApiResult, blocking};
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
-        .route("/api/notes", get(list_notes))
-        .route("/api/notes/{*id}", get(note))
-        .route("/api/version/{*id}", get(version))
-        .route("/api/links/{*id}", get(links))
-        .route("/api/preview/{*id}", get(preview))
-        .route("/api/pdf/{*id}", get(pdf))
-        .route("/api/warm", post(warm))
+        .route("/api/vaults/{vault}/notes", get(list_notes))
+        .route("/api/vaults/{vault}/notes/{*id}", get(note).delete(delete))
+        .route("/api/vaults/{vault}/version/{*id}", get(version))
+        .route("/api/vaults/{vault}/links/{*id}", get(links))
+        .route("/api/vaults/{vault}/preview/{*id}", get(preview))
+        .route("/api/vaults/{vault}/pdf/{*id}", get(pdf))
+        .route("/api/vaults/{vault}/warm", post(warm))
 }
 
-async fn list_notes(State(s): State<AppState>) -> ApiResult<Json<Vec<NoteListItem>>> {
-    let notes = s.notes.clone();
+async fn list_notes(State(s): State<AppState>, Path(vault): Path<String>) -> ApiResult<Json<Vec<NoteListItem>>> {
+    let notes = s.vault(vault).await?.notes.clone();
     let list = blocking(move || {
         let index = notes.index()?;
         Ok(index
@@ -54,11 +54,11 @@ struct PreviewQuery {
 
 async fn preview(
     State(s): State<AppState>,
-    Path(id): Path<String>,
+    Path((vault, id)): Path<(String, String)>,
     Query(q): Query<PreviewQuery>,
 ) -> ApiResult<Json<Preview>> {
     let id = NoteId::new(id)?;
-    let notes = s.notes.clone();
+    let notes = s.vault(vault).await?.notes.clone();
     Ok(Json(blocking(move || notes.preview(&id, q.anchor.as_deref())).await?))
 }
 
@@ -70,9 +70,13 @@ struct NoteQuery {
 
 /// Заметка. С `chapter` или `anchor` книга приходит одной главой (с
 /// оглавлением книги в `book`); не книга — целиком, как без них.
-async fn note(State(s): State<AppState>, Path(id): Path<String>, Query(q): Query<NoteQuery>) -> ApiResult<Response> {
+async fn note(
+    State(s): State<AppState>,
+    Path((vault, id)): Path<(String, String)>,
+    Query(q): Query<NoteQuery>,
+) -> ApiResult<Response> {
     let id = NoteId::new(id)?;
-    let (notes, opts) = (s.notes.clone(), s.settings.figure_options());
+    let (notes, opts) = (s.vault(vault).await?.notes.clone(), s.settings.figure_options());
     let by_chapter = q.chapter.is_some() || q.anchor.is_some();
     let page = blocking(move || {
         let page = notes.page(&id, opts)?;
@@ -83,16 +87,27 @@ async fn note(State(s): State<AppState>, Path(id): Path<String>, Query(q): Query
     Ok(Json(page).into_response())
 }
 
-async fn version(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<VersionResponse>> {
+/// Удалить заметку или книгу (папку целиком) — в корзину.
+async fn delete(State(s): State<AppState>, Path((vault, id)): Path<(String, String)>) -> ApiResult<StatusCode> {
     let id = NoteId::new(id)?;
-    let (notes, opts) = (s.notes.clone(), s.settings.figure_options());
+    let notes = s.vault(vault).await?.notes.clone();
+    blocking(move || notes.delete(&id)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn version(
+    State(s): State<AppState>,
+    Path((vault, id)): Path<(String, String)>,
+) -> ApiResult<Json<VersionResponse>> {
+    let id = NoteId::new(id)?;
+    let (notes, opts) = (s.vault(vault).await?.notes.clone(), s.settings.figure_options());
     let version = blocking(move || notes.version(&id, opts)).await?;
     Ok(Json(VersionResponse { version }))
 }
 
-async fn links(State(s): State<AppState>, Path(id): Path<String>) -> ApiResult<Json<LinksResponse>> {
+async fn links(State(s): State<AppState>, Path((vault, id)): Path<(String, String)>) -> ApiResult<Json<LinksResponse>> {
     let id = NoteId::new(id)?;
-    let notes = s.notes.clone();
+    let notes = s.vault(vault).await?.notes.clone();
     blocking(move || {
         notes.vault().entry(&id)?;
         let snap = notes.index()?;
@@ -115,9 +130,13 @@ struct PdfQuery {
     theme: Option<String>,
 }
 
-async fn pdf(State(s): State<AppState>, Path(id): Path<String>, Query(q): Query<PdfQuery>) -> ApiResult<Response> {
+async fn pdf(
+    State(s): State<AppState>,
+    Path((vault, id)): Path<(String, String)>,
+    Query(q): Query<PdfQuery>,
+) -> ApiResult<Response> {
     let id = NoteId::new(id)?;
-    let notes = s.notes.clone();
+    let notes = s.vault(vault).await?.notes.clone();
     let theme = q.theme.unwrap_or_else(|| notes.themes().names().first().cloned().unwrap_or_default());
     let name = id.name().to_owned();
     let result = blocking(move || notes.pdf(&id, &theme)).await?;
@@ -146,7 +165,14 @@ fn percent(s: &str) -> String {
         .collect()
 }
 
-async fn warm(State(s): State<AppState>, Json(req): Json<WarmRequest>) -> StatusCode {
-    s.notes.hint_warm(req.ids.iter().filter_map(|id| NoteId::new(id).ok()).collect());
-    StatusCode::NO_CONTENT
+/// Подсказка прогреву; хранилище становится активным (прогревается оно).
+async fn warm(
+    State(s): State<AppState>,
+    Path(vault): Path<String>,
+    Json(req): Json<WarmRequest>,
+) -> ApiResult<StatusCode> {
+    let vault = s.vault(vault).await?;
+    s.vaults.activate(&vault.name);
+    vault.notes.hint_warm(req.ids.iter().filter_map(|id| NoteId::new(id).ok()).collect());
+    Ok(StatusCode::NO_CONTENT)
 }

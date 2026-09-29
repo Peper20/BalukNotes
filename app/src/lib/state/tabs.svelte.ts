@@ -1,7 +1,8 @@
 // Вкладки клиента (запоминаются). Переходы между ними — router.
 
+import { homeHref } from "../ids";
 import { load, save } from "../storage";
-import { clampActive, closeAt, openAfter, type Tab, type TabList } from "../tabs";
+import { clampActive, closeAt, dropTabs, openAfter, type Tab, type TabList } from "../tabs";
 
 class Tabs {
   list = $state<Tab[]>(load<{ tabs: Tab[] }>("k-tabs", { tabs: [] }).tabs);
@@ -9,7 +10,7 @@ class Tabs {
 
   /** После загрузки: хотя бы одна вкладка, активная — в пределах. */
   restore(): void {
-    if (!this.list.length) this.list = [{ url: "/" }];
+    if (!this.list.length) this.list = [{ url: homeHref() }];
     this.active = clampActive(this.active, this.list.length);
   }
 
@@ -29,6 +30,14 @@ class Tabs {
     const next = closeAt(this.#state(), i);
     if (next) this.#set(next);
     return next;
+  }
+
+  /** Убрать вкладки, для которых `drop` — истина; `true` — убрана активная. */
+  drop(drop: (tab: Tab) => boolean): boolean {
+    const next = dropTabs(this.#state(), drop, homeHref());
+    this.#set(next);
+    this.save();
+    return next.activeDropped;
   }
 
   save(): void {

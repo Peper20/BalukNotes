@@ -1,7 +1,7 @@
 //! Поиск по тексту всех заметок (`?q=&limit=`) или одной (`&note=<путь>` —
 //! «в этой книге»: все разделы по порядку текста).
 
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::routing::get;
 use axum::{Json, Router};
 use notes_core::NoteId;
@@ -11,7 +11,7 @@ use crate::AppState;
 use crate::error::{ApiResult, blocking};
 
 pub(crate) fn routes() -> Router<AppState> {
-    Router::new().route("/api/search", get(search))
+    Router::new().route("/api/vaults/{vault}/search", get(search))
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -21,8 +21,12 @@ struct SearchQuery {
     note: Option<String>,
 }
 
-async fn search(State(s): State<AppState>, Query(q): Query<SearchQuery>) -> ApiResult<Json<Vec<SearchHit>>> {
-    let notes = s.notes.clone();
+async fn search(
+    State(s): State<AppState>,
+    Path(vault): Path<String>,
+    Query(q): Query<SearchQuery>,
+) -> ApiResult<Json<Vec<SearchHit>>> {
+    let notes = s.vault(vault).await?.notes.clone();
     let limit = q.limit.unwrap_or(30).min(200);
     let note = q.note.as_deref().map(NoteId::new).transpose()?;
     Ok(Json(

@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { encodeId, graphHref, hashAnchor, noteHref, parseRoute, splitId } from "./ids";
+import { afterEach, describe, expect, it } from "vitest";
+import { encodeId, graphHref, hashAnchor, homeHref, isAppPath, noteHref, parseRoute, splitId, tagHref } from "./ids";
+import { setVault } from "./vault";
 
 describe("адреса заметок", () => {
   it("кодирует сегменты, оставляя /", () => {
@@ -31,5 +32,35 @@ describe("адреса заметок", () => {
     expect(hashAnchor("#")).toBeNull();
     expect(splitId("Сеть/SSH")).toEqual({ name: "SSH", folder: "Сеть" });
     expect(splitId("Начало")).toEqual({ name: "Начало", folder: "" });
+  });
+});
+
+describe("адреса в хранилище", () => {
+  afterEach(() => setVault(null));
+
+  it("начинаются с хранилища и читаются обратно", () => {
+    setVault("Учёба");
+    const base = `/v/${encodeURIComponent("Учёба")}`;
+    expect(noteHref("A", "x")).toBe(`${base}/n/A#x`);
+    expect(tagHref("сеть")).toBe(`${base}/tags/${encodeURIComponent("сеть")}`);
+    expect(graphHref()).toBe(`${base}/graph`);
+    expect(graphHref("A")).toBe(`${base}/graph?around=A`);
+    expect(homeHref()).toBe(`${base}/`);
+    expect(parseRoute(new URL(noteHref("Сеть/SSH"), "http://x").pathname)).toEqual({ kind: "note", id: "Сеть/SSH" });
+    expect(parseRoute(`${base}/`)).toEqual({ kind: "home" });
+    expect(parseRoute(base)).toEqual({ kind: "home" });
+    expect(parseRoute(`${base}/graph`, "?around=A")).toEqual({ kind: "graph", around: "A", depth: 1 });
+    expect(parseRoute("/n/A")).toEqual({ kind: "note", id: "A" });
+  });
+
+  it("свои адреса — клиенту, чужого хранилища — нет", () => {
+    setVault("Учёба");
+    const base = `/v/${encodeURIComponent("Учёба")}`;
+    for (const own of [`${base}/`, base, `${base}/n/A`, `${base}/tags`, `${base}/graph`, "/n/A", "/", "/graph"]) {
+      expect(isAppPath(own), own).toBe(true);
+    }
+    for (const other of ["/v/Другое/n/A", "/v/Другое/", `${base}x/n/A`, "/assets/x.css", "/api/notes"]) {
+      expect(isAppPath(other), other).toBe(false);
+    }
   });
 });

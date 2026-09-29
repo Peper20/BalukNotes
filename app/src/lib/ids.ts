@@ -1,11 +1,17 @@
-// Адреса заметок в клиенте: /n/<путь>#<якорь>.
+// Адреса заметок в клиенте: /v/<хранилище>/n/<путь>#<якорь> (хранилище —
+// ./vault.ts; без него — /n/…, так ссылки ставит ядро в HTML заметки).
+
+import { splitVaultPath, vaultBase, vaultHome } from "./vault";
 
 /** Путь заметки в URL: сегменты кодируются, «/» остаётся. */
 export const encodeId = (id: string): string => id.split("/").map(encodeURIComponent).join("/");
 
 /** Адрес заметки (и раздела в ней). */
 export const noteHref = (id: string, anchor?: string | null): string =>
-  `/n/${encodeId(id)}${anchor ? `#${encodeURIComponent(anchor)}` : ""}`;
+  `${vaultBase()}/n/${encodeId(id)}${anchor ? `#${encodeURIComponent(anchor)}` : ""}`;
+
+/** Главная показанного хранилища. */
+export const homeHref = (): string => vaultHome();
 
 export type Route =
   | { kind: "home" }
@@ -14,14 +20,33 @@ export type Route =
   | { kind: "graph"; around: string | null; depth: number };
 
 /** Адрес страницы тегов (или одного тега). */
-export const tagHref = (tag?: string | null): string => (tag ? `/tags/${encodeURIComponent(tag)}` : "/tags");
+export const tagHref = (tag?: string | null): string => `${vaultBase()}${tag ? `/tags/${encodeURIComponent(tag)}` : "/tags"}`;
 
 /** Адрес графа: весь или соседи заметки на `depth` шагов. */
 export const graphHref = (around?: string | null, depth = 1): string =>
-  around ? `/graph?around=${encodeURIComponent(around)}${depth === 1 ? "" : `&depth=${depth}`}` : "/graph";
+  `${vaultBase()}/graph${around ? `?around=${encodeURIComponent(around)}${depth === 1 ? "" : `&depth=${depth}`}` : ""}`;
 
-/** Маршрут по адресу страницы (`search` — для графа). Неверное кодирование — главная. */
+/**
+ * Адрес клиента (заметка, теги, граф, главная) — показанного хранилища или
+ * без хранилища (ссылки ядра, прежние адреса); адрес другого хранилища —
+ * нет: туда — переходом с перезагрузкой.
+ */
+export function isAppPath(pathname: string): boolean {
+  const own = vaultBase();
+  const split = splitVaultPath(pathname);
+  if (split) {
+    if (!own || pathname.slice(0, own.length + 1) !== `${own}/` && pathname !== own) return false;
+    pathname = split.rest;
+  }
+  return pathname === "/" || pathname.startsWith("/n/") || pathname === "/tags" || pathname.startsWith("/tags/") || pathname === "/graph";
+}
+
+/**
+ * Маршрут по адресу страницы (`search` — для графа): хранилище в начале
+ * адреса пропускается. Неверное кодирование — главная.
+ */
 export function parseRoute(pathname: string, search = ""): Route {
+  pathname = splitVaultPath(pathname)?.rest ?? pathname;
   let path: string;
   try {
     path = decodeURIComponent(pathname);

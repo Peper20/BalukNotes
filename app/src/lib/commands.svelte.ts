@@ -1,8 +1,9 @@
 // Команды приложения — одно место для палитры (Ctrl+K), горячих клавиш и
 // справки (?). Новая возможность интерфейса = команда здесь.
 
-import { reader, router, settings, tabs, updates } from "./state";
-import { graphHref, noteHref, tagHref } from "./ids";
+import { api } from "./api";
+import { notes, places, reader, router, settings, tabs, updates } from "./state";
+import { graphHref, homeHref, noteHref, parseRoute, splitId, tagHref } from "./ids";
 import { combo, type Combo } from "./keys";
 import { mobile, ui } from "./ui.svelte";
 
@@ -71,14 +72,14 @@ export function commands(): Command[] {
       run: () => ui.openPalette("", router.currentId),
     },
     { id: "commands", group: "Переход", title: "Команды", keys: keys("Ctrl+KeyK"), run: () => ui.openPalette(">") },
-    { id: "home", group: "Переход", title: "Главная: граф и все заметки", keys: keys("KeyH"), run: () => router.go("/") },
+    { id: "home", group: "Переход", title: "Главная: граф и все заметки", keys: keys("KeyH"), run: () => router.go(homeHref()) },
     { id: "tags", group: "Переход", title: "Теги", run: () => router.go(tagHref()) },
     { id: "graph", group: "Переход", title: "Граф заметок", keys: keys("KeyG"), run: () => router.go(graphHref()) },
     { id: "graph-around", group: "Переход", title: "Граф: соседи заметки", available: () => router.currentId != null, run: () => router.go(graphHref(router.currentId)) },
     { id: "prev-chapter", group: "Переход", title: "Предыдущая глава", keys: keys("BracketLeft"), available: hasBook, run: () => chapter(-1) },
     { id: "next-chapter", group: "Переход", title: "Следующая глава", keys: keys("BracketRight"), available: hasBook, run: () => chapter(1) },
 
-    { id: "new-tab", group: "Вкладки", title: "Новая вкладка", keys: keys("Alt+KeyT"), run: () => router.go("/", { newTab: true }) },
+    { id: "new-tab", group: "Вкладки", title: "Новая вкладка", keys: keys("Alt+KeyT"), run: () => router.go(homeHref(), { newTab: true }) },
     { id: "close-tab", group: "Вкладки", title: "Закрыть вкладку", keys: keys("Alt+KeyW"), run: () => router.closeTab(tabs.active) },
     { id: "next-tab", group: "Вкладки", title: "Следующая вкладка", keys: keys("Alt+BracketRight"), run: () => router.switchTab((tabs.active + 1) % tabs.list.length) },
     { id: "prev-tab", group: "Вкладки", title: "Предыдущая вкладка", keys: keys("Alt+BracketLeft"), run: () => router.switchTab((tabs.active - 1 + tabs.list.length) % tabs.list.length) },
@@ -100,6 +101,7 @@ export function commands(): Command[] {
     { id: "refresh", group: "Заметка", title: "Пересобрать заметку", keys: keys("KeyR"), available: () => router.currentId != null, run: () => void updates.check({ force: true }) },
     { id: "pdf", group: "Заметка", title: "PDF в текущей теме", available: hasNote, run: () => { const url = reader.pdfUrl(); if (url) open(url, "_blank"); } },
     { id: "copy-link", group: "Заметка", title: "Скопировать ссылку #see(…) на заметку", available: () => router.currentId != null, run: () => void copyLink() },
+    { id: "delete-note", group: "Заметка", title: "Удалить заметку…", available: () => router.currentNote != null, run: () => (ui.deleting = router.currentId) },
     { id: "backlinks", group: "Заметка", title: "Кто ссылается сюда", available: hasNote, run: () => document.getElementById("backlinks")?.scrollIntoView({ behavior: "smooth" }) },
 
     { id: "settings", group: "Приложение", title: "Настройки", keys: keys("Ctrl+Comma"), run: () => (ui.settingsOpen = true) },
@@ -109,6 +111,26 @@ export function commands(): Command[] {
     list.push({ id: `tab-${i}`, group: "Вкладки", title: `Вкладка ${i}`, keys: keys(`Alt+Digit${i}`), available: () => tabs.list.length >= i, run: () => router.switchTab(i - 1) });
   }
   return list;
+}
+
+/**
+ * Удалить заметку (книгу — папкой) в корзину системы: закрыть её вкладки,
+ * забыть место чтения, обновить список; была открыта — показать соседнюю
+ * вкладку (или главную).
+ */
+export async function deleteNote(id: string): Promise<void> {
+  await api.deleteNote(id);
+  const isIt = (url: string) => {
+    const route = parseRoute(new URL(url, location.href).pathname);
+    return route.kind === "note" && route.id === id;
+  };
+  if (tabs.drop((t) => isIt(t.url))) {
+    history.replaceState(null, "", tabs.list[tabs.active]!.url);
+    router.sync();
+  }
+  places.forget(id);
+  await notes.refresh();
+  reader.status = `в корзине: ${splitId(id).name}`;
 }
 
 /** Открыть заметку из палитры или списка: Ctrl — в новой вкладке. */

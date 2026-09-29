@@ -23,10 +23,10 @@ async fn get_settings(State(s): State<AppState>) -> Json<SettingsResponse> {
 }
 
 async fn put_settings(State(s): State<AppState>, Json(patch): Json<Map<String, Value>>) -> ApiResult<Json<Value>> {
-    let (settings, notes) = (s.settings.clone(), s.notes.clone());
+    let (settings, vaults) = (s.settings.clone(), s.vaults.clone());
     let values = blocking(move || {
         let values = settings.update(&patch)?;
-        notes.apply_device(&settings.device());
+        vaults.apply_device();
         Ok(values)
     })
     .await?;
@@ -34,9 +34,9 @@ async fn put_settings(State(s): State<AppState>, Json(patch): Json<Map<String, V
 }
 
 async fn themes(State(s): State<AppState>) -> Json<Vec<Theme>> {
-    Json(s.notes.themes().themes().to_vec())
+    Json(s.vaults.library().themes().themes().to_vec())
 }
 
 async fn themes_css(State(s): State<AppState>) -> axum::response::Response {
-    css(s.notes.themes().css().to_owned())
+    css(s.vaults.library().themes().css().to_owned())
 }

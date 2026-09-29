@@ -4,7 +4,7 @@
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { VAULT, ready } from "./helpers";
+import { VAULT, ready, vaultUrl } from "./helpers";
 
 /** Пересборка заметки не быстрее первой (десятки рисунков в отладочной сборке). */
 const BUILD = { timeout: 60_000 };
@@ -14,7 +14,7 @@ const touch = (file: string) => appendFileSync(join(VAULT, file), `\n// e2e: п�
 
 test("переход во время сборки: не показывать чужую заметку и не прыгать назад", async ({ page }) => {
   touch("демо/визуализация.typ");
-  await page.goto("/");
+  await page.goto(vaultUrl("/"));
   await ready(page);
   const tree = page.locator("#tree");
   const note = page.locator("#note");
@@ -38,7 +38,7 @@ test("переход во время сборки: не показывать ч�
 
 test("заглушка «собирается» на месте новой заметки", async ({ page }) => {
   touch("ассессмент/01-тесты.typ");
-  await page.goto("/");
+  await page.goto(vaultUrl("/"));
   await ready(page);
   // Большая глава ещё не собиралась: сначала заглушка с её именем.
   await page.locator("#tree").getByRole("link", { name: "01-тесты" }).click();

@@ -37,8 +37,11 @@ export function zoomAt(v: View, factor: number, px: number, py: number): View {
   return { x: px - (px - v.x) * f, y: py - (py - v.y) * f, k };
 }
 
-/** Вписать прямоугольник мира [x0, y0, x1, y1] в экран w×h с полями `pad`; крупнее 1:1.6 — не увеличивать. */
+/** Крупнее не вписывать: граф из пары заметок не растягивается во весь экран. */
+export const FIT_ZOOM = 1.6;
+
+/** Вписать прямоугольник мира [x0, y0, x1, y1] в экран w×h с полями `pad`; крупнее `FIT_ZOOM` — не увеличивать. */
 export function fitView([x0, y0, x1, y1]: [number, number, number, number], w: number, h: number, pad = 24): View {
-  const k = clamp(Math.min((w - 2 * pad) / Math.max(x1 - x0, 1), (h - 2 * pad) / Math.max(y1 - y0, 1)), MIN_ZOOM, 1.6);
+  const k = clamp(Math.min((w - 2 * pad) / Math.max(x1 - x0, 1), (h - 2 * pad) / Math.max(y1 - y0, 1)), MIN_ZOOM, FIT_ZOOM);
   return { k, x: (w - (x1 - x0) * k) / 2 - x0 * k, y: (h - (y1 - y0) * k) / 2 - y0 * k };
 }

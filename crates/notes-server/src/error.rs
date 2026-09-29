@@ -20,8 +20,9 @@ impl From<notes_core::Error> for ApiError {
     fn from(e: notes_core::Error) -> Self {
         use notes_core::Error as E;
         let code = match e {
-            E::NotFound(_) => StatusCode::NOT_FOUND,
-            E::InvalidId { .. } | E::Setting { .. } => StatusCode::BAD_REQUEST,
+            E::NotFound(_) | E::VaultNotFound { .. } => StatusCode::NOT_FOUND,
+            E::InvalidId { .. } | E::InvalidVault { .. } | E::Setting { .. } => StatusCode::BAD_REQUEST,
+            E::VaultExists(_) => StatusCode::CONFLICT,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         if code == StatusCode::INTERNAL_SERVER_ERROR {

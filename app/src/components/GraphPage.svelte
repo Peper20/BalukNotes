@@ -12,6 +12,7 @@
   import { notes, router } from "../lib/state";
   import { matches } from "../lib/graph-view";
   import { graphHref, noteHref, splitId } from "../lib/ids";
+  import { plural } from "../lib/plural";
   import { load, save } from "../lib/storage";
   import Graph from "./Graph.svelte";
   import GraphLegend from "./GraphLegend.svelte";
@@ -83,11 +84,6 @@
   });
 
   const centerNote = $derived(route.around ? notes.all.find((n) => n.id === route.around) : null);
-  const plural = (n: number, one: string, few: string, many: string) => {
-    const m10 = n % 10;
-    const m100 = n % 100;
-    return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
-  };
 </script>
 
 <main class="graph-page" id="note" bind:this={page} style:height="calc(100dvh - {top}px)">
@@ -99,7 +95,7 @@
         <select aria-label="Глубина" value={route.depth} onchange={(e) => router.go(graphHref(route.around, Number(e.currentTarget.value)), { replace: true })}>
           {#each [1, 2, 3] as d (d)}<option value={d}>{d} {plural(d, "шаг", "шага", "шагов")}</option>{/each}
         </select>
-        <a class="graph-all" href="/graph">весь граф</a>
+        <a class="graph-all" href={graphHref()}>весь граф</a>
       </span>
     {:else}
       <span class="graph-title">Граф заметок</span>

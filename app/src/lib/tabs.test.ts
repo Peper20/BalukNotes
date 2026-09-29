@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { clampActive, closeAt, cycle, openAfter } from "./tabs";
+import { clampActive, closeAt, cycle, dropTabs, openAfter } from "./tabs";
 
 const list = (...urls: string[]) => urls.map((url) => ({ url }));
 
@@ -23,4 +23,15 @@ it("по кругу и в пределах", () => {
   expect(cycle(0, 3, -1)).toBe(2);
   expect(clampActive(7, 3)).toBe(2);
   expect(clampActive(-1, 3)).toBe(0);
+});
+
+it("убрать вкладки удалённой заметки", () => {
+  const isA = (t: { url: string }) => t.url.startsWith("/a");
+  // Активная осталась — она же активная.
+  expect(dropTabs({ tabs: list("/a", "/b", "/a#x", "/c"), active: 3 }, isA, "/")).toEqual({ tabs: list("/b", "/c"), active: 1, activeDropped: false });
+  // Убрали активную — ближайшая слева; слева никого — справа.
+  expect(dropTabs({ tabs: list("/b", "/a", "/c"), active: 1 }, isA, "/")).toEqual({ tabs: list("/b", "/c"), active: 0, activeDropped: true });
+  expect(dropTabs({ tabs: list("/a", "/c"), active: 0 }, isA, "/")).toEqual({ tabs: list("/c"), active: 0, activeDropped: true });
+  // Не осталось ни одной — одна новая.
+  expect(dropTabs({ tabs: list("/a", "/a#y"), active: 1 }, isA, "/home")).toEqual({ tabs: list("/home"), active: 0, activeDropped: true });
 });

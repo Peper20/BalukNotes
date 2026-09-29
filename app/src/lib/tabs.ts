@@ -31,3 +31,19 @@ export function closeAt({ tabs, active }: TabList, i: number): (TabList & { wasA
 
 /** Соседняя вкладка по кругу: `delta` = ±1. */
 export const cycle = (active: number, count: number, delta: number): number => (active + delta + count) % count;
+
+/**
+ * Убрать вкладки, для которых `drop` — истина (удалённая заметка): активной
+ * остаётся та же вкладка, а если убрали её — ближайшая слева оставшаяся
+ * (нет — справа). Не осталось ни одной — одна вкладка `fallback`.
+ */
+export function dropTabs({ tabs, active }: TabList, drop: (tab: Tab) => boolean, fallback: string): TabList & { activeDropped: boolean } {
+  const keep = tabs.map((t) => !drop(t));
+  const rest = tabs.filter((_, i) => keep[i]);
+  if (!rest.length) return { tabs: [{ url: fallback }], active: 0, activeDropped: true };
+  const activeDropped = !keep[active];
+  // Оставшиеся левее активной (и она сама, если осталась): последняя из них
+  // — новая активная; слева никого — первая справа.
+  const left = keep.slice(0, active + 1).filter(Boolean).length;
+  return { tabs: rest, active: clampActive(left - 1, rest.length), activeDropped };
+}

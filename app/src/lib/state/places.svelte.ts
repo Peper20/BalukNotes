@@ -21,6 +21,15 @@ class Places {
     save("k-places", this.#places);
   }
 
+  /** Заметку удалили: не помнить ни места, ни в недавних. */
+  forget(id: string): void {
+    const { [id]: _, ...rest } = this.#places;
+    this.#places = rest;
+    this.recent = this.recent.filter((r) => r !== id);
+    save("k-places", this.#places);
+    save("k-recent", this.recent);
+  }
+
   visited(id: string): void {
     this.recent = pushRecent(this.recent, id, MAX_RECENT);
     save("k-recent", this.recent);

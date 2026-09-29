@@ -73,6 +73,14 @@ pub trait Storage: Send + Sync + fmt::Debug {
         Err(io::Error::new(io::ErrorKind::Unsupported, "хранилище только для чтения"))
     }
 
+    /// Убрать файл или каталог (книгу) в корзину — туда, откуда его можно
+    /// вернуть. Нет такого — `NotFound`; хранилище только для чтения —
+    /// `Unsupported` (по умолчанию).
+    fn trash(&self, path: &str) -> io::Result<()> {
+        let _ = path;
+        Err(io::Error::new(io::ErrorKind::Unsupported, "хранилище только для чтения"))
+    }
+
     /// Сообщать об изменениях файлов в `sink`. `Ok(None)` — хранилище так
     /// не умеет (по умолчанию).
     fn watch(&self, sink: ChangeSink) -> io::Result<Option<WatchGuard>> {
@@ -95,6 +103,8 @@ pub fn is_hidden(name: &str) -> bool {
 #[derive(Debug, Clone)]
 pub struct DirStorage {
     root: PathBuf,
+    /// Корзина: `None` — системная, каталог — удалённое переносится в него.
+    trash: Option<PathBuf>,
     /// Список файлов, пока наблюдатель не сообщил об изменении.
     listed: Arc<Mutex<Listed>>,
 }
@@ -113,7 +123,15 @@ impl DirStorage {
         if !root.is_dir() {
             return Err(io::Error::new(io::ErrorKind::NotADirectory, "хранилище — не каталог"));
         }
-        Ok(Self { root, listed: Arc::default() })
+        Ok(Self { root, trash: None, listed: Arc::default() })
+    }
+
+    /// Удалённое ([`Storage::trash`]) — в каталог `dir`, а не в корзину
+    /// системы (тесты: не засорять корзину пользователя); `None` — в системную.
+    #[must_use]
+    pub fn with_trash(mut self, dir: Option<PathBuf>) -> Self {
+        self.trash = dir;
+        self
     }
 
     pub fn root(&self) -> &Path {
@@ -246,6 +264,41 @@ impl Storage for DirStorage {
         self.listed.lock().files = None;
         file.write_all(data)
     }
+
+    fn trash(&self, path: &str) -> io::Result<()> {
+        let full = self.full(path)?;
+        if full == self.root {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "хранилище целиком не удаляется"));
+        }
+        fs::symlink_metadata(&full)?;
+        match &self.trash {
+            None => system_trash(&full)?,
+            Some(dir) => {
+                fs::create_dir_all(dir)?;
+                let name = full.file_name().unwrap_or_default().to_string_lossy().into_owned();
+                let target = (1..10_000)
+                    .map(|n| dir.join(if n == 1 { name.clone() } else { format!("{name} ({n})") }))
+                    .find(|p| !p.exists())
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::AlreadyExists, "в корзине нет свободного имени"))?;
+                fs::rename(&full, target)?;
+            }
+        }
+        // Список файлов — заново, не дожидаясь события наблюдателя.
+        self.listed.lock().files = None;
+        Ok(())
+    }
+}
+
+/// Корзина системы (freedesktop на Linux, «Корзина» Windows и macOS).
+#[cfg(not(any(target_os = "android", target_os = "ios", target_family = "wasm")))]
+fn system_trash(path: &Path) -> io::Result<()> {
+    trash::delete(path).map_err(io::Error::other)
+}
+
+/// Корзины системы нет (телефон, браузер): удалять некуда — пока нельзя.
+#[cfg(any(target_os = "android", target_os = "ios", target_family = "wasm"))]
+fn system_trash(_path: &Path) -> io::Result<()> {
+    Err(io::Error::new(io::ErrorKind::Unsupported, "на этом устройстве нет корзины"))
 }
 
 /// Остановить наблюдатель: список файлов больше не помнить.
@@ -353,6 +406,21 @@ impl Storage for MemStorage {
         Ok(Some(Box::new(())))
     }
 
+    fn trash(&self, path: &str) -> io::Result<()> {
+        let prefix = format!("{path}/");
+        let mut f = self.files.lock();
+        let gone: Vec<String> = f.files.keys().filter(|p| *p == path || p.starts_with(&prefix)).cloned().collect();
+        if gone.is_empty() || path.is_empty() {
+            return Err(io::Error::new(io::ErrorKind::NotFound, format!("нет файла {path}")));
+        }
+        for p in &gone {
+            f.files.remove(p);
+        }
+        drop(f);
+        self.changed(path);
+        Ok(())
+    }
+
     fn create(&self, path: &str, data: &[u8]) -> io::Result<()> {
         if self.files.lock().files.contains_key(path) {
             return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("файл уже есть: {path}")));
@@ -413,6 +481,34 @@ mod tests {
             assert_eq!(storage.read("Новая/папка/x.typ").unwrap(), b"x");
         }
         assert!(disk.create("../x.typ", b"").is_err(), "за пределы каталога — нельзя");
+    }
+
+    /// `trash`: файл или каталог целиком; в каталог-корзину — без
+    /// перезаписи одноимённого; корень и чужие пути — нельзя.
+    #[test]
+    fn trash_moves_away() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = tempfile::tempdir().unwrap();
+        let disk = DirStorage::open(dir.path()).unwrap().with_trash(Some(bin.path().to_owned()));
+        let mem = MemStorage::new();
+        for storage in [&disk as &dyn Storage, &mem] {
+            for f in ["a.typ", "Книга/main.typ", "Книга/01.typ", "Книга2/main.typ"] {
+                storage.create(f, b"x").unwrap();
+            }
+            storage.trash("a.typ").unwrap();
+            storage.trash("Книга").unwrap();
+            let mut list = storage.list().unwrap();
+            list.sort();
+            assert_eq!(list, ["Книга2/main.typ"], "список — заново");
+            assert_eq!(storage.trash("a.typ").unwrap_err().kind(), io::ErrorKind::NotFound);
+            assert!(storage.trash("").is_err(), "всё хранилище — нельзя");
+        }
+        assert!(disk.trash("../x").is_err(), "за пределы каталога — нельзя");
+        assert!(bin.path().join("Книга/01.typ").is_file());
+        disk.create("a.typ", b"y").unwrap();
+        disk.trash("a.typ").unwrap();
+        assert_eq!(fs::read(bin.path().join("a.typ")).unwrap(), b"x", "прежнее не перезаписано");
+        assert_eq!(fs::read(bin.path().join("a.typ (2)")).unwrap(), b"y");
     }
 
     /// Ждать, пока `ok()` не станет истиной (события ОС приходят не сразу).

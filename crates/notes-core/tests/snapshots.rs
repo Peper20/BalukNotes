@@ -22,6 +22,7 @@ fn repo() -> PathBuf {
 #[test]
 fn rendering_matches_snapshots() {
     let notes = Notes::open(&NotesConfig {
+        trash: None,
         vault: repo().join("tests/vault"),
         library: LibrarySource::Dir(repo().join("baluk")),
         font_dirs: vec![],

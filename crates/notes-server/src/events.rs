@@ -1,4 +1,4 @@
-//! События клиенту (`GET /api/events`, Server-Sent Events): файлы хранилища
+//! События клиенту (`GET /api/vaults/{хранилище}/events`, Server-Sent Events): файлы хранилища
 //! изменились — клиент сверяет версию показанной заметки и список заметок,
 //! вместо опроса раз в N секунд.
 //!
@@ -12,7 +12,7 @@
 use std::convert::Infallible;
 
 use axum::Router;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::routing::get;
 use futures_util::Stream;
@@ -20,18 +20,23 @@ use tokio::sync::broadcast::error::RecvError;
 
 use crate::AppState;
 use crate::api::{ChangeEvent, EventsHello};
+use crate::error::ApiResult;
 
 pub(crate) fn routes() -> Router<AppState> {
-    Router::new().route("/api/events", get(events))
+    Router::new().route("/api/vaults/{vault}/events", get(events))
 }
 
-async fn events(State(s): State<AppState>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let watching = s.notes.watching();
+async fn events(
+    State(s): State<AppState>,
+    Path(vault): Path<String>,
+) -> ApiResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
+    let vault = s.vault(vault).await?;
+    let watching = vault.notes.watching();
     let hello = Event::default().event("hello").json_data(EventsHello { watching });
-    let rx = s.events.subscribe();
+    let rx = vault.events.subscribe();
     let closing = s.closing.subscribe();
     let first = futures_util::stream::iter(hello.ok().map(Ok));
-    let notes = s.notes.clone();
+    let notes = vault.notes.clone();
     let rest = futures_util::stream::unfold((rx, closing, false), move |(mut rx, mut closing, done)| {
         let notes = notes.clone();
         async move {
@@ -55,5 +60,5 @@ async fn events(State(s): State<AppState>) -> Sse<impl Stream<Item = Result<Even
             Some((Ok(event), (rx, closing, done)))
         }
     });
-    Sse::new(futures_util::StreamExt::chain(first, rest)).keep_alive(KeepAlive::default())
+    Ok(Sse::new(futures_util::StreamExt::chain(first, rest)).keep_alive(KeepAlive::default()))
 }

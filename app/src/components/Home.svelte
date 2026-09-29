@@ -2,7 +2,9 @@
 <script lang="ts">
   import { api, type GraphLayout } from "../lib/api";
   import { notes, router } from "../lib/state";
-  import { noteHref } from "../lib/ids";
+  import { graphHref, noteHref } from "../lib/ids";
+  import { plural } from "../lib/plural";
+  import { vault } from "../lib/vault";
   import Graph from "./Graph.svelte";
   import GraphLegend from "./GraphLegend.svelte";
 
@@ -20,18 +22,13 @@
 
   const books = $derived(notes.all.filter((n) => n.kind === "book").length);
   const byFolder = $derived(Map.groupBy(notes.all, (n) => n.folder || "—"));
-  const plural = (n: number, one: string, few: string, many: string) => {
-    const m10 = n % 10;
-    const m100 = n % 100;
-    return m10 === 1 && m100 !== 11 ? one : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? few : many;
-  };
 </script>
 
 <main class="k-note" id="note">
   <div class="home">
-    <h1>Заметки</h1>
+    <h1>{vault()}</h1>
     {#if !notes.all.length}
-      <p>Хранилище пусто: новая заметка — <code>notes new Папка/Название</code> (где хранилище — <code>notes info</code>).</p>
+      <p>Хранилище пусто: новая заметка — <code>notes new --vault "{vault()}" Папка/Название</code> (где хранилище — <code>notes info</code>).</p>
     {:else}
       <p class="home-lead">
         {notes.all.length - books}
@@ -51,7 +48,7 @@
         <p class="graph-hint">
           Наведите на узел — подсветятся его связи; протяните — соседи потянутся за ним; нажмите — откроется заметка.
           Крупные узлы — книги, пустой — заметка,
-          на которую ссылаются, но её ещё нет. <a href="/graph">Граф целиком</a> — масштаб, фильтры, соседи заметки.
+          на которую ссылаются, но её ещё нет. <a href={graphHref()}>Граф целиком</a> — масштаб, фильтры, соседи заметки.
         </p>
       {/if}
       <h2>Все заметки</h2>

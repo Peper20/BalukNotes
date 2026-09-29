@@ -24,6 +24,12 @@ class Ui {
    */
   palette = $state<{ query: string; book?: string | null } | null>(null);
   helpOpen = $state(false);
+  /** Диалог «Новое хранилище». */
+  vaultNewOpen = $state(false);
+  /** Заметка, которую спрашивают, удалить ли (диалог подтверждения). */
+  deleting = $state<string | null>(null);
+  /** Меню заметки в дереве (правый клик, долгое касание): где и какой. */
+  noteMenu = $state<{ id: string; x: number; y: number } | null>(null);
   /** Режим чтения: только текст — без панелей, вкладок и оглавления. */
   reading = $state(false);
 

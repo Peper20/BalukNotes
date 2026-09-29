@@ -122,6 +122,17 @@ impl Changes {
         }
     }
 
+    /// Изменение, которое сделало само приложение (удаление заметки):
+    /// раздать как событие наблюдателя, не дожидаясь ОС — индекс не отдаст
+    /// прежний список. Без наблюдателя делать нечего: индекс и так обходит
+    /// хранилище.
+    pub fn local(&self, paths: Vec<String>) {
+        let sink = self.sink.lock().clone();
+        if let Some(sink) = sink {
+            sink(Some(paths));
+        }
+    }
+
     /// Выключить наблюдатель.
     pub fn stop(&self) {
         self.watching.store(false, Ordering::SeqCst);

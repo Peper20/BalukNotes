@@ -26,6 +26,7 @@ const AFTER_CACHE: &[&str] = &[
     "pages.rs",
     "search.rs",
     "settings.rs",
+    "vaults.rs", // хранилища по именам — вне сборки
     "warm.rs",
     "watch.rs",    // наблюдатель файлов
     "webfonts.rs", // шрифты для браузера

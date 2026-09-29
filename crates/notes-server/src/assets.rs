@@ -18,6 +18,14 @@ const NO_CLIENT: &str = "<!doctype html><meta charset=utf-8><title>Клиент 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route("/", get(shell))
+        .route("/v/{vault}", get(shell))
+        .route("/v/{vault}/", get(shell))
+        .route("/v/{vault}/n/{*id}", get(shell))
+        .route("/v/{vault}/graph", get(shell))
+        .route("/v/{vault}/tags", get(shell))
+        .route("/v/{vault}/tags/{*tag}", get(shell))
+        // Адреса без хранилища (прежние, ссылки из HTML заметок): клиент
+        // откроет их в хранилище по умолчанию.
         .route("/n/{*id}", get(shell))
         .route("/graph", get(shell))
         .route("/tags", get(shell))

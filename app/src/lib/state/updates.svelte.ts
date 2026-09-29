@@ -1,11 +1,11 @@
 // Обновление: изменились файлы показанной заметки — перезагрузить её.
-// Проверка — сверка версии (/api/version/… — дёшево: сервер ничего не
+// Проверка — сверка версии (…/version/… — дёшево: сервер ничего не
 // компилирует, если файлы не менялись) по кнопке «Обновить» и, если
 // настройка `refresh.mode` — «автоматически», при возврате в окно и по
 // сигналу источника изменений (../changes.ts): событие сервера (он следит за
 // файлами), а без событий — опрос.
 
-import { api, apiUrl } from "../api";
+import { api } from "../api";
 import { changeSource, type RefreshMode } from "../changes";
 import { notes } from "./notes.svelte";
 import { reader } from "./reader.svelte";
@@ -42,7 +42,7 @@ class Updates {
 
   #schedule(): void {
     this.#stop();
-    this.#stop = changeSource(this.#mode(), apiUrl("/api/events", { withToken: true })).start(() => void this.check());
+    this.#stop = changeSource(this.#mode(), api.eventsUrl()).start(() => void this.check());
   }
 
   #settingsSaved(keys: string[]): void {

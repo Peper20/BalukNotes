@@ -11,6 +11,7 @@
 // Интерфейс вокруг заметки (панели, глава, оглавление) — ../ui.svelte.ts.
 
 import { api, rebaseStylesheets } from "../api";
+import { rememberVault } from "../boot";
 import { parseRoute } from "../ids";
 import { notes } from "./notes.svelte";
 import { places } from "./places.svelte";
@@ -29,6 +30,7 @@ export async function start(): Promise<void> {
   // вкладок, а полоса вкладок прокручивается к активной по списку заметок.
   const [, list] = await Promise.all([settings.load(), api.notes()]);
   notes.all = list;
+  rememberVault();
   updates.start();
   history.scrollRestoration = "manual";
   tabs.restore();

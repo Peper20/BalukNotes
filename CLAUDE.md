@@ -17,9 +17,11 @@ roadmap, **дописать техдолг** (что упрощено, чем г
   сервер в сети — хранилище, синхронизация и вход, без Typst (VPS: 1 ядро, 2 ГБ).
 - Данные — каталог пользователя, вне репозитория (`notes info`; по
   умолчанию `~/.local/share/baluk-notes`, другой — `data` в
-  `~/.config/baluk-notes/config.toml` или `--data`): `vault/` — хранилище,
-  `settings.json`, `cache/` — кэш (`pages/` — отрисовка, `fonts/` — части
-  шрифтов; можно удалять в любой момент).
+  `~/.config/baluk-notes/config.toml` или `--data`): `vaults/<имя>/` —
+  хранилища (по умолчанию — ни одного: создаёт и называет пользователь;
+  команды заметок — всегда `--vault <имя>`), `settings.json`, `cache/` —
+  кэш (`pages/` — отрисовка, `fonts/` — части шрифтов; можно удалять в
+  любой момент).
   В хранилище — **копии** конспектов пользователя: их можно править, дополнять
   и удалять. Оригиналы (`~/Documents/abstract/…`) не трогать никогда.
 - Спорное (вид интерфейса, поведение для пользователя, публичный API
@@ -31,17 +33,25 @@ roadmap, **дописать техдолг** (что упрощено, чем г
 - Заметки пишутся из любой папки через установленную команду `notes`
   (`tools/install.sh`: `notes` в `~/.local/bin` + навык `/new-note` в
   `~/.claude/skills`, одной версией): `notes new`, `list`, `tags`,
-  `check`, `pdf`, `docs writing|library`, `info`. Исходники BalukNotes
+  `check`, `pdf`, `docs writing|library`, `info`, `vaults [new]`. Исходники BalukNotes
   навыку знать не нужно.
 - Пишешь или правишь заметку — сначала `docs/writing.md` (= `notes docs
   writing`): содержание, рисунки, проверка; продолжение — по
   шапке-комментарию в начале файла (у книги — `main.typ`).
+- Навык `/new-note` самодостаточен — пишут им и слабые модели:
+  `SKILL.md` (порядок действий, пути, шпаргалка Typst, ошибки `notes
+  check`, краткие правила) + `examples/` (заметки и книга, которые вместе
+  используют каждое публичное имя библиотеки). В `notes docs` модель не
+  ходит. Просьба пользователя приходит подстановкой `$ARGUMENTS`; `$` с
+  цифрой в `SKILL.md` не писать (`$0$` оболочка заменит словом) —
+  сверяет `--test library`.
 - Поменял публичный API библиотеки, шаблоны `note`/`book`
   (`notes-core::new_note`), команды `notes` или правила путей (`NoteId`)
-  — поправь `docs/writing.md` и навык `skills/new-note/` в том же
-  изменении (шаг `new-note` в `tools/check.sh` собирает заготовки, тест
-  `--test library` сверяет `#имена` из `docs/writing.md`), затем
-  `tools/install.sh`.
+  — поправь `docs/writing.md`, `skills/new-note/SKILL.md` и примеры
+  `skills/new-note/examples/` в том же изменении (шаг `new-note` в
+  `tools/check.sh` собирает заготовки, примеры и блок «Частые вызовы»;
+  тест `--test library` сверяет `#имена` из `docs/writing.md` и `SKILL.md`
+  и требует каждое публичное имя в примерах), затем `tools/install.sh`.
 
 ## Проверка после изменений
 
@@ -104,9 +114,12 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
 - Workspace: `notes-core` (без async и HTTP), `notes-server` (axum),
   `notes-assets` (клиент `app/dist` для сервера), `notes-cli`. Логика — в
   ядре; остальное — тонкие обёртки.
-- Сервер — модуль на область API (`notes`, `graph`, `search`, `settings`,
-  `assets`, `fonts`, `events`) со своими `routes()`; общие — `AppState`
-  (`lib.rs`), `error.rs`, токен — `auth.rs`. Новая область — модуль + `merge`.
+- Сервер — модуль на область API (`vaults`, `notes`, `graph`, `search`,
+  `settings`, `assets`, `fonts`, `events`) со своими `routes()`; общие —
+  `AppState` (`lib.rs`), `error.rs`, токен — `auth.rs`. Новая область —
+  модуль + `merge`. API хранилища — под `/api/vaults/{vault}/…`
+  (`s.vault(name)` — открытое хранилище); общее у всех (настройки, темы,
+  шрифты) — без хранилища.
 - Typst закреплён `=0.15.1` (HTML-экспорт экспериментальный). Обновление —
   отдельной задачей, с прогоном тестов и проверкой глазами; копии крейтов с
   правками (`vendor/`, сейчас `comemo`) — перенести или убрать
@@ -152,7 +165,11 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замерить что-то 
   компоненты — `src/components/`.
 - Сервер — только через `src/lib/api/` (адрес и токен — `api/config.ts`,
   ошибки — `ApiError`); прямой `fetch` в компонентах не писать. Источник
-  изменений — `changes.ts` (события `GET /api/events`, запасной — опрос).
+  изменений — `changes.ts` (события `GET …/events`, запасной — опрос).
+- Хранилище — в адресе (`/v/<имя>/…`, `lib/vault.ts`), выбирается до
+  загрузки состояния (`lib/boot.ts`). Адреса — только через `lib/ids.ts`
+  (`noteHref`, `homeHref`…), не строкой `"/"`/`"/n/…"`; `localStorage` —
+  через `lib/storage.ts` (ключи свои у каждого хранилища).
 - **Типы API — из Rust** (`ts-rs`, фича `ts`): `npm run types` выгружает их в
   `src/lib/api/types/` (в git). Поменял структуру ответа — выгрузи и закоммить;
   руками файлы не править. Ответ сервера — именованная структура

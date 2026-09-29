@@ -53,6 +53,7 @@ serde = { version = "1", features = ["derive", "rc"] }
 siphasher = "1"
 serde_json = { version = "1", features = ["preserve_order"] }
 tempfile = "3"
+trash = "5"
 thiserror = "2"
 # Файл настроек `notes` (~/.config/baluk-notes/config.toml) — та же версия,
 # что уже тянет typst.
