@@ -86,6 +86,19 @@ async fn note_list_and_page() {
     let (status, list) = call(app.clone(), "GET", "/api/vaults/test/notes", None).await;
     assert_eq!(status, StatusCode::OK);
     assert!(list.as_array().unwrap().iter().any(|n| n["id"] == "Сеть/SSH" && n["kind"] == "note"));
+    let odd = list.as_array().unwrap().iter().find(|n| n["id"] == "Имена/странное").unwrap();
+    assert_eq!(odd["name"], "странное");
+    assert_eq!(odd["title"], r"@#$@&$*%@#!.:/\ — в названии можно всё", "название — из файла");
+
+    // Папки: название из `_folder.toml`, иначе (и при ошибке в нём) — имя.
+    let (status, folders) = call(app.clone(), "GET", "/api/vaults/test/folders", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let title = |path: &str| folders.as_array().unwrap().iter().find(|f| f["path"] == path).map(|f| f["title"].clone());
+    assert_eq!(title("Имена").unwrap(), "Имена: файлы / названия");
+    assert_eq!(title("Сеть").unwrap(), "Сеть");
+    assert_eq!(title("Глубоко/а/б").unwrap(), "б");
+    assert_eq!(title("Книга"), None, "книга — не папка");
+    assert_eq!(title("_служебное"), None);
 
     let (status, page) = call(app, "GET", &uri("/api/vaults/test/notes/Сеть/SSH"), None).await;
     assert_eq!(status, StatusCode::OK);

@@ -28,8 +28,7 @@ export async function start(): Promise<void> {
   rebaseStylesheets();
   // Список заметок — после настроек: вид (кегль) меняет ширину названий
   // вкладок, а полоса вкладок прокручивается к активной по списку заметок.
-  const [, list] = await Promise.all([settings.load(), api.notes()]);
-  notes.all = list;
+  await Promise.all([settings.load(), notes.load()]);
   rememberVault();
   updates.start();
   history.scrollRestoration = "manual";

@@ -9,7 +9,7 @@
   import Sun from "@lucide/svelte/icons/sun";
   import TableOfContents from "@lucide/svelte/icons/table-of-contents";
   import { nextTheme } from "../lib/appearance";
-  import { reader, router, settings, updates } from "../lib/state";
+  import { notes, reader, router, settings, updates } from "../lib/state";
   import { splitId } from "../lib/ids";
   import { commands, toggleToc } from "../lib/commands.svelte";
   import { ui } from "../lib/ui.svelte";
@@ -34,7 +34,7 @@
 <header class="topbar">
   <button type="button" class="icon" title="Список заметок" aria-label="Список заметок" onclick={() => run("sidebar")}><PanelLeft {...icon} /></button>
   <div class="crumbs" id="crumbs">
-    {#if crumbs}{crumbs.folder ? `${crumbs.folder} / ` : ""}<b>{router.currentNote?.name ?? crumbs.name}</b>{/if}
+    {#if crumbs && router.currentId}{crumbs.folder ? `${notes.folderLabel(crumbs.folder)} / ` : ""}<b>{notes.title(router.currentId)}</b>{/if}
   </div>
   <span class="status" class:busy={reader.busy} id="status" role="status">{reader.status}</span>
   <button type="button" id="open-palette" class="icon" title="Быстрый переход и поиск (Ctrl+O)" aria-label="Поиск" onclick={() => ui.openPalette("")}><Search {...icon} /></button>

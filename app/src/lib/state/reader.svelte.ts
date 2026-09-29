@@ -8,6 +8,7 @@ import { api, ApiError, type NotePage } from "../api";
 import { ChapterCache } from "../chapters";
 import type { Place } from "../places";
 import { chapterSelect, scrollIntent, tocItems, type ScrollIntent } from "../reading";
+import { notes } from "./notes.svelte";
 import { places } from "./places.svelte";
 import { router } from "./router.svelte";
 import { settings } from "./settings.svelte";
@@ -86,7 +87,7 @@ class Reader {
     this.pending = { id, since: Date.now() };
     document.documentElement.dataset.state = "loading";
     this.setStatus("собираю…", true);
-    document.title = `${router.currentNote?.name ?? id} — Заметки`;
+    document.title = `${notes.title(id)} — Заметки`;
     const place = this.#place;
     this.#place = null;
     const where = { keepScroll, current: this.chapter, anchor: router.anchor, place };
@@ -108,7 +109,7 @@ class Reader {
       this.page = page;
       this.#chapters.shown(page);
       places.visited(id);
-      document.title = `${page.rendered?.title ?? router.currentNote?.name ?? id} — Заметки`;
+      document.title = `${page.rendered?.title ?? notes.title(id)} — Заметки`;
       this.setStatus(`${updated ? "книга обновлена" : "собрано"} ${new Date().toLocaleTimeString("ru-RU")}`);
     } catch (e) {
       if (this.#ctrl !== ctrl) return; // отменена или устарела

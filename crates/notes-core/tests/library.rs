@@ -84,14 +84,14 @@ fn every_public_name_is_documented() {
     assert!(missing.is_empty(), "не описаны в baluk/README.md: {missing:?}");
 }
 
-/// Правила написания заметок (`docs/writing.md`) и навык `/new-note`
-/// (`skills/new-note/SKILL.md`) не устарели: каждый вызов `#имя` из них —
+/// Правила написания заметок (`docs/writing.md`) и навык `/baluk-note`
+/// (`skills/baluk-note/SKILL.md`) не устарели: каждый вызов `#имя` из них —
 /// публичное имя библиотеки (кроме ключевых слов Typst).
 #[test]
 fn writing_guide_uses_public_names() {
     const KEYWORDS: [&str; 5] = ["import", "include", "show", "set", "let"];
     let names = public_names();
-    for file in ["docs/writing.md", "skills/new-note/SKILL.md"] {
+    for file in ["docs/writing.md", "skills/baluk-note/SKILL.md"] {
         let guide = std::fs::read_to_string(repo().join(file)).unwrap();
         let mut unknown: Vec<&str> = guide
             .split('#')
@@ -113,22 +113,22 @@ fn writing_guide_uses_public_names() {
 /// есть, а `$` с цифрой (формула `$0$`) — нет: её испортит подстановка.
 #[test]
 fn skill_gets_arguments_and_has_no_positional_placeholders() {
-    let skill = std::fs::read_to_string(repo().join("skills/new-note/SKILL.md")).unwrap();
+    let skill = std::fs::read_to_string(repo().join("skills/baluk-note/SKILL.md")).unwrap();
     assert!(skill.contains("$ARGUMENTS"), "SKILL.md: нет $ARGUMENTS — просьба пользователя не попадёт к модели");
     let bad: Vec<&str> =
         skill.lines().filter(|l| l.split('$').skip(1).any(|r| r.starts_with(|c: char| c.is_ascii_digit()))).collect();
     assert!(bad.is_empty(), "SKILL.md: «$цифра» заменится аргументом вызова: {bad:?}");
 }
 
-/// Примеры навыка `/new-note` (`skills/new-note/examples/`) показывают
+/// Примеры навыка `/baluk-note` (`skills/baluk-note/examples/`) показывают
 /// каждое публичное имя: слабая модель пишет по образцу, а не по описанию.
-/// Что они собираются без ошибок — шаг `new-note` в `tools/check.sh`.
+/// Что они собираются без ошибок — шаг `baluk-note` в `tools/check.sh`.
 #[test]
 fn skill_examples_use_every_public_name() {
     // Своя тема — правка библиотеки, а не заметки: в примерах её нет.
     const NOT_FOR_NOTES: [&str; 2] = ["customize", "themes"];
     let mut code = String::new();
-    let mut dirs = vec![repo().join("skills/new-note/examples")];
+    let mut dirs = vec![repo().join("skills/baluk-note/examples")];
     while let Some(dir) = dirs.pop() {
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
@@ -143,7 +143,7 @@ fn skill_examples_use_every_public_name() {
         .into_iter()
         .filter(|n| is_public(n) && !NOT_FOR_NOTES.contains(&n.as_str()) && !has_word(&code, n))
         .collect();
-    assert!(missing.is_empty(), "нет в примерах навыка skills/new-note/examples: {missing:?}");
+    assert!(missing.is_empty(), "нет в примерах навыка skills/baluk-note/examples: {missing:?}");
 }
 
 /// Куски кода Markdown: блоки ``` … ``` и `…` в строке.

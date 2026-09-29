@@ -3,7 +3,7 @@
 
 import { api } from "./api";
 import { notes, places, reader, router, settings, tabs, updates } from "./state";
-import { graphHref, homeHref, noteHref, parseRoute, splitId, tagHref } from "./ids";
+import { graphHref, homeHref, noteHref, parseRoute, tagHref } from "./ids";
 import { combo, type Combo } from "./keys";
 import { mobile, ui } from "./ui.svelte";
 
@@ -119,6 +119,7 @@ export function commands(): Command[] {
  * вкладку (или главную).
  */
 export async function deleteNote(id: string): Promise<void> {
+  const title = notes.title(id);
   await api.deleteNote(id);
   const isIt = (url: string) => {
     const route = parseRoute(new URL(url, location.href).pathname);
@@ -130,7 +131,7 @@ export async function deleteNote(id: string): Promise<void> {
   }
   places.forget(id);
   await notes.refresh();
-  reader.status = `в корзине: ${splitId(id).name}`;
+  reader.status = `в корзине: ${title}`;
 }
 
 /** Открыть заметку из палитры или списка: Ctrl — в новой вкладке. */

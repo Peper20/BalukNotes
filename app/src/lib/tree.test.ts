@@ -2,9 +2,10 @@ import { expect, it } from "vitest";
 import type { NoteListItem } from "./api";
 import { ancestors, buildTree, countNotes } from "./tree";
 
-const note = (id: string, kind: "note" | "book" = "note"): NoteListItem => {
+const note = (id: string, kind: "note" | "book" = "note", title?: string): NoteListItem => {
   const i = id.lastIndexOf("/");
-  return { id, kind, name: id.slice(i + 1), folder: i < 0 ? "" : id.slice(0, i), title: null, tags: [] };
+  const name = id.slice(i + 1);
+  return { id, kind, name, folder: i < 0 ? "" : id.slice(0, i), title: title ?? name, tags: [] };
 };
 
 it("папки по алфавиту, вложенность, заметки в корне", () => {
@@ -21,4 +22,16 @@ it("папки по алфавиту, вложенность, заметки в 
 it("путь к заметке — для раскрытия дерева", () => {
   expect(ancestors("Глубоко/а/б/Дно")).toEqual(["Глубоко", "Глубоко/а", "Глубоко/а/б"]);
   expect(ancestors("Начало")).toEqual([]);
+});
+
+it("порядок — по названиям, а не по именам файлов; числа — по значению", () => {
+  const titles: Record<string, string> = { Сеть: "Сети и протоколы", Алгоритмы: "Я — последняя" };
+  const tree = buildTree(
+    [note("Сеть/a", "note", "SSH: основы"), note("Сеть/b", "note", "Шифрование"), note("Алгоритмы/x"), note("Базы/y"), note("г10", "note", "Глава 10"), note("г2", "note", "Глава 2")],
+    (path) => titles[path] ?? path,
+  );
+  expect(tree.folders.map((f) => f.title)).toEqual(["Базы", "Сети и протоколы", "Я — последняя"]);
+  expect(tree.folders[1]!.name).toBe("Сеть");
+  expect(tree.folders[1]!.notes.map((n) => n.title)).toEqual(["Шифрование", "SSH: основы"]); // русский порядок: кириллица раньше латиницы
+  expect(tree.notes.map((n) => n.title)).toEqual(["Глава 2", "Глава 10"]);
 });

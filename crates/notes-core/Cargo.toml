@@ -30,6 +30,8 @@ serde.workspace = true
 serde_json.workspace = true
 siphasher.workspace = true
 thiserror.workspace = true
+# Файл папки `_folder.toml` (folders.rs).
+toml.workspace = true
 tracing.workspace = true
 ts-rs = { workspace = true, optional = true }
 

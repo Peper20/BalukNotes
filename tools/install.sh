@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Поставить BalukNotes для работы из любой папки — одной версией из этого
 # репозитория: команду `notes` (релизная сборка: библиотека baluk, клиент и
-# шрифты встроены) и навык Claude Code /new-note. После изменений проекта —
+# шрифты встроены) и навык Claude Code /baluk-note. После изменений проекта —
 # запустить снова.
 #
 #   tools/install.sh
 #
 # Куда: notes — в $BIN (по умолчанию ~/.local/bin), навык — в
-# $CLAUDE_SKILLS/new-note (по умолчанию ~/.claude/skills). Хранилище не
+# $CLAUDE_SKILLS/baluk-note (по умолчанию ~/.claude/skills). Хранилище не
 # трогается: где оно — `notes info`.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -28,18 +28,24 @@ install -m755 target/release/notes "$bin/.notes.new"
 mv -f "$bin/.notes.new" "$bin/notes"
 echo "  $bin/notes"
 
-# Навык целиком заменяется копией из репозитория (skills/new-note).
-target=$skills/new-note
+# Навык целиком заменяется копией из репозитория (skills/baluk-note).
+target=$skills/baluk-note
 if [[ -e $target && ! -f $target/SKILL.md ]]; then
   echo "Ошибка: $target есть, но это не навык (нет SKILL.md) — не трогаю." >&2
   exit 1
 fi
 mkdir -p "$skills"
 rm -rf "$target.new"
-cp -r skills/new-note "$target.new"
+cp -r skills/baluk-note "$target.new"
 rm -rf "$target"
 mv "$target.new" "$target"
 echo "  $target"
+# Прежнее имя навыка (/new-note) — в корзину, чтобы в Claude Code не было двух.
+old=$skills/new-note
+if [[ -f $old/SKILL.md ]]; then
+  gio trash "$old" 2>/dev/null || rm -rf "$old"
+  echo "  убран прежний навык $old"
+fi
 
 case ":$PATH:" in
   *":$bin:"*) ;;

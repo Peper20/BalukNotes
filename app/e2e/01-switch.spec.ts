@@ -20,20 +20,20 @@ test("переход во время сборки: не показывать ч�
   const note = page.locator("#note");
 
   // Медленная (первая сборка, десятки рисунков) → сразу быстрая.
-  await tree.getByRole("link", { name: "визуализация" }).click();
-  await tree.getByRole("link", { name: "UFW" }).click();
+  await tree.locator('a[data-id="демо/визуализация"]').click();
+  await tree.locator('a[data-id="Сеть/UFW"]').click();
   await expect(note).toContainText("Порядок правил");
 
   // Обратно к медленной, пока она, возможно, ещё собирается: под её именем —
   // заглушка или она сама, но не текст UFW.
-  await tree.getByRole("link", { name: "визуализация" }).click();
-  await expect(page.locator("#crumbs")).toContainText("визуализация");
+  await tree.locator('a[data-id="демо/визуализация"]').click();
+  await expect(page.locator("#crumbs")).toContainText("Визуализация");
   await expect(note).not.toContainText("Порядок правил");
   await expect(note.locator(".k-doc")).toContainText("Инструменты визуализации", BUILD);
 
   // Ответ на отменённый запрос не перебивает текущую заметку.
   await page.waitForTimeout(500);
-  await expect(page.locator("#crumbs")).toContainText("визуализация");
+  await expect(page.locator("#crumbs")).toContainText("Визуализация");
 });
 
 test("заглушка «собирается» на месте новой заметки", async ({ page }) => {
@@ -41,7 +41,7 @@ test("заглушка «собирается» на месте новой за�
   await page.goto(vaultUrl("/"));
   await ready(page);
   // Большая глава ещё не собиралась: сначала заглушка с её именем.
-  await page.locator("#tree").getByRole("link", { name: "01-тесты" }).click();
+  await page.locator('#tree a[data-id="ассессмент/01-тесты"]').click();
   await expect(page.locator("#note .loading-name, #note .k-doc").first()).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-state", "ready", BUILD);
   await expect(page.locator("#note .loading")).toHaveCount(0);

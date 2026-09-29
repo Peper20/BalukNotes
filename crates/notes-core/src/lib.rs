@@ -4,6 +4,7 @@
 //!
 //! - [`vault`] — хранилище: какие файлы — заметки, какие — книги;
 //! - [`vaults`] — хранилища пользователя по именам (`<данные>/vaults/`);
+//! - [`folders`] — папки хранилища: название из `_folder.toml`;
 //! - [`world`] — компилятор Typst поверх хранилища (виртуальная библиотека
 //!   `/_baluk/`, шрифты, пакеты);
 //! - [`vault_data`] — данные хранилища для заметок `/_vault/…` (реестр
@@ -34,6 +35,7 @@ pub mod diag;
 mod error;
 pub mod figures;
 pub mod finish;
+pub mod folders;
 pub mod fonts;
 pub mod frames;
 mod fsutil;

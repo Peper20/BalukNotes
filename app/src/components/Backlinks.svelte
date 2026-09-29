@@ -2,7 +2,7 @@
 <script lang="ts">
   import { api, type LinksResponse } from "../lib/api";
   import { notes } from "../lib/state";
-  import { graphHref, noteHref, splitId } from "../lib/ids";
+  import { graphHref, noteHref } from "../lib/ids";
 
   let { id }: { id: string } = $props();
   let links = $state.raw<LinksResponse | null>(null);
@@ -26,8 +26,8 @@
       {#each links.backlinks as b}
         {@const note = notes.all.find((n) => n.id === b.from)}
         <li>
-          <a href={noteHref(b.from)}>{note?.name ?? splitId(b.from).name}</a>
-          {#if note?.folder}<span class="anchor"> · {note.folder}</span>{/if}
+          <a href={noteHref(b.from)}>{notes.title(b.from)}</a>
+          {#if note?.folder}<span class="anchor"> · {notes.folderLabel(note.folder)}</span>{/if}
           {#if b.anchor}<span class="anchor"> → «{b.anchor}»</span>{/if}
         </li>
       {/each}

@@ -79,7 +79,7 @@ pub struct PlacedNode {
     pub id: String,
     /// `None` — заметки нет.
     pub kind: Option<NoteKind>,
-    /// Подпись: последний сегмент пути.
+    /// Подпись: название заметки.
     pub name: String,
     pub group: String,
     pub x: f64,
@@ -386,7 +386,7 @@ pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>) -> Grap
             let book = n.kind == Some(NoteKind::Book);
             #[allow(clippy::cast_precision_loss, reason = "не больше 8")]
             let r = if book { 11.0 } else { 5.5 } + d.min(8) as f64 * 0.7;
-            NodeBox { r, label: label_width(name_of(&n.id), if book { LABEL_SIZE * 1.1 } else { LABEL_SIZE }) }
+            NodeBox { r, label: label_width(&n.title, if book { LABEL_SIZE * 1.1 } else { LABEL_SIZE }) }
         })
         .collect();
     let pos = layout(graph.nodes.len(), &links, Some(&boxes));
@@ -401,7 +401,7 @@ pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>) -> Grap
         .map(|((n, (x, y)), (b, degree))| PlacedNode {
             id: n.id.clone(),
             kind: n.kind,
-            name: name_of(&n.id).to_owned(),
+            name: n.title.clone(),
             group: group_of(&n.id).to_owned(),
             x,
             y,
@@ -410,10 +410,6 @@ pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>) -> Grap
         })
         .collect();
     GraphLayout { nodes, edges: graph.edges.clone(), groups, bounds: bounds.unwrap_or([0.0, 0.0, 1.0, 1.0]), center }
-}
-
-fn name_of(id: &str) -> &str {
-    id.rsplit_once('/').map_or(id, |(_, name)| name)
 }
 
 /// Префикс графа в данных хранилища: `/_vault/graph/…`.
@@ -529,7 +525,7 @@ mod tests {
     use crate::graph::Node;
 
     fn node(id: &str, kind: Option<NoteKind>) -> Node {
-        Node { id: id.into(), kind }
+        Node { id: id.into(), kind, title: id.rsplit('/').next().unwrap_or(id).into() }
     }
 
     fn edge(from: &str, to: &str, count: usize) -> Edge {

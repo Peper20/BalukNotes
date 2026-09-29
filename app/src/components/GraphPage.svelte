@@ -11,7 +11,7 @@
   import { api, type GraphFilter, type GraphLayout } from "../lib/api";
   import { notes, router } from "../lib/state";
   import { matches } from "../lib/graph-view";
-  import { graphHref, noteHref, splitId } from "../lib/ids";
+  import { graphHref, noteHref } from "../lib/ids";
   import { plural } from "../lib/plural";
   import { load, save } from "../lib/storage";
   import Graph from "./Graph.svelte";
@@ -52,7 +52,7 @@
     return () => (stale = true);
   });
 
-  const titles = $derived(new Map(notes.all.flatMap((n) => (n.title ? [[n.id, n.title] as const] : []))));
+  const titles = $derived(new Map(notes.all.map((n) => [n.id, n.title] as const)));
   const allTags = $derived([...new Set(notes.all.flatMap((n) => n.tags))].sort((a, b) => a.localeCompare(b, "ru")));
   // Цвета — по всем группам, а не по показанным: фильтр не перекрашивает узлы.
   const groups = $derived(shown?.groups ?? []);
@@ -83,7 +83,6 @@
     return () => removeEventListener("resize", measure);
   });
 
-  const centerNote = $derived(route.around ? notes.all.find((n) => n.id === route.around) : null);
 </script>
 
 <main class="graph-page" id="note" bind:this={page} style:height="calc(100dvh - {top}px)">
@@ -91,7 +90,7 @@
     {#if route.around}
       <span class="graph-title">
         Соседи
-        <a href={noteHref(route.around)} title={centerNote?.title ?? route.around}>{splitId(route.around).name}</a>
+        <a href={noteHref(route.around)} title={route.around}>{notes.title(route.around)}</a>
         <select aria-label="Глубина" value={route.depth} onchange={(e) => router.go(graphHref(route.around, Number(e.currentTarget.value)), { replace: true })}>
           {#each [1, 2, 3] as d (d)}<option value={d}>{d} {plural(d, "шаг", "шага", "шагов")}</option>{/each}
         </select>

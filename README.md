@@ -19,10 +19,10 @@ Android и браузер с ядром в WASM; сервер в сети — х
    Node.js ≥ 22 с `npm`. Шрифты ставить не нужно — они встроены. Пакет
    Typst `@preview/cetz` скачается сам при первой сборке заметки с рисунком
    (нужен интернет).
-2. **Установить** команду `notes` и навык Claude Code `/new-note` (и
+2. **Установить** команду `notes` и навык Claude Code `/baluk-note` (и
    после каждого обновления репозитория):
    ```sh
-   tools/install.sh     # клиент, релизная сборка → ~/.local/bin/notes; навык → ~/.claude/skills/new-note
+   tools/install.sh     # клиент, релизная сборка → ~/.local/bin/notes; навык → ~/.claude/skills/baluk-note
    ```
    Первая сборка Rust — несколько минут. Дальше `notes` работает из любой
    папки: библиотека оформления, клиент и шрифты встроены в бинарник.
@@ -39,7 +39,7 @@ Android и браузер с ядром в WASM; сервер в сети — х
    = Раздел
    Текст, формулы $x^2$, ссылка на другую заметку: #see("Папка/Другая").
    ```
-   С Claude Code — навык `/new-note` из папки с материалами: заведёт
+   С Claude Code — навык `/baluk-note` из папки с материалами: заведёт
    заметку или книгу и поведёт по правилам (цель, план, главы, проверка).
    Возможности библиотеки — `notes docs library`, как писать —
    `notes docs writing`.
@@ -88,7 +88,7 @@ data = "~/Заметки"
 | `crates/notes-cli/` | команда `notes`: serve, new, list, check, pdf, … |
 | `app/` | клиент: Svelte 5 + TypeScript + Vite; `src/baluk-css/` — вид заметок |
 | `baluk/` | библиотека оформления Typst: блоки, рисунки, шаблоны `note`/`book` |
-| `skills/new-note/` | навык Claude Code `/new-note` (ставит `tools/install.sh`) |
+| `skills/baluk-note/` | навык Claude Code `/baluk-note` (ставит `tools/install.sh`) |
 | `fonts/` | шрифты оформления (встроены в бинарник) |
 | `tests/vault/` | хранилище-фикстура: каждый случай отрисовки, каталог — его `README.md` |
 | `tests/snapshots/` | эталонные снимки HTML фикстур |

@@ -7,7 +7,7 @@ import type { NoteKind } from "./NoteKind";
  */
 export type NoteListItem = { id: NoteId, kind: NoteKind, 
 /**
- * Последний сегмент пути: `SSH` для `Сеть/SSH`.
+ * Последний сегмент пути — имя файла: `SSH` для `Сеть/SSH`.
  */
 name: string, 
 /**
@@ -15,6 +15,6 @@ name: string,
  */
 folder: string, 
 /**
- * Название из шаблона (`title: […]`), если есть.
+ * Название для показа: из шаблона (`title: […]`), иначе — имя файла.
  */
-title: string | null, tags: Array<string>, };
+title: string, tags: Array<string>, };

@@ -56,7 +56,8 @@ struct Walker {
 impl Walker {
     fn walk(&mut self, node: &SyntaxNode, parent: SyntaxKind) {
         match node.kind() {
-            SyntaxKind::Text => self.text.push_str(node.leaf_text()),
+            // Кавычка — как написана (`'` не становится `"`).
+            SyntaxKind::Text | SyntaxKind::SmartQuote => self.text.push_str(node.leaf_text()),
             SyntaxKind::Space
             | SyntaxKind::Linebreak
             | SyntaxKind::Parbreak
@@ -74,7 +75,6 @@ impl Walker {
                     self.text.push(e.get());
                 }
             }
-            SyntaxKind::SmartQuote => self.text.push('"'),
             SyntaxKind::Str => {
                 if parent == SyntaxKind::Args
                     && let Some(s) = node.cast::<ast::Str>()

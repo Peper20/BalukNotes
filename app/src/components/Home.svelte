@@ -21,14 +21,20 @@
   });
 
   const books = $derived(notes.all.filter((n) => n.kind === "book").length);
-  const byFolder = $derived(Map.groupBy(notes.all, (n) => n.folder || "—"));
+  const byTitle = (a: string, b: string) => a.localeCompare(b, "ru", { numeric: true });
+  // Папка — названиями (`Учёба / Матан`), заметки в ней — по названию.
+  const byFolder = $derived(
+    [...Map.groupBy(notes.all, (n) => (n.folder ? notes.folderLabel(n.folder) : "—"))]
+      .map(([folder, list]) => [folder, list.toSorted((a, b) => byTitle(a.title, b.title))] as const)
+      .sort(([a], [b]) => byTitle(a, b)),
+  );
 </script>
 
 <main class="k-note" id="note">
   <div class="home">
     <h1>{vault()}</h1>
     {#if !notes.all.length}
-      <p>Хранилище пусто: новая заметка — <code>notes new --vault "{vault()}" Папка/Название</code> (где хранилище — <code>notes info</code>).</p>
+      <p>Хранилище пусто: новая заметка — <code>notes new --vault "{vault()}" --title "Название"</code> (где хранилище — <code>notes info</code>).</p>
     {:else}
       <p class="home-lead">
         {notes.all.length - books}
@@ -59,7 +65,7 @@
             <ul>
               {#each list as n (n.id)}
                 <li>
-                  <a href={noteHref(n.id)}>{n.name}</a>
+                  <a href={noteHref(n.id)}>{n.title}</a>
                   {#if n.kind === "book"}<span class="home-kind"> книга</span>{/if}
                 </li>
               {/each}

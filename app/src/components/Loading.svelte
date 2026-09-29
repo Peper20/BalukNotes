@@ -19,7 +19,7 @@
 </script>
 
 <div class="loading" role="status">
-  <div class="loading-name">{note?.name ?? id}</div>
+  <div class="loading-name">{notes.title(id)}</div>
   <div class="loading-bar"></div>
   <p class="loading-text">Собирается… {seconds > 0 ? `${seconds} с` : ""}</p>
   {#if seconds >= 2}

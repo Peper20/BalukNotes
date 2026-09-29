@@ -130,6 +130,8 @@ fn check_finds_exactly_the_planted_problems() {
     assert_eq!(failing, ["Особые случаи/Ошибка компиляции"]);
     let warned: Vec<_> = report.notes.iter().filter(|n| !n.warnings.is_empty()).map(|n| n.id.as_str()).collect();
     assert_eq!(warned, ["Особые случаи/Предупреждение"]);
+    let folders: Vec<_> = report.folders.iter().map(|f| f.file.as_str()).collect();
+    assert_eq!(folders, ["Глубоко/а/б/_folder.toml"]);
     assert_eq!(report.summary(), expected_summary(), "итог в tests/vault/README.md");
 }
 

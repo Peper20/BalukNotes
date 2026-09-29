@@ -42,7 +42,7 @@ test("раскрытые «Ответы» — по разделу и текст�
     await page.goto(vaultUrl("/"));
     await ready(page);
     await page.locator("#refresh").click();
-    await page.locator("#tree").getByRole("link", { name: "Заметка" }).click();
+    await page.locator("#tree").locator('a[data-id="Ответы/Заметка"]').click();
     await ready(page);
     const answers = page.locator("#note details", { hasText: "Раскрытые." });
     await answers.locator("summary").click();
@@ -131,7 +131,7 @@ test("изменение файла подхватывается по ⟳ без
     await page.goto(vaultUrl("/"));
     await ready(page);
     await page.locator("#refresh").click();
-    await page.locator("#tree").getByRole("link", { name: "Заметка" }).click();
+    await page.locator("#tree").locator('a[data-id="Правка/Заметка"]').click();
     await ready(page);
     await page.mouse.move(700, 400); // над заметкой, а не над деревом (оно прокручивается само)
     await page.mouse.wheel(0, 800);
@@ -162,7 +162,7 @@ test("правка файла приходит событием сервера �
     mkdirSync(dir, { recursive: true });
     writeFileSync(file, text(1));
     // Новая заметка — в дереве, правка — на экране, без ⟳.
-    const link = page.locator("#tree").getByRole("link", { name: "Заметка" });
+    const link = page.locator("#tree").locator('a[data-id="События/Заметка"]');
     await expect(link).toBeVisible();
     await link.click();
     await ready(page);

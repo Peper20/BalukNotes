@@ -93,26 +93,29 @@ vendor_tests() {
   rm -f vendor/comemo/Cargo.lock
 }
 
-# Навык /new-note: заготовки `notes new` (заметка и книга), примеры
-# skills/new-note/examples и блок «Частые вызовы» из SKILL.md (дописан в
+# Навык /baluk-note: заготовки `notes new` (заметка и книга; имя файла — из
+# названия со знаками разметки и запрещёнными в именах файлов), примеры
+# skills/baluk-note/examples и блок «Частые вызовы» из SKILL.md (дописан в
 # заготовку заметки) собираются во временном хранилище без ошибок,
 # предупреждений и битых ссылок.
-new_note() {
-  local dir=tests/.data/new-note notes=(cargo run -q -p notes-cli -- --data tests/.data/new-note)
+baluk_note() {
+  local dir=tests/.data/baluk-note notes=(cargo run -q -p notes-cli -- --data tests/.data/baluk-note)
   rm -rf "$dir"
   "${notes[@]}" vaults new Проверка >/dev/null || return 1
   notes+=(--vault Проверка)
   "${notes[@]}" new --tag проверка "Математика/Заметка" || return 1
   "${notes[@]}" new --book --lang en --title 'C++ [1] #x $y$ // - z' "Книга" || return 1
+  "${notes[@]}" new --folder Сеть --title 'SSH: основы? "1.0"... <черновик> 1. -- a/b @x' || return 1
+  [[ $("${notes[@]}" new --folder Сеть --title '/\:*?"<>|' | tail -n 1) == "Сеть/Без названия" ]] || return 1
   local vault=$dir/vaults/Проверка
-  cp -r skills/new-note/examples "$vault/examples"
+  cp -r skills/baluk-note/examples "$vault/examples"
   awk '/^## Частые вызовы/ {on = 1} on && /^```$/ {exit} on == 2 {print} on && /^```typst/ {on = 2}' \
-    skills/new-note/SKILL.md >>"$vault/Математика/Заметка.typ"
+    skills/baluk-note/SKILL.md >>"$vault/Математика/Заметка.typ"
   # цель ссылки #see из блока
   printf '#import "/_baluk/lib.typ": *\n#show: note.with(title: [Производная])\n' >"$vault/Математика/Производная.typ"
   local actual
   actual=$("${notes[@]}" check | tee /dev/stderr | tail -n 1)
-  [[ $actual == "заметок: 9, ошибок: 0, предупреждений: 0, битых ссылок: 0" ]]
+  [[ $actual == "заметок: 11, ошибок: 0, предупреждений: 0, битых ссылок: 0" ]]
 }
 
 in_app() { (cd app && "$@"); }
@@ -123,7 +126,7 @@ if [[ $rust == 1 ]]; then
   step fmt cargo fmt --check
   step vendor vendor_tests
   step notes-check vault_check
-  step new-note new_note
+  step baluk-note baluk_note
   step api-types api_types
 fi
 

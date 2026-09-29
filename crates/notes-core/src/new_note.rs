@@ -5,8 +5,14 @@
 //!
 //! Существующее не перезаписывается; внутри книги заметок нет — там главы.
 //! Заготовки собираются без ошибок и предупреждений (тесты ниже и шаг
-//! `new-note` в `tools/check.sh`).
+//! `baluk-note` в `tools/check.sh`).
+//!
+//! Название живёт в самом файле (`title: […]`), поэтому в нём можно всё. Имя
+//! файла — из названия ([`file_name`]): без знаков, запрещённых в именах
+//! файлов Windows, и без служебных `_`/`.` в начале; занятое — с номером
+//! ([`NewNote::id_in`]).
 
+use std::collections::HashSet;
 use std::fmt::Write;
 
 use crate::vault::{BOOK_MAIN, NoteId, NoteKind, Vault};
@@ -16,7 +22,7 @@ use crate::{Error, Result};
 #[derive(Debug, Clone)]
 pub struct NewNote {
     pub kind: NoteKind,
-    /// Название; `None` — последний сегмент пути.
+    /// Название; `None` — последний сегмент пути (только с явным путём).
     pub title: Option<String>,
     pub tags: Vec<String>,
     /// Язык заметки (`lang:`); `None` и `"ru"` — по умолчанию библиотеки.
@@ -57,10 +63,44 @@ impl NewNote {
         out
     }
 
+    /// Путь новой заметки в папке `folder` (пусто — корень): имя файла из
+    /// названия ([`file_name`]); занято (без учёта регистра: в Windows и
+    /// macOS `SSH` и `ssh` — один файл) — `Имя 2`, `Имя 3`…
+    pub fn id_in(&self, vault: &Vault, folder: &str) -> Result<NoteId> {
+        let title = self.title.as_deref().unwrap_or_default();
+        let refuse = |reason: String| Err(Error::Create { id: title.to_owned(), reason });
+        if title.trim().is_empty() {
+            return refuse("пустое название".into());
+        }
+        let prefix = if folder.is_empty() { String::new() } else { format!("{}/", NoteId::new(folder)?) };
+        // Имена в папке: файлы (без .typ) и подпапки — строчными.
+        let files = vault.storage().list().map_err(|e| vault.io_error(folder, e))?;
+        let taken: HashSet<String> = files
+            .iter()
+            .filter_map(|f| f.strip_prefix(&prefix))
+            .map(|rest| rest.split_once('/').map_or_else(|| rest.strip_suffix(".typ").unwrap_or(rest), |(dir, _)| dir))
+            .map(str::to_lowercase)
+            .collect();
+        let exists = |name: &str| {
+            taken.contains(&name.to_lowercase()) || vault.storage().stat(&format!("{prefix}{name}")).is_ok()
+        };
+        let base = file_name(title);
+        for n in 1..=MAX_NUMBER {
+            let name = if n == 1 { base.clone() } else { format!("{base} {n}") };
+            if !exists(&name) && !exists(&format!("{name}.typ")) {
+                return NoteId::new(format!("{prefix}{name}"));
+            }
+        }
+        refuse(format!("в папке уже {MAX_NUMBER} заметок «{base}»"))
+    }
+
     /// Создать заготовку в хранилище. Результат — путь главного файла от
     /// корня хранилища.
     pub fn create(&self, vault: &Vault, id: &NoteId) -> Result<String> {
         let refuse = |reason: String| Err(Error::Create { id: id.to_string(), reason });
+        if self.title.as_deref().is_some_and(|t| t.trim().is_empty()) {
+            return refuse("пустое название".into());
+        }
         if let Some(lang) = &self.lang
             && (!(2..=3).contains(&lang.len()) || !lang.bytes().all(|b| b.is_ascii_lowercase()))
         {
@@ -93,13 +133,89 @@ impl NewNote {
     }
 }
 
-/// Текст в разметке Typst `[…]`: знаки разметки — через `\`.
+/// Сколько номеров перебирать для занятого имени.
+const MAX_NUMBER: usize = 1000;
+
+/// Самое длинное имя файла из названия, в буквах.
+pub const MAX_FILE_NAME: usize = 80;
+
+/// И в байтах: предел файловых систем — 255 байт (русская буква — два,
+/// значок — четыре); место — номеру ` 1000` и `.typ`.
+const MAX_FILE_BYTES: usize = 200;
+
+/// Имя, если от названия ничего не осталось (`???`).
+pub const UNTITLED: &str = "Без названия";
+
+/// Знаки, запрещённые в именах файлов Windows (и `/` — разделитель везде).
+const FORBIDDEN: &[char] = &['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
+
+/// Имена устройств Windows: `CON`, `con.txt` — не файлы.
+const RESERVED: &[&str] = &[
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2",
+    "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+];
+
+/// Имя файла (без `.typ`) или папки книги из названия:
+///
+/// - запрещённые в Windows знаки `/ \ : * ? " < > |` и управляющие — пробел,
+///   пробелы схлопнуты;
+/// - в начале нет `_` и `.` (служебные имена), в конце — `.` и пробелов
+///   (Windows их отрезает) и `.typ`;
+/// - не длиннее [`MAX_FILE_NAME`] букв и 200 байт (по целым буквам);
+/// - имя устройства Windows (`CON`, `lpt1.x`) и `main` (главный файл книги
+///   сделал бы папку книгой) — с `_` после основы;
+/// - ничего не осталось — [`UNTITLED`].
+pub fn file_name(title: &str) -> String {
+    let spaced: String =
+        title.chars().map(|c| if c.is_control() || FORBIDDEN.contains(&c) { ' ' } else { c }).collect();
+    let mut name = spaced.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut cut = false;
+    loop {
+        let before = name.len();
+        name = name.trim_start_matches(['_', '.', ' ']).trim_end_matches(['.', ' ']).to_owned();
+        if name.len() > 4
+            && name.is_char_boundary(name.len() - 4)
+            && name[name.len() - 4..].eq_ignore_ascii_case(".typ")
+        {
+            name.truncate(name.len() - 4);
+        }
+        if !cut && (name.chars().count() > MAX_FILE_NAME || name.len() > MAX_FILE_BYTES) {
+            let mut bytes = 0;
+            name = name
+                .chars()
+                .take(MAX_FILE_NAME)
+                .take_while(|c| {
+                    bytes += c.len_utf8();
+                    bytes <= MAX_FILE_BYTES
+                })
+                .collect();
+            cut = true;
+        }
+        if name.len() == before {
+            break;
+        }
+    }
+    if name.is_empty() {
+        return UNTITLED.to_owned();
+    }
+    let stem = name.split('.').next().unwrap_or(&name);
+    // `Main.typ` в Windows — тот же `main.typ`.
+    if RESERVED.iter().chain(&["main"]).any(|r| stem.eq_ignore_ascii_case(r)) {
+        name.insert(stem.len(), '_');
+    }
+    name
+}
+
+/// Текст в разметке Typst `[…]`: знаки разметки — через `\`, в том числе
+/// сокращения (`...` → «…», `1.` в начале — список) и кавычки (Typst
+/// сделал бы их «умными»): название в файле — ровно то, что ввели.
 fn markup(text: &str) -> String {
     let mut out = String::new();
     for c in text.chars() {
         match c {
             '\n' | '\r' => out.push(' '),
-            '[' | ']' | '\\' | '#' | '$' | '*' | '_' | '`' | '<' | '>' | '@' | '=' | '~' | '/' | '-' | '+' => {
+            '[' | ']' | '\\' | '#' | '$' | '*' | '_' | '`' | '<' | '>' | '@' | '=' | '~' | '/' | '-' | '+' | '.'
+            | '\'' | '"' => {
                 out.push('\\');
                 out.push(c);
             }
@@ -170,5 +286,122 @@ mod tests {
         assert_eq!(new(NoteKind::Note).create(&vault, &id("Сеть/UFW")).unwrap(), "Сеть/UFW.typ");
         assert_eq!(new(NoteKind::Book).create(&vault, &id("Курсы/Матан")).unwrap(), "Курсы/Матан/main.typ");
         assert!(text(&mem, "Курсы/Матан/main.typ").contains("#show: book.with("));
+
+        let blank = NewNote { title: Some("  ".into()), ..new(NoteKind::Note) };
+        assert!(blank.create(&vault, &id("y")).unwrap_err().to_string().contains("пустое название"));
+    }
+
+    #[test]
+    fn file_name_from_title() {
+        let cases = [
+            ("SSH: основы работы", "SSH основы работы"),
+            ("Ввод/вывод", "Ввод вывод"),
+            (r#"a\b:c*d?e"f<g>h|i"#, "a b c d e f g h i"),
+            ("  много   пробелов\tи\nстрок  ", "много пробелов и строк"),
+            ("Что такое C++?", "Что такое C++"),
+            ("#$@&%!", "#$@&%!"),
+            // Служебные имена и хвосты, которые Windows отрезает.
+            ("_черновик", "черновик"),
+            (".скрытое", "скрытое"),
+            ("__. _.x", "x"),
+            ("Итоги...", "Итоги"),
+            ("Итоги . . .", "Итоги"),
+            ("заметка.typ", "заметка"),
+            ("заметка.TYP.typ", "заметка"),
+            ("v1.2 релиз", "v1.2 релиз"),
+            // Имена устройств Windows и главный файл книги.
+            ("CON", "CON_"),
+            ("con.txt", "con_.txt"),
+            ("Lpt9", "Lpt9_"),
+            ("CONSOLE", "CONSOLE"),
+            ("COM10", "COM10"),
+            ("main", "main_"),
+            ("Main", "Main_"),
+            ("main идея", "main идея"),
+            // Ничего не осталось.
+            ("", UNTITLED),
+            ("   ", UNTITLED),
+            (r#"/\:*?"<>|"#, UNTITLED),
+            ("...", UNTITLED),
+            ("_", UNTITLED),
+            (".typ", "typ"),
+            ("\u{0}\u{7}\u{1b}", UNTITLED),
+            ("@#$@&$*%@#!.:/\\", "@#$@&$ %@#!"),
+        ];
+        for (title, want) in cases {
+            let got = file_name(title);
+            assert_eq!(got, want, "название {title:?}");
+            NoteId::new(got.clone()).unwrap_or_else(|e| panic!("{title:?} → {got:?}: {e}"));
+        }
+    }
+
+    #[test]
+    fn file_name_is_bounded() {
+        let long = "дл".repeat(100);
+        assert_eq!(file_name(&long).chars().count(), MAX_FILE_NAME);
+        // Обрезка по букве, а не по байту, и хвост после обрезки снова чистится.
+        let dotted = format!("{}. . . хвост", "я".repeat(MAX_FILE_NAME - 3));
+        assert_eq!(file_name(&dotted), "я".repeat(MAX_FILE_NAME - 3));
+        let wide = file_name(&"🙂".repeat(200));
+        assert!(wide.len() <= 200 && wide.chars().all(|c| c == '🙂'), "в байтах — в пределах ФС, по целым буквам");
+    }
+
+    #[test]
+    fn id_from_title_is_free_and_title_survives() {
+        let mem = Arc::new(MemStorage::new());
+        mem.write("Сеть/SSH основы.typ", "");
+        mem.write("Сеть/Без названия.typ", "");
+        mem.write("Сеть/Книга/main.typ", "");
+        mem.write("Сеть/Протоколы/DNS.typ", "");
+        let vault = Vault::new(mem.clone());
+        let titled = |t: &str| NewNote { title: Some(t.into()), ..new(NoteKind::Note) };
+        let path = |t: &str, folder: &str| titled(t).id_in(&vault, folder).map(|id| id.to_string());
+
+        assert_eq!(path("DNS", "Сеть").unwrap(), "Сеть/DNS", "имя из подпапки не мешает");
+        assert_eq!(path("SSH: основы", "Сеть").unwrap(), "Сеть/SSH основы 2", "занято — с номером");
+        assert_eq!(path("ssh ОСНОВЫ", "Сеть").unwrap(), "Сеть/ssh ОСНОВЫ 2", "регистр не важен");
+        assert_eq!(path("протоколы", "Сеть").unwrap(), "Сеть/протоколы 2", "есть папка с тем же именем");
+        assert_eq!(path("книга", "Сеть").unwrap(), "Сеть/книга 2", "и книга");
+        assert_eq!(path("???", "Сеть").unwrap(), "Сеть/Без названия 2");
+        assert_eq!(path("Вне папок", "").unwrap(), "Вне папок");
+        assert_eq!(path("a/b", "").unwrap(), "a b", "/ в названии — не папка");
+        assert_eq!(path("x", "Новая/Глубже").unwrap(), "Новая/Глубже/x", "папки нет — будет");
+
+        for bad in ["", "   ", "\n\t"] {
+            assert!(path(bad, "Сеть").unwrap_err().to_string().contains("пустое название"), "{bad:?}");
+        }
+        assert!(
+            NewNote { title: None, ..new(NoteKind::Note) }.id_in(&vault, "").is_err(),
+            "без названия — нечего брать"
+        );
+        assert!(path("x", "_служебная").is_err(), "папка — по правилам пути");
+        assert!(path("x", "Сеть/").is_err());
+
+        // Название в файле — как написано, со всеми знаками; индекс читает его обратно.
+        let odd_titles = [
+            "@#$@&$*%@#!.:/\\",
+            "C++ [1] #x $y$",
+            "Итоги... <черновик>",
+            "a_b*c*",
+            "= не заголовок",
+            "- не список",
+            "1. не список",
+            "It's \"так\" -- и ~ --- -?",
+            "https://example.org // не комментарий",
+        ];
+        for title in odd_titles {
+            let note = titled(title);
+            let id = note.id_in(&vault, "Сеть").unwrap();
+            let main = note.create(&vault, &id).unwrap();
+            let outline = crate::outline::parse_outline(&text(&mem, &main));
+            assert_eq!(outline.title.as_deref(), Some(title), "{title:?} → {main}");
+        }
+        // Книга: название — в main.typ, имя папки — из названия.
+        let book = NewNote { title: Some("Матан: кратные".into()), ..new(NoteKind::Book) };
+        let id = book.id_in(&vault, "Курсы").unwrap();
+        assert_eq!(book.create(&vault, &id).unwrap(), "Курсы/Матан кратные/main.typ");
+        // Внутри книги — нельзя, как и с явным путём.
+        let inside = titled("Глава").id_in(&vault, "Сеть/Книга").unwrap();
+        assert!(titled("Глава").create(&vault, &inside).unwrap_err().to_string().contains("книга"));
     }
 }

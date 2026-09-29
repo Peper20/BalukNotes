@@ -33,9 +33,9 @@
     book ? "book" : query.startsWith(">") ? "commands" : query.startsWith("/") ? "text" : query.startsWith("#") ? "tags" : "notes",
   );
   const q = $derived(mode === "notes" || mode === "book" ? query.trim() : query.slice(1).trim());
-  const bookTitle = $derived(book ? (notes.byId(book)?.title ?? notes.byId(book)?.name ?? book) : "");
+  const bookTitle = $derived(book ? notes.title(book) : "");
 
-  const titleOf = (n: NoteListItem) => n.title ?? n.name;
+  const titleOf = (n: NoteListItem) => n.title;
 
   const noteItems = $derived.by((): Item[] => {
     if (mode !== "notes") return [];
