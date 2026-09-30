@@ -1,4 +1,6 @@
-//! Теги заметки: элементы `ul.k-tags` шаблона → [`Context::tags`].
+//! Теги заметки: элементы `ul.k-tags` шаблона → [`Context::tags`]. Свои
+//! теги глав книги (`ul.k-chapter-tags`) — не теги книги: их знает индекс
+//! исходников ([`crate::outline::Section::tags`]).
 
 use typst_html::{HtmlElement, HtmlNode, tag};
 
@@ -8,7 +10,7 @@ use crate::render::{has_class, text_of};
 pub const PASS: TreePass = TreePass { name: "теги", visit };
 
 fn visit(ctx: &mut Context<'_>, el: &mut HtmlElement) {
-    if !(el.tag == tag::ul && has_class(el, "k-tags")) {
+    if !(el.tag == tag::ul && has_class(el, "k-tags")) || has_class(el, "k-chapter-tags") {
         return;
     }
     ctx.tags.extend(el.children.iter().filter_map(|c| match c {
@@ -33,6 +35,8 @@ mod tests {
         visit(&mut c, &mut ul);
         let mut other = el(tag::ul, &[], vec![li("не тег")]);
         visit(&mut c, &mut other);
+        let mut chapter = el(tag::ul, &[(attr::class, "k-tags k-chapter-tags")], vec![li("глава")]);
+        visit(&mut c, &mut chapter);
         assert_eq!(c.tags, ["сеть", "ssh ключи"]);
     }
 }

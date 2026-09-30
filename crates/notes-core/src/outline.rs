@@ -1,5 +1,7 @@
 //! Содержание исходника без компиляции: название и теги из шаблона,
-//! разделы и их текст — для быстрого перехода, поиска и тегов.
+//! разделы и их текст — для быстрого перехода, поиска и тегов. Глава книги
+//! со своими характеристиками (`#show: chapter.with(title: […], tags: (…))`)
+//! — раздел первого уровня со своими тегами.
 //!
 //! Как и ссылки ([`crate::graph`]), берётся из синтаксического дерева Typst:
 //! весь индекс строится за миллисекунды. Текст — приблизительный: формулы
@@ -13,12 +15,15 @@ use typst::syntax::{SyntaxKind, SyntaxNode, ast};
 const LINK_FN: &str = "see";
 /// Шаблоны baluk, у которых берём `название` и `теги`.
 const TEMPLATES: &[&str] = &["note", "book"];
+/// Глава книги: её `title` — заголовок первого уровня, `tags` — свои теги.
+const CHAPTER: &str = "chapter";
 /// Именованные строковые аргументы, которые видны читателю (подписи блоков).
 const VISIBLE_ARGS: &[&str] = &["title", "label", "caption", "description", "subtitle"];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Outline {
     pub title: Option<String>,
+    /// Теги шаблона; у книги — корня (`main.typ`), их наследуют все главы.
     pub tags: Vec<String>,
     /// Первый раздел — текст до первого заголовка (без заголовка).
     pub sections: Vec<Section>,
@@ -32,7 +37,21 @@ pub struct Section {
     pub level: usize,
     /// Метка заголовка `= Раздел <метка>` — она станет его `id`.
     pub label: Option<String>,
+    /// Свои теги главы книги (`chapter.with(tags: …)`); у остальных разделов пусто.
+    pub tags: Vec<String>,
     pub text: String,
+}
+
+impl Outline {
+    /// Теги заметки или книги: корня, затем глав (могут повторяться).
+    pub fn all_tags(&self) -> impl Iterator<Item = &str> {
+        self.tags.iter().chain(self.sections.iter().flat_map(|s| &s.tags)).map(String::as_str)
+    }
+
+    /// Есть ли тег у заметки или книги: у корня или хотя бы у одной главы.
+    pub fn has_tag(&self, tag: &str) -> bool {
+        self.all_tags().any(|t| t == tag)
+    }
 }
 
 pub fn parse_outline(source: &str) -> Outline {
@@ -51,6 +70,7 @@ struct Walker {
     heading: Option<String>,
     level: usize,
     label: Option<String>,
+    tags: Vec<String>,
 }
 
 impl Walker {
@@ -138,6 +158,7 @@ impl Walker {
             heading: self.heading.take(),
             level: self.level,
             label: self.label.take(),
+            tags: std::mem::take(&mut self.tags),
             text,
         });
     }
@@ -173,25 +194,30 @@ impl Walker {
         true
     }
 
-    /// `#show: note.with(title: […], tags: (…))`.
+    /// `#show: note.with(title: […], tags: (…))`; глава —
+    /// `#show: chapter.with(title: […], tags: (…), label: "…")`.
     fn template(&mut self, node: &SyntaxNode) {
         let Some(rule) = node.cast::<ast::ShowRule>() else { return };
         let ast::Expr::FuncCall(call) = rule.transform() else { return };
         let ast::Expr::FieldAccess(access) = call.callee() else { return };
         let ast::Expr::Ident(name) = access.target() else { return };
-        if !TEMPLATES.contains(&name.as_str()) || access.field().as_str() != "with" {
+        let chapter = name.as_str() == CHAPTER;
+        if !(chapter || TEMPLATES.contains(&name.as_str())) || access.field().as_str() != "with" {
             return;
         }
+        let mut title = None;
+        let mut tags = Vec::new();
+        let mut label = None;
         for arg in call.args().items() {
             let ast::Arg::Named(n) = arg else { continue };
             match (n.name().as_str(), n.expr()) {
                 ("title", ast::Expr::ContentBlock(block)) => {
                     let mut inner = Walker::default();
                     inner.walk(block.body().to_untyped(), SyntaxKind::Markup);
-                    self.out.title = Some(normalize(&inner.text)).filter(|t| !t.is_empty());
+                    title = Some(normalize(&inner.text));
                 }
                 ("tags", ast::Expr::Array(array)) => {
-                    self.out.tags = array
+                    tags = array
                         .items()
                         .filter_map(|item| match item {
                             ast::ArrayItem::Pos(ast::Expr::Str(s)) => Some(s.get().to_string()),
@@ -199,8 +225,20 @@ impl Walker {
                         })
                         .collect();
                 }
+                ("label", ast::Expr::Str(s)) => label = Some(s.get().to_string()),
                 _ => {}
             }
+        }
+        if chapter {
+            // Заголовок главы ставит сам шаблон — как `= Название <метка>`.
+            self.finish_section();
+            self.heading = Some(title.unwrap_or_default());
+            self.level = 1;
+            self.label = label;
+            self.tags = tags;
+        } else {
+            self.out.title = title.filter(|t| !t.is_empty());
+            self.out.tags = tags;
         }
     }
 }
@@ -257,6 +295,31 @@ ssh-copy-id host
         assert_eq!(o.sections[0].text, "О ключах — SSH. Порт — Смена порта.");
         assert!(!s2.contains("комментарий"));
         assert!(s2.contains("ssh-keygen ssh-copy-id host"), "строки кода — через пробел: {s2}");
+    }
+
+    #[test]
+    fn book_chapter_with_own_tags() {
+        let o = parse_outline(
+            r#"#import "/_baluk/lib.typ": *
+#show: chapter.with(title: [Двойные *интегралы*], tags: ("интегралы",), label: "гл-2")
+#lead[Зачем.]
+== Пределы
+Текст.
+"#,
+        );
+        assert_eq!(o.title, None, "название главы — не название книги");
+        assert!(o.tags.is_empty(), "теги главы — не теги корня");
+        let heads: Vec<_> =
+            o.sections.iter().map(|s| (s.heading.as_deref(), s.level, s.label.as_deref(), s.tags.clone())).collect();
+        assert_eq!(
+            heads,
+            [
+                (Some("Двойные интегралы"), 1, Some("гл-2"), vec!["интегралы".to_owned()]),
+                (Some("Пределы"), 2, None, vec![])
+            ]
+        );
+        assert_eq!(o.sections[0].text, "Зачем.");
+        assert!(o.has_tag("интегралы") && !o.has_tag("пределы"));
     }
 
     #[test]

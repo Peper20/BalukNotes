@@ -12,6 +12,7 @@
   import { commands, openNote, type Command } from "../lib/commands.svelte";
   import { fuzzy, highlight } from "../lib/fuzzy";
   import { tagHref } from "../lib/ids";
+  import { tagIndex } from "../lib/tags";
   import { ui } from "../lib/ui.svelte";
 
   type Item =
@@ -69,10 +70,8 @@
 
   const tagItems = $derived.by((): Item[] => {
     if (mode !== "tags") return [];
-    const counts = new Map<string, number>();
-    for (const n of notes.all) for (const t of n.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
-    return [...counts]
-      .map(([tag, count]) => ({ tag, count, m: fuzzy(q, tag) }))
+    return tagIndex(notes.all)
+      .map(({ tag, notes: count }) => ({ tag, count, m: fuzzy(q, tag) }))
       .filter((x) => x.m)
       .sort((a, b) => b.m!.score - a.m!.score || b.count - a.count)
       .map(({ tag, count, m }) => ({ kind: "tag", tag, count, positions: m!.positions }));

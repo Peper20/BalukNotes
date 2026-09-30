@@ -13,6 +13,7 @@
   import { matches } from "../lib/graph-view";
   import { graphHref, noteHref } from "../lib/ids";
   import { plural } from "../lib/plural";
+  import { noteTags } from "../lib/tags";
   import { load, save } from "../lib/storage";
   import Graph from "./Graph.svelte";
   import GraphLegend from "./GraphLegend.svelte";
@@ -53,7 +54,7 @@
   });
 
   const titles = $derived(new Map(notes.all.map((n) => [n.id, n.title] as const)));
-  const allTags = $derived([...new Set(notes.all.flatMap((n) => n.tags))].sort((a, b) => a.localeCompare(b, "ru")));
+  const allTags = $derived([...new Set(notes.all.flatMap(noteTags))].sort((a, b) => a.localeCompare(b, "ru")));
   // Цвета — по всем группам, а не по показанным: фильтр не перекрашивает узлы.
   const groups = $derived(shown?.groups ?? []);
 

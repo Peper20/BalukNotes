@@ -58,7 +58,10 @@ impl NewNote {
         }
         let mut out = format!("{HEADER}#import \"/_baluk/lib.typ\": *\n#show: {template}.with(\n{args})\n");
         if self.kind == NoteKind::Book {
-            out += "\n// Главы — файлы NN-тема.typ рядом, по строке на главу:\n// #include \"01-тема.typ\"\n";
+            out += "\n// Этот файл — корень книги: язык и теги выше общие для всех глав.\n\
+                    // Главы — файлы NN-тема.typ рядом (#import, затем `= Название` или\n\
+                    // #show: chapter.with(title: […], tags: (…)) — свои теги главы),\n\
+                    // по строке на главу:\n// #include \"01-тема.typ\"\n";
         }
         out
     }

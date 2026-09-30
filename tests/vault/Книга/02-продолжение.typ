@@ -1,6 +1,6 @@
 #import "/_baluk/lib.typ": *
 
-= Продолжение
+#show: chapter.with(title: [Продолжение], tags: ("код",))
 
 == Код из файла
 

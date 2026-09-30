@@ -434,6 +434,27 @@
   body,
 ) = _document("book", theme, lang, words, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body)
 
+/// Глава книги — свои характеристики, как у заметки: название и теги. Общее
+/// для всех глав (язык, тема, слова, теги книги) — у корня книги, `book.with`
+/// в `main.typ`: глава его наследует. Ставит заголовок главы (`=`) и под ним
+/// свои теги (только HTML: теги книги и заметки в PDF тоже не печатаются).
+///   #import "/_baluk/lib.typ": *
+///   #show: chapter.with(title: [Интегралы], tags: ("интегралы",))
+#let chapter(title: none, tags: (), label: none, body) = {
+  assert(title != none, message: "chapter: нужно название главы — title: [...]")
+  assert(type(tags) == array and tags.all(t => type(t) == str), message: "chapter: tags — массив строк, например (\"тег\",)")
+  assert(label == none or type(label) == str, message: "chapter: label — строка, например \"гл-интегралы\"")
+  context assert(
+    _doc-kind.get() == "book",
+    message: "chapter — только в главе книги (файл, подключённый #include из main.typ с book.with); в заметке раздел — `=`",
+  )
+  if label == none { heading(level: 1, title) } else { [#heading(level: 1, title)#std.label(label)] }
+  if tags.len() > 0 {
+    context if is-web() { elem("ul", "k-tags k-chapter-tags", tags.map(x => html.elem("li", x)).join()) }
+  }
+  body
+}
+
 /// Заметка — одна тема целиком: `=` — раздел, нумерация сквозная.
 ///   #import "/_baluk/lib.typ": *
 ///   #show: note.with(title: [SSH], tags: ("безопасность",))

@@ -36,6 +36,7 @@ export type { NotePage } from "./types/NotePage";
 export type { Preview } from "./types/Preview";
 export type { Rendered } from "./types/Rendered";
 export type { SearchHit } from "./types/SearchHit";
+export type { TaggedChapter } from "./types/TaggedChapter";
 export type { Fragment } from "./types/Fragment";
 export type { Schema } from "./types/Schema";
 export type { SettingDef } from "./types/SettingDef";

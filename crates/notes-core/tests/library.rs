@@ -355,3 +355,19 @@ fn frames_pdf_is_checked() {
         assert!(error(bad).contains("номера кадров от 1 до 5"), "{bad}: {}", error(bad));
     }
 }
+
+/// `chapter`: только в книге; название обязательно, теги — массив строк.
+#[test]
+fn chapter_is_checked() {
+    let error = |template: &str, chapter: &str| {
+        let page = compile(&format!(
+            "#import \"/_baluk/lib.typ\": *\n#show: {template}.with(title: [Книга])\n#show: chapter.with({chapter})\nТекст\n"
+        ));
+        page.errors.first().map(|e| e.message.clone()).unwrap_or_default()
+    };
+    assert_eq!(error("book", "title: [Глава], tags: (\"тег\",), label: \"гл\""), "");
+    assert!(error("note", "title: [Глава]").contains("только в главе книги"), "{}", error("note", "title: [Глава]"));
+    assert!(error("book", "tags: (\"тег\",)").contains("нужно название"));
+    assert!(error("book", "title: [Глава], tags: \"тег\"").contains("массив строк"));
+    assert!(error("book", "title: [Глава], label: <гл>").contains("label — строка"));
+}
