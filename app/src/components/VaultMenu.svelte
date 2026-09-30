@@ -1,12 +1,16 @@
 <!--
-  Шапка боковой панели: имя хранилища (ссылка на его главную) и меню
-  хранилищ — перейти в другое (с перезагрузкой: вкладки и места чтения у
-  каждого свои) или создать новое.
+  Низ боковой панели (как в Obsidian): хранилище и меню хранилищ — перейти в
+  другое (с перезагрузкой: вкладки и места чтения у каждого свои), создать
+  новое, переименовать или удалить открытое. Рядом — главная хранилища.
 -->
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
   import ChevronsUpDown from "@lucide/svelte/icons/chevrons-up-down";
+  import House from "@lucide/svelte/icons/house";
+  import Library from "@lucide/svelte/icons/library";
+  import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
+  import Trash2 from "@lucide/svelte/icons/trash-2";
   import { api, type VaultsResponse } from "../lib/api";
   import { homeHref } from "../lib/ids";
   import { ui } from "../lib/ui.svelte";
@@ -29,9 +33,10 @@
     }
   }
 
-  function create() {
+  function dialog(which: "new" | "rename" | "delete") {
     open = false;
-    ui.vaultNewOpen = true;
+    if (which === "new") ui.vaultNewOpen = true;
+    else ui.vaultEdit = which;
   }
 
   function onPointerDown(e: PointerEvent) {
@@ -49,11 +54,21 @@
 <svelte:window onpointerdown={onPointerDown} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="sidebar-head" bind:this={root} onkeydown={onKeydown}>
-  <a href={homeHref()} class="brand" id="vault-name" title="Главная хранилища «{vault()}»">{vault()}</a>
-  <button type="button" class="icon" id="vault-switch" title="Хранилища" aria-label="Хранилища" aria-haspopup="menu" aria-expanded={open} onclick={toggle}>
+<div class="sidebar-foot" bind:this={root} onkeydown={onKeydown}>
+  <button
+    type="button"
+    class="vault-switch"
+    id="vault-switch"
+    title="Хранилища"
+    aria-haspopup="menu"
+    aria-expanded={open}
+    onclick={toggle}
+  >
+    <Library {...icon} />
+    <span class="vault-switch-name" id="vault-name">{vault()}</span>
     <ChevronsUpDown {...icon} />
   </button>
+  <a href={homeHref()} class="icon vault-home" title="Главная хранилища «{vault()}»" aria-label="Главная хранилища"><House {...icon} /></a>
   {#if open}
     <div class="vault-menu" id="vault-menu" role="menu" aria-label="Хранилища">
       {#if failed}<p class="vault-menu-note">Сервер не ответил</p>{/if}
@@ -65,10 +80,20 @@
         </a>
       {/each}
       {#if list?.can_create}
-        <button type="button" role="menuitem" id="vault-create" onclick={create}>
-          <span class="vault-menu-mark"><Plus {...icon} /></span>
-          <span class="vault-menu-name">Новое хранилище…</span>
-        </button>
+        <div class="vault-menu-actions">
+          <button type="button" role="menuitem" id="vault-create" onclick={() => dialog("new")}>
+            <span class="vault-menu-mark"><Plus {...icon} /></span>
+            <span class="vault-menu-name">Новое хранилище…</span>
+          </button>
+          <button type="button" role="menuitem" id="vault-rename" onclick={() => dialog("rename")}>
+            <span class="vault-menu-mark"><Pencil {...icon} /></span>
+            <span class="vault-menu-name">Переименовать «{vault()}»…</span>
+          </button>
+          <button type="button" role="menuitem" id="vault-delete" class="danger" onclick={() => dialog("delete")}>
+            <span class="vault-menu-mark"><Trash2 {...icon} /></span>
+            <span class="vault-menu-name">Удалить «{vault()}»…</span>
+          </button>
+        </div>
       {/if}
     </div>
   {/if}

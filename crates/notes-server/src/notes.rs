@@ -93,7 +93,8 @@ async fn note(
     Query(q): Query<NoteQuery>,
 ) -> ApiResult<Response> {
     let id = NoteId::new(id)?;
-    let (notes, opts) = (s.vault(vault).await?.notes.clone(), s.settings.figure_options());
+    let vault = s.vault(vault).await?;
+    let (notes, opts) = (vault.notes.clone(), vault.figure_options(&s.settings));
     let by_chapter = q.chapter.is_some() || q.anchor.is_some();
     let page = blocking(move || {
         let page = notes.page(&id, opts)?;
@@ -117,7 +118,8 @@ async fn version(
     Path((vault, id)): Path<(String, String)>,
 ) -> ApiResult<Json<VersionResponse>> {
     let id = NoteId::new(id)?;
-    let (notes, opts) = (s.vault(vault).await?.notes.clone(), s.settings.figure_options());
+    let vault = s.vault(vault).await?;
+    let (notes, opts) = (vault.notes.clone(), vault.figure_options(&s.settings));
     let version = blocking(move || notes.version(&id, opts)).await?;
     Ok(Json(VersionResponse { version }))
 }

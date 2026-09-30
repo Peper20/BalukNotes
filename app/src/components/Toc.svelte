@@ -7,6 +7,7 @@
 <script lang="ts">
   import { reader, settings } from "../lib/state";
   import { ui } from "../lib/ui.svelte";
+  import BookInfo from "./BookInfo.svelte";
 
   let nav: HTMLElement | undefined = $state();
 
@@ -80,6 +81,7 @@
 {#if shown.length}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
   <nav class="toc" class:open={ui.tocOpen} aria-label="Оглавление" style:--toc-w="{ui.tocWidth}px" bind:this={nav} onclick={onClick}>
+    <BookInfo />
     <div class="toc-title">Содержание</div>
     {#each shown as h (h.id)}
       <a href="#{encodeURIComponent(h.id)}" data-id={h.id} data-depth={h.depth} class:current={ui.currentHeading === h.id}

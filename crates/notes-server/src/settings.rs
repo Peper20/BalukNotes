@@ -1,19 +1,22 @@
-//! Настройки (схема и значения) и темы оформления.
+//! Настройки (схема и значения) и темы оформления. Общие для всех хранилищ
+//! — `/api/settings`; для одного — `/api/vaults/{хранилище}/settings`: общие
+//! и поверх них заданные в хранилище (`PUT` со значением `null` — снова общая).
 
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::routing::get;
 use axum::{Json, Router};
 use notes_core::themes::Theme;
 use serde_json::{Map, Value};
 
 use crate::AppState;
-use crate::api::SettingsResponse;
+use crate::api::{SettingsResponse, VaultSettingsResponse};
 use crate::assets::css;
 use crate::error::{ApiResult, blocking};
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/settings", get(get_settings).put(put_settings))
+        .route("/api/vaults/{vault}/settings", get(get_vault_settings).put(put_vault_settings))
         .route("/api/themes", get(themes))
         .route("/api/themes.css", get(themes_css))
 }
@@ -31,6 +34,31 @@ async fn put_settings(State(s): State<AppState>, Json(patch): Json<Map<String, V
     })
     .await?;
     Ok(Json(Value::Object(values)))
+}
+
+fn vault_response(s: &AppState, own: Map<String, Value>) -> VaultSettingsResponse {
+    let shared = s.settings.values();
+    let mut values = shared.clone();
+    values.extend(own.clone());
+    VaultSettingsResponse { schema: s.settings.schema().clone(), values, shared, own }
+}
+
+async fn get_vault_settings(
+    State(s): State<AppState>,
+    Path(vault): Path<String>,
+) -> ApiResult<Json<VaultSettingsResponse>> {
+    let own = s.vault(vault).await?.settings.own();
+    Ok(Json(vault_response(&s, own)))
+}
+
+async fn put_vault_settings(
+    State(s): State<AppState>,
+    Path(vault): Path<String>,
+    Json(patch): Json<Map<String, Value>>,
+) -> ApiResult<Json<VaultSettingsResponse>> {
+    let (vault, settings) = (s.vault(vault).await?, s.settings.clone());
+    let own = blocking(move || vault.settings.update(settings.schema(), &patch)).await?;
+    Ok(Json(vault_response(&s, own)))
 }
 
 async fn themes(State(s): State<AppState>) -> Json<Vec<Theme>> {

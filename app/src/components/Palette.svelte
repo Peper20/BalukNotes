@@ -1,8 +1,8 @@
 <!--
   Палитра: быстрый переход (Ctrl+O), команды (Ctrl+K или «>»), поиск по
-  тексту (Ctrl+Shift+F или «/»), теги («#»), поиск в книге (Ctrl+F в книге
-  по главам; повторное Ctrl+F — поиск браузера). ↑↓ — выбор, Enter —
-  открыть, Ctrl+Enter — в новой вкладке, Esc — закрыть.
+  тексту (Ctrl+Shift+F или «/»), теги («#»), поиск Ctrl+F из заметки (Tab —
+  где искать: глава, заметка, хранилище; повторное Ctrl+F — поиск браузера).
+  ↑↓ — выбор, Enter — открыть, Ctrl+Enter — в новой вкладке, Esc — закрыть.
 -->
 <script lang="ts">
   import { tick } from "svelte";
@@ -10,6 +10,7 @@
   import { notes, places, router } from "../lib/state";
   import { chapterLabel, chapterOf } from "../lib/chapters";
   import { commands, openNote, type Command } from "../lib/commands.svelte";
+  import { inChapter, nextScope, scopeLabel, scopes, type FindScope } from "../lib/find";
   import { fuzzy, highlight } from "../lib/fuzzy";
   import { tagHref } from "../lib/ids";
   import { tagIndex } from "../lib/tags";
@@ -28,13 +29,19 @@
   let searching = $state(false);
 
   const query = $derived(ui.palette?.query ?? "");
-  /** Поиск в одной книге (её id) — или по всем заметкам. */
-  const book = $derived(ui.palette?.book ?? null);
+  /** Поиск Ctrl+F из заметки — или обычная палитра. */
+  const find = $derived(ui.palette?.find ?? null);
   const mode = $derived(
-    book ? "book" : query.startsWith(">") ? "commands" : query.startsWith("/") ? "text" : query.startsWith("#") ? "tags" : "notes",
+    find ? "find" : query.startsWith(">") ? "commands" : query.startsWith("/") ? "text" : query.startsWith("#") ? "tags" : "notes",
   );
-  const q = $derived(mode === "notes" || mode === "book" ? query.trim() : query.slice(1).trim());
-  const bookTitle = $derived(book ? notes.title(book) : "");
+  const q = $derived(mode === "notes" || mode === "find" ? query.trim() : query.slice(1).trim());
+  /** Поиск внутри одной заметки (книги): её id. */
+  const inNote = $derived(find && find.scope !== "vault" ? find.note : null);
+  const findTitle = $derived(find ? notes.title(find.note) : "");
+  const findBook = $derived(find ? notes.all.find((n) => n.id === find.note)?.kind === "book" : false);
+  /** Книга показана по главам — можно искать в главе. */
+  const byChapters = $derived(find != null && ui.book != null && find.note === router.currentId);
+  const chapterTitle = $derived(byChapters ? (ui.book!.chapters[ui.book!.chapter]?.title ?? "") : "");
 
   const titleOf = (n: NoteListItem) => n.title;
 
@@ -77,20 +84,22 @@
       .map(({ tag, count, m }) => ({ kind: "tag", tag, count, positions: m!.positions }));
   });
 
-  const hitItems = $derived<Item[]>(mode === "notes" || mode === "text" || mode === "book" ? hits.map((hit) => ({ kind: "hit", hit })) : []);
+  const shownHits = $derived(find?.scope === "chapter" && byChapters ? inChapter(hits, ui.book!) : hits);
+  const hitItems = $derived<Item[]>(mode === "notes" || mode === "text" || mode === "find" ? shownHits.map((hit) => ({ kind: "hit", hit })) : []);
   const items = $derived([...noteItems, ...commandItems, ...tagItems, ...hitItems]);
 
   // Поиск по тексту — с задержкой и отменой прежнего запроса.
   $effect(() => {
-    const text = mode === "notes" || mode === "text" || mode === "book" ? q : "";
-    const scope = book;
+    const text = mode === "notes" || mode === "text" || mode === "find" ? q : "";
+    const note = inNote;
+    const limit = note ? 100 : mode === "text" || mode === "find" ? 50 : 15;
     hits = [];
     if (text.length < 2) return;
     const ctrl = new AbortController();
     const timer = setTimeout(() => {
       searching = true;
       api
-        .search(text, ctrl.signal, scope ? 100 : mode === "text" ? 50 : 15, scope)
+        .search(text, ctrl.signal, limit, note)
         .then((h) => (hits = h))
         .catch(() => {})
         .finally(() => (searching = false));
@@ -103,6 +112,7 @@
 
   $effect(() => {
     void query;
+    void find?.scope;
     selected = 0;
   });
 
@@ -134,14 +144,19 @@
     list?.querySelector(".selected")?.scrollIntoView({ block: "nearest" });
   }
 
+  function setScope(scope: FindScope) {
+    if (ui.palette?.find) ui.palette.find = { ...ui.palette.find, scope };
+  }
+
   function onKeydown(e: KeyboardEvent) {
-    // Повторное Ctrl+F в поиске по книге — поиск браузера (в показанной главе).
-    if (mode === "book" && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.code === "KeyF") {
+    // Повторное Ctrl+F — поиск браузера (в показанной главе).
+    if (mode === "find" && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.code === "KeyF") {
       close();
       e.stopPropagation();
       return;
     }
-    if (e.key === "ArrowDown") move(1);
+    if (find && e.key === "Tab" && !e.ctrlKey && !e.altKey && !e.metaKey) setScope(nextScope(find.scope, byChapters, e.shiftKey ? -1 : 1));
+    else if (e.key === "ArrowDown") move(1);
     else if (e.key === "ArrowUp") move(-1);
     else if (e.key === "PageDown") move(8);
     else if (e.key === "PageUp") move(-8);
@@ -158,15 +173,21 @@
         ? "Заметки"
         : "Недавние и все заметки"
       : item.kind === "hit"
-        ? book
-          ? `В книге «${bookTitle}»`
+        ? inNote
+          ? find!.scope === "chapter" && byChapters
+            ? `В главе «${chapterTitle}»`
+            : `${findBook ? "В книге" : "В заметке"} «${findTitle}»`
           : "В тексте"
         : item.kind === "tag"
           ? "Теги"
           : "Команды";
   const placeholder = $derived(
-    mode === "book"
-      ? `Слова из текста книги «${bookTitle}»…`
+    mode === "find"
+      ? find!.scope === "vault"
+        ? "Слова из текста всех заметок…"
+        : find!.scope === "chapter" && byChapters
+          ? `Слова из главы «${chapterTitle}»…`
+          : `Слова из текста ${findBook ? "книги" : "заметки"} «${findTitle}»…`
       : mode === "commands"
         ? "Команда…"
         : mode === "text"
@@ -196,11 +217,27 @@
         aria-label="Запрос"
         aria-controls="palette-list"
       />
+      {#if find}
+        <div class="palette-scopes" role="radiogroup" aria-label="Где искать">
+          {#each scopes(byChapters) as scope}
+            <!-- Фокус остаётся в поле ввода. -->
+            <button
+              type="button"
+              role="radio"
+              aria-checked={find.scope === scope}
+              class:active={find.scope === scope}
+              tabindex="-1"
+              onmousedown={(e) => e.preventDefault()}
+              onclick={() => setScope(scope)}>{scopeLabel(scope, findBook)}</button
+            >
+          {/each}
+        </div>
+      {/if}
       <ul class="palette-list" id="palette-list" role="listbox" bind:this={list}>
         {#each items as item, i}
           {#if i === 0 || groupOf(items[i - 1]!) !== groupOf(item)}
             <li class="palette-group" role="presentation">
-              {groupOf(item)}{item.kind === "hit" ? ` · ${hits.length}` : ""}
+              {groupOf(item)}{item.kind === "hit" ? ` · ${shownHits.length}` : ""}
             </li>
           {/if}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -216,9 +253,9 @@
               {#if item.note.kind === "book"}<span class="p-badge">книга</span>{/if}
               <span class="p-path">{@render marked(item.note.id, item.path)}</span>
             {:else if item.kind === "hit"}
-              {#if book}
-                {@const chapter = book === router.currentId ? chapterOf(ui.book, item.hit.anchor) : null}
-                <span class="p-title">{item.hit.heading ?? "Начало книги"}</span>
+              {#if inNote}
+                {@const chapter = byChapters && find!.scope !== "chapter" ? chapterOf(ui.book, item.hit.anchor) : null}
+                <span class="p-title">{item.hit.heading ?? (findBook ? "Начало книги" : "Начало заметки")}</span>
                 {#if chapter}<span class="p-badge p-chapter">{chapterLabel(chapter)}</span>{/if}
               {:else}
                 <span class="p-title">{item.hit.title}{#if item.hit.heading}<span class="p-heading">{` › ${item.hit.heading}`}</span>{/if}</span>
@@ -234,7 +271,7 @@
           </li>
         {:else}
           <li class="palette-empty" role="presentation">
-            {searching ? "Ищу…" : q ? "Ничего не нашлось" : mode === "text" || mode === "book" ? "Введите хотя бы две буквы" : "Пусто"}
+            {searching ? "Ищу…" : q ? "Ничего не нашлось" : mode === "text" || mode === "find" ? "Введите хотя бы две буквы" : "Пусто"}
           </li>
         {/each}
       </ul>
@@ -245,7 +282,10 @@
         <span><kbd>&gt;</kbd> команды</span>
         <span><kbd>/</kbd> текст</span>
         <span><kbd>#</kbd> теги</span>
-        {#if mode === "book"}<span><kbd>Ctrl</kbd>+<kbd>F</kbd> поиск браузера в главе</span>{/if}
+        {#if mode === "find"}
+          <span><kbd>Tab</kbd> где искать</span>
+          <span><kbd>Ctrl</kbd>+<kbd>F</kbd> поиск браузера</span>
+        {/if}
       </footer>
     </div>
   </div>

@@ -148,13 +148,7 @@ const PREVIEW: usize = 420;
 /// Превью заметки `id`; якорь — `id` раздела, его метка или текст заголовка.
 pub fn preview(snap: &Snapshot, id: &NoteId, anchor: Option<&str>) -> Option<Preview> {
     let (entry, outline) = snap.outlines().find(|(e, _)| e.id == *id)?;
-    let ids = section_ids(outline);
-    let wanted = anchor.map(slug);
-    let at = anchor.and_then(|a| {
-        outline.sections.iter().zip(&ids).position(|(s, sid)| {
-            sid.as_deref() == Some(a) || s.heading.as_deref().map(slug) == wanted && wanted.is_some()
-        })
-    });
+    let at = anchor.and_then(|a| section_at(outline, a)).map(|(i, _)| i);
     // Без якоря — начало заметки: первый раздел с текстом.
     let section = match at {
         Some(i) => &outline.sections[i],
@@ -199,6 +193,16 @@ pub fn tagged_chapters(outline: &Outline) -> Vec<TaggedChapter> {
             Some(TaggedChapter { title: s.heading.clone()?, anchor: anchor?, tags: s.tags.clone() })
         })
         .collect()
+}
+
+/// Раздел по якорю ссылки (`#see(…, anchor: …)`): `id` раздела (метка) или
+/// текст заголовка — как находит ссылка на странице. Номер раздела и его `id`.
+pub fn section_at(outline: &Outline, anchor: &str) -> Option<(usize, String)> {
+    let wanted = slug(anchor);
+    outline.sections.iter().zip(section_ids(outline)).enumerate().find_map(|(i, (s, sid))| {
+        let sid = sid?;
+        (sid == anchor || s.heading.as_deref().map(slug).as_deref() == Some(wanted.as_str())).then_some((i, sid))
+    })
 }
 
 /// `id` разделов — по тем же правилам, что у отрисовки (`render.rs`): метка,

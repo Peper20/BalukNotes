@@ -52,6 +52,11 @@ const ANCHOR_ARG: &str = "anchor";
 pub struct Backlink {
     pub from: NoteId,
     pub anchor: Option<String>,
+    /// Раздел заметки, куда ведёт якорь: `id` заголовка (HTML заголовка —
+    /// в `Rendered::headings`) и его текст (формула — исходником); якоря
+    /// нет или раздел не нашёлся — `None`.
+    pub section: Option<String>,
+    pub heading: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -319,13 +324,19 @@ impl Snapshot {
 
     /// Кто ссылается на заметку (без ссылок на себя).
     pub fn backlinks(&self, id: &NoteId) -> Vec<Backlink> {
+        let outline = self.outlines().find(|(e, _)| e.id == *id).map(|(_, o)| o);
         let mut out = Vec::new();
         for (from, links) in &self.links {
             if from == id {
                 continue;
             }
             for link in links.iter().filter(|l| l.target == id.as_str()) {
-                out.push(Backlink { from: from.clone(), anchor: link.anchor.clone() });
+                let at = outline.zip(link.anchor.as_deref()).and_then(|(o, a)| {
+                    let (i, section) = crate::search::section_at(o, a)?;
+                    Some((section, o.sections[i].heading.clone()))
+                });
+                let (section, heading) = at.map_or((None, None), |(s, h)| (Some(s), h));
+                out.push(Backlink { from: from.clone(), anchor: link.anchor.clone(), section, heading });
             }
         }
         out

@@ -35,8 +35,8 @@ test("хранилища: выбор без адреса, новое пусто�
     // Меню: переход в другое хранилище — заметки прежние.
     await page.locator("#vault-switch").click();
     const menu = page.locator("#vault-menu");
-    await expect(menu.getByRole("menuitem", { name: "Учёба" })).toHaveAttribute("aria-current", "true");
-    await menu.getByRole("menuitem", { name: "vault" }).click();
+    await expect(menu.getByRole("menuitem", { name: "Учёба", exact: true })).toHaveAttribute("aria-current", "true");
+    await menu.getByRole("menuitem", { name: "vault", exact: true }).click();
     await expect(page).toHaveURL(vaultUrl("/"));
     await ready(page);
     await expect(page.locator("#tree").getByRole("link", { name: "SSH" })).toBeVisible();
@@ -60,6 +60,53 @@ test("хранилища: выбор без адреса, новое пусто�
   } finally {
     rmSync(study, { recursive: true, force: true });
     rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test("хранилище: переименовать (вкладки — за ним) и удалить в корзину", async ({ page }) => {
+  const old = join(VAULT, "..", "Черновики");
+  const renamed = join(VAULT, "..", "Черновики 2026");
+  mkdirSync(old, { recursive: true });
+  writeFileSync(join(old, "Идея.typ"), `${head("Идея")}Текст.\n`);
+  try {
+    await page.goto(`/v/${encodeURIComponent("Черновики")}/n/${encodeURIComponent("Идея")}`);
+    await ready(page);
+
+    await page.locator("#vault-switch").click();
+    await page.locator("#vault-rename").click();
+    const dialog = page.locator("#vault-edit");
+    await expect(dialog.getByLabel("Название")).toHaveValue("Черновики");
+    // Занятое имя — ошибка сервера, ничего не переименовано.
+    await dialog.getByLabel("Название").fill("vault");
+    await dialog.getByRole("button", { name: "Переименовать" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("vault");
+    await dialog.getByLabel("Название").fill("Черновики 2026");
+    await dialog.getByRole("button", { name: "Переименовать" }).click();
+
+    // Та же заметка — под новым именем хранилища.
+    await expect(page).toHaveURL(`/v/${encodeURIComponent("Черновики 2026")}/n/${encodeURIComponent("Идея")}`);
+    await ready(page);
+    await expect(page.locator("#vault-name")).toHaveText("Черновики 2026");
+    await expect(page.locator("#note .k-title h1")).toHaveText("Идея");
+    expect(existsSync(join(renamed, "Идея.typ"))).toBe(true);
+    expect(existsSync(old)).toBe(false);
+
+    // Удалить: «Отмена» — по умолчанию; удалённое — в корзине, дальше — выбор хранилища.
+    await page.locator("#vault-switch").click();
+    await page.locator("#vault-delete").click();
+    await expect(dialog).toContainText("Удалить хранилище «Черновики 2026»?");
+    await expect(dialog.getByRole("button", { name: "Отмена" })).toBeFocused();
+    await page.locator("#vault-delete-confirm").click();
+    await expect(page).toHaveURL("/");
+    await ready(page);
+    await expect(page.locator("#vault-picker")).toBeVisible();
+    await expect(page.locator("#vault-picker").getByRole("link", { name: "Черновики 2026" })).toHaveCount(0);
+    expect(existsSync(renamed)).toBe(false);
+    expect(existsSync(join(TRASH, "Черновики 2026", "Идея.typ"))).toBe(true);
+  } finally {
+    rmSync(old, { recursive: true, force: true });
+    rmSync(renamed, { recursive: true, force: true });
+    rmSync(TRASH, { recursive: true, force: true });
   }
 });
 

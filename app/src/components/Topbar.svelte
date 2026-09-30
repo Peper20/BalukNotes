@@ -9,7 +9,8 @@
   import Sun from "@lucide/svelte/icons/sun";
   import TableOfContents from "@lucide/svelte/icons/table-of-contents";
   import { nextTheme } from "../lib/appearance";
-  import { notes, reader, router, settings, updates } from "../lib/state";
+  import CloudOff from "@lucide/svelte/icons/cloud-off";
+  import { connection, notes, reader, router, settings, updates } from "../lib/state";
   import { splitId } from "../lib/ids";
   import { commands, toggleToc } from "../lib/commands.svelte";
   import { ui } from "../lib/ui.svelte";
@@ -37,6 +38,18 @@
     {#if crumbs && router.currentId}{crumbs.folder ? `${notes.folderLabel(crumbs.folder)} / ` : ""}<b>{notes.title(router.currentId)}</b>{/if}
   </div>
   <span class="status" class:busy={reader.busy} id="status" role="status">{reader.status}</span>
+  {#if !connection.online}
+    <!-- Нет связи с сервером (state/connection): метка, подробности — в подсказке. -->
+    <button
+      type="button"
+      class="offline-chip"
+      id="offline"
+      title="Нет связи с сервером. Показано то, что уже загружено; когда связь появится, страница обновится. Нажмите, чтобы проверить сейчас."
+      onclick={() => connection.retry()}
+    >
+      <CloudOff size={15} strokeWidth={1.75} aria-hidden="true" />нет связи
+    </button>
+  {/if}
   <button type="button" id="open-palette" class="icon" title="Быстрый переход и поиск (Ctrl+O)" aria-label="Поиск" onclick={() => ui.openPalette("")}><Search {...icon} /></button>
   {#if reader.toc.length}
     <button type="button" id="toggle-toc" class="icon" title="Оглавление" aria-label="Оглавление" onclick={toggleToc}><TableOfContents {...icon} /></button>

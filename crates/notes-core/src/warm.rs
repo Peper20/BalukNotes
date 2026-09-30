@@ -33,7 +33,7 @@
 //! заметки — несколько `stat`. При запуске фонового потока кэш на диске
 //! чистится ([`crate::cache::DiskCache::prune`]).
 
-use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use parking_lot::{Condvar, Mutex};
@@ -98,6 +98,8 @@ pub struct Warmer {
     /// Растёт с каждой подсказкой: проход начинается заново.
     generation: AtomicU64,
     wake: Condvar,
+    /// Хранилище закрыто ([`Warmer::stop`]): фоновый поток выходит.
+    stopped: AtomicBool,
 }
 
 /// Итог одного прохода.
@@ -153,6 +155,14 @@ impl Warmer {
         }
     }
 
+    /// Остановить прогрев навсегда (хранилище закрыто): проход кончается,
+    /// фоновый поток ([`Warmer::forever`]) выходит.
+    pub fn stop(&self) {
+        self.stopped.store(true, Ordering::SeqCst);
+        self.set_mode(WarmMode::Off);
+        self.poke();
+    }
+
     /// Файлы хранилища изменились: пройти заново (подсказки те же).
     pub fn poke(&self) {
         let hints = self.hints.lock();
@@ -201,10 +211,10 @@ impl Warmer {
 
     /// Прогревать бесконечно (фоновый поток сервера). Сначала — чистка
     /// кэша на диске. `rescan` — сколько спать без подсказок и изменений.
-    pub fn forever(&self, pages: &Pages, rescan: impl Fn() -> Duration) -> ! {
+    pub fn forever(&self, pages: &Pages, rescan: impl Fn() -> Duration) {
         prune(pages);
         let mut released = None;
-        loop {
+        while !self.stopped.load(Ordering::SeqCst) {
             let started = Instant::now();
             let stats = self.pass(pages);
             if should_release(stats, released, Instant::now()) {
@@ -224,7 +234,7 @@ impl Warmer {
             }
             let generation = self.generation.load(Ordering::SeqCst);
             let mut hints = self.hints.lock();
-            if self.generation.load(Ordering::SeqCst) == generation {
+            if self.generation.load(Ordering::SeqCst) == generation && !self.stopped.load(Ordering::SeqCst) {
                 self.wake.wait_for(&mut hints, rescan());
             }
         }

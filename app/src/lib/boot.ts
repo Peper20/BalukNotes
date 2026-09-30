@@ -3,7 +3,7 @@
 // нужно раньше, чем их прочитают модули состояния.
 
 import { api, type VaultsResponse } from "./api";
-import { loadShared, saveShared } from "./storage";
+import { loadShared, moveVault, saveShared } from "./storage";
 import { chooseVault, setVault, splitVaultPath, vault, vaultBase } from "./vault";
 
 /** Ключ localStorage: хранилище, открытое последним. */
@@ -37,3 +37,6 @@ export function rememberVault(): void {
   const name = vault();
   if (name != null) saveShared(LAST, name);
 }
+
+/** Хранилище переименовали (`to`) или удалили (null): его вкладки и места чтения — за ним. */
+export const vaultMoved = (from: string, to: string | null): void => moveVault(from, to, LAST);

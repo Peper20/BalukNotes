@@ -113,11 +113,22 @@ class Reader {
       this.setStatus(`${updated ? "книга обновлена" : "собрано"} ${new Date().toLocaleTimeString("ru-RU")}`);
     } catch (e) {
       if (this.#ctrl !== ctrl) return; // отменена или устарела
+      const offline = e instanceof ApiError && e.offline;
+      document.documentElement.dataset.state = "ready";
+      // Нет связи, а заметка уже на экране (обновление, другая глава) — она
+      // остаётся: пусть лучше прежняя, чем пустая страница.
+      if (offline && this.page?.id === id) {
+        this.setStatus(""); // «нет связи» показывает метка в Topbar
+        return;
+      }
       this.version = null;
       this.page = null;
-      this.failure = e instanceof ApiError && e.status === 404 ? `Заметки «${id}» нет.` : `Не удалось загрузить: ${(e as Error).message}`;
+      this.failure = offline
+        ? "Нет связи с сервером: заметка откроется, когда связь вернётся."
+        : e instanceof ApiError && e.status === 404
+          ? `Заметки «${id}» нет.`
+          : `Не удалось загрузить: ${(e as Error).message}`;
       this.setStatus("");
-      document.documentElement.dataset.state = "ready";
     } finally {
       if (this.#ctrl === ctrl) {
         this.#ctrl = null;

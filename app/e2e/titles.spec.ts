@@ -49,3 +49,22 @@ test("правка названия и _folder.toml — видна сразу", 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("формула в названии — текстом исходника; в «Ссылаются сюда» — заголовок с формулой", async ({ page }) => {
+  const dir = join(VAULT, "Формулы в названиях");
+  mkdirSync(dir, { recursive: true });
+  const head = (title: string) => `#import "/_baluk/lib.typ": *\n#show: note.with(title: [${title}])\n\n`;
+  writeFileSync(join(dir, "ряд.typ"), `${head("Ряд $sum 1/n^2$")}См. #see("Формулы и теги", anchor: "Пространство-ℝ𝑛-и-норма-‖𝑥‖2").\n`);
+  try {
+    await open(page, "Формулы в названиях/ряд");
+    await expect(page.locator('#tree a[data-id="Формулы в названиях/ряд"]')).toHaveText("Ряд sum 1/n^2");
+    await expect(page.locator("#crumbs b")).toHaveText("Ряд sum 1/n^2");
+
+    await open(page, "Формулы и теги");
+    const item = page.locator("#backlinks li", { hasText: "Ряд sum 1/n^2" });
+    await expect(item.locator(".backlinks-heading math")).toHaveCount(2);
+    await expect(item.locator(".backlinks-heading strong")).toHaveText("норма");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

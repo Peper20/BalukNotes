@@ -22,6 +22,7 @@
   import Sidebar from "./components/Sidebar.svelte";
   import Toc from "./components/Toc.svelte";
   import Topbar from "./components/Topbar.svelte";
+  import VaultEdit from "./components/VaultEdit.svelte";
   import VaultNew from "./components/VaultNew.svelte";
 
   let started = $state(false);
@@ -123,6 +124,7 @@
   <Settings />
   <Help />
   <VaultNew />
+  <VaultEdit />
   <NoteDelete />
   <Palette />
   <LinkPreview />

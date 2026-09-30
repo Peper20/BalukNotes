@@ -8,21 +8,29 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text); ba
 .app.sidebar-hidden .sidebar { visibility: hidden; }
 
 /* ── Боковая панель ─────────────────────────────────────────────────── */
+/* Дерево прокручивается, хранилище — всегда внизу (как в Obsidian). */
 .sidebar {
-  position: sticky; top: 0; height: 100vh; overflow-y: auto; box-sizing: border-box;
+  position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; box-sizing: border-box;
   border-right: 1px solid var(--k-line); background: var(--k-surface);
 }
-.sidebar-head { position: relative; display: flex; align-items: center; gap: 0.3rem; padding: 0.55rem 0.5rem 0.3rem 1rem; }
-.brand {
-  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-weight: 600; color: var(--k-text); text-decoration: none; letter-spacing: 0.02em;
+.sidebar-foot {
+  position: relative; flex: none; display: flex; align-items: center; gap: 0.2rem;
+  padding: 0.35rem 0.5rem; border-top: 1px solid var(--k-line);
 }
+.vault-switch {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.45rem; padding: 0.3rem 0.5rem; border-radius: 6px;
+  border: 1px solid transparent; background: none; font: inherit; font-weight: 600; color: var(--k-text); cursor: pointer; text-align: left;
+}
+.vault-switch svg { flex: none; color: var(--k-muted); }
+.vault-switch:hover, .vault-switch[aria-expanded="true"] { background: color-mix(in srgb, var(--k-text) 7%, transparent); }
+.vault-switch:focus-visible { outline: 2px solid var(--k-accent); outline-offset: -2px; }
+.vault-switch-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: 0.02em; }
 /* Меню хранилищ и меню заметки в дереве — одинаковые строки. */
 .vault-menu, .note-menu {
   z-index: 30; display: flex; flex-direction: column; padding: 0.3rem; min-width: 12rem; box-sizing: border-box;
   border: 1px solid var(--k-line); border-radius: 8px; background: var(--k-bg); box-shadow: 0 8px 28px rgb(0 0 0 / 0.22);
 }
-.vault-menu { position: absolute; left: 0.5rem; right: 0.5rem; top: calc(100% + 0.1rem); max-height: 60vh; overflow-y: auto; }
+.vault-menu { position: absolute; left: 0.5rem; right: 0.5rem; bottom: calc(100% + 0.1rem); max-height: 60vh; overflow-y: auto; }
 .note-menu { position: fixed; }
 .vault-menu a, .vault-menu button, .note-menu button {
   display: flex; align-items: center; gap: 0.45rem; min-height: 1.9rem; padding: 0 0.5rem; border: none; border-radius: 5px;
@@ -33,15 +41,16 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text); ba
   outline: none; background: color-mix(in srgb, var(--k-accent) 14%, transparent);
 }
 .vault-menu a.current { font-weight: 600; }
-.vault-menu button { color: var(--k-muted); border-top: 1px solid var(--k-line); border-radius: 0 0 5px 5px; margin-top: 0.2rem; }
+.vault-menu-actions { display: flex; flex-direction: column; border-top: 1px solid var(--k-line); margin-top: 0.2rem; padding-top: 0.2rem; }
+.vault-menu button { color: var(--k-muted); }
 .vault-menu-mark { display: inline-flex; width: 16px; flex: none; color: var(--k-accent); }
 .vault-menu-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vault-menu-note { margin: 0.3rem 0.5rem; color: var(--k-muted); }
-.note-menu button.danger { color: var(--k-box-pitfall); }
+.note-menu button.danger, .vault-menu button.danger { color: var(--k-box-pitfall); }
 /* Строка дерева: [шеврон] значок имя [счётчик]. Отступ уровня — ширина
  * шеврона с зазором: шеврон вложенной папки встаёт под значок родителя,
  * значок заметки — под значок соседней папки; направляющая — под шевроном. */
-.tree { --tree-pad: 0.5rem; --tree-gap: 0.4rem; padding: 0.1rem 0.5rem 2rem; font-size: 13.5px; }
+.tree { --tree-pad: 0.5rem; --tree-gap: 0.4rem; flex: 1; min-height: 0; overflow-y: auto; padding: 0.6rem 0.5rem 2rem; font-size: 13.5px; }
 .tree summary, .tree a {
   display: flex; align-items: center; gap: var(--tree-gap); min-height: 1.75rem; box-sizing: border-box;
   padding: 0 var(--tree-pad); border-radius: 6px; color: var(--k-text); text-decoration: none;
@@ -68,6 +77,15 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text); ba
 .tree a.active { background: color-mix(in srgb, var(--k-accent) 16%, transparent); color: var(--k-accent); font-weight: 600; }
 .tree a.active .tree-icon { color: var(--k-accent); }
 
+/* ── Нет связи с сервером: метка в верхней строке (Topbar) ───────────── */
+.offline-chip {
+  display: inline-flex; align-items: center; gap: 0.3rem; flex: none; padding: 0.15rem 0.6rem; border-radius: 1em;
+  font: inherit; font-size: 0.85em; cursor: pointer; color: var(--k-box-pitfall);
+  border: 1px solid color-mix(in srgb, var(--k-box-pitfall) 50%, transparent); background: color-mix(in srgb, var(--k-box-pitfall) 8%, transparent);
+}
+.offline-chip:hover { background: color-mix(in srgb, var(--k-box-pitfall) 16%, transparent); }
+.offline-chip:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
+
 /* ── Верхняя строка ─────────────────────────────────────────────────── */
 .main { min-width: 0; }
 .topbar {
@@ -79,13 +97,13 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text); ba
 .crumbs b { color: var(--k-text); font-weight: 600; }
 .status { color: var(--k-muted); font-size: 0.85em; white-space: nowrap; }
 .status.busy::before { content: "● "; color: var(--k-accent); }
-button.icon {
-  display: inline-grid; place-items: center; flex: none; padding: 0;
+button.icon, a.icon {
+  display: inline-grid; place-items: center; flex: none; padding: 0; box-sizing: border-box;
   font: inherit; font-size: 1.05rem; line-height: 1; width: 2rem; height: 2rem; border-radius: 6px;
   border: 1px solid transparent; background: none; color: var(--k-muted); cursor: pointer;
 }
-button.icon:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
-button.icon:hover { color: var(--k-accent); border-color: var(--k-line); background: var(--k-surface); }
+button.icon:focus-visible, a.icon:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
+button.icon:hover, a.icon:hover { color: var(--k-accent); border-color: var(--k-line); background: var(--k-surface); }
 button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 
 /* ── Ошибки компиляции ──────────────────────────────────────────────── */
@@ -214,6 +232,18 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
  * свой слой (isolation): без этого заметка перекрывает их и они не нажимаются. */
 .chapter-nav, .backlinks { position: relative; z-index: 1; }
 
+/* Общее книги (BookInfo.svelte) — вверху оглавления. */
+.book-info {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; color: var(--k-muted); line-height: 1.4;
+  margin: 0.3rem 0.5rem 0.5rem; padding-bottom: 0.55rem; border-bottom: 1px solid var(--k-line);
+}
+.book-info svg { flex: none; }
+.book-info-tags { display: flex; flex-wrap: wrap; gap: 0.1rem 0.55rem; }
+/* Ссылки внутри — не пункты оглавления. */
+.toc .book-info a { display: inline; padding: 0; border: none; color: var(--k-muted); }
+.toc .book-info a.book-info-title { color: var(--k-text); font-weight: 600; }
+.toc .book-info a:hover { color: var(--k-accent); }
+
 /* ── Ссылаются сюда ─────────────────────────────────────────────────── */
 .backlinks {
   /* Кегль — как у заметки, чтобы em ширины совпали с колонкой; текст — мельче. */
@@ -253,6 +283,18 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .setting select { max-width: min(16rem, 55vw); text-overflow: ellipsis; }
 .setting input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: var(--k-accent); }
 .settings-error { margin: 0 1rem 1rem; color: var(--k-box-pitfall); }
+.settings-scope { margin: 0.6rem 1rem 0; color: var(--k-muted); font-size: 0.85em; overflow-wrap: anywhere; }
+/* Откуда значение: метка и действия под настройкой. */
+.setting-source { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.7rem; font-size: 0.8em; }
+.setting-badge { padding: 0 0.5em; border-radius: 1em; border: 1px solid currentColor; }
+.setting-badge.own { color: var(--k-accent); }
+.setting-badge.shared { color: var(--k-muted); }
+.setting-action {
+  font: inherit; padding: 0; border: none; background: none; color: var(--k-muted); cursor: pointer;
+  text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 40%, transparent); text-underline-offset: 2px;
+}
+.setting-action:hover { color: var(--k-accent); }
+.setting-action:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
 
 /* ── Выбор хранилища (адрес без хранилища, первый запуск) ───────────── */
 .vault-picker { box-sizing: border-box; width: min(28rem, 100%); margin: 12vh auto 2rem; padding: 0 1rem; }
@@ -279,9 +321,9 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 }
 .vault-picker-row button:disabled { opacity: 0.5; cursor: default; }
 
-/* ── Короткие диалоги: новое хранилище, удалить заметку ─────────────── */
-.vault-new, .note-delete { width: min(26rem, 94vw); }
-.vault-new h2, .note-delete h2 { overflow-wrap: anywhere; }
+/* ── Короткие диалоги: хранилище (новое, переименовать, удалить), удалить заметку ── */
+.vault-new, .vault-edit, .note-delete { width: min(26rem, 94vw); }
+.vault-new h2, .vault-edit h2, .note-delete h2 { overflow-wrap: anywhere; }
 .dialog-body { padding: 0.8rem 1rem 0.2rem; }
 .dialog-body p { margin: 0 0 0.6rem; }
 .dialog-body label { display: block; margin-bottom: 0.3rem; font-weight: 600; }
@@ -329,6 +371,13 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
   font: inherit; font-size: 1.05rem; padding: 0.8rem 1rem; border: none; border-bottom: 1px solid var(--k-line);
   background: transparent; color: var(--k-text); outline: none;
 }
+.palette-scopes { display: flex; gap: 0.3rem; padding: 0.45rem 0.8rem; border-bottom: 1px solid var(--k-line); }
+.palette-scopes button {
+  font: inherit; font-size: 0.85em; padding: 0.15rem 0.7rem; border: 1px solid var(--k-line); border-radius: 1em;
+  background: none; color: var(--k-muted); cursor: pointer;
+}
+.palette-scopes button:hover { color: var(--k-text); }
+.palette-scopes button.active { border-color: var(--k-accent); color: var(--k-accent); background: color-mix(in srgb, var(--k-accent) 10%, transparent); }
 .palette-list { list-style: none; margin: 0; padding: 0.3rem; overflow-y: auto; }
 .palette-list li[role="option"] {
   display: grid; grid-template-columns: auto auto 1fr; align-items: baseline; gap: 0 0.6rem;

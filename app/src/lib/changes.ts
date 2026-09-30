@@ -1,38 +1,26 @@
 // Откуда клиент узнаёт, что файлы заметок могли измениться: события сервера
-// (`…/events` хранилища, сервер следит за файлами), а без них — опрос раз в
-// `POLL_SECONDS`. Проверку (сверку версии) делает state/updates — источнику
-// достаточно сказать «проверь».
-
-import type { EventsHello } from "./api/types/EventsHello";
+// (`…/events` хранилища, сервер следит за файлами). Опроса нет (решение
+// пользователя): без событий (сервер не следит, режим «только по кнопке»)
+// изменения — по кнопке «Обновить». Проверку (сверку версии) делает
+// state/updates — источнику достаточно сказать «проверь».
 
 export interface ChangeSource {
   /** Начать слушать; вернуть «остановить». */
   start(onChange: () => void): () => void;
 }
 
-/** Опрос раз в `seconds` секунд (0 — никогда); скрытую вкладку не тревожить. */
-export function polling(seconds: number, hidden: () => boolean = () => document.hidden): ChangeSource {
-  return {
-    start(onChange) {
-      if (!(seconds > 0)) return () => {};
-      const timer = setInterval(() => hidden() || onChange(), seconds * 1000);
-      return () => clearInterval(timer);
-    },
-  };
-}
-
-/** Опрос, когда событий нет (сервер не следит за файлами, связь потеряна). */
-export const POLL_SECONDS = 5;
-
 /** Настройка `refresh.mode`: «автоматически» или «только по кнопке». */
 export type RefreshMode = "auto" | "manual";
 
-/**
- * Источник изменений по настройке: автоматически — события сервера, без
- * них опрос; по кнопке — никакого (проверяет только «Обновить»).
- */
-export function changeSource(mode: RefreshMode, eventsUrl: string, connect?: (url: string) => EventStream): ChangeSource {
-  return mode === "manual" ? polling(0) : serverEvents(eventsUrl, polling(POLL_SECONDS), connect);
+/** Ничего не слушать: изменения — только по кнопке. */
+const none: ChangeSource = { start: () => () => {} };
+
+/** Связь с сервером по потоку событий: пропала (`false`) или есть (`true`). */
+export type Reach = (reachable: boolean) => void;
+
+/** Источник изменений по настройке: автоматически — события сервера, по кнопке — никакого. */
+export function changeSource(mode: RefreshMode, eventsUrl: string, reach?: Reach, connect?: (url: string) => EventStream): ChangeSource {
+  return mode === "manual" ? none : serverEvents(eventsUrl, reach, connect);
 }
 
 /** Что нужно от `EventSource` (в тестах — подделка). */
@@ -43,44 +31,32 @@ export interface EventStream {
 }
 
 /**
- * События сервера: `change` — проверить. Пока событий нет (сервер не следит
- * за файлами, соединение потеряно, старый сервер без событий) —
- * `fallback` (опрос). После восстановленного соединения — одна проверка:
+ * События сервера: `change` — проверить. Разрыв — `reach(false)` (браузер
+ * переподключается сам); снова `hello` — `reach(true)` и одна проверка:
  * изменения за время разрыва могли потеряться.
  */
-export function serverEvents(url: string, fallback: ChangeSource, connect: (url: string) => EventStream = (u) => new EventSource(u)): ChangeSource {
+export function serverEvents(url: string, reach: Reach = () => {}, connect: (url: string) => EventStream = (u) => new EventSource(u)): ChangeSource {
   return {
     start(onChange) {
-      let stopFallback: (() => void) | null = null;
-      const useFallback = () => (stopFallback ??= fallback.start(onChange));
-      const quitFallback = () => {
-        stopFallback?.();
-        stopFallback = null;
-      };
       let es: EventStream;
       try {
         es = connect(url);
       } catch {
-        useFallback();
-        return quitFallback;
+        return () => {};
       }
       let lost = false;
-      es.addEventListener("hello", (e) => {
-        const hello = JSON.parse(e.data) as EventsHello;
-        if (hello.watching) quitFallback();
-        else useFallback();
+      // `hello` говорит и, следит ли сервер за файлами: не следит — изменения по кнопке.
+      es.addEventListener("hello", () => {
+        reach(true);
         if (lost) onChange();
         lost = false;
       });
       es.addEventListener("change", () => onChange());
       es.onerror = () => {
         lost = true;
-        useFallback();
+        reach(false);
       };
-      return () => {
-        es.close();
-        quitFallback();
-      };
+      return () => es.close();
     },
   };
 }

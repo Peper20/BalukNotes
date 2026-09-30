@@ -483,13 +483,94 @@ async fn vaults_are_separate() {
     assert_eq!(call(app, "GET", "/api/themes", None).await.0, StatusCode::OK);
 }
 
-/// Сервер на одной папке (`--vault <путь>`): новые хранилища не создаются.
+/// Переименование и удаление хранилища: открытое закрывается, заметки
+/// переезжают с папкой, удалённое — в корзину.
+#[tokio::test]
+async fn vaults_rename_and_trash() {
+    let data = tempfile::tempdir().unwrap();
+    let trash = tempfile::tempdir().unwrap();
+    let vaults = Vaults::new(data.path());
+    for (vault, note) in [("Учёба", "Матан"), ("Работа", "Отчёт")] {
+        let dir = vaults.create(&VaultName::new(vault).unwrap()).unwrap();
+        std::fs::write(dir.join(format!("{note}.typ")), "").unwrap();
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let config = config(PathBuf::new(), Some(trash.path().to_owned()));
+    let app = router(AppState::new(VaultSet::registry(vaults, config, NOTES.clone(), settings(&dir))));
+    // Открыто до переименования.
+    assert_eq!(call(app.clone(), "GET", &uri("/api/vaults/Учёба/notes"), None).await.0, StatusCode::OK);
+
+    let (status, list) = call(app.clone(), "PATCH", &uri("/api/vaults/Учёба"), Some(r#"{"name": "Учёба 2026"}"#)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["vaults"], serde_json::json!(["Работа", "Учёба 2026"]));
+    assert_eq!(call(app.clone(), "GET", &uri("/api/vaults/Учёба/notes"), None).await.0, StatusCode::NOT_FOUND);
+    let (status, notes) = call(app.clone(), "GET", &uri("/api/vaults/Учёба 2026/notes"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(notes[0]["id"], "Матан");
+    let taken = call(app.clone(), "PATCH", &uri("/api/vaults/Работа"), Some(r#"{"name": "Учёба 2026"}"#)).await;
+    assert_eq!(taken.0, StatusCode::CONFLICT);
+    let bad = call(app.clone(), "PATCH", &uri("/api/vaults/Работа"), Some(r#"{"name": "a/b"}"#)).await;
+    assert_eq!(bad.0, StatusCode::BAD_REQUEST);
+
+    let (status, list) = call(app.clone(), "DELETE", &uri("/api/vaults/Работа"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["vaults"], serde_json::json!(["Учёба 2026"]));
+    assert!(trash.path().join("Работа/Отчёт.typ").is_file(), "в корзине целиком");
+    assert_eq!(call(app, "DELETE", &uri("/api/vaults/Работа"), None).await.0, StatusCode::NOT_FOUND);
+}
+
+/// Настройки хранилища: поверх общих, в его папке, переезжают с ним; у
+/// другого хранилища — общие; настройки устройства — только общие.
+#[tokio::test]
+async fn vault_settings_over_shared() {
+    let data = tempfile::tempdir().unwrap();
+    let vaults = Vaults::new(data.path());
+    for vault in ["Учёба", "Работа"] {
+        vaults.create(&VaultName::new(vault).unwrap()).unwrap();
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let set = VaultSet::registry(vaults.clone(), config(PathBuf::new(), None), NOTES.clone(), settings(&dir));
+    let app = router(AppState::new(set));
+    let size = |v: &Value, part: &str| v[part]["appearance.font_size"].clone();
+
+    let (status, body) =
+        call(app.clone(), "PUT", &uri("/api/vaults/Учёба/settings"), Some(r#"{"appearance.font_size": 22}"#)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!((size(&body, "values"), size(&body, "own"), size(&body, "shared")), (22.into(), 22.into(), 19.into()));
+    assert!(vaults.path(&VaultName::new("Учёба").unwrap()).join(".baluk/settings.json").is_file());
+    let (_, other) = call(app.clone(), "GET", &uri("/api/vaults/Работа/settings"), None).await;
+    assert_eq!(size(&other, "values"), 19);
+    assert!(other["own"].as_object().unwrap().is_empty());
+
+    // Общая настройка меняется у всех, своя у хранилища — сильнее.
+    call(app.clone(), "PUT", "/api/settings", Some(r#"{"appearance.font_size": 20}"#)).await;
+    assert_eq!(size(&call(app.clone(), "GET", &uri("/api/vaults/Работа/settings"), None).await.1, "values"), 20);
+    assert_eq!(size(&call(app.clone(), "GET", &uri("/api/vaults/Учёба/settings"), None).await.1, "values"), 22);
+
+    let device = r#"{"device.builds": 4}"#;
+    assert_eq!(
+        call(app.clone(), "PUT", &uri("/api/vaults/Учёба/settings"), Some(device)).await.0,
+        StatusCode::BAD_REQUEST
+    );
+
+    // Переехали с папкой; null — снова общая.
+    call(app.clone(), "PATCH", &uri("/api/vaults/Учёба"), Some(r#"{"name": "Учёба 2"}"#)).await;
+    assert_eq!(size(&call(app.clone(), "GET", &uri("/api/vaults/Учёба 2/settings"), None).await.1, "values"), 22);
+    let (_, body) =
+        call(app, "PUT", &uri("/api/vaults/Учёба 2/settings"), Some(r#"{"appearance.font_size": null}"#)).await;
+    assert_eq!(size(&body, "values"), 20);
+}
+
+/// Сервер на одной папке (`--vault <путь>`): хранилища не создаются, не
+/// переименовываются и не удаляются.
 #[tokio::test]
 async fn single_vault_cannot_create() {
     let (app, _dir) = app();
     let (_, list) = call(app.clone(), "GET", "/api/vaults", None).await;
     assert_eq!(list, serde_json::json!({ "vaults": ["test"], "can_create": false }));
     assert_eq!(call(app.clone(), "POST", "/api/vaults", Some(r#"{"name": "x"}"#)).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(call(app.clone(), "PATCH", "/api/vaults/test", Some(r#"{"name": "x"}"#)).await.0, StatusCode::FORBIDDEN);
+    assert_eq!(call(app.clone(), "DELETE", "/api/vaults/test", None).await.0, StatusCode::FORBIDDEN);
     assert_eq!(call(app, "GET", "/api/vaults/other/notes", None).await.0, StatusCode::NOT_FOUND);
 }
 

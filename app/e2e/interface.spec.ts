@@ -57,20 +57,42 @@ test("раскрытые «Ответы» — по разделу и текст�
   }
 });
 
-test("настройки: кегль меняется сразу и сохраняется", async ({ page }) => {
+test("настройки: кегль — для всех хранилищ, по выбору — только для этого; прочее — для хранилища", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await page.locator("#open-settings").click();
   const size = page.locator('input[id="setting-appearance.font_size"]');
+  const row = page.locator('.setting[data-key="appearance.font_size"]');
+  const shared = async () => (await (await page.request.get("/api/settings")).json()).values["appearance.font_size"];
+  await expect(row).toHaveAttribute("data-source", "default");
   await size.fill("23");
   await size.dispatchEvent("change");
   await expect(page.locator("html")).toHaveCSS("--k-size", "23px");
+  await expect(row.locator(".setting-badge")).toHaveText("изменено для всех хранилищ");
+  expect(await shared()).toBe(23);
   await page.reload();
   await ready(page);
   await expect(page.locator("html")).toHaveCSS("--k-size", "23px");
+
+  // Только для этого хранилища: дальше кегль меняется лишь здесь.
   await page.locator("#open-settings").click();
-  await size.fill("19");
+  await row.getByRole("button", { name: "только для этого хранилища" }).click();
+  await expect(row.locator(".setting-badge")).toHaveText("только в этом хранилище");
+  await size.fill("25");
   await size.dispatchEvent("change");
+  await expect(page.locator("html")).toHaveCSS("--k-size", "25px");
+  expect(await shared()).toBe(23);
+  await row.getByRole("button", { name: "как у всех" }).click();
+  await expect(page.locator("html")).toHaveCSS("--k-size", "23px");
+  await row.getByRole("button", { name: "по умолчанию" }).click();
+  await expect(row).toHaveAttribute("data-source", "default");
   await expect(page.locator("html")).toHaveCSS("--k-size", "19px");
+
+  // Прочие настройки — только для хранилища.
+  const tags = page.locator('.setting[data-key="header.tags"]');
+  await tags.locator("input").uncheck();
+  await expect(tags.locator(".setting-badge")).toHaveText("только в этом хранилище");
+  await tags.getByRole("button", { name: "как у всех" }).click();
+  await expect(tags).toHaveAttribute("data-source", "default");
 });
 
 test("оглавление: сбоку на широком экране, всплывающее на узком", async ({ page }) => {
@@ -184,6 +206,27 @@ test("правка файла приходит событием сервера �
     rmSync(dir, { recursive: true, force: true });
     await mode("auto");
   }
+});
+
+test("нет связи с сервером: заметка остаётся, метка в строке; связь вернулась — метка пропадает", async ({ page }) => {
+  await open(page, "Сеть/SSH");
+  const offline = page.locator("#offline");
+  await expect(offline).toHaveCount(0);
+  // Сервер «выключили»: запросы не доходят.
+  await page.route("**/api/**", (route) => route.abort("connectionrefused"));
+  await page.locator("#refresh").click();
+  await expect(offline).toBeVisible();
+  await expect(offline).toHaveText("нет связи");
+  await expect(offline).toHaveAttribute("title", /Нет связи с сервером/);
+  await expect(title(page)).toHaveText("SSH");
+  // Другая заметка без связи — объяснение, а не ошибка запроса.
+  await page.locator("#tree").getByRole("link", { name: "UFW" }).click();
+  await expect(page.locator("#note")).toContainText("заметка откроется, когда связь вернётся");
+  // Связь вернулась: пробный запрос (нажатие на метку) — метка пропала, заметка догрузилась.
+  await page.unroute("**/api/**");
+  await offline.click();
+  await expect(offline).toHaveCount(0);
+  await expect(title(page)).toHaveText("UFW");
 });
 
 test("PDF заметки в текущей теме", async ({ page }) => {

@@ -74,6 +74,9 @@ test("узкий экран: выбор хранилища, меню храни�
   const box = (await menu.boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(400);
+  // Меню — над переключателем внизу панели, в пределах окна.
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(800);
   await menu.getByRole("menuitem", { name: "Новое хранилище…" }).click();
   const dialog = page.locator("#vault-new");
   await expect(dialog).toBeVisible();

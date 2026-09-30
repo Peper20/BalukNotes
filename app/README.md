@@ -16,7 +16,8 @@ npm test        # Vitest; ещё check, e2e
   компоненты - `src/components/`.
 - Сервер - только через `src/lib/api/` (адрес и токен - `api/config.ts`, ошибки
   - `ApiError`), без `fetch` в компонентах. Источник изменений - `changes.ts`
-  (события `GET .../events`, запасной путь - опрос).
+  (события `GET .../events`, опроса нет); связь с сервером -
+  `state/connection.svelte.ts` (ответил ли он - `api.onReach`).
 - **Типы API - из Rust** (`ts-rs`, фича `ts`): `npm run types` выгружает их в
   `src/lib/api/types/` (в git). Поменял структуру ответа - выгрузи и закоммить;
   руками не править.

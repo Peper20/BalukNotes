@@ -1,30 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { changeSource, POLL_SECONDS, polling, serverEvents, type EventStream } from "./changes";
+import { changeSource, serverEvents, type EventStream } from "./changes";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
-
-it("опрос: раз в N секунд, кроме скрытой вкладки; остановка", () => {
-  let hidden = false;
-  const seen = vi.fn();
-  const stop = polling(5, () => hidden).start(seen);
-  vi.advanceTimersByTime(10_000);
-  expect(seen).toHaveBeenCalledTimes(2);
-  hidden = true;
-  vi.advanceTimersByTime(5_000);
-  expect(seen).toHaveBeenCalledTimes(2);
-  stop();
-  hidden = false;
-  vi.advanceTimersByTime(20_000);
-  expect(seen).toHaveBeenCalledTimes(2);
-});
-
-it("опрос выключен при 0", () => {
-  const seen = vi.fn();
-  polling(0).start(seen);
-  vi.advanceTimersByTime(60_000);
-  expect(seen).not.toHaveBeenCalled();
-});
 
 /** Подделка EventSource: события — вручную. */
 class FakeStream implements EventStream {
@@ -42,51 +20,39 @@ class FakeStream implements EventStream {
   }
 }
 
-it("события сервера: change — проверить; опрос — только пока событий нет", () => {
+it("события сервера: change — проверить; разрыв — нет связи, возврат — одна проверка", () => {
   const stream = new FakeStream();
   const seen = vi.fn();
-  const stop = serverEvents("/api/events", polling(5, () => false), () => stream).start(seen);
+  const reach = vi.fn();
+  const stop = serverEvents("/api/events", reach, () => stream).start(seen);
   stream.emit("hello", '{"watching":true}');
-  vi.advanceTimersByTime(20_000);
-  expect(seen).not.toHaveBeenCalled();
+  expect(reach).toHaveBeenLastCalledWith(true);
   stream.emit("change", '{"seq":1,"paths":["a.typ"]}');
   expect(seen).toHaveBeenCalledTimes(1);
 
-  // Разрыв — опрос; соединение вернулось — одна проверка, опрос выключен.
   stream.onerror!(new Event("error"));
-  vi.advanceTimersByTime(5_000);
-  expect(seen).toHaveBeenCalledTimes(2);
+  expect(reach).toHaveBeenLastCalledWith(false);
+  // Опроса нет: пока связи нет, проверок нет.
+  vi.advanceTimersByTime(60_000);
+  expect(seen).toHaveBeenCalledTimes(1);
   stream.emit("hello", '{"watching":true}');
-  expect(seen).toHaveBeenCalledTimes(3);
-  vi.advanceTimersByTime(20_000);
-  expect(seen).toHaveBeenCalledTimes(3);
+  expect(reach).toHaveBeenLastCalledWith(true);
+  expect(seen).toHaveBeenCalledTimes(2);
 
   stop();
   expect(stream.closed).toBe(true);
 });
 
-it("сервер не следит за файлами — опрос", () => {
+it("сервер не следит за файлами — проверок нет, только по кнопке", () => {
   const stream = new FakeStream();
   const seen = vi.fn();
-  serverEvents("/api/events", polling(5, () => false), () => stream).start(seen);
+  serverEvents("/api/events", undefined, () => stream).start(seen);
   stream.emit("hello", '{"watching":false}');
-  vi.advanceTimersByTime(10_000);
-  expect(seen).toHaveBeenCalledTimes(2);
+  vi.advanceTimersByTime(60_000);
+  expect(seen).not.toHaveBeenCalled();
 });
 
-it("наблюдатель сервера сломался — поток закрыт: одна проверка и опрос", () => {
-  const stream = new FakeStream();
-  const seen = vi.fn();
-  serverEvents("/api/events", polling(5, () => false), () => stream).start(seen);
-  stream.emit("hello", '{"watching":true}');
-  stream.onerror!(new Event("error"));
-  stream.emit("hello", '{"watching":false}');
-  expect(seen).toHaveBeenCalledTimes(1);
-  vi.advanceTimersByTime(10_000);
-  expect(seen).toHaveBeenCalledTimes(3);
-});
-
-it("настройка: автоматически — события, без них опрос; по кнопке — ничего", () => {
+it("настройка: автоматически — события; по кнопке — ничего", () => {
   const streams: FakeStream[] = [];
   const connect = () => {
     const s = new FakeStream();
@@ -94,21 +60,14 @@ it("настройка: автоматически — события, без н
     return s;
   };
   const manual = vi.fn();
-  changeSource("manual", "/api/events", connect).start(manual);
-  vi.advanceTimersByTime(POLL_SECONDS * 10_000);
-  expect(manual).not.toHaveBeenCalled();
+  changeSource("manual", "/api/events", undefined, connect).start(manual);
   expect(streams).toHaveLength(0);
 
   const auto = vi.fn();
-  const stop = changeSource("auto", "/api/events", connect).start(auto);
-  streams[0]!.emit("hello", JSON.stringify({ watching: false }));
-  vi.advanceTimersByTime(POLL_SECONDS * 1000);
-  expect(auto).toHaveBeenCalledTimes(1);
+  const stop = changeSource("auto", "/api/events", undefined, connect).start(auto);
   streams[0]!.emit("hello", JSON.stringify({ watching: true }));
-  vi.advanceTimersByTime(POLL_SECONDS * 10_000);
-  expect(auto).toHaveBeenCalledTimes(1);
   streams[0]!.emit("change");
-  expect(auto).toHaveBeenCalledTimes(2);
+  expect(auto).toHaveBeenCalledTimes(1);
   stop();
   expect(streams[0]!.closed).toBe(true);
 });

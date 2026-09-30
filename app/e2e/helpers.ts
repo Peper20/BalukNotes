@@ -30,8 +30,16 @@ export async function open(page: Page, id: string, anchor?: string) {
 /** Заголовок заметки (h1 титула). */
 export const title = (page: Page) => page.locator("#note .k-title h1");
 
-/** Настройки общие для всех сценариев: вернуть тему «как в системе». */
+/**
+ * Настройки общие для всех сценариев: вернуть тему «как в системе» — общую
+ * и хранилища (тема из интерфейса меняется только для хранилища).
+ */
 export async function resetTheme(page: Page) {
-  const res = await page.request.put("/api/settings", { data: { "appearance.theme": "auto" } });
-  if (!res.ok()) throw new Error(`тема не сброшена: ${res.status()}`);
+  for (const [url, value] of [
+    ["/api/settings", "auto"],
+    [`/api/vaults/${VAULT_NAME}/settings`, null],
+  ] as const) {
+    const res = await page.request.put(url, { data: { "appearance.theme": value } });
+    if (!res.ok()) throw new Error(`тема не сброшена: ${res.status()}`);
+  }
 }

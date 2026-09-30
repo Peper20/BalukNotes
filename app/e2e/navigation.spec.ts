@@ -91,6 +91,16 @@ test("Ctrl+F в книге по главам — поиск по всей кни
   await ready(page);
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Продолжение/);
   await expect(page.locator("#Итоги-2")).toBeInViewport();
+  // Где искать - показанная глава: только её разделы, без номера главы.
+  await page.keyboard.press("Control+KeyF");
+  const scopes = palette.locator(".palette-scopes [role=radio]");
+  await expect(scopes).toHaveText(["Глава", "Книга", "Всё хранилище"]);
+  await scopes.first().click();
+  await expect(palette.locator("input")).toHaveAttribute("placeholder", /главы «Продолжение»/);
+  await palette.locator("input").fill("Итоги");
+  await expect(palette.locator(".palette-group")).toContainText("В главе «Продолжение»");
+  await expect(palette.locator(".palette-list li[role=option]")).toHaveCount(1);
+  await expect(palette.locator(".palette-list li[role=option]")).toContainText("Итоги второй");
 });
 
 test("главу книги отдаёт сервер: в странице одна глава, перезагрузка — та же глава", async ({ page }) => {
@@ -184,4 +194,24 @@ test("ссылаются сюда", async ({ page }) => {
   await bl.getByRole("link", { name: "UFW" }).click();
   await ready(page);
   await expect(title(page)).toHaveText("UFW");
+});
+
+test("общее книги — вверху оглавления в любой главе: название и теги корня", async ({ page }) => {
+  await page.setViewportSize({ width: 1700, height: 900 });
+  await open(page, "Книга");
+  await page.keyboard.press("BracketRight");
+  await ready(page);
+  const info = page.locator(".toc .book-info");
+  await expect(info).toBeVisible();
+  await expect(info.locator(".book-info-title")).toHaveText("Тестовая книга");
+  await expect(info.locator(".book-info-tags a")).toHaveText(["#книга", "#фикстура"]);
+  // Под заголовком главы — только её теги.
+  await expect(page.locator("#note .k-chapter-tags li")).toHaveText(["код"]);
+  await info.locator(".book-info-title").click();
+  await ready(page);
+  await expect(page.locator("#note h2.k-h1")).toHaveText(/Основы/);
+  // У заметки — нет.
+  await open(page, "демо/компоненты");
+  await expect(page.locator(".toc")).toBeVisible();
+  await expect(page.locator(".toc .book-info")).toHaveCount(0);
 });

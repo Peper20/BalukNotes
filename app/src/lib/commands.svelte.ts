@@ -61,15 +61,15 @@ export function commands(): Command[] {
     { id: "open", group: "Переход", title: "Быстрый переход к заметке", keys: keys("Ctrl+KeyO", "Ctrl+KeyP"), run: () => ui.openPalette("") },
     { id: "search", group: "Переход", title: "Поиск по тексту всех заметок", keys: keys("Ctrl+Shift+KeyF"), run: () => ui.openPalette("/") },
     {
-      id: "search-book",
+      id: "find",
       group: "Переход",
-      title: "Поиск в этой книге",
-      // Книга по главам: Ctrl+F браузера видит одну главу — вместо него
-      // поиск по всей книге (повторное Ctrl+F — поиск браузера, Palette).
+      title: "Поиск в этой заметке или книге",
+      // Книгу показывают по главам: Ctrl+F браузера видит одну главу — вместо
+      // него поиск по заметке, главе или хранилищу (повторное Ctrl+F — поиск
+      // браузера, Palette).
       keys: keys("Ctrl+KeyF"),
-      available: () => router.currentNote?.kind === "book",
-      keysAvailable: hasBook,
-      run: () => ui.openPalette("", router.currentId),
+      available: () => router.currentId != null,
+      run: () => ui.openPalette("", { note: router.currentId!, scope: "note" }),
     },
     { id: "commands", group: "Переход", title: "Команды", keys: keys("Ctrl+KeyK"), run: () => ui.openPalette(">") },
     { id: "home", group: "Переход", title: "Главная: граф и все заметки", keys: keys("KeyH"), run: () => router.go(homeHref()) },
