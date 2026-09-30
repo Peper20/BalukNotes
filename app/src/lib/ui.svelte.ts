@@ -1,6 +1,7 @@
 // Состояние интерфейса вокруг заметки: главы книги, оглавление, панели.
 
 import type { BookView } from "./api";
+import type { Find } from "./find";
 import { load, save } from "./storage";
 
 class Ui {
@@ -20,12 +21,14 @@ class Ui {
   settingsOpen = $state(false);
   /**
    * Палитра: быстрый переход, команды (`>`), поиск (`/`), теги (`#`);
-   * `book` — поиск в одной книге (её id).
+   * `find` — поиск Ctrl+F из заметки (где искать — `lib/find.ts`).
    */
-  palette = $state<{ query: string; book?: string | null } | null>(null);
+  palette = $state<{ query: string; find?: Find | null } | null>(null);
   helpOpen = $state(false);
   /** Диалог «Новое хранилище». */
   vaultNewOpen = $state(false);
+  /** Диалог открытого хранилища: переименовать или удалить. */
+  vaultEdit = $state<"rename" | "delete" | null>(null);
   /** Заметка, которую спрашивают, удалить ли (диалог подтверждения). */
   deleting = $state<string | null>(null);
   /** Меню заметки в дереве (правый клик, долгое касание): где и какой. */
@@ -43,8 +46,8 @@ class Ui {
     save("k-collapsed", this.collapsed);
   }
 
-  openPalette(query = "", book: string | null = null): void {
-    this.palette = { query, book };
+  openPalette(query = "", find: Find | null = null): void {
+    this.palette = { query, find };
   }
 }
 

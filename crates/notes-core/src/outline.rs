@@ -5,7 +5,10 @@
 //!
 //! Как и ссылки ([`crate::graph`]), берётся из синтаксического дерева Typst:
 //! весь индекс строится за миллисекунды. Текст — приблизительный: формулы
-//! пропускаются, вычисляемое содержимое (`#let x = …; #x`) не раскрывается.
+//! в тексте пропускаются, а в названии и заголовках — исходником без `$`
+//! (`Ряд $sum 1/n^2$` -> «Ряд sum 1/n^2», решение пользователя: в дереве,
+//! вкладках и графе формула не пропадает); вычисляемое содержимое
+//! (`#let x = …; #x`) не раскрывается.
 //! Для поиска этого достаточно; точный текст есть только у собранной страницы.
 
 use typst::syntax::ast::AstNode as _;
@@ -71,20 +74,28 @@ struct Walker {
     level: usize,
     label: Option<String>,
     tags: Vec<String>,
+    /// Название или заголовок: формула — исходником, а не пропуском.
+    formulas: bool,
 }
 
 impl Walker {
+    /// Для названия и заголовка: формулы — исходником.
+    fn inline() -> Self {
+        Self { formulas: true, ..Self::default() }
+    }
+
     fn walk(&mut self, node: &SyntaxNode, parent: SyntaxKind) {
         match node.kind() {
             // Кавычка — как написана (`'` не становится `"`).
             SyntaxKind::Text | SyntaxKind::SmartQuote => self.text.push_str(node.leaf_text()),
-            SyntaxKind::Space
-            | SyntaxKind::Linebreak
-            | SyntaxKind::Parbreak
-            | SyntaxKind::RawTrimmed
-            | SyntaxKind::Equation => {
+            SyntaxKind::Space | SyntaxKind::Linebreak | SyntaxKind::Parbreak | SyntaxKind::RawTrimmed => {
                 self.space();
             }
+            SyntaxKind::Equation if self.formulas => {
+                let source = node.full_text();
+                self.text.push_str(source.trim_matches('$').trim());
+            }
+            SyntaxKind::Equation => self.space(),
             SyntaxKind::Shorthand => {
                 if let Some(s) = node.cast::<ast::Shorthand>() {
                     self.text.push(s.get());
@@ -146,7 +157,7 @@ impl Walker {
     fn heading(&mut self, node: &SyntaxNode) {
         let Some(h) = node.cast::<ast::Heading>() else { return };
         self.finish_section();
-        let mut inner = Walker::default();
+        let mut inner = Walker::inline();
         inner.walk(h.body().to_untyped(), SyntaxKind::Markup);
         self.heading = Some(normalize(&inner.text));
         self.level = h.depth().get();
@@ -212,7 +223,7 @@ impl Walker {
             let ast::Arg::Named(n) = arg else { continue };
             match (n.name().as_str(), n.expr()) {
                 ("title", ast::Expr::ContentBlock(block)) => {
-                    let mut inner = Walker::default();
+                    let mut inner = Walker::inline();
                     inner.walk(block.body().to_untyped(), SyntaxKind::Markup);
                     title = Some(normalize(&inner.text));
                 }
@@ -320,6 +331,17 @@ ssh-copy-id host
         );
         assert_eq!(o.sections[0].text, "Зачем.");
         assert!(o.has_tag("интегралы") && !o.has_tag("пределы"));
+    }
+
+    #[test]
+    fn formulas_in_title_and_headings_as_source() {
+        let o = parse_outline(
+            "#show: note.with(title: [Ряд $sum 1/n^2$])\n= Норма $norm(x)$ и $ y $\nТекст $a + b$ после.\n",
+        );
+        assert_eq!(o.title.as_deref(), Some("Ряд sum 1/n^2"));
+        assert_eq!(o.sections[0].heading.as_deref(), Some("Норма norm(x) и y"));
+        // В тексте раздела формула по-прежнему пропускается.
+        assert_eq!(o.sections[0].text, "Текст после.");
     }
 
     #[test]

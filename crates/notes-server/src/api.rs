@@ -30,6 +30,13 @@ pub struct CreateVaultRequest {
     pub name: String,
 }
 
+/// `PATCH /api/vaults/{хранилище}`: новое имя хранилища.
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct RenameVaultRequest {
+    pub name: String,
+}
+
 /// Элемент `GET /api/vaults/{хранилище}/notes`.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -99,6 +106,21 @@ pub struct SettingsResponse {
     /// Ключ → число, строка или флаг (тип — по схеме).
     #[cfg_attr(feature = "ts", ts(type = "Record<string, number | string | boolean>"))]
     pub values: Map<String, Value>,
+}
+
+/// `GET`/`PUT /api/vaults/{хранилище}/settings`: настройки для хранилища —
+/// итог (`values`) и откуда он: общие для всех (`shared`) и заданные только
+/// в этом хранилище (`own`).
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct VaultSettingsResponse {
+    pub schema: Schema,
+    #[cfg_attr(feature = "ts", ts(type = "Record<string, number | string | boolean>"))]
+    pub values: Map<String, Value>,
+    #[cfg_attr(feature = "ts", ts(type = "Record<string, number | string | boolean>"))]
+    pub shared: Map<String, Value>,
+    #[cfg_attr(feature = "ts", ts(type = "Record<string, number | string | boolean>"))]
+    pub own: Map<String, Value>,
 }
 
 /// Тело ошибки. `errors` — ошибки компиляции (у PDF), иначе пусто.

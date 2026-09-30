@@ -13,9 +13,16 @@
 //! умолчанию ([`Platform`]), и при синхронизации они не переносятся. Вид —
 //! общий. Ядро применяет их на ходу ([`SettingsStore::device`] →
 //! `Notes::apply_device`).
+//!
+//! **Настройки хранилища** ([`VaultSettings`], `<хранилище>/.baluk/settings.json`)
+//! — поверх общих: любую настройку, кроме настроек устройства, можно задать
+//! только для одного хранилища (решение пользователя); не задана — общая.
+//! Файл переезжает вместе с папкой хранилища. Изменение из интерфейса — для
+//! открытого хранилища, у настроек [`SettingDef::shared`] (тема, кегль) и
+//! устройства — для всех (решения пользователя).
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use parking_lot::RwLock;
@@ -51,6 +58,12 @@ pub struct SettingDef {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub device: bool,
+    /// Изменение из интерфейса по умолчанию — для всех хранилищ (тема, кегль:
+    /// решение пользователя), а не только для открытого; у хранилища можно
+    /// задать своё. Остальные — наоборот (см. модуль).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
+    pub shared: bool,
 }
 
 /// Применение настройки вида: значение — на `<html>`, правило — в CSS.
@@ -69,6 +82,12 @@ impl SettingDef {
     /// Применять атрибутом `data-…` на `<html>`.
     fn attr(mut self, name: &'static str) -> Self {
         self.apply = Some(Apply::Attr { name });
+        self
+    }
+
+    /// Изменение по умолчанию — для всех хранилищ.
+    fn shared(mut self) -> Self {
+        self.shared = true;
         self
     }
 
@@ -168,6 +187,7 @@ impl Schema {
             default: json!(default),
             apply: None,
             device: false,
+            shared: false,
         };
         let number = |key, label, help, (min, max, step): (f64, f64, f64), default: u64| SettingDef {
             key,
@@ -177,6 +197,7 @@ impl Schema {
             default: json!(default),
             apply: None,
             device: true,
+            shared: false,
         };
         let p = platform;
 
@@ -200,7 +221,9 @@ impl Schema {
                     default: json!("auto"),
                     apply: None,
                     device: false,
-                },
+                    shared: false,
+                }
+                .shared(),
                 SettingDef {
                     key: "appearance.font_size",
                     label: "Кегль текста, px",
@@ -209,8 +232,10 @@ impl Schema {
                     default: json!(19),
                     apply: None,
                     device: false,
+                    shared: false,
                 }
-                .var("--k-size", "px"),
+                .var("--k-size", "px")
+                .shared(),
                 SettingDef {
                     key: "appearance.measure",
                     label: "Ширина колонки, em",
@@ -219,6 +244,7 @@ impl Schema {
                     default: json!(40),
                     apply: None,
                     device: false,
+                    shared: false,
                 }
                 .var("--k-measure", "em"),
                 bool_def("header.title", "Название", true).attr("data-header-title"),
@@ -240,6 +266,7 @@ impl Schema {
                     default: json!("books"),
                     apply: None,
                     device: false,
+                    shared: false,
                 }
                 .attr("data-numbering"),
                 SettingDef {
@@ -255,18 +282,20 @@ impl Schema {
                     default: json!("decorated"),
                     apply: None,
                     device: false,
+                    shared: false,
                 }
                 .attr("data-chapters"),
                 SettingDef {
                     key: "books.pages",
                     label: "Показывать книгу",
-                    help: Some("По главам — быстрее открывается, но Ctrl+F ищет только в открытой главе"),
+                    help: Some("По главам — быстрее открывается; печать браузера видит только открытую главу"),
                     kind: Kind::Choice {
                         options: vec![choice("chapters", "по главам"), choice("whole", "целиком")]
                     },
                     default: json!("chapters"),
                     apply: None,
                     device: false,
+                    shared: false,
                 },
                 SettingDef {
                     key: "figures.precision",
@@ -283,6 +312,7 @@ impl Schema {
                     default: json!("2"),
                     apply: None,
                     device: false,
+                    shared: false,
                 },
                 bool_def("panels.toc", "Оглавление сбоку, если хватает места", true).attr("data-toc"),
                 SettingDef {
@@ -293,6 +323,7 @@ impl Schema {
                     default: json!(2),
                     apply: None,
                     device: false,
+                    shared: false,
                 },
                 bool_def("panels.backlinks", "«Ссылаются сюда» под заметкой", true).attr("data-backlinks"),
                 SettingDef {
@@ -305,6 +336,7 @@ impl Schema {
                     default: json!("auto"),
                     apply: None,
                     device: false,
+                    shared: false,
                 },
                 SettingDef {
                     key: "device.warm",
@@ -320,6 +352,7 @@ impl Schema {
                     default: json!(p.pick(WarmMode::All, WarmMode::Off).key()),
                     apply: None,
                     device: true,
+                    shared: false,
                 },
                 number(
                     "device.builds",
@@ -418,25 +451,36 @@ pub struct SettingsStore {
     values: RwLock<Map<String, Value>>,
 }
 
+/// Значения из файла `path`, проверенные по схеме: неверные и отвергнутые
+/// `keep` — отброшены с предупреждением; нет файла — пусто.
+fn load(
+    path: &Path,
+    schema: &Schema,
+    keep: impl Fn(&str) -> std::result::Result<(), &'static str>,
+) -> Result<Map<String, Value>> {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Map::new()),
+        Err(e) => return Err(Error::io(path, e)),
+    };
+    let stored: Map<String, Value> = serde_json::from_str(&text)?;
+    let mut values = Map::new();
+    for (key, value) in migrate(stored) {
+        match keep(&key).map_err(|reason| setting_err(&key, reason)).and_then(|()| schema.validate(&key, &value)) {
+            Ok(v) => {
+                values.insert(key, v);
+            }
+            Err(e) => tracing::warn!("{}: {e} — пропускаю", path.display()),
+        }
+    }
+    Ok(values)
+}
+
 impl SettingsStore {
     pub fn open(path: impl Into<PathBuf>, schema: Schema) -> Result<Self> {
         let path = path.into();
         let mut values = schema.defaults();
-        match fs::read_to_string(&path) {
-            Ok(text) => {
-                let stored: Map<String, Value> = serde_json::from_str(&text)?;
-                for (key, value) in migrate(stored) {
-                    match schema.validate(&key, &value) {
-                        Ok(v) => {
-                            values.insert(key, v);
-                        }
-                        Err(e) => tracing::warn!("{}: {e} — беру значение по умолчанию", path.display()),
-                    }
-                }
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(Error::io(&path, e)),
-        }
+        values.extend(load(&path, &schema, |_| Ok(()))?);
         Ok(Self { path, schema, values: RwLock::new(values) })
     }
 
@@ -450,12 +494,7 @@ impl SettingsStore {
 
     /// Обработка рисунков по настройкам `figures.*`.
     pub fn figure_options(&self) -> FigureOptions {
-        let values = self.values.read();
-        match values.get("figures.precision").and_then(Value::as_str) {
-            Some("full") => FigureOptions { precision: None },
-            Some(p) => p.parse().map_or_else(|_| FigureOptions::default(), |p| FigureOptions { precision: Some(p) }),
-            None => FigureOptions::default(),
-        }
+        figure_options(&self.values.read())
     }
 
     /// Настройки устройства для ядра.
@@ -491,6 +530,85 @@ impl SettingsStore {
         write_atomic(&self.path, &serde_json::to_vec_pretty(&next)?)?;
         *values = next;
         Ok(values.clone())
+    }
+}
+
+/// Обработка рисунков по значениям настроек `figures.*`.
+pub fn figure_options(values: &Map<String, Value>) -> FigureOptions {
+    match values.get("figures.precision").and_then(Value::as_str) {
+        Some("full") => FigureOptions { precision: None },
+        Some(p) => p.parse().map_or_else(|_| FigureOptions::default(), |p| FigureOptions { precision: Some(p) }),
+        None => FigureOptions::default(),
+    }
+}
+
+/// Настройки одного хранилища — только заданные в нём (поверх общих).
+/// Без файла (`path` = `None`, хранилище в памяти) — только в памяти.
+#[derive(Debug)]
+pub struct VaultSettings {
+    path: Option<PathBuf>,
+    own: RwLock<Map<String, Value>>,
+}
+
+/// Настройки устройства — общие, у хранилища их нет.
+fn not_device(key: &str) -> std::result::Result<(), &'static str> {
+    if key.starts_with("device.") {
+        Err("настройка устройства — общая для всех хранилищ")
+    } else {
+        Ok(())
+    }
+}
+
+impl VaultSettings {
+    pub fn open(path: Option<PathBuf>, schema: &Schema) -> Result<Self> {
+        let own = match &path {
+            Some(path) => load(path, schema, not_device)?,
+            None => Map::new(),
+        };
+        Ok(Self { path, own: RwLock::new(own) })
+    }
+
+    /// Заданные в хранилище.
+    pub fn own(&self) -> Map<String, Value> {
+        self.own.read().clone()
+    }
+
+    /// Значения для хранилища: общие, поверх — свои.
+    pub fn merged(&self, mut shared: Map<String, Value>) -> Map<String, Value> {
+        shared.extend(self.own());
+        shared
+    }
+
+    /// Задать настройки хранилища (`null` — убрать: снова общая); либо все
+    /// верны и записаны, либо ни одна. Ответ — заданные в хранилище.
+    pub fn update(&self, schema: &Schema, patch: &Map<String, Value>) -> Result<Map<String, Value>> {
+        let mut checked = Vec::with_capacity(patch.len());
+        for (key, value) in patch {
+            not_device(key).map_err(|reason| setting_err(key, reason))?;
+            let value = if value.is_null() {
+                schema.get(key).ok_or_else(|| setting_err(key, "нет такой настройки"))?;
+                None
+            } else {
+                Some(schema.validate(key, value)?)
+            };
+            checked.push((key.clone(), value));
+        }
+        let mut own = self.own.write();
+        let mut next = own.clone();
+        for (key, value) in checked {
+            match value {
+                Some(v) => next.insert(key, v),
+                None => next.remove(&key),
+            };
+        }
+        if let Some(path) = &self.path {
+            if let Some(dir) = path.parent() {
+                fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+            }
+            write_atomic(path, &serde_json::to_vec_pretty(&next)?)?;
+        }
+        *own = next;
+        Ok(own.clone())
     }
 }
 
@@ -615,6 +733,7 @@ mod tests {
         for s in [&desktop, &phone] {
             for d in &s.settings {
                 assert_eq!(d.device, d.key.starts_with("device."), "{}: настройка устройства — в группе device", d.key);
+                assert!(!(d.device && d.shared), "{}: настройка устройства и так общая", d.key);
             }
         }
         assert_eq!(desktop.get("device.warm").unwrap().default, json!("all"));
@@ -637,5 +756,37 @@ mod tests {
         assert_eq!(store.device().memory, 128 << 20);
         assert_eq!(serde_json::to_value(desktop.get("device.warm").unwrap()).unwrap()["device"], json!(true));
         assert!(serde_json::to_value(desktop.get("header.title").unwrap()).unwrap().get("device").is_none());
+    }
+
+    #[test]
+    fn vault_settings_over_shared() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(".baluk/settings.json");
+        let shared = || SettingsStore::open(dir.path().join("shared.json"), schema()).unwrap().values();
+        let vault = VaultSettings::open(Some(path.clone()), &schema()).unwrap();
+        assert!(vault.own().is_empty(), "файла ещё нет");
+        assert_eq!(vault.merged(shared())["appearance.font_size"], json!(19));
+
+        let set = |pairs: &[(&str, Value)]| pairs.iter().map(|(k, v)| ((*k).to_owned(), v.clone())).collect();
+        vault
+            .update(&schema(), &set(&[("appearance.font_size", json!(22)), ("figures.precision", json!("full"))]))
+            .unwrap();
+        assert_eq!(vault.merged(shared())["appearance.font_size"], json!(22));
+        assert_eq!(figure_options(&vault.merged(shared())), FigureOptions { precision: None });
+        // Настройки устройства — только общие.
+        assert!(vault.update(&schema(), &set(&[("device.builds", json!(4))])).is_err());
+        assert!(vault.update(&schema(), &set(&[("appearance.font_size", json!(999))])).is_err());
+
+        // Файл — в папке хранилища; null — снова общая.
+        let reopened = VaultSettings::open(Some(path.clone()), &schema()).unwrap();
+        assert_eq!(reopened.own().len(), 2);
+        reopened.update(&schema(), &set(&[("appearance.font_size", Value::Null)])).unwrap();
+        assert_eq!(reopened.merged(shared())["appearance.font_size"], json!(19));
+        assert!(reopened.update(&schema(), &set(&[("нет.такой", Value::Null)])).is_err());
+
+        // Руками вписанная настройка устройства — пропускается.
+        fs::write(&path, r#"{"device.builds": 4, "header.title": false}"#).unwrap();
+        let own = VaultSettings::open(Some(path), &schema()).unwrap().own();
+        assert_eq!(own.keys().collect::<Vec<_>>(), ["header.title"]);
     }
 }

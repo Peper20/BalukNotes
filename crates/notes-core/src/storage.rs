@@ -270,22 +270,28 @@ impl Storage for DirStorage {
         if full == self.root {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "хранилище целиком не удаляется"));
         }
-        fs::symlink_metadata(&full)?;
-        match &self.trash {
-            None => system_trash(&full)?,
-            Some(dir) => {
-                fs::create_dir_all(dir)?;
-                let name = full.file_name().unwrap_or_default().to_string_lossy().into_owned();
-                let target = (1..10_000)
-                    .map(|n| dir.join(if n == 1 { name.clone() } else { format!("{name} ({n})") }))
-                    .find(|p| !p.exists())
-                    .ok_or_else(|| io::Error::new(io::ErrorKind::AlreadyExists, "в корзине нет свободного имени"))?;
-                fs::rename(&full, target)?;
-            }
-        }
+        move_to_trash(&full, self.trash.as_deref())?;
         // Список файлов — заново, не дожидаясь события наблюдателя.
         self.listed.lock().files = None;
         Ok(())
+    }
+}
+
+/// Файл или каталог — в корзину системы (`dir` = `None`) или в каталог
+/// `dir` (тесты): там его можно восстановить.
+pub(crate) fn move_to_trash(full: &Path, dir: Option<&Path>) -> io::Result<()> {
+    fs::symlink_metadata(full)?;
+    match dir {
+        None => system_trash(full),
+        Some(dir) => {
+            fs::create_dir_all(dir)?;
+            let name = full.file_name().unwrap_or_default().to_string_lossy().into_owned();
+            let target = (1..10_000)
+                .map(|n| dir.join(if n == 1 { name.clone() } else { format!("{name} ({n})") }))
+                .find(|p| !p.exists())
+                .ok_or_else(|| io::Error::new(io::ErrorKind::AlreadyExists, "в корзине нет свободного имени"))?;
+            fs::rename(full, target)
+        }
     }
 }
 

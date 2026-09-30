@@ -2,11 +2,12 @@
 // Проверка — сверка версии (…/version/… — дёшево: сервер ничего не
 // компилирует, если файлы не менялись) по кнопке «Обновить» и, если
 // настройка `refresh.mode` — «автоматически», при возврате в окно и по
-// сигналу источника изменений (../changes.ts): событие сервера (он следит за
-// файлами), а без событий — опрос.
+// событию сервера (../changes.ts). Связь вернулась — проверка (а заметку,
+// которая не открылась без связи, — загрузить).
 
 import { api } from "../api";
 import { changeSource, type RefreshMode } from "../changes";
+import { connection } from "./connection.svelte";
 import { notes } from "./notes.svelte";
 import { reader } from "./reader.svelte";
 import { router } from "./router.svelte";
@@ -19,6 +20,7 @@ class Updates {
     this.#schedule();
     settings.onSaved((keys) => this.#settingsSaved(keys));
     addEventListener("focus", () => this.#mode() === "auto" && this.check());
+    connection.onBack(() => void (reader.failure ? reader.reload() : this.check()));
   }
 
   #mode(): RefreshMode {
@@ -36,13 +38,14 @@ class Updates {
       // Пока ждали ответ, могли перейти на другую заметку.
       if (router.currentId === id && !reader.pending && version !== reader.version) await reader.reload();
     } catch {
-      // сервер недоступен — попробуем в следующий раз
+      // сервер недоступен — проверим, когда связь вернётся
     }
   }
 
   #schedule(): void {
     this.#stop();
-    this.#stop = changeSource(this.#mode(), api.eventsUrl()).start(() => void this.check());
+    const reach = (ok: boolean) => (ok ? connection.reached() : connection.lost());
+    this.#stop = changeSource(this.#mode(), api.eventsUrl(), reach).start(() => void this.check());
   }
 
   #settingsSaved(keys: string[]): void {

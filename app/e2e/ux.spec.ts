@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { noteUrl, open, ready, title, vaultUrl } from "./helpers";
+import { noteUrl, open, ready, resetTheme, title, vaultUrl } from "./helpers";
 
 const palette = (page: Page) => page.locator(".palette");
 
@@ -33,17 +33,10 @@ test("поиск по тексту ведёт в раздел нужной гл�
 });
 
 test("поиск в этой книге: разделы всех глав по порядку, переход — в нужную главу", async ({ page }) => {
-  await open(page, "Сеть/SSH");
-  // У обычной заметки такой команды нет.
-  await page.keyboard.press("Control+k");
-  await page.locator(".palette input").pressSequentially("в этой книге");
-  await expect(page.locator(".palette-list li[role=option]")).toHaveCount(0);
-  await page.keyboard.press("Escape");
-
   await open(page, "Книга");
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Основы/);
   await page.keyboard.press("Control+k");
-  await page.locator(".palette input").pressSequentially("в этой книге");
+  await page.locator(".palette input").pressSequentially("в этой заметке");
   await page.keyboard.press("Enter");
   const input = page.locator(".palette input");
   await expect(input).toHaveAttribute("placeholder", /Тестовая книга/);
@@ -63,6 +56,23 @@ test("поиск в этой книге: разделы всех глав по �
   await expect(page.locator("#Итоги-2")).toBeInViewport();
 });
 
+test("Ctrl+F в заметке: в ней или во всём хранилище (Tab — где искать)", async ({ page }) => {
+  await open(page, "Сеть/SSH");
+  await page.keyboard.press("Control+KeyF");
+  const scopes = page.locator(".palette-scopes [role=radio]");
+  // У заметки нет глав: заметка и хранилище.
+  await expect(scopes).toHaveText(["Заметка", "Всё хранилище"]);
+  await expect(scopes.first()).toHaveAttribute("aria-checked", "true");
+  const input = page.locator(".palette input");
+  await input.fill("итоги");
+  await expect(page.locator(".palette-list")).toContainText("Ничего не нашлось");
+  await input.press("Tab");
+  await expect(scopes.last()).toHaveAttribute("aria-checked", "true");
+  await expect(input).toBeFocused();
+  await expect(page.locator(".palette-group").first()).toContainText("В тексте");
+  await expect(page.locator(".palette-list li[role=option]").first()).toContainText("Тестовая книга");
+});
+
 test("команды: сменить тему из палитры", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await page.keyboard.press("Control+k");
@@ -73,6 +83,7 @@ test("команды: сменить тему из палитры", async ({ pag
   await page.locator(".palette input").pressSequentially("как в системе");
   await page.keyboard.press("Enter");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "classic");
+  await resetTheme(page);
 });
 
 test("tags: из шапки заметки, страница тега, все теги, палитра", async ({ page }) => {

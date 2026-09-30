@@ -19,4 +19,10 @@ apply?: Apply,
 /**
  * Настройка устройства: своя у каждого устройства, не синхронизируется.
  */
-device?: boolean, } & ({ "type": "bool" } | { "type": "number", min: number, max: number, step: number, } | { "type": "choice", options: Array<Choice>, });
+device?: boolean, 
+/**
+ * Изменение из интерфейса по умолчанию — для всех хранилищ (тема, кегль:
+ * решение пользователя), а не только для открытого; у хранилища можно
+ * задать своё. Остальные — наоборот (см. модуль).
+ */
+shared?: boolean, } & ({ "type": "bool" } | { "type": "number", min: number, max: number, step: number, } | { "type": "choice", options: Array<Choice>, });

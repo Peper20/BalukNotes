@@ -71,6 +71,8 @@ pub struct Notes {
     /// Каталог библиотеки на диске (`--library`, отладочная сборка):
     /// наблюдатель следит и за ним.
     library_dir: Option<PathBuf>,
+    /// Папка хранилища на диске ([`Notes::open`]); в памяти — `None`.
+    dir: Option<PathBuf>,
 }
 
 impl Notes {
@@ -79,7 +81,9 @@ impl Notes {
         let root = &config.vault;
         let storage = crate::storage::DirStorage::open(root).map_err(|e| Error::io(root, e))?;
         let storage = storage.with_trash(config.trash.clone());
-        Self::with_vault(Vault::new(Arc::new(storage)), config)
+        let mut notes = Self::with_vault(Vault::new(Arc::new(storage)), config)?;
+        notes.dir = Some(root.clone());
+        Ok(notes)
     }
 
     /// Хранилище — любой [`Storage`] (`config.vault` не используется).
@@ -131,11 +135,16 @@ impl Notes {
                 w.poke();
             }
         });
-        Ok(Self { pages, typst, links, layouts, warmer, changes, library_dir })
+        Ok(Self { pages, typst, links, layouts, warmer, changes, library_dir, dir: None })
     }
 
     pub fn vault(&self) -> &Vault {
         self.pages.vault()
+    }
+
+    /// Папка хранилища на диске; хранилище в памяти — `None`.
+    pub fn dir(&self) -> Option<&std::path::Path> {
+        self.dir.as_deref()
     }
 
     pub fn themes(&self) -> &ThemeSet {
@@ -250,10 +259,10 @@ impl Notes {
         self.warmer.pass(&self.pages)
     }
 
-    /// Прогревать бесконечно (фоновый поток сервера).
-    pub fn warm_forever(&self) -> ! {
+    /// Прогревать до закрытия хранилища ([`Notes::close`]; фоновый поток сервера).
+    pub fn warm_forever(&self) {
         let changes = self.changes.clone();
-        self.warmer.forever(&self.pages, move || if changes.watching() { RESCAN } else { RESCAN_UNWATCHED })
+        self.warmer.forever(&self.pages, move || if changes.watching() { RESCAN } else { RESCAN_UNWATCHED });
     }
 
     // ── Изменения хранилища (см. crate::watch) ─────────────────────────────
@@ -275,6 +284,13 @@ impl Notes {
             }
         }
         true
+    }
+
+    /// Закрыть хранилище (его переименовывают или удаляют): прогрев и
+    /// наблюдатель останавливаются. Запросы к закрытому не делают.
+    pub fn close(&self) {
+        self.warmer.stop();
+        self.changes.stop();
     }
 
     /// Работает ли наблюдатель.

@@ -16,6 +16,7 @@ import type { Preview } from "./types/Preview";
 import type { SearchHit } from "./types/SearchHit";
 import type { SettingsResponse } from "./types/SettingsResponse";
 import type { Theme } from "./types/Theme";
+import type { VaultSettingsResponse } from "./types/VaultSettingsResponse";
 import type { VersionResponse } from "./types/VersionResponse";
 import type { VaultsResponse } from "./types/VaultsResponse";
 import type { WarmRequest } from "./types/WarmRequest";
@@ -29,6 +30,7 @@ export type { GraphFilter } from "./types/GraphFilter";
 export type { GraphLayout } from "./types/GraphLayout";
 export type { PlacedNode } from "./types/PlacedNode";
 export type { Heading } from "./types/Heading";
+export type { Backlink } from "./types/Backlink";
 export type { LinksResponse } from "./types/LinksResponse";
 export type { NoteListItem } from "./types/NoteListItem";
 export type { FolderListItem } from "./types/FolderListItem";
@@ -43,6 +45,7 @@ export type { SettingDef } from "./types/SettingDef";
 export type { Apply } from "./types/Apply";
 export type { Theme } from "./types/Theme";
 export type { VaultsResponse } from "./types/VaultsResponse";
+export type { VaultSettingsResponse } from "./types/VaultSettingsResponse";
 
 /** Какую главу книги запросить: по номеру или ту, где якорь. */
 export interface ChapterSelect {
@@ -73,14 +76,24 @@ export class ApiError extends Error {
   }
 }
 
+/** Кто следит за связью с сервером (state/connection): ответил ли он на запрос. */
+let reached: (ok: boolean) => void = () => {};
+
+/** Сообщать `fn`, ответил ли сервер на очередной запрос (ответ с ошибкой — тоже ответ). */
+export function onReach(fn: (ok: boolean) => void): void {
+  reached = fn;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
     res = await fetch(apiUrl(path), { ...init, headers: { ...authHeaders(), ...(init.headers as Record<string, string> | undefined) } });
   } catch (e) {
     if ((e as Error).name === "AbortError") throw e;
+    reached(false);
     throw new ApiError((e as Error).message, 0);
   }
+  reached(true);
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok) {
     const err = body as ErrorResponse | null;
@@ -103,6 +116,10 @@ export const api = {
   vaults: () => request<VaultsResponse>("/api/vaults"),
   /** Новое пустое хранилище; ответ — список хранилищ. */
   createVault: (name: string) => request<VaultsResponse>("/api/vaults", json("POST", { name })),
+  /** Переименовать хранилище (папку); ответ — список хранилищ. */
+  renameVault: (from: string, name: string) => request<VaultsResponse>(`/api/vaults/${encodeURIComponent(from)}`, json("PATCH", { name })),
+  /** Хранилище целиком — в корзину системы; ответ — список хранилищ. */
+  deleteVault: (name: string) => request<VaultsResponse>(`/api/vaults/${encodeURIComponent(name)}`, { method: "DELETE" }),
   notes: () => request<NoteListItem[]>(inVault("/notes")),
   folders: () => request<FolderListItem[]>(inVault("/folders")),
   /** Заметка; с `chapter` или `anchor` книга приходит одной главой. */
@@ -125,6 +142,11 @@ export const api = {
   themes: () => request<Theme[]>("/api/themes"),
   settings: () => request<SettingsResponse>("/api/settings"),
   saveSettings: (patch: SettingValues) => request<SettingValues>("/api/settings", json("PUT", patch)),
+  /** Настройки показанного хранилища: итог, общие и заданные в нём. */
+  vaultSettings: () => request<VaultSettingsResponse>(inVault("/settings")),
+  /** Задать настройки только для показанного хранилища; `null` — снова общая. */
+  saveVaultSettings: (patch: Record<string, number | string | boolean | null>) =>
+    request<VaultSettingsResponse>(inVault("/settings"), json("PUT", patch)),
   /** Подсказать серверу, что собрать заранее первым (ответ не нужен). */
   warm: (req: WarmRequest) => request<unknown>(inVault("/warm"), json("POST", req)).then(() => {}),
   /** Адрес PDF — его открывает браузер (новая вкладка), токен — в адресе. */

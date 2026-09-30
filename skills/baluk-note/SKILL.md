@@ -78,7 +78,7 @@ Check with `notes check --vault "Name"` without a path, since folder errors appe
 
 ## Title and path
 
-**Title**: `title: [...]` in the file (a book: `main.typ`), any text, shown to readers in the tree, tabs, graph and links. **Path**: where the file is, from the vault root, `/`-separated, without `.typ`: `Math/Parabola`. `notes new` (line 2) and `notes list` (first on each line) print it; it is the same in `notes check`, `notes pdf`, `#see(...)` and the app URL. Folders are created automatically.
+**Title**: `title: [...]` in the file (a book: `main.typ`), any text, shown to readers in the tree, tabs, graph and links (a formula there shows as its source, `sum 1/n^2`, so prefer words). **Path**: where the file is, from the vault root, `/`-separated, without `.typ`: `Math/Parabola`. `notes new` (line 2) and `notes list` (first on each line) print it; it is the same in `notes check`, `notes pdf`, `#see(...)` and the app URL. Folders are created automatically.
 
 **Folder title**: `_folder.toml` in the folder, one line `title = "Networks and protocols"`; other keys are errors. Without it the folder shows its name. Write it only when the user asks to name a folder.
 

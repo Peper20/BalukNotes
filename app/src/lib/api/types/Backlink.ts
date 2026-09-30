@@ -4,4 +4,10 @@ import type { NoteId } from "./NoteId";
 /**
  * Ссылка на заметку из другой заметки.
  */
-export type Backlink = { from: NoteId, anchor: string | null, };
+export type Backlink = { from: NoteId, anchor: string | null, 
+/**
+ * Раздел заметки, куда ведёт якорь: `id` заголовка (HTML заголовка —
+ * в `Rendered::headings`) и его текст (формула — исходником); якоря
+ * нет или раздел не нашёлся — `None`.
+ */
+section: string | null, heading: string | null, };

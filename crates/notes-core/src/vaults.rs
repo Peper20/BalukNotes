@@ -9,9 +9,9 @@
 //! Хранилища по умолчанию нет (решение пользователя): даже первое создаёт
 //! и называет пользователь, а команды работают в хранилище, названном явно.
 //!
-//! Настройки хранилища (когда появятся) — в нём самом, `<хранилище>/.baluk/`
-//! (как `.obsidian/`): переезжают вместе с папкой. Служебные имена на `.`
-//! заметками не бывают ([`crate::storage::is_hidden`]).
+//! Настройки хранилища — в нём самом, [`SETTINGS_FILE`] (как `.obsidian/`):
+//! переезжают вместе с папкой ([`crate::settings::VaultSettings`]).
+//! Служебные имена на `.` заметками не бывают ([`crate::storage::is_hidden`]).
 
 use std::fmt;
 use std::fs;
@@ -25,6 +25,8 @@ use crate::{Error, Result};
 
 /// Каталог хранилищ в каталоге данных.
 pub const VAULTS_DIR: &str = "vaults";
+/// Настройки хранилища — путь в его папке.
+pub const SETTINGS_FILE: &str = ".baluk/settings.json";
 /// Самое длинное имя хранилища, знаков.
 pub const MAX_NAME: usize = 64;
 
@@ -86,7 +88,8 @@ impl From<VaultName> for String {
     }
 }
 
-/// Хранилища в каталоге данных: список, создание, путь по имени.
+/// Хранилища в каталоге данных: список, создание, переименование, удаление
+/// в корзину, путь по имени.
 #[derive(Debug, Clone)]
 pub struct Vaults {
     /// `<данные>/vaults`.
@@ -142,6 +145,31 @@ impl Vaults {
         Ok(out)
     }
 
+    /// Переименовать хранилище (папку); хранилище с новым именем уже есть —
+    /// ошибка. Открытое хранилище сначала закрыть ([`crate::Notes::close`]).
+    pub fn rename(&self, from: &VaultName, to: &VaultName) -> Result<()> {
+        let (old, new) = (self.path(from), self.path(to));
+        if !old.is_dir() {
+            return Err(Error::VaultNotFound { name: from.to_string(), known: self.list()? });
+        }
+        // Имя другого регистра на нечувствительной к регистру ФС — та же
+        // папка: переименовать можно.
+        if new.exists() && from.as_str().to_lowercase() != to.as_str().to_lowercase() {
+            return Err(Error::VaultExists(to.to_string()));
+        }
+        fs::rename(&old, &new).map_err(|e| Error::io(&old, e))
+    }
+
+    /// Хранилище целиком — в корзину системы (`trash` = `None`) или в
+    /// каталог `trash` (тесты). Открытое хранилище сначала закрыть.
+    pub fn trash(&self, name: &VaultName, trash: Option<&Path>) -> Result<()> {
+        let path = self.path(name);
+        if !path.is_dir() {
+            return Err(Error::VaultNotFound { name: name.to_string(), known: self.list()? });
+        }
+        crate::storage::move_to_trash(&path, trash).map_err(|e| Error::io(&path, e))
+    }
+
     /// Создать **новое** пустое хранилище; такое уже есть — ошибка.
     pub fn create(&self, name: &VaultName) -> Result<PathBuf> {
         fs::create_dir_all(&self.root).map_err(|e| Error::io(&self.root, e))?;
@@ -193,5 +221,24 @@ mod tests {
         let Err(Error::VaultNotFound { known, .. }) = vaults.find("Нет") else { panic!("нет такого") };
         assert_eq!(known.len(), 2);
         assert!(vaults.find("../x").is_err());
+    }
+
+    #[test]
+    fn rename_and_trash() {
+        let data = tempfile::tempdir().unwrap();
+        let bin = tempfile::tempdir().unwrap();
+        let vaults = Vaults::new(data.path());
+        vaults.create(&name("Учёба")).unwrap();
+        vaults.create(&name("Работа")).unwrap();
+        fs::write(vaults.path(&name("Учёба")).join("a.typ"), "= A").unwrap();
+        assert!(matches!(vaults.rename(&name("Учёба"), &name("Работа")), Err(Error::VaultExists(_))));
+        assert!(matches!(vaults.rename(&name("Нет"), &name("Другое")), Err(Error::VaultNotFound { .. })));
+        vaults.rename(&name("Учёба"), &name("Учёба 2026")).unwrap();
+        assert_eq!(vaults.list().unwrap(), [name("Работа"), name("Учёба 2026")]);
+        assert!(vaults.path(&name("Учёба 2026")).join("a.typ").is_file(), "заметки переехали с папкой");
+        vaults.trash(&name("Работа"), Some(bin.path())).unwrap();
+        assert_eq!(vaults.list().unwrap(), [name("Учёба 2026")]);
+        assert!(bin.path().join("Работа").is_dir(), "хранилище — в корзине, его можно вернуть");
+        assert!(matches!(vaults.trash(&name("Работа"), Some(bin.path())), Err(Error::VaultNotFound { .. })));
     }
 }

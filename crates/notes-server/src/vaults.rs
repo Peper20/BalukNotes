@@ -1,5 +1,6 @@
-//! Хранилища: список и создание (`GET`/`POST /api/vaults`) и хранилища,
-//! открытые сервером.
+//! Хранилища: список и создание (`GET`/`POST /api/vaults`), переименование
+//! и удаление в корзину (`PATCH`/`DELETE /api/vaults/{хранилище}`) и
+//! хранилища, открытые сервером.
 //!
 //! API заметок — под `/api/vaults/{хранилище}/…` (модули `notes`, `graph`,
 //! `search`, `events`). Хранилище открывается при первом обращении: у
@@ -11,28 +12,40 @@
 //! Источник хранилищ — каталог данных (`notes_core::vaults`, по запросу;
 //! хранилищ может не быть вовсе — первое создают в клиенте) или одно
 //! хранилище, открытое заранее (`notes serve --vault …`, тесты): тогда
-//! новые не создаются. Темы и шрифты у всех общие (библиотека одна) — их
+//! новые не создаются, а это не переименовывается и не удаляется. Темы и шрифты у всех общие (библиотека одна) — их
 //! отдаёт ядро без хранилища ([`VaultSet::library`]).
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::routing::get;
+use axum::routing::{get, patch};
 use axum::{Json, Router};
-use notes_core::settings::SettingsStore;
+use notes_core::figures::FigureOptions;
+use notes_core::settings::{Schema, SettingsStore, VaultSettings};
 use notes_core::warm::WarmMode;
 use notes_core::{Notes, NotesConfig, VaultName, Vaults};
 use tokio::sync::broadcast;
 
 use crate::AppState;
-use crate::api::{ChangeEvent, CreateVaultRequest, VaultsResponse};
+use crate::api::{ChangeEvent, CreateVaultRequest, RenameVaultRequest, VaultsResponse};
 use crate::error::{ApiError, ApiResult, blocking};
 
 pub(crate) fn routes() -> Router<AppState> {
-    Router::new().route("/api/vaults", get(list).post(create))
+    Router::new()
+        .route("/api/vaults", get(list).post(create))
+        .route("/api/vaults/{vault}", patch(rename).delete(remove))
+}
+
+/// Хранилища каталога данных; сервер на одном хранилище — 403.
+fn registry_only(s: &AppState) -> ApiResult<()> {
+    if s.vaults.can_create() {
+        Ok(())
+    } else {
+        Err(ApiError(StatusCode::FORBIDDEN, "сервер открыт на одном хранилище (--vault <путь>)".into()))
+    }
 }
 
 async fn list(State(s): State<AppState>) -> ApiResult<Json<VaultsResponse>> {
@@ -44,9 +57,7 @@ async fn create(
     State(s): State<AppState>,
     Json(req): Json<CreateVaultRequest>,
 ) -> ApiResult<(StatusCode, Json<VaultsResponse>)> {
-    if !s.vaults.can_create() {
-        return Err(ApiError(StatusCode::FORBIDDEN, "сервер открыт на одном хранилище (--vault <путь>)".into()));
-    }
+    registry_only(&s)?;
     let vaults = s.vaults.clone();
     let list = blocking(move || {
         vaults.create(&VaultName::new(req.name)?)?;
@@ -56,6 +67,34 @@ async fn create(
     Ok((StatusCode::CREATED, Json(list)))
 }
 
+async fn rename(
+    State(s): State<AppState>,
+    Path(vault): Path<String>,
+    Json(req): Json<RenameVaultRequest>,
+) -> ApiResult<Json<VaultsResponse>> {
+    registry_only(&s)?;
+    let vaults = s.vaults.clone();
+    Ok(Json(
+        blocking(move || {
+            vaults.rename(&vault, &VaultName::new(req.name)?)?;
+            vaults.describe()
+        })
+        .await?,
+    ))
+}
+
+async fn remove(State(s): State<AppState>, Path(vault): Path<String>) -> ApiResult<Json<VaultsResponse>> {
+    registry_only(&s)?;
+    let vaults = s.vaults.clone();
+    Ok(Json(
+        blocking(move || {
+            vaults.trash(&vault)?;
+            vaults.describe()
+        })
+        .await?,
+    ))
+}
+
 /// Открытое хранилище.
 #[derive(Debug)]
 pub struct OpenVault {
@@ -63,17 +102,30 @@ pub struct OpenVault {
     pub notes: Arc<Notes>,
     /// Изменения хранилища для `GET …/events`.
     pub events: broadcast::Sender<ChangeEvent>,
+    /// Настройки, заданные только для этого хранилища (поверх общих).
+    pub settings: VaultSettings,
 }
 
 impl OpenVault {
-    fn new(name: VaultName, notes: Arc<Notes>) -> Self {
+    fn new(name: VaultName, notes: Arc<Notes>, schema: &Schema) -> Self {
+        let path = notes.dir().map(|d| d.join(notes_core::vaults::SETTINGS_FILE));
+        // Испорченный файл не перезаписываем: настройки хранилища — только в памяти.
+        let settings = VaultSettings::open(path, schema).unwrap_or_else(|e| {
+            tracing::warn!("настройки хранилища «{name}»: {e} — пока без них");
+            VaultSettings::open(None, schema).expect("без файла — без ошибок")
+        });
         let (events, _) = broadcast::channel(64);
         let tx = events.clone();
         notes.on_change(move |c| {
             // Нет слушателей — не страшно.
             let _ = tx.send(ChangeEvent { seq: c.seq, paths: c.paths.clone() });
         });
-        Self { name, notes, events }
+        Self { name, notes, events, settings }
+    }
+
+    /// Обработка рисунков по настройкам этого хранилища.
+    pub fn figure_options(&self, shared: &SettingsStore) -> FigureOptions {
+        notes_core::settings::figure_options(&self.settings.merged(shared.values()))
     }
 }
 
@@ -109,7 +161,7 @@ impl VaultSet {
     /// Одно хранилище, открытое заранее; настройки устройства сразу применяются.
     pub fn single(name: VaultName, notes: Arc<Notes>, settings: Arc<SettingsStore>) -> Self {
         let set = Self::with(Source::Single(name.clone()), notes.clone(), settings);
-        set.insert(OpenVault::new(name, notes));
+        set.insert(OpenVault::new(name, notes, set.settings.schema()));
         set
     }
 
@@ -164,6 +216,53 @@ impl VaultSet {
         }
     }
 
+    /// Переименовать хранилище: открытое — закрыть (следующий запрос
+    /// откроет его под новым именем).
+    pub fn rename(&self, from: &str, to: &VaultName) -> notes_core::Result<()> {
+        let Source::Registry { vaults, .. } = &self.source else {
+            return Err(notes_core::Error::VaultExists(to.to_string()));
+        };
+        // Под замком открытых: запрос не откроет хранилище, пока оно переезжает.
+        let mut open = lock(&self.open);
+        let from = vaults.find(from)?;
+        Self::close(&mut open, &from);
+        vaults.rename(&from, to)?;
+        drop(open);
+        self.forget_active(&from);
+        tracing::info!("хранилище «{from}» переименовано в «{to}»");
+        Ok(())
+    }
+
+    /// Хранилище целиком — в корзину системы; открытое — закрыть.
+    pub fn trash(&self, name: &str) -> notes_core::Result<()> {
+        let Source::Registry { vaults, config } = &self.source else {
+            return Err(notes_core::Error::VaultNotFound { name: name.to_owned(), known: self.describe()?.vaults });
+        };
+        let mut open = lock(&self.open);
+        let name = vaults.find(name)?;
+        Self::close(&mut open, &name);
+        vaults.trash(&name, config.trash.as_deref())?;
+        drop(open);
+        self.forget_active(&name);
+        tracing::info!("хранилище «{name}» удалено в корзину");
+        Ok(())
+    }
+
+    /// Закрыть открытое хранилище: прогрев и наблюдатель — стоп, поток
+    /// событий кончается (клиенты переподключатся к новому имени).
+    fn close(open: &mut BTreeMap<VaultName, Arc<OpenVault>>, name: &VaultName) {
+        if let Some(vault) = open.remove(name) {
+            vault.notes.close();
+        }
+    }
+
+    fn forget_active(&self, name: &VaultName) {
+        let mut active = lock(&self.active);
+        if active.as_ref() == Some(name) {
+            *active = None;
+        }
+    }
+
     /// Открытое хранилище, если уже открыто (без блокирующей работы).
     pub fn opened(&self, name: &str) -> Option<Arc<OpenVault>> {
         lock(&self.open).iter().find(|(n, _)| n.as_str() == name).map(|(_, v)| v.clone())
@@ -187,7 +286,7 @@ impl VaultSet {
         let started = std::time::Instant::now();
         let notes = Arc::new(Notes::open(&NotesConfig { vault: vaults.path(&name), ..config.clone() })?);
         tracing::info!(ms = started.elapsed().as_millis(), "открыто хранилище «{name}»");
-        let vault = Arc::new(OpenVault::new(name.clone(), notes));
+        let vault = Arc::new(OpenVault::new(name.clone(), notes, self.settings.schema()));
         open.insert(name.clone(), vault.clone());
         drop(open);
         if self.background.load(Ordering::SeqCst) {
