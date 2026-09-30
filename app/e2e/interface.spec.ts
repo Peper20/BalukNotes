@@ -18,6 +18,36 @@ test("тема: каждый клик — сразу другая на вид (�
   }
 });
 
+test("тема — с первого кадра: запомненная, ещё до настроек с сервера", async ({ page }) => {
+  await open(page, "Сеть/SSH");
+  try {
+    await page.locator("#theme").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "night");
+    // Настройки не пришли (клиент не запустится), а тема и фон — уже её.
+    await page.route("**/api/vaults/*/settings", (r) => r.abort());
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "night");
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).not.toBe("rgb(255, 255, 255)");
+  } finally {
+    await page.unrouteAll();
+    await resetTheme(page);
+  }
+});
+
+test("переход к собранной заметке — без пустого кадра между заметками", async ({ page }) => {
+  await open(page, "Сеть/UFW");
+  await open(page, "Сеть/SSH");
+  await page.evaluate(() => {
+    const note = document.getElementById("note")!;
+    new MutationObserver(() => {
+      if (!note.querySelector(".note-body")) document.documentElement.dataset.blank = "1";
+    }).observe(note, { childList: true });
+  });
+  await page.locator("#tree").getByRole("link", { name: "UFW" }).click();
+  await expect(title(page)).toHaveText("UFW");
+  await expect(page.locator("html")).not.toHaveAttribute("data-blank", "1");
+});
+
 test("раскрытые «Ответы» не сворачиваются, когда заметка пересобрана", async ({ page }) => {
   await open(page, "демо/компоненты");
   const answers = page.locator(".k-quiz-answers").first();

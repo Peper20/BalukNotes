@@ -16,7 +16,12 @@ export interface Folder {
 
 const byTitle = (a: { title: string }, b: { title: string }) => a.title.localeCompare(b.title, "ru", { numeric: true });
 
-export function buildTree(notes: NoteListItem[], folderTitle: (path: string) => string = (p) => p.slice(p.lastIndexOf("/") + 1)): Folder {
+/** `folders` — ещё и папки без заметок (пустые). */
+export function buildTree(
+  notes: NoteListItem[],
+  folderTitle: (path: string) => string = (p) => p.slice(p.lastIndexOf("/") + 1),
+  folders: string[] = [],
+): Folder {
   const root: Folder = { name: "", title: "", path: "", folders: [], notes: [] };
   const index = new Map<string, Folder>([["", root]]);
   const folder = (path: string): Folder => {
@@ -29,6 +34,7 @@ export function buildTree(notes: NoteListItem[], folderTitle: (path: string) => 
     index.set(path, f);
     return f;
   };
+  for (const path of folders) folder(path);
   for (const note of notes) folder(note.folder).notes.push(note);
   const sort = (f: Folder) => {
     f.folders.sort(byTitle);

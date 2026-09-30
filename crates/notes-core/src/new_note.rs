@@ -64,26 +64,10 @@ impl NewNote {
         if title.trim().is_empty() {
             return refuse("пустое название".into());
         }
-        let prefix = if folder.is_empty() { String::new() } else { format!("{}/", NoteId::new(folder)?) };
-        // Имена в папке: файлы (без .typ) и подпапки — строчными.
-        let files = vault.storage().list().map_err(|e| vault.io_error(folder, e))?;
-        let taken: HashSet<String> = files
-            .iter()
-            .filter_map(|f| f.strip_prefix(&prefix))
-            .map(|rest| rest.split_once('/').map_or_else(|| rest.strip_suffix(".typ").unwrap_or(rest), |(dir, _)| dir))
-            .map(str::to_lowercase)
-            .collect();
-        let exists = |name: &str| {
-            taken.contains(&name.to_lowercase()) || vault.storage().stat(&format!("{prefix}{name}")).is_ok()
-        };
-        let base = file_name(title);
-        for n in 1..=MAX_NUMBER {
-            let name = if n == 1 { base.clone() } else { format!("{base} {n}") };
-            if !exists(&name) && !exists(&format!("{name}.typ")) {
-                return NoteId::new(format!("{prefix}{name}"));
-            }
+        match free_id(vault, folder, &file_name(title), None)? {
+            Ok(id) => Ok(id),
+            Err(reason) => refuse(reason),
         }
-        refuse(format!("в папке уже {MAX_NUMBER} заметок «{base}»"))
     }
 
     /// Создать заготовку в хранилище. Результат — путь главного файла от
@@ -123,6 +107,43 @@ impl NewNote {
         storage.create(&main, self.source(id).as_bytes()).map_err(|e| Error::io(storage.display(&main), e))?;
         Ok(main)
     }
+}
+
+/// Свободный путь в папке `folder` (пусто — корень) для имени `base`:
+/// занято (без учёта регистра: в Windows и macOS `SSH` и `ssh` — один файл)
+/// — `base 2`, `base 3`… Имя `except` (переименовываемое) занятым не
+/// считается. `Err(причина)` внутри — свободного номера нет.
+pub(crate) fn free_id(
+    vault: &Vault,
+    folder: &str,
+    base: &str,
+    except: Option<&str>,
+) -> Result<std::result::Result<NoteId, String>> {
+    let prefix = if folder.is_empty() { String::new() } else { format!("{}/", NoteId::new(folder)?) };
+    // Имена в папке: файлы (без .typ) и подпапки (и пустые) — строчными.
+    let files = vault.storage().list().map_err(|e| vault.io_error(folder, e))?;
+    let dirs = vault.storage().dirs().map_err(|e| vault.io_error(folder, e))?;
+    let except = except.map(str::to_lowercase);
+    let taken: HashSet<String> = files
+        .iter()
+        .chain(&dirs)
+        .filter_map(|f| f.strip_prefix(&prefix))
+        .map(|rest| rest.split_once('/').map_or_else(|| rest.strip_suffix(".typ").unwrap_or(rest), |(dir, _)| dir))
+        .map(str::to_lowercase)
+        .filter(|name| Some(name) != except.as_ref())
+        .collect();
+    let exists = |name: &str| {
+        let stem = name.strip_suffix(".typ").unwrap_or(name).to_lowercase();
+        let own = except.as_deref() == Some(stem.as_str());
+        taken.contains(&name.to_lowercase()) || (!own && vault.storage().stat(&format!("{prefix}{name}")).is_ok())
+    };
+    for n in 1..=MAX_NUMBER {
+        let name = if n == 1 { base.to_owned() } else { format!("{base} {n}") };
+        if !exists(&name) && !exists(&format!("{name}.typ")) {
+            return Ok(Ok(NoteId::new(format!("{prefix}{name}"))?));
+        }
+    }
+    Ok(Err(format!("в папке уже {MAX_NUMBER} заметок «{base}»")))
 }
 
 /// Сколько номеров перебирать для занятого имени.
@@ -201,7 +222,7 @@ pub fn file_name(title: &str) -> String {
 /// Текст в разметке Typst `[…]`: знаки разметки — через `\`, в том числе
 /// сокращения (`...` → «…», `1.` в начале — список) и кавычки (Typst
 /// сделал бы их «умными»): название в файле — ровно то, что ввели.
-fn markup(text: &str) -> String {
+pub(crate) fn markup(text: &str) -> String {
     let mut out = String::new();
     for c in text.chars() {
         match c {

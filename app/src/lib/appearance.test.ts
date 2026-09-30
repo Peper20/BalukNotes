@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { SettingDef } from "./api";
-import { applyAppearance, nextTheme, resolveTheme } from "./appearance";
+import { applyAppearance, nextTheme, resolveTheme, themeMemo } from "./appearance";
 
 const themes = [
   { name: "classic", title: "Классика", dark: false },
@@ -12,6 +12,12 @@ it("тема: явная, по системе, неизвестная", () => {
   expect(resolveTheme("auto", themes, true)).toBe("night");
   expect(resolveTheme("auto", themes, false)).toBe("classic");
   expect(resolveTheme("sepia", themes, true)).toBe("night");
+});
+
+it("тема для первого кадра: выбранная или своя на светлую и тёмную систему", () => {
+  expect(themeMemo("night", themes)).toEqual({ fixed: "night", light: "classic", dark: "night" });
+  expect(themeMemo("auto", themes)).toEqual({ fixed: null, light: "classic", dark: "night" });
+  expect(themeMemo("sepia", themes).fixed).toBeNull();
 });
 
 it("кнопка темы: всегда другая на вид", () => {

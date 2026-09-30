@@ -21,6 +21,9 @@ pub enum Error {
     #[error("не создать «{id}»: {reason}")]
     Create { id: String, reason: String },
 
+    #[error("не переименовать «{id}»: {reason}")]
+    Rename { id: String, reason: String },
+
     #[error("недопустимое имя хранилища «{name}»: {reason}")]
     InvalidVault { name: String, reason: &'static str },
 

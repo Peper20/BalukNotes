@@ -226,6 +226,37 @@ impl Notes {
         Ok(())
     }
 
+    /// Удалить папку хранилища целиком (подпапки, заметки, книги) — в
+    /// корзину. Путь проверяется по правилам [`NoteId`]; не папка — `NotFound`.
+    pub fn delete_folder(&self, path: &NoteId) -> Result<()> {
+        let path = path.as_str();
+        let storage = self.vault().storage();
+        if !storage.stat(path).is_ok_and(|m| m.is_dir) {
+            return Err(Error::NotFound(path.to_owned()));
+        }
+        storage.trash(path).map_err(|e| self.vault().io_error(path, e))?;
+        tracing::info!("удалено в корзину: {}", storage.display(path).display());
+        self.changes.local(vec![path.to_owned()]);
+        Ok(())
+    }
+
+    /// Переименовать заметку, книгу или папку ([`crate::rename`]): название,
+    /// имя файла и ссылки на неё. `apply` = `false` — только план.
+    pub fn rename(
+        &self,
+        kind: crate::rename::RenameKind,
+        from: &NoteId,
+        title: &str,
+        apply: bool,
+    ) -> Result<crate::rename::RenamePlan> {
+        if !apply {
+            return crate::rename::plan(self.vault(), kind, from, title);
+        }
+        let (plan, changed) = crate::rename::apply(self.vault(), kind, from, title)?;
+        self.changes.local(changed);
+        Ok(plan)
+    }
+
     // ── Прогрев (см. crate::warm) ─────────────────────────────────────────
 
     /// Применить настройки устройства — на ходу: число сборок, память

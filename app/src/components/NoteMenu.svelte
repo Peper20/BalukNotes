@@ -1,5 +1,6 @@
-<!-- Меню заметки в дереве (правый клик, долгое касание): действия с заметкой. -->
+<!-- Меню заметки или папки в дереве (правый клик, долгое касание): действия с ней. -->
 <script lang="ts">
+  import Pencil from "@lucide/svelte/icons/pencil";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { tick } from "svelte";
   import { ui } from "../lib/ui.svelte";
@@ -22,10 +23,16 @@
 
   const close = () => (ui.noteMenu = null);
 
-  function remove() {
-    const id = ui.noteMenu?.id ?? null;
+  function rename() {
+    const at = ui.noteMenu;
     close();
-    ui.deleting = id;
+    if (at) ui.renaming = { kind: at.kind, id: at.id };
+  }
+
+  function remove() {
+    const at = ui.noteMenu;
+    close();
+    if (at) ui.deleting = { kind: at.kind, id: at.id };
   }
 
   function onPointerDown(e: PointerEvent) {
@@ -43,7 +50,10 @@
 <svelte:window onpointerdown={onPointerDown} onkeydown={onKeydown} onblur={close} onresize={close} />
 
 {#if ui.noteMenu}
-  <div class="note-menu" id="note-menu" role="menu" aria-label="Заметка" bind:this={menu} style:left="{pos.x}px" style:top="{pos.y}px">
+  <div class="note-menu" id="note-menu" role="menu" aria-label={ui.noteMenu.kind === "folder" ? "Папка" : "Заметка"} bind:this={menu} style:left="{pos.x}px" style:top="{pos.y}px">
+    <button type="button" role="menuitem" onclick={rename}>
+      <Pencil size={16} strokeWidth={1.75} aria-hidden="true" />Переименовать…
+    </button>
     <button type="button" role="menuitem" class="danger" onclick={remove}>
       <Trash2 size={16} strokeWidth={1.75} aria-hidden="true" />Удалить…
     </button>

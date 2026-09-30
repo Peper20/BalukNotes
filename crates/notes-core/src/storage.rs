@@ -54,6 +54,16 @@ pub trait Storage: Send + Sync + fmt::Debug {
     /// `_` или `.`, в список не входит. Порядок — любой.
     fn list(&self) -> io::Result<Vec<String>>;
 
+    /// Все каталоги, кроме служебных (как в [`Self::list`]), и пустые тоже.
+    /// По умолчанию — каталоги, в которых есть файлы. Порядок — любой.
+    fn dirs(&self) -> io::Result<Vec<String>> {
+        let mut out = std::collections::BTreeSet::new();
+        for file in self.list()? {
+            out.extend(file.match_indices('/').map(|(i, _)| file[..i].to_owned()));
+        }
+        Ok(out.into_iter().collect())
+    }
+
     /// Сведения о файле или каталоге. Нет такого — `NotFound`.
     fn stat(&self, path: &str) -> io::Result<FileMeta>;
 
@@ -70,6 +80,21 @@ pub trait Storage: Send + Sync + fmt::Debug {
     /// для чтения — `Unsupported` (по умолчанию).
     fn create(&self, path: &str, data: &[u8]) -> io::Result<()> {
         let _ = (path, data);
+        Err(io::Error::new(io::ErrorKind::Unsupported, "хранилище только для чтения"))
+    }
+
+    /// Новое содержимое **существующего** файла (нет такого — `NotFound`).
+    /// Хранилище только для чтения — `Unsupported` (по умолчанию).
+    fn rewrite(&self, path: &str, data: &[u8]) -> io::Result<()> {
+        let _ = (path, data);
+        Err(io::Error::new(io::ErrorKind::Unsupported, "хранилище только для чтения"))
+    }
+
+    /// Переименовать (перенести) файл или каталог; `to` уже есть —
+    /// `AlreadyExists`, каталоги на пути к `to` появляются сами. Хранилище
+    /// только для чтения — `Unsupported` (по умолчанию).
+    fn rename(&self, from: &str, to: &str) -> io::Result<()> {
+        let _ = (from, to);
         Err(io::Error::new(io::ErrorKind::Unsupported, "хранилище только для чтения"))
     }
 
@@ -114,6 +139,15 @@ struct Listed {
     /// Наблюдатель работает — список можно помнить.
     watching: bool,
     files: Option<Vec<String>>,
+    dirs: Option<Vec<String>>,
+}
+
+impl Listed {
+    /// Файлы или каталоги изменились: списки — заново.
+    fn forget(&mut self) {
+        self.files = None;
+        self.dirs = None;
+    }
 }
 
 impl DirStorage {
@@ -148,7 +182,8 @@ impl DirStorage {
         }
     }
 
-    fn walk(dir: &Path, rel: &str, out: &mut Vec<String>) -> io::Result<()> {
+    /// Файлы в `out`, каталоги — в `dirs`.
+    fn walk(dir: &Path, rel: &str, out: &mut Vec<String>, dirs: &mut Vec<String>) -> io::Result<()> {
         for item in fs::read_dir(dir)? {
             let item = item?;
             let name = item.file_name();
@@ -159,7 +194,8 @@ impl DirStorage {
             let child = if rel.is_empty() { name.to_owned() } else { format!("{rel}/{name}") };
             // Тип — из записи каталога, без перехода по ссылке (как раньше в `Vault`).
             if item.file_type()?.is_dir() {
-                Self::walk(&item.path(), &child, out)?;
+                Self::walk(&item.path(), &child, out, dirs)?;
+                dirs.push(child);
             } else {
                 out.push(child);
             }
@@ -180,12 +216,27 @@ impl Storage for DirStorage {
         if let Some(files) = &listed.files {
             return Ok(files.clone());
         }
-        let mut out = Vec::new();
-        Self::walk(&self.root, "", &mut out)?;
+        let (mut out, mut dirs) = (Vec::new(), Vec::new());
+        Self::walk(&self.root, "", &mut out, &mut dirs)?;
         if listed.watching {
             listed.files = Some(out.clone());
+            listed.dirs = Some(dirs);
         }
         Ok(out)
+    }
+
+    fn dirs(&self) -> io::Result<Vec<String>> {
+        let mut listed = self.listed.lock();
+        if let Some(dirs) = &listed.dirs {
+            return Ok(dirs.clone());
+        }
+        let (mut out, mut dirs) = (Vec::new(), Vec::new());
+        Self::walk(&self.root, "", &mut out, &mut dirs)?;
+        if listed.watching {
+            listed.files = Some(out);
+            listed.dirs = Some(dirs.clone());
+        }
+        Ok(dirs)
     }
 
     fn watch(&self, sink: ChangeSink) -> io::Result<Option<WatchGuard>> {
@@ -201,7 +252,7 @@ impl Storage for DirStorage {
             let mut state = listed.lock();
             // Правка содержимого список файлов не меняет.
             if !matches!(&event, Ok(e) if matches!(e.kind, EventKind::Modify(ModifyKind::Data(_) | ModifyKind::Metadata(_)))) {
-                state.files = None;
+                state.forget();
             }
             match event {
                 // Очередь событий ОС переполнилась (inotify): что поменялось — неизвестно.
@@ -236,7 +287,7 @@ impl Storage for DirStorage {
         watcher.watch(&self.root, RecursiveMode::Recursive).map_err(io::Error::other)?;
         let mut state = self.listed.lock();
         state.watching = true;
-        state.files = None;
+        state.forget();
         Ok(Some(Box::new(Unwatch { _watcher: watcher, listed: self.listed.clone() })))
     }
 
@@ -261,8 +312,34 @@ impl Storage for DirStorage {
         }
         let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&full)?;
         // Список файлов — заново, не дожидаясь события наблюдателя.
-        self.listed.lock().files = None;
+        self.listed.lock().forget();
         file.write_all(data)
+    }
+
+    fn rewrite(&self, path: &str, data: &[u8]) -> io::Result<()> {
+        let full = self.full(path)?;
+        if !fs::metadata(&full)?.is_file() {
+            return Err(io::Error::new(io::ErrorKind::IsADirectory, path.to_owned()));
+        }
+        fs::write(full, data)
+    }
+
+    fn rename(&self, from: &str, to: &str) -> io::Result<()> {
+        let (src, dst) = (self.full(from)?, self.full(to)?);
+        if src == self.root || dst == self.root {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "корень хранилища не переименовывается"));
+        }
+        fs::symlink_metadata(&src)?;
+        // `ssh` → `SSH` в Windows и macOS: `to` «есть» — это он сам.
+        if fs::symlink_metadata(&dst).is_ok() && !same_file(&src, &dst) {
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("уже есть: {to}")));
+        }
+        if let Some(dir) = dst.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        fs::rename(src, dst)?;
+        self.listed.lock().forget();
+        Ok(())
     }
 
     fn trash(&self, path: &str) -> io::Result<()> {
@@ -272,9 +349,25 @@ impl Storage for DirStorage {
         }
         move_to_trash(&full, self.trash.as_deref())?;
         // Список файлов — заново, не дожидаясь события наблюдателя.
-        self.listed.lock().files = None;
+        self.listed.lock().forget();
         Ok(())
     }
+}
+
+/// Один и тот же файл (другой регистр букв в нечувствительной к нему ФС).
+#[cfg(unix)]
+fn same_file(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (fs::symlink_metadata(a), fs::symlink_metadata(b)) {
+        (Ok(a), Ok(b)) => a.dev() == b.dev() && a.ino() == b.ino(),
+        _ => false,
+    }
+}
+
+/// Один и тот же файл: ФС Windows не различает регистр.
+#[cfg(not(unix))]
+fn same_file(a: &Path, b: &Path) -> bool {
+    a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
 }
 
 /// Файл или каталог — в корзину системы (`dir` = `None`) или в каталог
@@ -317,7 +410,7 @@ impl Drop for Unwatch {
     fn drop(&mut self) {
         let mut state = self.listed.lock();
         state.watching = false;
-        state.files = None;
+        state.forget();
     }
 }
 
@@ -424,6 +517,35 @@ impl Storage for MemStorage {
         }
         drop(f);
         self.changed(path);
+        Ok(())
+    }
+
+    fn rewrite(&self, path: &str, data: &[u8]) -> io::Result<()> {
+        if !self.files.lock().files.contains_key(path) {
+            return Err(io::Error::new(io::ErrorKind::NotFound, format!("нет файла {path}")));
+        }
+        self.write(path, data);
+        Ok(())
+    }
+
+    fn rename(&self, from: &str, to: &str) -> io::Result<()> {
+        let prefix = format!("{from}/");
+        let mut f = self.files.lock();
+        let moved: Vec<String> = f.files.keys().filter(|p| *p == from || p.starts_with(&prefix)).cloned().collect();
+        if moved.is_empty() || from.is_empty() || to.is_empty() {
+            return Err(io::Error::new(io::ErrorKind::NotFound, format!("нет файла {from}")));
+        }
+        let to_prefix = format!("{to}/");
+        if from != to && f.files.keys().any(|p| p == to || p.starts_with(&to_prefix)) {
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("уже есть: {to}")));
+        }
+        for old in moved {
+            let data = f.files.remove(&old).expect("есть в списке");
+            f.files.insert(format!("{to}{}", &old[from.len()..]), data);
+        }
+        drop(f);
+        self.changed(from);
+        self.changed(to);
         Ok(())
     }
 

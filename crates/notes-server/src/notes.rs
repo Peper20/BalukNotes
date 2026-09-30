@@ -1,12 +1,12 @@
 //! Заметки хранилища: список, страница (книга — по главам), версия, ссылки,
-//! превью, PDF, удаление и подсказки прогреву.
+//! превью, PDF, удаление и переименование (и папок), подсказки прогреву.
 
 use std::sync::Arc;
 
 use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
 use notes_core::NoteId;
 use notes_core::book::{Select, chapter_page};
@@ -14,7 +14,8 @@ use notes_core::search::{Preview, tagged_chapters};
 
 use crate::AppState;
 use crate::api::{
-    ErrorResponse, FolderListItem, LinksResponse, NoteListItem, OutgoingLink, VersionResponse, WarmRequest,
+    ErrorResponse, FolderListItem, LinksResponse, NoteListItem, OutgoingLink, RenameRequest, VersionResponse,
+    WarmRequest,
 };
 use crate::error::{ApiResult, blocking};
 
@@ -22,11 +23,13 @@ pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/vaults/{vault}/notes", get(list_notes))
         .route("/api/vaults/{vault}/folders", get(list_folders))
-        .route("/api/vaults/{vault}/notes/{*id}", get(note).delete(delete))
+        .route("/api/vaults/{vault}/folders/{*path}", delete(delete_folder))
+        .route("/api/vaults/{vault}/notes/{*id}", get(note).delete(delete_note))
         .route("/api/vaults/{vault}/version/{*id}", get(version))
         .route("/api/vaults/{vault}/links/{*id}", get(links))
         .route("/api/vaults/{vault}/preview/{*id}", get(preview))
         .route("/api/vaults/{vault}/pdf/{*id}", get(pdf))
+        .route("/api/vaults/{vault}/rename", post(rename))
         .route("/api/vaults/{vault}/warm", post(warm))
 }
 
@@ -106,11 +109,34 @@ async fn note(
 }
 
 /// Удалить заметку или книгу (папку целиком) — в корзину.
-async fn delete(State(s): State<AppState>, Path((vault, id)): Path<(String, String)>) -> ApiResult<StatusCode> {
+async fn delete_note(State(s): State<AppState>, Path((vault, id)): Path<(String, String)>) -> ApiResult<StatusCode> {
     let id = NoteId::new(id)?;
     let notes = s.vault(vault).await?.notes.clone();
     blocking(move || notes.delete(&id)).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Удалить папку целиком (со всем, что в ней) — в корзину.
+async fn delete_folder(
+    State(s): State<AppState>,
+    Path((vault, path)): Path<(String, String)>,
+) -> ApiResult<StatusCode> {
+    let path = NoteId::new(path)?;
+    let notes = s.vault(vault).await?.notes.clone();
+    blocking(move || notes.delete_folder(&path)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Переименовать заметку (книгу) или папку: название, имя файла и ссылки на
+/// неё; без `apply` — только план.
+async fn rename(
+    State(s): State<AppState>,
+    Path(vault): Path<String>,
+    Json(r): Json<RenameRequest>,
+) -> ApiResult<Json<notes_core::rename::RenamePlan>> {
+    let id = NoteId::new(r.id)?;
+    let notes = s.vault(vault).await?.notes.clone();
+    Ok(Json(blocking(move || notes.rename(r.kind, &id, &r.title, r.apply)).await?))
 }
 
 async fn version(

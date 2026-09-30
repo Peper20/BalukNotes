@@ -600,5 +600,56 @@ async fn delete_moves_to_trash() {
         call(app.clone(), "DELETE", &uri("/api/vaults/test/notes/Сеть/SSH"), None).await.0,
         StatusCode::NOT_FOUND
     );
-    assert_eq!(call(app, "DELETE", "/api/vaults/test/notes/..%2Fx", None).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(call(app.clone(), "DELETE", "/api/vaults/test/notes/..%2Fx", None).await.0, StatusCode::BAD_REQUEST);
+
+    // Папка — целиком; файл или нет такой — 404.
+    std::fs::create_dir_all(vault.path().join("Папка/Вложенная")).unwrap();
+    std::fs::write(vault.path().join("Папка/Вложенная/Заметка.typ"), "з").unwrap();
+    assert_eq!(
+        call(app.clone(), "DELETE", &uri("/api/vaults/test/folders/Папка"), None).await.0,
+        StatusCode::NO_CONTENT
+    );
+    assert!(trash.path().join("Папка/Вложенная/Заметка.typ").is_file());
+    assert_eq!(
+        call(app.clone(), "DELETE", &uri("/api/vaults/test/folders/Папка"), None).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(call(app, "DELETE", "/api/vaults/test/folders/..%2Fx", None).await.0, StatusCode::BAD_REQUEST);
+}
+
+/// Переименование: план ничего не меняет, `apply` — файл, название, ссылки;
+/// пустая папка — в списке папок.
+#[tokio::test]
+async fn rename_plan_and_apply() {
+    let vault = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(vault.path().join("Сеть")).unwrap();
+    std::fs::create_dir_all(vault.path().join("Пустая")).unwrap();
+    std::fs::write(vault.path().join("Сеть/SSH.typ"), "#show: note.with(title: [SSH])\n").unwrap();
+    std::fs::write(vault.path().join("A.typ"), "#see(\"Сеть/SSH\")").unwrap();
+    let notes = Arc::new(Notes::open(&config(vault.path().to_owned(), None)).unwrap());
+    let dir = tempfile::tempdir().unwrap();
+    let app = router(single(notes, &dir));
+
+    let (_, folders) = call(app.clone(), "GET", &uri("/api/vaults/test/folders"), None).await;
+    let paths: Vec<&str> = folders.as_array().unwrap().iter().map(|f| f["path"].as_str().unwrap()).collect();
+    assert_eq!(paths, ["Пустая", "Сеть"]);
+
+    let body = r#"{"kind":"note","id":"Сеть/SSH","title":"SSH: основы"}"#;
+    let (status, plan) = call(app.clone(), "POST", &uri("/api/vaults/test/rename"), Some(body)).await;
+    assert_eq!(status, StatusCode::OK, "{plan}");
+    assert_eq!(plan["to"], "Сеть/SSH основы");
+    assert_eq!(plan["links"], serde_json::json!([{"note": "A", "count": 1}]));
+    assert!(vault.path().join("Сеть/SSH.typ").is_file(), "план ничего не меняет");
+
+    let body = r#"{"kind":"note","id":"Сеть/SSH","title":"SSH: основы","apply":true}"#;
+    assert_eq!(call(app.clone(), "POST", &uri("/api/vaults/test/rename"), Some(body)).await.0, StatusCode::OK);
+    assert_eq!(std::fs::read_to_string(vault.path().join("A.typ")).unwrap(), "#see(\"Сеть/SSH основы\")");
+    let (_, list) = call(app.clone(), "GET", &uri("/api/vaults/test/notes"), None).await;
+    assert!(
+        list.as_array().unwrap().iter().any(|n| n["id"] == "Сеть/SSH основы" && n["title"] == "SSH: основы"),
+        "{list}"
+    );
+
+    let body = r#"{"kind":"folder","id":"Пустая","title":"  "}"#;
+    assert_eq!(call(app, "POST", &uri("/api/vaults/test/rename"), Some(body)).await.0, StatusCode::BAD_REQUEST);
 }

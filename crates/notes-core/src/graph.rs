@@ -239,13 +239,16 @@ impl SourceIndex {
         // Удалённые файлы — из кэша вон.
         files.retain(|path, _| seen.contains(path));
         drop(files);
-        let folders = self.walk_folders(vault, &entries);
+        let folders = self.walk_folders(vault, &entries)?;
         Ok(Walk { entries: Arc::new(entries), links, outlines: Arc::new(outlines), folders: Arc::new(folders) })
     }
 
-    /// Папки заметок и их `_folder.toml` (перечитываются только изменившиеся).
-    fn walk_folders(&self, vault: &Vault, entries: &[Entry]) -> BTreeMap<String, Folder> {
-        let paths: BTreeSet<&str> = entries.iter().flat_map(|e| ancestors(e.id.as_str())).collect();
+    /// Папки хранилища (и пустые) и их `_folder.toml` (перечитываются только
+    /// изменившиеся).
+    fn walk_folders(&self, vault: &Vault, entries: &[Entry]) -> Result<BTreeMap<String, Folder>> {
+        let all = vault.folders()?;
+        let paths: BTreeSet<&str> =
+            entries.iter().flat_map(|e| ancestors(e.id.as_str())).chain(all.iter().map(String::as_str)).collect();
         let mut cache = self.folder_files.lock();
         let mut out = BTreeMap::new();
         for path in paths {
@@ -270,7 +273,7 @@ impl SourceIndex {
             out.insert(path.to_owned(), folder);
         }
         cache.retain(|path, _| out.get(path).is_some_and(|f| *f != Folder::default()));
-        out
+        Ok(out)
     }
 }
 
@@ -302,7 +305,7 @@ impl Snapshot {
             .unwrap_or_else(|| path.rsplit('/').next().unwrap_or(path).to_owned())
     }
 
-    /// Папки с заметками (и их предки), по алфавиту путей.
+    /// Папки хранилища (и пустые), по алфавиту путей.
     pub fn folders(&self) -> impl Iterator<Item = (&str, &Folder)> {
         self.folders.iter().map(|(path, f)| (path.as_str(), f))
     }

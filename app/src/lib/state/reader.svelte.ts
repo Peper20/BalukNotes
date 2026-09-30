@@ -13,6 +13,9 @@ import { places } from "./places.svelte";
 import { router } from "./router.svelte";
 import { settings } from "./settings.svelte";
 
+/** Сколько прежняя заметка стоит на экране, пока грузится новая. */
+const STALE_MS = 150;
+
 class Reader {
   /** Показанная заметка — или null, пока собирается / не загрузилась. */
   page = $state.raw<NotePage | null>(null);
@@ -76,12 +79,17 @@ class Reader {
     const ctrl = new AbortController();
     this.#ctrl = ctrl;
     if (this.page?.id !== id) {
-      // Другая заметка: сразу убираем прежнюю — пока новая собирается, на
+      // Другая заметка. Из кэша она придёт за десятки мс — прежняя стоит до
+      // неё, без пустого кадра. Собирается дольше — прежнюю убираем: на
       // экране не должно быть чужого текста под новым заголовком.
-      this.page = null;
+      const old = this.page;
       this.version = null;
       keepScroll = false;
-      scrollTo(0, 0);
+      setTimeout(() => {
+        if (this.#ctrl !== ctrl || this.page !== old) return;
+        this.page = null;
+        scrollTo(0, 0);
+      }, STALE_MS);
     }
     this.failure = null;
     this.pending = { id, since: Date.now() };

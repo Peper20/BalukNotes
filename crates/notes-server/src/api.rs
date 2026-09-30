@@ -55,8 +55,8 @@ pub struct NoteListItem {
     pub chapters: Vec<TaggedChapter>,
 }
 
-/// Элемент `GET /api/vaults/{хранилище}/folders`: папка, в которой есть
-/// заметки (или папки с ними).
+/// Элемент `GET /api/vaults/{хранилище}/folders`: папка с заметками или
+/// пустая (`Vault::folders`).
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct FolderListItem {
@@ -64,6 +64,20 @@ pub struct FolderListItem {
     pub path: String,
     /// Название для показа: из `_folder.toml`, иначе — имя папки.
     pub title: String,
+}
+
+/// `POST /api/vaults/{хранилище}/rename`: переименовать заметку (книгу) или
+/// папку; без `apply` — только план (новый путь, какие ссылки перепишутся).
+#[derive(Debug, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct RenameRequest {
+    pub kind: notes_core::rename::RenameKind,
+    /// Путь заметки или папки.
+    pub id: String,
+    /// Новое название.
+    pub title: String,
+    #[serde(default)]
+    pub apply: bool,
 }
 
 /// `POST /api/vaults/{хранилище}/warm`: что собрать заранее первым (заметки во вкладках,

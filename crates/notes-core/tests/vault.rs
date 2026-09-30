@@ -494,4 +494,13 @@ fn delete_note_and_book() {
     assert_eq!(ids, ["A"]);
 
     assert!(matches!(notes.delete(&id("Нет")), Err(notes_core::Error::NotFound(_))));
+
+    mem.write("Папка/Вложенная/Заметка.typ", "= З");
+    mem.write("Папка/Другая.typ", "= Д");
+    assert!(notes.index().unwrap().exists("Папка/Вложенная/Заметка"));
+    assert!(matches!(notes.delete_folder(&id("Папка/Другая")), Err(notes_core::Error::NotFound(_))), "файл — не папка");
+    notes.delete_folder(&id("Папка")).unwrap();
+    let ids: Vec<String> = notes.entries().unwrap().into_iter().map(|e| e.id.to_string()).collect();
+    assert_eq!(ids, ["A"], "папка — целиком, со вложенными");
+    assert!(matches!(notes.delete_folder(&id("Папка")), Err(notes_core::Error::NotFound(_))));
 }

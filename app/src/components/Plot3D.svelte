@@ -7,7 +7,7 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import { compile } from "../lib/plot/formula";
-  import { faces, mixHex, view, Z, type P3 } from "../lib/plot/geometry";
+  import { faces, mixHex, turn, view, Z, type P3 } from "../lib/plot/geometry";
   import { colorVar, defaults, PT_PER_CM, SMALL_PT, TEXT_PT, type Plot3D } from "../lib/plot/spec";
   import PlotSliders from "./PlotSliders.svelte";
 
@@ -106,20 +106,30 @@
     ctx.fillText(spec.labels[2], ...at([...far, Z + 0.14]));
   }
 
-  // Вращение: перетаскивание по горизонтали — поворот, по вертикали — наклон.
-  let drag: { id: number; x: number; y: number } | null = null;
+  // Вращение: перетаскивание по горизонтали — поворот, по вертикали — наклон;
+  // ближняя сторона едет за указателем (`turn`). Палец, начавший вертикально,
+  // прокручивает страницу (touch-action: pan-y — браузер пришлёт pointercancel):
+  // до TOUCH_SLOP пикселей палец не вращает — ждём, куда он пошёл.
+  const TOUCH_SLOP = 8;
+  let drag: { id: number; x: number; y: number; held: boolean } | null = null;
   function down(e: PointerEvent) {
-    drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    drag = { id: e.pointerId, x: e.clientX, y: e.clientY, held: e.pointerType === "touch" };
     canvas?.setPointerCapture(e.pointerId);
   }
   function move(e: PointerEvent) {
     if (!drag || drag.id !== e.pointerId) return;
-    rotate((e.clientX - drag.x) * 0.012, (e.clientY - drag.y) * 0.012);
+    const [dx, dy] = [e.clientX - drag.x, e.clientY - drag.y];
+    if (drag.held) {
+      if (Math.hypot(dx, dy) < TOUCH_SLOP) return;
+      // Вертикально — это прокрутка страницы, не рисунка.
+      if (Math.abs(dy) > Math.abs(dx)) return void (drag = null);
+      drag.held = false;
+    }
+    rotate(dx * 0.012, dy * 0.012);
     drag = { ...drag, x: e.clientX, y: e.clientY };
   }
-  function rotate(dth: number, dph: number) {
-    th -= dth;
-    ph = Math.min(89 * deg, Math.max(-10 * deg, ph + dph));
+  function rotate(du: number, dv: number) {
+    [th, ph] = turn(th, ph, du, dv);
   }
   function key(e: KeyboardEvent) {
     const step = 5 * deg;

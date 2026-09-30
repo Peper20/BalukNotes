@@ -16,6 +16,7 @@
   import TabBar from "./components/TabBar.svelte";
   import Tags from "./components/Tags.svelte";
   import NoteDelete from "./components/NoteDelete.svelte";
+  import NoteRename from "./components/NoteRename.svelte";
   import NoteView from "./components/NoteView.svelte";
   import Problems from "./components/Problems.svelte";
   import Settings from "./components/Settings.svelte";
@@ -126,6 +127,7 @@
   <VaultNew />
   <VaultEdit />
   <NoteDelete />
+  <NoteRename />
   <Palette />
   <LinkPreview />
 {/if}
