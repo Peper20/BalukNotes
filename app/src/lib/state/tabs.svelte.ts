@@ -40,6 +40,12 @@ class Tabs {
     return next.activeDropped;
   }
 
+  /** Новые адреса вкладок (`url` → новый или null — тот же). */
+  move(url: (url: string) => string | null): void {
+    for (const tab of this.list) tab.url = url(tab.url) ?? tab.url;
+    this.save();
+  }
+
   save(): void {
     save("k-tabs", { tabs: this.list, active: this.active });
   }

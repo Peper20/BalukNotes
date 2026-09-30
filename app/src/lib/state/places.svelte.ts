@@ -30,6 +30,14 @@ class Places {
     save("k-recent", this.recent);
   }
 
+  /** Заметку (папку) переименовали: места и недавние — под новыми путями. */
+  move(moved: (id: string) => string | null): void {
+    this.#places = Object.fromEntries(Object.entries(this.#places).map(([id, place]) => [moved(id) ?? id, place]));
+    this.recent = this.recent.map((id) => moved(id) ?? id);
+    save("k-places", this.#places);
+    save("k-recent", this.recent);
+  }
+
   visited(id: string): void {
     this.recent = pushRecent(this.recent, id, MAX_RECENT);
     save("k-recent", this.recent);

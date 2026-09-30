@@ -88,7 +88,8 @@ impl ThemeSet {
             let colors: &Map<String, Value> =
                 theme.get("colors").and_then(Value::as_object).ok_or_else(|| bad("цвета темы — словарь"))?;
             let bg = colors.get("bg").and_then(Value::as_str).ok_or_else(|| bad("у темы нет bg"))?;
-            themes.push(Theme { name: name.clone(), title: title.to_owned(), dark: is_dark(bg) });
+            let dark = is_dark(bg);
+            themes.push(Theme { name: name.clone(), title: title.to_owned(), dark });
             if let Some(fonts) = theme.get("fonts") {
                 let fonts = fonts.as_array().ok_or_else(|| bad("шрифты темы — список"))?;
                 for font in fonts {
@@ -100,7 +101,8 @@ impl ThemeSet {
                 let color = color.as_str().ok_or_else(|| bad("цвет — строка"))?;
                 let _ = writeln!(css, "  --k-{var}: {color};");
             }
-            css.push_str("}\n");
+            // Полосы прокрутки, поля ввода и фон окна браузера — в тон теме.
+            let _ = writeln!(css, "  color-scheme: {};\n}}", if dark { "dark" } else { "light" });
             // Рисунки: виден только вариант текущей темы (см. render).
             let _ = writeln!(
                 css,
@@ -159,6 +161,7 @@ mod tests {
         assert!(set.themes()[1].dark);
         assert!(set.css().contains(":root[data-theme=\"dark\"] {\n  --k-bg: #16181e;"));
         assert!(set.css().contains(".k-frame-v[data-theme=\"light\"] { display: contents; }"));
+        assert!(set.css().contains("  --k-text: #dde2ea;\n  color-scheme: dark;\n}"));
         assert_eq!(set.web_fonts(), ["Math", "Mono", "Serif"], "по алфавиту, без повторов");
     }
 

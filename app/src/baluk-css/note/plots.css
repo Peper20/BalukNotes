@@ -16,7 +16,9 @@
   }
   .k-plot-svg, .k-plot-canvas { display: block; max-width: 100%; height: auto; font-family: var(--k-font-text); }
   .k-plot-svg { touch-action: pan-y; cursor: crosshair; }
-  .k-plot-canvas { touch-action: none; cursor: grab; }
+  /* Палец: вертикальный свайп — прокрутка страницы, начатый вбок —
+   * вращение (дальше и наклон: жест уже у рисунка). */
+  .k-plot-canvas { touch-action: pan-y; cursor: grab; }
   .k-plot-canvas:active { cursor: grabbing; }
   .k-plot-canvas:focus-visible { outline: 1px dashed var(--k-accent); outline-offset: 2px; }
   .k-plot-readout, .k-plot-sliders { font-size: 0.72em; }

@@ -1,7 +1,7 @@
 // Хранилища (создать, переключиться — у каждого свои заметки) и удаление
-// заметок из интерфейса: в корзину (у сервера e2e — каталог TRASH), с
+// заметок и папок из интерфейса: в корзину (у сервера e2e — каталог TRASH), с
 // подтверждением; вкладки удалённой заметки закрываются.
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { TRASH, VAULT, noteUrl, open, ready, vaultUrl } from "./helpers";
@@ -154,5 +154,83 @@ test("удалить заметку: из дерева и командой — �
   } finally {
     rmSync(dir, { recursive: true, force: true });
     rmSync(TRASH, { recursive: true, force: true });
+  }
+});
+
+test("удалить папку: правый клик в дереве — со всем, что в ней, в корзину", async ({ page }) => {
+  const dir = join(VAULT, "Черновики");
+  mkdirSync(join(dir, "Старое"), { recursive: true });
+  writeFileSync(join(dir, "Первый.typ"), `${head("Первый")}Текст.\n`);
+  writeFileSync(join(dir, "Старое", "Второй.typ"), `${head("Второй")}Текст.\n`);
+  writeFileSync(join(VAULT, "Ссылка.typ"), `${head("Ссылка")}См. #see("Черновики/Старое/Второй").\n`);
+  try {
+    await open(page, "Черновики/Старое/Второй");
+    const folder = page.locator("#tree summary", { hasText: "Черновики" });
+    const dialog = page.locator("#note-delete");
+
+    await folder.click({ button: "right" });
+    await page.locator("#note-menu").getByRole("menuitem", { name: "Удалить…" }).click();
+    await expect(dialog).toContainText("Удалить папку «Черновики»?");
+    await expect(dialog).toContainText("2 заметки");
+    await expect(dialog).toContainText("ссылается 1 заметка");
+    await expect(dialog.getByRole("button", { name: "Отмена" })).toBeFocused();
+    await page.locator("#note-delete-confirm").click();
+    await expect(dialog).toBeHidden();
+    await expect(folder).toHaveCount(0);
+    // Вкладка заметки из папки закрылась.
+    await expect(page).toHaveURL(vaultUrl("/"));
+    await expect(page.locator("#status")).toContainText("в корзине: папка Черновики");
+    expect(existsSync(dir)).toBe(false);
+    expect(existsSync(join(TRASH, "Черновики", "Старое", "Второй.typ"))).toBe(true);
+    await ready(page);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(join(VAULT, "Ссылка.typ"), { force: true });
+    rmSync(TRASH, { recursive: true, force: true });
+  }
+});
+
+test("пустая папка — в дереве; переименовать заметку и папку: файл, название, ссылки, вкладка", async ({ page }) => {
+  const empty = join(VAULT, "Пустая");
+  const dir = join(VAULT, "Переим");
+  mkdirSync(empty, { recursive: true });
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "Старое.typ"), `${head("Старое")}Текст.\n`);
+  writeFileSync(join(VAULT, "Ссылка2.typ"), `${head("Ссылка2")}См. #see("Переим/Старое").\n`);
+  try {
+    await open(page, "Переим/Старое");
+    const tree = page.locator("#tree");
+    await expect(tree.locator("summary", { hasText: "Пустая" })).toContainText("0");
+    const dialog = page.locator("#note-rename");
+
+    // Заметка: план по ходу ввода — новый файл и чьи ссылки поправятся.
+    await tree.getByRole("link", { name: "Старое" }).click({ button: "right" });
+    await page.locator("#note-menu").getByRole("menuitem", { name: "Переименовать…" }).click();
+    const input = dialog.getByLabel("Название");
+    await expect(input).toHaveValue("Старое");
+    await input.fill("Новое: имя");
+    await expect(dialog).toContainText("Переим/Новое имя.typ");
+    await expect(dialog).toContainText("Перепишется 1 ссылка в 1 заметке");
+    await expect(dialog).toContainText("Ссылка2");
+    await page.locator("#note-rename-confirm").click();
+    await expect(dialog).toBeHidden();
+    await expect(page).toHaveURL(noteUrl("Переим/Новое имя"));
+    await expect(page.locator("#note .k-title h1")).toHaveText("Новое: имя");
+    expect(existsSync(join(dir, "Старое.typ"))).toBe(false);
+    expect(readFileSync(join(VAULT, "Ссылка2.typ"), "utf8")).toContain('#see("Переим/Новое имя")');
+
+    // Папка: всё внутри переезжает, открытая заметка — по новому адресу.
+    await tree.locator("summary", { hasText: "Переим" }).click({ button: "right" });
+    await page.locator("#note-menu").getByRole("menuitem", { name: "Переименовать…" }).click();
+    await input.fill("Готово");
+    await expect(dialog).toContainText("Переим/ → Готово/");
+    await page.locator("#note-rename-confirm").click();
+    await expect(page).toHaveURL(noteUrl("Готово/Новое имя"));
+    await expect(tree.locator("summary", { hasText: "Готово" })).toBeVisible();
+    expect(existsSync(join(VAULT, "Готово", "Новое имя.typ"))).toBe(true);
+    expect(readFileSync(join(VAULT, "Ссылка2.typ"), "utf8")).toContain('#see("Готово/Новое имя")');
+    await ready(page);
+  } finally {
+    for (const p of [empty, dir, join(VAULT, "Готово"), join(VAULT, "Ссылка2.typ")]) rmSync(p, { recursive: true, force: true });
   }
 });

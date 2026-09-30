@@ -5,6 +5,7 @@ import { api } from "./api";
 import { notes, places, reader, router, settings, tabs, updates } from "./state";
 import { graphHref, homeHref, noteHref, parseRoute, tagHref } from "./ids";
 import { combo, type Combo } from "./keys";
+import { movedId } from "./rename";
 import { mobile, ui } from "./ui.svelte";
 
 export interface Command {
@@ -101,7 +102,8 @@ export function commands(): Command[] {
     { id: "refresh", group: "Заметка", title: "Пересобрать заметку", keys: keys("KeyR"), available: () => router.currentId != null, run: () => void updates.check({ force: true }) },
     { id: "pdf", group: "Заметка", title: "PDF в текущей теме", available: hasNote, run: () => { const url = reader.pdfUrl(); if (url) open(url, "_blank"); } },
     { id: "copy-link", group: "Заметка", title: "Скопировать ссылку #see(…) на заметку", available: () => router.currentId != null, run: () => void copyLink() },
-    { id: "delete-note", group: "Заметка", title: "Удалить заметку…", available: () => router.currentNote != null, run: () => (ui.deleting = router.currentId) },
+    { id: "rename-note", group: "Заметка", title: "Переименовать заметку…", available: () => router.currentNote != null, run: () => (ui.renaming = router.currentId ? { kind: "note", id: router.currentId } : null) },
+    { id: "delete-note", group: "Заметка", title: "Удалить заметку…", available: () => router.currentNote != null, run: () => (ui.deleting = router.currentId ? { kind: "note", id: router.currentId } : null) },
     { id: "backlinks", group: "Заметка", title: "Кто ссылается сюда", available: hasNote, run: () => document.getElementById("backlinks")?.scrollIntoView({ behavior: "smooth" }) },
 
     { id: "settings", group: "Приложение", title: "Настройки", keys: keys("Ctrl+Comma"), run: () => (ui.settingsOpen = true) },
@@ -132,6 +134,52 @@ export async function deleteNote(id: string): Promise<void> {
   places.forget(id);
   await notes.refresh();
   reader.status = `в корзине: ${title}`;
+}
+
+/**
+ * Удалить папку со всем, что в ней, в корзину системы: как `deleteNote`, но
+ * для всех заметок папки.
+ */
+export async function deleteFolder(path: string): Promise<void> {
+  const title = notes.folderTitle(path);
+  const inside = (id: string) => id.startsWith(`${path}/`);
+  const gone = notes.all.filter((n) => inside(n.id)).map((n) => n.id);
+  await api.deleteFolder(path);
+  const isIt = (url: string) => {
+    const route = parseRoute(new URL(url, location.href).pathname);
+    return route.kind === "note" && inside(route.id);
+  };
+  if (tabs.drop((t) => isIt(t.url))) {
+    history.replaceState(null, "", tabs.list[tabs.active]!.url);
+    router.sync();
+  }
+  for (const id of gone) places.forget(id);
+  await notes.refresh();
+  reader.status = `в корзине: папка ${title}`;
+}
+
+/**
+ * Переименовать заметку или папку (название, имя файла, ссылки — сервер):
+ * вкладки, места чтения и свёрнутые папки — под новыми путями; открытая —
+ * по новому адресу.
+ */
+export async function renameItem(kind: "note" | "folder", id: string, title: string): Promise<void> {
+  const plan = await api.rename({ kind, id, title, apply: true });
+  const moved = (path: string) => movedId(path, plan.from, plan.to);
+  if (plan.from !== plan.to) {
+    tabs.move((url) => {
+      const u = new URL(url, location.href);
+      const route = parseRoute(u.pathname);
+      const to = route.kind === "note" ? moved(route.id) : null;
+      return to == null ? null : noteHref(to) + u.search + u.hash;
+    });
+    places.move(moved);
+    if (kind === "folder") ui.moveCollapsed(moved);
+    history.replaceState(history.state, "", tabs.list[tabs.active]!.url);
+  }
+  await notes.refresh();
+  router.sync();
+  reader.status = `переименовано: ${plan.title}`;
 }
 
 /** Открыть заметку из палитры или списка: Ctrl — в новой вкладке. */

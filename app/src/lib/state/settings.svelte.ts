@@ -10,7 +10,8 @@
 // хранилища (экран выбора) — только общие.
 
 import { api, type Schema, type SettingValues, type Theme, type VaultSettingsResponse } from "../api";
-import { applyAppearance, nextTheme, resolveTheme } from "../appearance";
+import { applyAppearance, nextTheme, resolveTheme, themeMemo } from "../appearance";
+import { save, saveShared } from "../storage";
 import { vault } from "../vault";
 
 type Value = SettingValues[string];
@@ -139,8 +140,15 @@ class Settings {
     void this.save(patch);
   }
 
+  /** Вид — после загрузки настроек: до неё на <html> тема из `public/assets/theme.js`. */
   apply(root: HTMLElement): void {
-    applyAppearance(root, this.schema?.settings ?? [], this.values, this.theme);
+    if (!this.schema || !this.themes.length) return;
+    applyAppearance(root, this.schema.settings, this.values, this.theme);
+    // Тема — и для первого кадра следующей загрузки: этого хранилища и
+    // любого, где её ещё не запомнили.
+    const memo = themeMemo(this.values["appearance.theme"], this.themes);
+    save("k-theme", memo);
+    saveShared("k-theme", memo);
   }
 }
 

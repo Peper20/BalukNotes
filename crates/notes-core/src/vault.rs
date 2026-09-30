@@ -171,6 +171,28 @@ impl Vault {
         Ok(out)
     }
 
+    /// Папки хранилища по алфавиту путей: с заметками и пустые (в них нет
+    /// файлов, кроме служебных). Каталог только с файлами не заметок (`code/`,
+    /// `img/` рядом с заметкой) — не папка; книга и всё, что в ней, — тоже;
+    /// служебные и с недопустимыми для [`NoteId`] именами пропускаются.
+    pub fn folders(&self) -> Result<Vec<String>> {
+        let files = self.storage.list().map_err(|e| self.io_error("", e))?;
+        let books: BTreeSet<&str> = files.iter().filter_map(|f| f.strip_suffix(&format!("/{BOOK_MAIN}"))).collect();
+        let mut out = BTreeSet::new();
+        for dir in self.storage.dirs().map_err(|e| self.io_error("", e))? {
+            if books.contains(dir.as_str()) || book_of(&books, &dir).is_some() || NoteId::new(dir.as_str()).is_err() {
+                continue;
+            }
+            let prefix = format!("{dir}/");
+            let mut inside = files.iter().filter(|f| f.starts_with(&prefix)).peekable();
+            let empty = inside.peek().is_none();
+            if empty || inside.any(|f| is_typ(f)) {
+                out.extend(crate::folders::ancestors(&prefix).map(str::to_owned));
+            }
+        }
+        Ok(out.into_iter().collect())
+    }
+
     /// Заметка или книга по идентификатору.
     pub fn entry(&self, id: &NoteId) -> Result<Entry> {
         let note = format!("{id}.typ");
@@ -259,6 +281,12 @@ mod tests {
             fs::create_dir_all(p.parent().unwrap()).unwrap();
             fs::write(p, "").unwrap();
         }
+        for d in ["Пустая/Вложенная", "Матан/рисунки", "_служебная", "Сеть/code", "Ресурсы/img"]
+        {
+            fs::create_dir_all(root.join(d)).unwrap();
+        }
+        fs::write(root.join("Сеть/code/main.cpp"), "").unwrap();
+        fs::write(root.join("Ресурсы/img/a.png"), "").unwrap();
         let vault = Vault::open(root).unwrap();
         let got: Vec<_> = vault.entries().unwrap().into_iter().map(|e| (e.id.to_string(), e.kind)).collect();
         assert_eq!(
@@ -273,5 +301,10 @@ mod tests {
         assert_eq!(book.main, Path::new("Матан/main.typ"));
         assert_eq!(vault.files_of(&book).unwrap(), ["Матан/01-глава.typ", "Матан/main.typ"]);
         assert!(matches!(vault.entry(&NoteId::new("Нет").unwrap()), Err(Error::NotFound(_))));
+        assert_eq!(
+            vault.folders().unwrap(),
+            ["Пустая", "Пустая/Вложенная", "Сеть"],
+            "пустые — тоже; книга и код рядом с заметкой — не папки"
+        );
     }
 }

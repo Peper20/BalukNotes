@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clipRuns, faces, formatNumber, mixHex, niceStep, sample, ticks, view } from "./geometry";
+import { clipRuns, faces, formatNumber, mixHex, niceStep, sample, ticks, turn, view } from "./geometry";
 
 describe("оси", () => {
   it("шаг делений — 1, 2, 5 × 10^k", () => {
@@ -84,5 +84,19 @@ describe("поверхность", () => {
   it("смесь цветов", () => {
     expect(mixHex("#000000", "#ffffff", 0.5)).toBe("rgba(128, 128, 128, 1.000)");
     expect(mixHex("#ff000080", "#ff0000", 0)).toBe("rgba(255, 0, 0, 0.502)");
+  });
+});
+
+describe("поворот", () => {
+  const near: [number, number, number] = [0, -1, 0]; // ближняя сторона при θ = 0
+  it("вправо — ближняя сторона едет вправо, вниз — вниз", () => {
+    const [th, ph] = [0, 0.5];
+    const [th2, ph2] = turn(th, ph, 0.1, 0.1);
+    expect(view(near, th2, ph2)[0]).toBeGreaterThan(view(near, th, ph)[0]);
+    expect(view(near, th2, ph2)[1]).toBeLessThan(view(near, th, ph)[1]);
+  });
+  it("наклон — в пределах", () => {
+    expect(turn(0, 0, 0, 10)[1]).toBeCloseTo((89 * Math.PI) / 180);
+    expect(turn(0, 0, 0, -10)[1]).toBeCloseTo((-10 * Math.PI) / 180);
   });
 });

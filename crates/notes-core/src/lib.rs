@@ -48,6 +48,7 @@ pub mod page_cache;
 pub mod pages;
 pub mod passes;
 pub mod pipeline;
+pub mod rename;
 pub mod render;
 pub mod search;
 pub mod settings;

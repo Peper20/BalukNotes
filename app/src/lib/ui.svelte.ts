@@ -4,6 +4,9 @@ import type { BookView } from "./api";
 import type { Find } from "./find";
 import { load, save } from "./storage";
 
+/** Что в дереве: заметка (книга) или папка (путь) — для меню и удаления. */
+export type TreeItem = { kind: "note" | "folder"; id: string };
+
 class Ui {
   /** Показанная книга по главам (список глав и карта якорей — с сервера) или null. */
   book = $state.raw<BookView | null>(null);
@@ -29,15 +32,23 @@ class Ui {
   vaultNewOpen = $state(false);
   /** Диалог открытого хранилища: переименовать или удалить. */
   vaultEdit = $state<"rename" | "delete" | null>(null);
-  /** Заметка, которую спрашивают, удалить ли (диалог подтверждения). */
-  deleting = $state<string | null>(null);
-  /** Меню заметки в дереве (правый клик, долгое касание): где и какой. */
-  noteMenu = $state<{ id: string; x: number; y: number } | null>(null);
+  /** Заметка или папка, которую спрашивают, удалить ли (диалог подтверждения). */
+  deleting = $state<TreeItem | null>(null);
+  /** Заметка или папка, которую переименовывают (диалог). */
+  renaming = $state<TreeItem | null>(null);
+  /** Меню заметки или папки в дереве (правый клик, долгое касание): где и какой. */
+  noteMenu = $state<(TreeItem & { x: number; y: number }) | null>(null);
   /** Режим чтения: только текст — без панелей, вкладок и оглавления. */
   reading = $state(false);
 
   /** Свёрнутые папки дерева (пути) — запоминаются. */
   collapsed = $state<string[]>(load<string[]>("k-collapsed", []));
+
+  /** Папку переименовали: свёрнутые — под новыми путями. */
+  moveCollapsed(moved: (path: string) => string | null): void {
+    this.collapsed = this.collapsed.map((p) => moved(p) ?? p);
+    save("k-collapsed", this.collapsed);
+  }
 
   setCollapsed(path: string, closed: boolean): void {
     const has = this.collapsed.includes(path);

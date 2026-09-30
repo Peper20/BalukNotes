@@ -12,6 +12,8 @@ import type { GraphLayout } from "./types/GraphLayout";
 import type { LinksResponse } from "./types/LinksResponse";
 import type { NoteListItem } from "./types/NoteListItem";
 import type { NotePage } from "./types/NotePage";
+import type { RenamePlan } from "./types/RenamePlan";
+import type { RenameRequest } from "./types/RenameRequest";
 import type { Preview } from "./types/Preview";
 import type { SearchHit } from "./types/SearchHit";
 import type { SettingsResponse } from "./types/SettingsResponse";
@@ -35,6 +37,7 @@ export type { LinksResponse } from "./types/LinksResponse";
 export type { NoteListItem } from "./types/NoteListItem";
 export type { FolderListItem } from "./types/FolderListItem";
 export type { NotePage } from "./types/NotePage";
+export type { RenamePlan } from "./types/RenamePlan";
 export type { Preview } from "./types/Preview";
 export type { Rendered } from "./types/Rendered";
 export type { SearchHit } from "./types/SearchHit";
@@ -129,6 +132,10 @@ export const api = {
   },
   /** Удалить заметку (книгу — папкой) — в корзину системы. */
   deleteNote: (id: string) => request<unknown>(inVault(`/notes/${encodeId(id)}`), { method: "DELETE" }).then(() => {}),
+  /** Переименовать заметку (книгу) или папку; без `apply` — только план. */
+  rename: (r: RenameRequest, signal?: AbortSignal) => request<RenamePlan>(inVault("/rename"), { ...json("POST", r), signal }),
+  /** Удалить папку со всем, что в ней, — в корзину системы. */
+  deleteFolder: (path: string) => request<unknown>(inVault(`/folders/${encodeId(path)}`), { method: "DELETE" }).then(() => {}),
   version: (id: string) => request<VersionResponse>(inVault(`/version/${encodeId(id)}`)),
   links: (id: string) => request<LinksResponse>(inVault(`/links/${encodeId(id)}`)),
   graph: () => request<Graph>(inVault("/graph")),

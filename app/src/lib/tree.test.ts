@@ -35,3 +35,10 @@ it("порядок — по названиям, а не по именам фай
   expect(tree.folders[1]!.notes.map((n) => n.title)).toEqual(["Шифрование", "SSH: основы"]); // русский порядок: кириллица раньше латиницы
   expect(tree.notes.map((n) => n.title)).toEqual(["Глава 2", "Глава 10"]);
 });
+
+it("пустые папки — тоже в дереве, со счётчиком 0", () => {
+  const tree = buildTree([note("Сеть/UFW")], undefined, ["Пустая", "Сеть/Черновики", "Сеть"]);
+  expect(tree.folders.map((f) => f.name)).toEqual(["Пустая", "Сеть"]);
+  expect(countNotes(tree.folders[0]!)).toBe(0);
+  expect(tree.folders[1]!.folders.map((f) => f.path)).toEqual(["Сеть/Черновики"]);
+});

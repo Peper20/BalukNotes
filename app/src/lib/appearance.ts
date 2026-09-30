@@ -21,6 +21,19 @@ export function nextTheme(shown: string, themes: Theme[]): string {
   return themes[(i + 1) % themes.length]?.name ?? shown;
 }
 
+/** Что запомнить для первого кадра следующей загрузки (`public/assets/theme.js`). */
+export interface ThemeMemo {
+  /** Выбранная тема; null — «как в системе». */
+  fixed: string | null;
+  light: string;
+  dark: string;
+}
+
+export function themeMemo(value: unknown, themes: Theme[]): ThemeMemo {
+  const fixed = value !== "auto" && themes.some((t) => t.name === value) ? (value as string) : null;
+  return { fixed, light: resolveTheme("auto", themes, false), dark: resolveTheme("auto", themes, true) };
+}
+
 /** Применить настройки вида по схеме (`apply`) и тему. */
 export function applyAppearance(root: HTMLElement, defs: readonly SettingDef[], v: SettingValues, theme: string): void {
   root.dataset.theme = theme;

@@ -21,7 +21,9 @@ impl From<notes_core::Error> for ApiError {
         use notes_core::Error as E;
         let code = match e {
             E::NotFound(_) | E::VaultNotFound { .. } => StatusCode::NOT_FOUND,
-            E::InvalidId { .. } | E::InvalidVault { .. } | E::Setting { .. } => StatusCode::BAD_REQUEST,
+            E::InvalidId { .. } | E::InvalidVault { .. } | E::Setting { .. } | E::Rename { .. } => {
+                StatusCode::BAD_REQUEST
+            }
             E::VaultExists(_) => StatusCode::CONFLICT,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };

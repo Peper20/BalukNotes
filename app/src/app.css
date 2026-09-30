@@ -1,7 +1,9 @@
 /* Интерфейс приложения вокруг заметки: боковая панель, верхняя строка,
  * ошибки, настройки. Цвета — те же переменные тем, что у заметок. */
 
-body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text); background: var(--k-bg); }
+/* Тема ещё не известна (первый запуск): цвета окна — по системе, не белые. */
+:root:not([data-theme]) { color-scheme: light dark; }
+body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, CanvasText); background: var(--k-bg, Canvas); }
 
 .app { display: grid; grid-template-columns: 17rem 1fr; min-height: 100vh; }
 .app.sidebar-hidden { grid-template-columns: 0 1fr; }
@@ -321,9 +323,10 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 }
 .vault-picker-row button:disabled { opacity: 0.5; cursor: default; }
 
-/* ── Короткие диалоги: хранилище (новое, переименовать, удалить), удалить заметку ── */
-.vault-new, .vault-edit, .note-delete { width: min(26rem, 94vw); }
-.vault-new h2, .vault-edit h2, .note-delete h2 { overflow-wrap: anywhere; }
+/* ── Короткие диалоги: хранилище (новое, переименовать, удалить), заметка и папка (переименовать, удалить) ── */
+.vault-new, .vault-edit, .note-delete, .note-rename { width: min(26rem, 94vw); }
+.vault-new h2, .vault-edit h2, .note-delete h2, .note-rename h2 { overflow-wrap: anywhere; }
+.rename-links { margin: 0 0 0.6rem; padding-left: 1.2rem; max-height: 9rem; overflow-y: auto; overflow-wrap: anywhere; }
 .dialog-body { padding: 0.8rem 1rem 0.2rem; }
 .dialog-body p { margin: 0 0 0.6rem; }
 .dialog-body label { display: block; margin-bottom: 0.3rem; font-weight: 600; }

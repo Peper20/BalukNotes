@@ -84,3 +84,31 @@ test("узкий экран: выбор хранилища, меню храни�
   await dialog.getByRole("button", { name: "Отмена" }).click();
   await noSideScroll(page);
 });
+
+test("телефон: 3D — свайп вверх прокручивает страницу, вбок — поворачивает", async ({ page }) => {
+  await open(page, "Рисунки/Интерактив");
+  const canvas = page.locator(".k-plot-canvas");
+  await canvas.scrollIntoViewIfNeeded();
+  await page.evaluate(async () => void (await document.fonts.ready));
+  const frame = () => canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL());
+  let first = "";
+  await expect.poll(async () => first === (first = await frame())).toBe(true);
+  const box = (await canvas.boundingBox())!;
+  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+  const cdp = await page.context().newCDPSession(page);
+  const swipe = async (dx: number, dy: number) => {
+    const point = (k: number) => [{ x: x + dx * k, y: y + dy * k }];
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: point(0) });
+    for (let k = 1; k <= 8; k++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: point(k / 8) });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  };
+
+  const top = await page.evaluate(() => scrollY);
+  await swipe(0, -120);
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(top + 40);
+  expect(await frame()).toBe(first);
+
+  await canvas.scrollIntoViewIfNeeded();
+  await swipe(120, 0);
+  await expect.poll(frame).not.toBe(first);
+});

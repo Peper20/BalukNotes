@@ -97,6 +97,15 @@ export function view([x, y, z]: P3, th: number, ph: number): P3 {
   return [xr, z * Math.cos(ph) + yr * Math.sin(ph), -yr * Math.cos(ph) + z * Math.sin(ph)];
 }
 
+/**
+ * Поворот перетаскиванием на (du, dv) рад (du вправо, dv вниз): ближняя к
+ * читателю сторона едет за указателем, наклон — от -10° до 89°.
+ */
+export function turn(th: number, ph: number, du: number, dv: number): [number, number] {
+  const deg = Math.PI / 180;
+  return [th + du, Math.min(89 * deg, Math.max(-10 * deg, ph + dv))];
+}
+
 /** Освещённость 0..1 грани с нормалью n (в осях экрана); обе стороны — одинаково. */
 export function lighting([a, b, c]: P3): number {
   const len = Math.hypot(a, b, c);
