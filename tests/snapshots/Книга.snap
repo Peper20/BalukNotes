@@ -29,6 +29,9 @@ styles: 0 байт, fnv cbf29ce484222325
 <li>книга</li>
 <li>фикстура</li></ul></header>
 <h2 class="k-h k-h1" data-num="1" id="гл-основы" data-k-anchor="Основы"><span class="k-num" data-word="Глава">1</span>Основы</h2>
+<ul class="k-tags k-chapter-tags">
+<li>основы</li>
+<li>определения</li></ul>
 <div class="k-lead">Первая глава. Проверяет главу книги, лид и раздел с одинаковым с другими главами названием («Итоги» есть в каждой главе).</div>
 <h3 class="k-h k-h2" id="Определения" data-k-anchor="Определения"><span class="k-num">1.1</span>Определения</h3>
 <div class="k-box k-def"><span class="k-label">Определение 1.1 (фикстуры).</span> <strong>Фикстура</strong> — заранее подготовленные данные для теста.</div>
@@ -36,6 +39,8 @@ styles: 0 байт, fnv cbf29ce484222325
 <h3 class="k-h k-h2" id="Итоги" data-k-anchor="Итоги"><span class="k-num">1.2</span>Итоги</h3>
 <p>Итоги первой главы.</p>
 <h2 class="k-h k-h1" data-num="2" id="Продолжение" data-k-anchor="Продолжение"><span class="k-num" data-word="Глава">2</span>Продолжение</h2>
+<ul class="k-tags k-chapter-tags">
+<li>код</li></ul>
 <h3 class="k-h k-h2" id="Код-из-файла" data-k-anchor="Код-из-файла"><span class="k-num">2.1</span>Код из файла</h3>
 <div class="k-listing k-numbered">
 <div class="k-listing-cap"><span class="k-lang">Rust</span> регион файла; строки 2 и 3 выделены</div>

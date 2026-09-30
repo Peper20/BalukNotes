@@ -10,7 +10,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use notes_core::NoteId;
 use notes_core::book::{Select, chapter_page};
-use notes_core::search::Preview;
+use notes_core::search::{Preview, tagged_chapters};
 
 use crate::AppState;
 use crate::api::{
@@ -43,6 +43,7 @@ async fn list_notes(State(s): State<AppState>, Path(vault): Path<String>) -> Api
                 folder: e.id.parent().to_owned(),
                 title: o.title.clone().unwrap_or_else(|| e.id.name().to_owned()),
                 tags: o.tags.clone(),
+                chapters: tagged_chapters(o),
             })
             .collect())
     })

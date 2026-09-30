@@ -15,4 +15,7 @@
   .k-tags li:has(a) { cursor: pointer; }
   .k-tags li a { color: inherit; text-decoration: none; border: none; }
   .k-tags li:has(a):hover { border-color: var(--k-accent); color: var(--k-accent); }
+  /* Свои теги главы книги — под её заголовком, по левому краю, как он. */
+  .k-h1:has(+ .k-chapter-tags) { margin-bottom: 0.3em; }
+  .k-chapter-tags { justify-content: flex-start; margin: 0 0 1.6em; }
 }

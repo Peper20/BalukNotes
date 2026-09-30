@@ -275,9 +275,9 @@ impl Snapshot {
         self.outlines.get(id)
     }
 
-    /// Теги заметки по пути (`None` — нет такой заметки).
-    pub fn tags_of(&self, id: &str) -> Option<&[String]> {
-        self.outlines.get(&NoteId::new(id).ok()?).map(|o| o.tags.as_slice())
+    /// Есть ли тег у заметки по пути: у неё самой или у главы книги.
+    pub fn has_tag(&self, id: &str, tag: &str) -> bool {
+        NoteId::new(id).ok().and_then(|id| self.outlines.get(&id)).is_some_and(|o| o.has_tag(tag))
     }
 
     /// Название заметки для показа: из шаблона (`title: […]`), иначе —

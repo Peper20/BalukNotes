@@ -27,6 +27,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use notes_core::check::{Report, check, check_note};
 use notes_core::new_note::NewNote;
+use notes_core::search::{TaggedChapter, tagged_chapters};
 use notes_core::settings::{Platform, Schema, SettingsStore};
 use notes_core::vault::NoteKind;
 use notes_core::{LibrarySource, NoteId, Notes, NotesConfig, VaultName, Vaults};
@@ -109,7 +110,7 @@ enum Command {
         #[arg(long)]
         lang: Option<String>,
     },
-    /// Заметки и книги хранилища: путь, вид, название, теги.
+    /// Заметки и книги хранилища: путь, вид, название, теги; под книгой — её главы со своими тегами.
     List {
         /// В JSON.
         #[arg(long)]
@@ -491,6 +492,9 @@ struct ListItem<'a> {
     kind: NoteKind,
     title: Option<&'a str>,
     tags: &'a [String],
+    /// Главы книги со своими тегами (теги книги они наследуют).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    chapters: Vec<TaggedChapter>,
 }
 
 fn list(notes: &Notes, json: bool) -> Result<ExitCode> {
@@ -502,6 +506,7 @@ fn list(notes: &Notes, json: bool) -> Result<ExitCode> {
             kind: entry.kind,
             title: outline.title.as_deref(),
             tags: &outline.tags,
+            chapters: tagged_chapters(outline),
         })
         .collect();
     if json {
@@ -513,6 +518,10 @@ fn list(notes: &Notes, json: bool) -> Result<ExitCode> {
         let title = item.title.filter(|t| *t != item.id.name()).map(|t| format!("  «{t}»")).unwrap_or_default();
         let tags: String = item.tags.iter().flat_map(|t| ["  #", t.as_str()]).collect();
         println!("{}{kind}{title}{tags}", item.id);
+        for chapter in &item.chapters {
+            let tags: String = chapter.tags.iter().flat_map(|t| ["  #", t.as_str()]).collect();
+            println!("  глава «{}»{tags}", chapter.title);
+        }
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -521,7 +530,8 @@ fn tags(notes: &Notes) -> Result<ExitCode> {
     let index = notes.index()?;
     let mut counts = std::collections::BTreeMap::<&str, usize>::new();
     for (_, outline) in index.outlines() {
-        for tag in &outline.tags {
+        // Книга — одна, сколько бы глав ни несли тег.
+        for tag in outline.all_tags().collect::<std::collections::BTreeSet<_>>() {
             *counts.entry(tag).or_default() += 1;
         }
     }

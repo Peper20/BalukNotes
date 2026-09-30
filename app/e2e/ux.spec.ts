@@ -91,6 +91,24 @@ test("tags: из шапки заметки, страница тега, все т
   await expect(page.locator("h1")).toHaveText("#фикстура");
 });
 
+test("tags: свои теги главы книги - под её заголовком и на странице тега", async ({ page }) => {
+  await open(page, "Книга");
+  await page.locator("#note .k-chapter-tags a", { hasText: "определения" }).click();
+  await ready(page);
+  const item = page.locator(".tag-notes li");
+  await expect(item).toHaveCount(1);
+  await expect(item).toContainText("глава книги «Тестовая книга»");
+  await item.getByRole("link", { name: "Основы", exact: true }).click();
+  await ready(page);
+  await expect(page.locator("#note h2.k-h1")).toHaveText(/Основы/);
+
+  await page.goto(vaultUrl(`/tags/${encodeURIComponent("код")}`));
+  await ready(page);
+  await page.locator(".tag-notes").getByRole("link", { name: "Продолжение", exact: true }).click();
+  await ready(page);
+  await expect(page.locator("#note h2.k-h1")).toHaveText(/Продолжение/);
+});
+
 test("превью ссылки при наведении", async ({ page }) => {
   await open(page, "Сеть/UFW");
   await page.locator("#note a.k-link", { hasText: "порт мог измениться" }).hover();

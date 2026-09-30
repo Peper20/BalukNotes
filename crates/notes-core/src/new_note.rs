@@ -1,7 +1,6 @@
 //! Заготовка новой заметки или книги (`notes new`): шаблон библиотеки
-//! (`note` или `book`) и шапка-комментарий о ходе работы — по ней следующая
-//! сессия продолжает с того же места (правила — `docs/writing.md`,
-//! «Процесс»).
+//! (`note` или `book`). Шапку о ходе работы (цель, план, что дальше) пишет
+//! агент по навыку `/baluk-note`, не заготовка (решение пользователя).
 //!
 //! Существующее не перезаписывается; внутри книги заметок нет — там главы.
 //! Заготовки собираются без ошибок и предупреждений (тесты ниже и шаг
@@ -29,16 +28,6 @@ pub struct NewNote {
     pub lang: Option<String>,
 }
 
-/// Шапка — состояние работы для следующей сессии.
-const HEADER: &str = "\
-// Работа над заметкой (обновлять после каждого шага; готово — удалить шапку):
-//   цель и читатель: —
-//   исходники: —
-//   план: не согласован
-//   сделано: —
-//   дальше: выяснить цель и читателя, собрать исходники
-";
-
 impl NewNote {
     /// Текст главного файла заготовки.
     pub fn source(&self, id: &NoteId) -> String {
@@ -56,9 +45,12 @@ impl NewNote {
             let comma = if list.len() == 1 { "," } else { "" };
             let _ = writeln!(args, "  tags: ({}{comma}),", list.join(", "));
         }
-        let mut out = format!("{HEADER}#import \"/_baluk/lib.typ\": *\n#show: {template}.with(\n{args})\n");
+        let mut out = format!("#import \"/_baluk/lib.typ\": *\n#show: {template}.with(\n{args})\n");
         if self.kind == NoteKind::Book {
-            out += "\n// Главы — файлы NN-тема.typ рядом, по строке на главу:\n// #include \"01-тема.typ\"\n";
+            out += "\n// Этот файл — корень книги: язык и теги выше общие для всех глав.\n\
+                    // Главы — файлы NN-тема.typ рядом (#import, затем `= Название` или\n\
+                    // #show: chapter.with(title: […], tags: (…)) — свои теги главы),\n\
+                    // по строке на главу:\n// #include \"01-тема.typ\"\n";
         }
         out
     }
@@ -253,7 +245,7 @@ mod tests {
     fn source_of_note_and_book() {
         let note = NewNote { tags: vec!["сеть".into()], ..new(NoteKind::Note) }.source(&id("Сеть/SSH"));
         assert!(note.contains("#show: note.with(\n  title: [SSH],\n  tags: (\"сеть\",),\n)\n"), "{note}");
-        assert!(note.starts_with("// Работа над заметкой"));
+        assert!(note.starts_with("#import"), "без шапки: её пишет навык");
         let book = NewNote { lang: Some("en".into()), tags: vec!["a".into(), "b\"".into()], ..new(NoteKind::Book) }
             .source(&id("Курсы/Матан"));
         assert!(book.contains("  lang: \"en\",\n  tags: (\"a\", \"b\\\"\"),\n"), "{book}");

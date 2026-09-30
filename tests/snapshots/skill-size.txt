@@ -1,0 +1,12 @@
+24392 SKILL.md
+207 examples/_folder.toml
+4088 examples/algorithms.typ
+4353 examples/blocks.typ
+1053 examples/book/01-idea.typ
+1093 examples/book/02-code.typ
+506 examples/book/code/prefix.cpp
+699 examples/book/main.typ
+5466 examples/figures.typ
+2683 examples/interactive.typ
+14295 reference.md
+58835 всего

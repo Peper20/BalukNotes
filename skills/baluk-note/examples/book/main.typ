@@ -1,6 +1,7 @@
 // Skill sample: BOOK, a folder with main.typ and chapters NN-topic.typ.
-// `notes new --book` creates main.typ; chapters are plain files next to it,
-// each included by an #include line.
+// `notes new --book` creates main.typ, the book root: book.with holds what all
+// chapters share (lang, words, tags). Chapters are plain files next to it, each
+// included by an #include line.
 #import "/_baluk/lib.typ": *
 #show: book.with(
   lang: "en",

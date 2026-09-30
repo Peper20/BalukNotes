@@ -1,7 +1,8 @@
-// A book chapter starts with the import; "=" is a chapter ("Chapter 1"), "==" a section.
+// A book chapter starts with the import. chapter.with sets the chapter heading
+// ("Chapter 1") and own tags, added to the book tags from main.typ; a chapter
+// without own tags can start with "= Idea" instead. "==" is a section.
 #import "/_baluk/lib.typ": *
-
-= Idea
+#show: chapter.with(title: [Idea], tags: ("prefix sums",), label: "ch-idea")
 #lead[
   A range sum of an array takes one subtraction if all prefix sums are
   computed in advance. We rely only on arrays.

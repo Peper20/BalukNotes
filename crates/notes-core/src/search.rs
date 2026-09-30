@@ -177,6 +177,30 @@ pub fn preview(snap: &Snapshot, id: &NoteId, anchor: Option<&str>) -> Option<Pre
     })
 }
 
+/// Глава книги со своими тегами — для списка заметок и страницы тегов.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct TaggedChapter {
+    pub title: String,
+    /// `id` заголовка главы: ссылка `…/n/<книга>#<anchor>` открывает главу.
+    pub anchor: String,
+    /// Свои теги главы; теги корня книги (`Outline::tags`) она наследует.
+    pub tags: Vec<String>,
+}
+
+/// Главы со своими тегами (`chapter.with(tags: …)`), по порядку.
+pub fn tagged_chapters(outline: &Outline) -> Vec<TaggedChapter> {
+    outline
+        .sections
+        .iter()
+        .zip(section_ids(outline))
+        .filter(|(s, _)| !s.tags.is_empty())
+        .filter_map(|(s, anchor)| {
+            Some(TaggedChapter { title: s.heading.clone()?, anchor: anchor?, tags: s.tags.clone() })
+        })
+        .collect()
+}
+
 /// `id` разделов — по тем же правилам, что у отрисовки (`render.rs`): метка,
 /// иначе слаг текста с `-2`, `-3` у повторов. Слаг одинаковых заголовков
 /// («Итоги» в каждой главе) привёл бы к первому из них.

@@ -13,16 +13,18 @@
 - **Label anchor** (`label-anchor:`, `anchor:`): the side of the label touching the point. `"south-west"` puts it up-right, `"north"` below, `"west"` right, `"east"` left; also `"south"`, `"north-east"`, `"center"`, ...
 - **Bare numbers** in a canvas are canvas units (`unit:`); `(a, b)` is a range or a point. A function: `x => x * x`, of two: `(x, y) => x * y`.
 
-## Templates: `examples/blocks.typ`, `book/main.typ`
+## Templates: `examples/blocks.typ`, `book/main.typ`, `book/01-idea.typ`
 
 ```
 note(theme: auto, lang: "ru", words: (:), title: none, description: none, tags: (), body)
 book(theme: auto, lang: "ru", words: (:), kind: auto, title: none, subtitle: none, author: none, date: none, description: none, tags: (), title-page: true, toc: true, depth: 2, body)
+chapter(title: none, tags: (), label: none, body)
 ```
 
 - Only as `#show: note.with(...)` / `#show: book.with(...)`; never set `theme` (the app picks it).
 - `description`: line in the note list; `tags`: array of strings `("tag",)`.
-- `kind`: label above the book title (`auto` is "Конспект"); `title-page`, `toc`, `depth`: title page, contents and its depth, PDF only.
+- `book` in `main.typ` is the book root: every chapter inherits its `lang`, `words` and `tags`. `chapter` gives one chapter own traits, like a note: `#show: chapter.with(title: [...], tags: (...))` at the top of a chapter file instead of `= Title`; `title` is required, `tags` add to the book tags (shown under the chapter heading, found on the tag page), `label: "ch-x"` is a string for `@ch-x` and `#see(..., anchor: "ch-x")`. Only inside a book; a chapter without own tags may stay `= Title`.
+- `kind`: label above the book title (`auto` is `Конспект`); `title-page`, `toc`, `depth`: title page, contents and its depth, PDF only.
 - `lang`: language of the block words, `"ru"` or `"en"` (others get English words). `words: (key: "word")` sets own words; keys: `definition theorem example remark pitfall idea algorithm step answer proof plan-note plan-chapter summary quiz answers mistake avoid complexity figure chapter contents book-kind frame frame-of`.
 
 ## Text blocks: `examples/blocks.typ`

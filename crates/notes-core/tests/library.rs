@@ -7,9 +7,11 @@
 //!   UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test library    # обновить
 //!
 //! Имя добавлено или убрано намеренно — обновить снимок и README библиотеки
-//! (второй тест проверяет, что каждое имя там упомянуто).
+//! (второй тест проверяет, что каждое имя там упомянуто). Так же обновляется
+//! размер текстов навыка `tests/snapshots/skill-size.txt`.
 
-use std::path::PathBuf;
+use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use notes_core::figures::FigureOptions;
@@ -110,11 +112,16 @@ fn writing_guide_uses_public_names() {
 /// Оболочки (Claude Code, opencode) подставляют в текст навыка аргументы
 /// вызова: `$ARGUMENTS` — просьба пользователя (без неё модель не знает
 /// задачи), `$0`, `$1`… — отдельные слова. Поэтому `$ARGUMENTS` в навыке
-/// есть, а `$` с цифрой (формула `$0$`) — нет: её испортит подстановка.
+/// есть — в начале и в конце, в тегах `<request>` (модель отделяет задачу от
+/// инструкций), а `$` с цифрой (формула `$0$`) — нет: её испортит подстановка.
 #[test]
 fn skill_gets_arguments_and_has_no_positional_placeholders() {
     let skill = std::fs::read_to_string(repo().join("skills/baluk-note/SKILL.md")).unwrap();
-    assert!(skill.contains("$ARGUMENTS"), "SKILL.md: нет $ARGUMENTS — просьба пользователя не попадёт к модели");
+    assert_eq!(
+        skill.matches("<request>\n$ARGUMENTS\n</request>").count(),
+        2,
+        "SKILL.md: просьба пользователя — `<request>`, `$ARGUMENTS`, `</request>` отдельными строками, в начале и в конце"
+    );
     let bad: Vec<&str> =
         skill.lines().filter(|l| l.split('$').skip(1).any(|r| r.starts_with(|c: char| c.is_ascii_digit()))).collect();
     assert!(bad.is_empty(), "SKILL.md: «$цифра» заменится аргументом вызова: {bad:?}");
@@ -354,4 +361,108 @@ fn frames_pdf_is_checked() {
     for bad in ["(0, 2)", "(6,)", "()", "\"strip\"", "(1.5,)"] {
         assert!(error(bad).contains("номера кадров от 1 до 5"), "{bad}: {}", error(bad));
     }
+}
+
+/// `chapter`: только в книге; название обязательно, теги — массив строк.
+#[test]
+fn chapter_is_checked() {
+    let error = |template: &str, chapter: &str| {
+        let page = compile(&format!(
+            "#import \"/_baluk/lib.typ\": *\n#show: {template}.with(title: [Книга])\n#show: chapter.with({chapter})\nТекст\n"
+        ));
+        page.errors.first().map(|e| e.message.clone()).unwrap_or_default()
+    };
+    assert_eq!(error("book", "title: [Глава], tags: (\"тег\",), label: \"гл\""), "");
+    assert!(error("note", "title: [Глава]").contains("только в главе книги"), "{}", error("note", "title: [Глава]"));
+    assert!(error("book", "tags: (\"тег\",)").contains("нужно название"));
+    assert!(error("book", "title: [Глава], tags: \"тег\"").contains("массив строк"));
+    assert!(error("book", "title: [Глава], label: <гл>").contains("label — строка"));
+}
+
+/// Тексты навыка `/baluk-note` (`SKILL.md`, `reference.md`, образцы) — для
+/// модели: английский и простой Markdown без типографики (`skills/README.md`).
+/// Кириллица и `« » — …` можно только в `код` в строке (дословные сообщения
+/// `notes`, русские слова оформления) и в `argument-hint` (его видит человек).
+#[test]
+fn skill_texts_are_plain_english() {
+    let forbidden = |c: char| "«»„“”‘’—–…→←".contains(c) || ('\u{0400}'..='\u{04FF}').contains(&c);
+    let mut problems = Vec::new();
+    for (name, text) in skill_files() {
+        let markdown = Path::new(&name).extension().is_some_and(|e| e.eq_ignore_ascii_case("md"));
+        let mut fenced = false;
+        for (i, line) in text.lines().enumerate() {
+            if markdown && line.trim_start().starts_with("```") {
+                fenced = !fenced;
+                continue;
+            }
+            if markdown && line.starts_with("argument-hint:") {
+                continue;
+            }
+            // Вне блоков кода Markdown — без `…` в строке.
+            let checked: String =
+                if markdown && !fenced { line.split('`').step_by(2).collect() } else { line.to_owned() };
+            if checked.chars().any(forbidden) {
+                problems.push(format!("{name}:{}: {line}", i + 1));
+            }
+        }
+    }
+    assert!(
+        problems.is_empty(),
+        "кириллица или типографика в текстах навыка (цитату вывода notes — в `код`):\n{}",
+        problems.join("\n")
+    );
+}
+
+/// Размер навыка — бюджет: текст растёт, только когда это задумано. Меряем
+/// знаки (у английского текста токенов около четверти от них); вырос больше
+/// чем на 10 % от записанного — тест падает. Задумано — обновить:
+/// `UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test library`.
+#[test]
+fn skill_size_within_budget() {
+    const GROWTH: f64 = 1.10;
+    let path = repo().join("tests/snapshots/skill-size.txt");
+    let files = skill_files();
+    let total: usize = files.iter().map(|(_, t)| t.chars().count()).sum();
+    let mut table = String::new();
+    for (name, text) in &files {
+        let _ = writeln!(table, "{} {name}", text.chars().count());
+    }
+    let _ = writeln!(table, "{total} всего");
+    if std::env::var_os("UPDATE_SNAPSHOTS").is_some() {
+        std::fs::write(&path, &table).unwrap();
+        return;
+    }
+    let recorded = std::fs::read_to_string(&path).unwrap_or_default();
+    let budget: usize = recorded
+        .lines()
+        .find_map(|l| l.strip_suffix(" всего"))
+        .and_then(|n| n.parse().ok())
+        .expect("нет tests/snapshots/skill-size.txt — UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test library");
+    #[allow(clippy::cast_precision_loss, reason = "размер текста — тысячи знаков, точность f64 с запасом")]
+    let over = total as f64 > budget as f64 * GROWTH;
+    assert!(
+        !over,
+        "навык вырос больше чем на 10 %: было {budget} знаков, стало {total}. Сократить или, если рост задуман, \
+         UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test library\n{table}"
+    );
+}
+
+/// Файлы навыка `/baluk-note`, которые читает модель: путь от `skills/baluk-note/` и текст.
+fn skill_files() -> Vec<(String, String)> {
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<(String, String)>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()).collect();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                walk(root, &path, out);
+            } else {
+                let name = path.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+                out.push((name, std::fs::read_to_string(&path).unwrap()));
+            }
+        }
+    }
+    let root = repo().join("skills/baluk-note");
+    let mut out = Vec::new();
+    walk(&root, &root, &mut out);
+    out
 }

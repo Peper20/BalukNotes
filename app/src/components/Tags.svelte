@@ -1,16 +1,13 @@
-<!-- Теги: все теги с числом заметок; выбранный тег — его заметки. -->
+<!-- Теги: все теги с числом заметок; выбранный тег — его заметки и главы книг. -->
 <script lang="ts">
   import { notes } from "../lib/state";
   import { noteHref, tagHref } from "../lib/ids";
+  import { noteTags, tagIndex } from "../lib/tags";
 
   let { tag }: { tag: string | null } = $props();
 
-  const byTag = $derived.by(() => {
-    const m = new Map<string, typeof notes.all>();
-    for (const n of notes.all) for (const t of n.tags) m.set(t, [...(m.get(t) ?? []), n]);
-    return [...m].sort(([a, x], [b, y]) => y.length - x.length || a.localeCompare(b, "ru"));
-  });
-  const tagged = $derived(tag ? (byTag.find(([t]) => t === tag)?.[1] ?? []) : []);
+  const byTag = $derived(tagIndex(notes.all));
+  const tagged = $derived(tag ? (byTag.find((e) => e.tag === tag)?.places ?? []) : []);
 
   $effect(() => {
     document.title = tag ? `#${tag} — Заметки` : "Теги — Заметки";
@@ -25,12 +22,17 @@
       <h1>#{tag}</h1>
       {#if tagged.length}
         <ul class="tag-notes">
-          {#each tagged as n (n.id)}
+          {#each tagged as { note: n, chapter: ch } (`${n.id}#${ch?.anchor ?? ""}`)}
             <li>
-              <a href={noteHref(n.id)}>{n.title}</a>
-              <span class="home-kind">{n.folder ? ` · ${notes.folderLabel(n.folder)}` : ""}{n.kind === "book" ? " · книга" : ""}</span>
+              {#if ch}
+                <a href={noteHref(n.id, ch.anchor)}>{ch.title}</a>
+                <span class="home-kind"> · глава книги «{n.title}»</span>
+              {:else}
+                <a href={noteHref(n.id)}>{n.title}</a>
+                <span class="home-kind">{n.folder ? ` · ${notes.folderLabel(n.folder)}` : ""}{n.kind === "book" ? " · книга" : ""}</span>
+              {/if}
               <span class="tag-others">
-                {#each n.tags.filter((t) => t !== tag) as t}<a class="tag-chip" href={tagHref(t)}>#{t}</a>{/each}
+                {#each (ch ? ch.tags : noteTags(n)).filter((t) => t !== tag) as t}<a class="tag-chip" href={tagHref(t)}>#{t}</a>{/each}
               </span>
             </li>
           {/each}
@@ -42,7 +44,7 @@
       <h1>Теги</h1>
       {#if byTag.length}
         <p class="tag-cloud">
-          {#each byTag as [t, list] (t)}<a class="tag-chip" href={tagHref(t)}>#{t} <small>{list.length}</small></a>{/each}
+          {#each byTag as e (e.tag)}<a class="tag-chip" href={tagHref(e.tag)}>#{e.tag} <small>{e.notes}</small></a>{/each}
         </p>
       {:else}
         <p class="home-lead">Тегов пока нет: они задаются в шаблоне заметки — <code>tags: ("сеть", "linux")</code>.</p>

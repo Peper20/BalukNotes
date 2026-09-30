@@ -5,6 +5,7 @@
 
 use notes_core::diag::Diagnostic;
 use notes_core::graph::Backlink;
+use notes_core::search::TaggedChapter;
 use notes_core::settings::Schema;
 use notes_core::{NoteId, NoteKind, VaultName};
 use serde::{Deserialize, Serialize};
@@ -41,7 +42,10 @@ pub struct NoteListItem {
     pub folder: String,
     /// Название для показа: из шаблона (`title: […]`), иначе — имя файла.
     pub title: String,
+    /// Теги заметки; у книги — корня (`main.typ`), их наследуют все главы.
     pub tags: Vec<String>,
+    /// Главы книги со своими тегами.
+    pub chapters: Vec<TaggedChapter>,
 }
 
 /// Элемент `GET /api/vaults/{хранилище}/folders`: папка, в которой есть

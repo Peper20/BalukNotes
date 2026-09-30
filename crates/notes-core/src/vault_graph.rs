@@ -130,8 +130,9 @@ pub fn neighbourhood(graph: &Graph, start: &str, depth: u32) -> HashSet<String> 
     seen
 }
 
-/// Подграф по фильтру. `tags` — теги заметки по пути.
-pub fn filter<'t>(graph: &Graph, tags: impl Fn(&str) -> &'t [String], f: &GraphFilter) -> Graph {
+/// Подграф по фильтру. `has_tag(путь, тег)` — есть ли тег у заметки (у книги —
+/// и у любой её главы).
+pub fn filter(graph: &Graph, has_tag: impl Fn(&str, &str) -> bool, f: &GraphFilter) -> Graph {
     let center = f.around.as_deref();
     let near = center.map(|c| neighbourhood(graph, c, f.depth));
     let keep = |id: &str, missing: bool| {
@@ -141,7 +142,7 @@ pub fn filter<'t>(graph: &Graph, tags: impl Fn(&str) -> &'t [String], f: &GraphF
                 && (f.folders.is_empty() || f.folders.iter().any(|g| g == group))
                 && !f.hidden.iter().any(|g| g == group)
                 && (f.missing || !missing)
-                && f.tag.as_ref().is_none_or(|t| tags(id).contains(t)))
+                && f.tag.as_ref().is_none_or(|t| has_tag(id, t)))
     };
     let mut nodes: Vec<_> = graph.nodes.iter().filter(|n| keep(&n.id, n.kind.is_none())).cloned().collect();
     let ids: HashSet<&str> = nodes.iter().map(|n| n.id.as_str()).collect();
@@ -514,8 +515,7 @@ impl Snapshot {
                 groups.push(g.to_owned());
             }
         }
-        let empty: &[String] = &[];
-        (filter(&full, |id| self.tags_of(id).unwrap_or(empty), f), groups)
+        (filter(&full, |id, tag| self.has_tag(id, tag), f), groups)
     }
 }
 
@@ -552,14 +552,13 @@ mod tests {
         }
     }
 
-    fn tags(id: &str) -> &'static [String] {
-        static NET: std::sync::LazyLock<Vec<String>> = std::sync::LazyLock::new(|| vec!["сеть".into()]);
-        static SSH: std::sync::LazyLock<Vec<String>> = std::sync::LazyLock::new(|| vec!["сеть".into(), "ssh".into()]);
-        match id {
-            "Сеть/A" => &NET,
-            "Сеть/B" => &SSH,
+    fn tags(id: &str, tag: &str) -> bool {
+        let tags: &[&str] = match id {
+            "Сеть/A" => &["сеть"],
+            "Сеть/B" => &["сеть", "ssh"],
             _ => &[],
-        }
+        };
+        tags.contains(&tag)
     }
 
     fn ids(g: &Graph) -> Vec<&str> {
