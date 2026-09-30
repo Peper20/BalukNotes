@@ -88,7 +88,7 @@ data = "~/Заметки"
 | `crates/notes-cli/` | команда `notes`: serve, new, list, check, pdf, … |
 | `app/` | клиент: Svelte 5 + TypeScript + Vite; `src/baluk-css/` — вид заметок |
 | `baluk/` | библиотека оформления Typst: блоки, рисунки, шаблоны `note`/`book` |
-| `skills/baluk-note/` | навык Claude Code `/baluk-note` (ставит `tools/install.sh`) |
+| `skills/` | навыки Claude Code (принципы — `skills/README.md`); `baluk-note/` — `/baluk-note` (ставит `tools/install.sh`) |
 | `fonts/` | шрифты оформления (встроены в бинарник) |
 | `tests/vault/` | хранилище-фикстура: каждый случай отрисовки, каталог — его `README.md` |
 | `tests/snapshots/` | эталонные снимки HTML фикстур |

@@ -1,318 +1,225 @@
 ---
 name: baluk-note
-description: Заметки BalukNotes на Typst — завести новую заметку или книгу, дописать главу, поправить или переименовать существующую (и назвать папку) по правилам хранилища. Вызывается из любой папки — часто из той, где лежат исходники (лекции, задачи).
+description: BalukNotes notes in Typst - create a note or a book, add a chapter, edit or rename a note (or name a folder) by the vault rules. Runs from any folder, often the one with the sources (lectures, problems).
 disable-model-invocation: true
-argument-hint: "[тема, «книга …», «допиши …» или «переименуй …»]"
+argument-hint: "[тема, книга ..., допиши ... или переименуй ...]"
 allowed-tools: Bash(notes info:*), Bash(notes vaults:*), Bash(notes docs:*), Bash(notes list:*), Bash(notes tags:*), Bash(notes new:*), Bash(notes check:*), Bash(notes pdf:*), Bash(pdftoppm:*), Bash(pgrep -x notes), Read, Glob, Grep
 ---
 
-# Заметка BalukNotes
+# BalukNotes note
 
-**Просьба пользователя:** $ARGUMENTS
+**Language:** reply to the user in the language of their request. Write a new note in that language too (unless the user asks otherwise); when editing, keep the note's language. A Russian request means a Russian note, even though these instructions and samples are in English.
 
-Это твоя задача — выполняй её по шагам ниже, не переспрашивая, что делать.
-Просьбы нет (после двоеточия пусто) — спроси одним вопросом, какую
-заметку завести или поправить.
+**User request:** $ARGUMENTS
 
-Заметки — файлы Typst в **хранилище** BalukNotes; их показывает приложение
-(`notes serve`) и печатает `notes pdf`. Оформление — библиотека `baluk`.
-Всё, что нужно для работы, — в этом файле и в папке `examples/` рядом с
-ним (каталог навыка — «Base directory» в начале, обычно
-`~/.claude/skills/baluk-note`). **Документацию не ищи** — ни в интернете, ни
-в файлах, ни в исходниках BalukNotes. Работай только командой `notes` и
-правкой файлов заметки.
+This is your task: work through it with the process below. If the request is empty, ask in one question which note to create or edit.
 
-## Что просят — выбери одно
+## Context
 
-| Просьба | Задача |
-|---|---|
-| «заметка», «создай заметку про …», одна тема | **A. Новая заметка** |
-| «книга», «конспект курса», много глав | **B. Новая книга** |
-| «добавь главу в книгу …» | **C. Глава в существующую книгу** |
-| «допиши / поправь заметку …» | **D. Правка существующей заметки** |
-| «переименуй заметку / книгу / папку …», «назови папку …» | **E. Переименование** |
+BalukNotes keeps notes as Typst files in a **vault** (a folder the user owns). The app (`notes serve`) renders them as web pages, `notes pdf` prints them, and the `baluk` library provides the layout: templates, text blocks, figures, interactive plots. The user reads notes mostly in the app, on a desktop or a phone, in a light or dark theme; the PDF is the same text for print. So the web page is the main result, and everything has to work in both themes.
 
-Не уверен — **A**. Существующие заметки, книги и папки меняй только в
-задачах C, D и E, то есть когда пользователь назвал их сам.
+Everything you need is in the skill folder ("Base directory" at the top, usually `~/.claude/skills/baluk-note`):
+- this file: the process, paths, Typst basics, `notes check` errors, rules for good notes;
+- `examples/`: whole notes and a book that together use every library function; each builds without errors;
+- `reference.md`: full signatures of all library functions with allowed values.
 
-## Порядок действий
+You do not need the BalukNotes sources or web docs: the library is not in any public documentation, and the samples plus the reference are the accurate description of it. Work through the `notes` command and by editing note files. `notes` prints in Russian; the messages that matter are quoted below.
 
-Выполняй шаги по порядку, каждый — один раз. Результат шага — в
-следующий.
+## Pick the task
 
-1. **Хранилище.** `notes vaults` — имена хранилищ, по одному в строке.
-   Команды нет — скажи пользователю поставить BalukNotes
-   (`tools/install.sh` в его репозитории) и остановись. Хранилищ нет —
-   скажи пользователю создать хранилище (в приложении или
-   `notes vaults new "Имя"`) и остановись: само хранилище не создавай.
-   Пользователь назвал хранилище — бери его; не назвал — спроси одним
-   вопросом, даже если хранилище одно. Названного нет в списке — спроси
-   снова. Дальше в **каждой** команде `notes` сразу после её имени пиши
-   `--vault "Имя"`: `notes list --vault "Учёба"`, `notes new --vault
-   "Учёба" …`, `notes check --vault "Учёба" …`, `notes pdf --vault "Учёба"
-   …`. Без `--vault` команды не работают.
-   `notes info --vault "Имя"` — первая строка: папка хранилища на диске.
-2. `notes list --vault "Имя"` — заметки хранилища (путь, `[книга]`,
-   «название», теги) и `notes tags --vault "Имя"` — теги. По ним выбираешь
-   папку и теги.
-3. **Исходники.** `ls` в текущей папке и в названных пользователем;
-   прочитай относящееся к теме. Исходники только читай, в их папке ничего
-   не создавай.
-4. **Реши название, папку, теги** из просьбы пользователя (правила —
-   «Название и путь» ниже). Очевидное не спрашивай. Неочевидно, куда
-   положить или заметка это или книга, — один вопрос пользователю:
-   вариант по умолчанию первым, с папкой.
-5. **Создай** (только A и B):
+- A. New note: "note", "create a note about ...", one topic. The default when unsure.
+- B. New book: "book", "course notes", a large topic with chapters.
+- C. Chapter in an existing book: "add a chapter to ...".
+- D. Edit a note: "continue / fix note ...".
+- E. Rename a note, book or folder, or name a folder.
+
+Work only in the chosen vault; never touch other vaults. In it, create or change only what the task is about: the note you create, or the notes, books and folders the user named (C, D, E). If you see a reason to change anything else (a link in another note, a broken link, a typo), ask the user first and wait for the answer; the vault is the user's own writing.
+
+## Process
+
+1. **Vault.** `notes vaults` lists vault names, one per line. If the command is missing, tell the user to install BalukNotes (`tools/install.sh` in its repo) and stop. If there are no vaults, tell the user to create one (in the app or `notes vaults new "Name"`) and stop: choosing and naming vaults is the user's decision. Use the vault the user named; otherwise ask, even if there is only one, since a note in the wrong vault is easy to lose. If the named vault is not in the list, show the list and ask again. Every `notes` command except `vaults` needs `--vault "Name"` right after the subcommand (`notes list --vault "Name"`); there is no default vault. The vault folder on disk is the first line of `notes info --vault "Name"`.
+2. **Survey.** `notes list --vault "Name"` prints notes (path, `[книга]` for books, title, tags); `notes tags --vault "Name"` prints tags. Use them to pick the folder, tags and link targets.
+3. **Sources.** `ls` the current folder and the folders the user named; read what relates to the topic (lectures, problems, old exams). Sources are read-only: create nothing in their folders.
+4. **Decide title, folder, tags** (see "Title and path"). Decide the obvious yourself. If the place, or note vs book, is genuinely unclear, ask one question with your default first.
+5. **Create** (A and B):
    ```sh
-   notes new --vault "Имя" --title "Название" --folder "Папка" --tag тег1 --tag тег2   # A. заметка
-   notes new --vault "Имя" --book --title "Название" --folder "Папка" --tag тег         # B. книга
+   notes new --vault "Name" --title "Title" --folder "Folder" --tag tag1 --tag tag2   # A. note
+   notes new --vault "Name" --book --title "Title" --folder "Folder" --tag tag        # B. book
    ```
-   Команда работает из любой папки; имя файла она делает из названия
-   сама. Вывод: **первая строка — путь файла на диске** (его дальше
-   читаешь и правишь), **вторая — путь заметки** (дальше «Путь»: для
-   `notes check`, `notes pdf` и `#see`), третья — адрес в приложении. Код
-   выхода 1 — «недопустимый путь» или «пустое название»: передай сообщение
-   пользователю; мешающее не трогай. Код 2 — ошибка в аргументах (`notes
-   new --help`).
-6. `notes check --vault "Имя" "Путь"` — заготовка чистая: `ошибок: 0,
-   предупреждений: 0`.
-7. **Где смотреть.** `pgrep -x notes` что-то вывел — сервер запущен,
-   заметка в приложении обновляется сама по адресу из шага 5. Не
-   запущен — предложи пользователю `notes serve`.
-8. **План.** Выясни цель (экзамен, «разобраться»…) и читателя, предложи
-   разделы (у книги — главы и разделы) с рисунками и примерами, дождись
-   «да». Если пользователь уже сказал, что именно должно быть в заметке
-   («один график параболы с ползунком»), — это и есть план, не
-   переспрашивай.
-9. **Пиши** по разделу (главе) за раз — см. «Как править файл». Перед
-   каждой новой для тебя возможностью библиотеки прочитай её пример из
-   `examples/` (таблица в конце) и копируй вызов оттуда, меняя только
-   данные.
-10. **Проверка** после каждого раздела: `notes check --vault "Имя" "Путь"`.
-    Есть ошибки — исправь по таблице «Ошибки» и проверь снова. Та же
-    ошибка второй раз — перечитай пример из `examples/` и перепиши вызов
-    по нему целиком. Итог — `ошибок: 0, предупреждений: 0, битых ссылок: 0`.
-11. **Шапка.** Обнови комментарий в начале файла (у книги — в `main.typ`):
-    что сделано, что дальше. Всё готово — удали шапку.
-12. **Посмотри результат** (если умеешь читать картинки):
+   Add `--lang en` (ISO 639 code) when the note is not in Russian: it sets `lang:` in the template, so block words become "Definition", "Fig." instead of Russian ones. The file name is derived from the title. Output: line 1 is the file on disk (read and edit it), line 2 is the note path ("Path" below: for `notes check`, `notes pdf`, `#see`), line 3 is the app URL. Exit code 1 (`недопустимый путь`, `пустое название`): report the message to the user and leave existing files alone. Exit code 2: wrong arguments, see `notes new --help`.
+6. `notes check --vault "Name" "Path"`: the fresh stub is clean (`ошибок: 0, предупреждений: 0`).
+7. **Where to look.** If `pgrep -x notes` prints something, the app runs and the page at the URL from step 5 refreshes on every save; otherwise suggest `notes serve` to the user.
+8. **Plan.** First read `reference.md` and every file in `examples/` in full, once per session (skip this for task E and small fixes): the plan should use the figures and blocks the library actually has, and the samples show how a finished note looks. Then find out the goal (exam, contest, lab, "understand it") and the reader: what they know well and what poorly, since weak spots deserve more room. Propose sections (a book: chapters, then sections) with the figures, examples and hard spots of each, and wait for approval. If the user already said what the note must contain ("one parabola plot with a slider"), that is the plan.
+9. **Write** one section (chapter) at a time, see "Editing the file" and "Writing a good note". Start each call from its sample in `examples/`; `reference.md` lists every parameter and allowed value. The samples show the calls, not the limits: combine features and draw your own figures (see "Figures").
+10. **Check** after each section: `notes check --vault "Name" "Path"`, then fix and repeat until `ошибок: 0, предупреждений: 0, битых ссылок: 0`. The "Errors" list below explains the usual messages; for an unclear one compare your call with the sample and the signature in `reference.md`.
+11. **Header.** Update the comment at the top of the file (a book: `main.typ`) after each section: work is often interrupted, and the next session starts from it. When everything is done, delete the header.
+12. **Look at the result.** Numbers and `notes check` do not show overlapping labels, invisible lines in the dark theme or a table wider than a phone. If you can read images:
     ```sh
-    notes pdf --vault "Имя" "Путь" -o /tmp/заметка.pdf
-    pdftoppm -r 70 -png /tmp/заметка.pdf /tmp/стр        # PNG-страницы — открой и посмотри
-    notes pdf --vault "Имя" "Путь" --theme night -o /tmp/заметка-ночь.pdf   # тёмная тема
+    notes pdf --vault "Name" "Path" -o $TMP/note.pdf
+    pdftoppm -r 70 -png $TMP/note.pdf $TMP/page                        # open the PNG pages
+    notes pdf --vault "Name" "Path" --theme night -o $TMP/note-night.pdf  # dark theme
     ```
-    Вместо `/tmp` — временная папка сессии, если она есть. Не в
-    хранилище и не в папке с исходниками.
-13. **Отчитайся**: путь файла, адрес в приложении, что сделано, что
-    осталось.
+    `$TMP` is the session temp folder (or `/tmp`), never the vault or a sources folder. If you have a browser tool and the app runs, also open the app URL: light and dark theme (switch at the top right), a narrow window (about 400 px), and the interactive parts (sliders, frames, rotation).
+13. **Report**: file path, app URL, what is done, what is left.
 
-**C. Глава в книгу** — вместо шагов 5–6: файл главы создаётся **руками**
-(`notes new` внутри книги не работает). Путь файла — папка книги на диске
-(папка хранилища из шага 1 + путь книги) + `NN-тема.typ`, следующий номер после
-существующих глав. Первая строка главы — `#import "/_baluk/lib.typ": *`,
-дальше `= Название главы` (образец — `examples/book/01-идея.typ`). Затем в
-`main.typ` книги после последней строки `#include` добавь
-`#include "NN-тема.typ"`. Проверка — `notes check --vault "Имя" "Путь книги"`.
+**C. Chapter.** Instead of steps 5-6 create the chapter file by hand (`notes new` does not create chapters): the book folder on disk (vault folder + book path) + `NN-topic.typ`, NN following the existing chapters. It starts with `#import "/_baluk/lib.typ": *`, then `= Chapter title` (sample: `examples/book/01-idea.typ`). Add `#include "NN-topic.typ"` to the book's `main.typ` after the last `#include`. Check with `notes check --vault "Name" "Book path"`.
 
-**D. Правка заметки** — вместо шагов 5–6: путь заметки — из `notes list`,
-файл — папка хранилища (шаг 1) + путь + `.typ` (у книги — папка с
-`main.typ` и главами). Прочитай файл целиком, правь только то, о чём
-просили.
+**D. Edit.** Instead of steps 5-6: the path comes from `notes list`, the file is vault folder + path + `.typ` (a book is a folder with `main.typ` and chapters). Read the whole file and change what was asked.
 
-**E. Переименование** — только шаги 1, 2, проверка и отчёт; файлы и папки
-**не переименовывай и не переноси** (на путь ссылаются другие заметки):
-- заметка или книга — поменяй текст в `title: […]` (у книги — в
-  `main.typ`); ссылки `#see("путь")` без своей подписи покажут новое
-  название сами;
-- папка — создай или поправь файл `_folder.toml` в ней (папка хранилища из
-  шага 1 + путь папки), образец — `examples/_folder.toml`.
+**E. Rename.** Steps 1, 2, the check and the report. Keep files and folders where they are: other notes link by path, so moving a file breaks their links.
+- Note or book: change the text in `title: [...]` (a book: in `main.typ`). Links `#see("path")` without own text show the new title automatically.
+- Folder: create or edit `_folder.toml` in it (vault folder + folder path); sample `examples/_folder.toml`.
 
-Проверка — `notes check --vault "Имя"` (без пути: ошибки папок — в общей
-проверке).
+Check with `notes check --vault "Name"` without a path, since folder errors appear only in the full check.
 
-## Название и путь
+## Title and path
 
-**Название** — `title: […]` в файле заметки (у книги — в `main.typ`):
-любой текст, его видит читатель (дерево, вкладки, граф, ссылки).
-**Путь** — где лежит файл, **от корня хранилища**, через `/`, без `.typ`:
-`Математика/Парабола`. Путь печатает `notes new` (вторая строка) и
-`notes list` (первое в строке); он одинаковый в `notes check`, `notes pdf`,
-`#see(…)` и адресе приложения. Папки создаются сами.
+**Title**: `title: [...]` in the file (a book: `main.typ`), any text, shown to readers in the tree, tabs, graph and links. **Path**: where the file is, from the vault root, `/`-separated, without `.typ`: `Math/Parabola`. `notes new` (line 2) and `notes list` (first on each line) print it; it is the same in `notes check`, `notes pdf`, `#see(...)` and the app URL. Folders are created automatically.
 
-Переименовать заметку — поправь `title:` в файле; файл не трогай (задача
-E). **Название папки** — файл `_folder.toml` в самой папке, одна строка:
+**Folder title**: `_folder.toml` in the folder, one line `title = "Networks and protocols"`; other keys are errors. Without it the folder shows its name. Write it only when the user asks to name a folder.
 
-```toml
-title = "Сети и протоколы"
-```
+Common path mistakes:
+- `"Math/Parabola"`, not `"/home/.../vaults/Notes/Math/Parabola"`: a vault path, not a disk path.
+- `"Parabola"` for a note in the root, not `"Notes/Parabola"`: the vault name is not part of the path.
+- No `.typ` at the end.
+- Names starting with `_` or `.` are reserved for the app.
 
-Пиши его, только если пользователь попросил назвать папку. Кроме `title`,
-ключей нет; ошибку в нём покажет `notes check`.
+Spaces and non-Latin letters are fine; quote the path in commands. Folder (`--folder`): an existing one from `notes list`, or a new short one in the note language. Tags: lowercase, in the note language, reusing those from `notes tags`, because tags are shared across the vault.
 
-Путь для `#see`, `check` и `pdf`:
+## The file
 
-| Правильно | Неправильно | Почему |
-|---|---|---|
-| `"Математика/Парабола"` | `"/home/…/vaults/Заметки/Математика/Парабола"` | путь на диске, а нужен путь в хранилище |
-| `"Парабола"` (в корне) | `"Заметки/Парабола"` | `Заметки` — имя самого хранилища, в путь не входит |
-| `"Математика/Парабола"` | `"Математика/Парабола.typ"` | без `.typ` |
-| `"Алгоритмы/Двоичный поиск"` | `"_черновики/…"`, `".скрытое/…"` | имена на `_` и `.` — служебные |
+The `notes new` stub has three parts, in order:
+- **header**: `//` lines at the top with keys generated by `notes new` (goal and reader, sources, plan, done, next). Change only the text after the colons; keep one header per file.
+- `#import "/_baluk/lib.typ": *` and `#show: note.with(title: [...], tags: (...))`: the template that styles the whole note. Keep them; you may change the fields `title`, `description`, `tags` and add others from `reference.md` (`lang`, `words`). The text goes after the closing `)` of `#show`.
+- A book's `main.typ` has `book` instead of `note` and `#include "01-topic.typ"` lines after `#show`; the text lives in chapter files.
 
-Пробелы и русские буквы в пути — можно, путь бери в кавычки. Папку
-(`--folder`) — из `notes list`, новую — коротко, по-русски. Теги —
-строчными, по-русски, как в `notes tags`.
-
-## Как устроен файл
-
-`notes new` создаёт такой файл заметки:
+A header in progress (values may be in any language):
 
 ```typst
-// Работа над заметкой (обновлять после каждого шага; готово — удалить шапку):
-//   цель и читатель: —
-//   исходники: —
-//   план: не согласован
-//   сделано: —
-//   дальше: выяснить цель и читателя, собрать исходники
-#import "/_baluk/lib.typ": *
-#show: note.with(
-  title: [Парабола],
-  tags: ("математика",),
-)
+//   цель и читатель: school student before the exam, weak at graphs
+//   исходники: ~/study/algebra/lecture-3.pdf
+//   план: 1) vertex and branches 2) shifts (slider plot) 3) problems; согласован
+//   сделано: sections 1-2
+//   дальше: section 3, problems from the lecture
 ```
 
-- Строки 1–6 — **шапка**: комментарий для следующей сессии. Меняй только
-  текст после двоеточий, шапка в файле ровно одна.
-- `#import` и `#show: note.with(…)` — **не удалять и не менять** (кроме
-  полей `title`, `description`, `tags`). Текст заметки пишется **после**
-  закрывающей `)` блока `#show`.
-- У книги в `main.typ` вместо `note` — `book`, а после `#show` — строки
-  `#include "01-тема.typ"`; сам текст — в файлах глав.
+### Editing the file
 
-Шапка в работе, например:
+- Read the whole file first. When rewriting it (Write), keep the header, `#import` and `#show` unchanged and put the text after them; line numbers and tool markers from the read output ("End of file...") must not end up in the file.
+- When appending or replacing a piece (Edit), copy the old piece verbatim from the file so that it is unique.
+- Run `notes check` after every write: errors are cheap to fix one at a time.
 
-```typst
-// Работа над заметкой (обновлять после каждого шага; готово — удалить шапку):
-//   цель и читатель: школьник перед ЕГЭ, графики знает плохо
-//   исходники: ~/Учёба/алгебра/лекция-3.pdf
-//   план: 1) вершина и ветви 2) сдвиги (график с ползунками) 3) задачи — согласован
-//   сделано: разделы 1–2
-//   дальше: раздел 3, задачи из лекции
-```
+## Typst essentials
 
-### Как править файл
+Typst is neither LaTeX nor Markdown: `\frac`, `\begin`, `**bold**`, `# Heading` do not work.
 
-- Сначала прочитай файл целиком. Если пишешь его заново (Write), перенеси
-  шапку, `#import` и `#show` **без изменений** и допиши текст после них.
-  Номера строк и служебные строки из вывода чтения («End of file…») в
-  файл не попадают.
-- Дописать в конец или заменить кусок (Edit) — старый кусок бери из файла
-  дословно и так, чтобы он встречался один раз.
-- После каждой записи — `notes check`.
+- Section / subsection: `= Section`, `== Subsection` (in a book `=` is a chapter).
+- Bold, italic, code: `*term*`, `_italic_`, `` `a[i]` ``.
+- Lists: `- item`, numbered `+ item`.
+- Inline / display math: `$x^2$` / `$ x^2 $` (spaces inside the `$` make a display line).
+- Label and reference: `= Section <sec-x>` ... `section @sec-x`; a figure: `label: "fig-x"` ... `fig. @fig-x`. In Russian notes the case word is written by hand ("в разделе @sec-x").
+- Comment: `// to end of line`.
+- Literal `# $ * _ @ < \`: `\#`, `\$`, `\*`, `\_`, `\@`, `\<`, `\\`.
 
-## Typst — самое нужное
+**Math:** `x^2`, `x_1`, `x_(i+1)`, `a / b` (fraction), `sqrt(x)`, `sum_(i=1)^n`, `integral_a^b f(x) dd(x)`, `lim_(x -> 0)`, `oo`, `pi`, `alpha`, `epsilon`, `<=`, `>=`, `!=`, `->`, `dots`, `abs(x)`, text `"text"`. Adjacent letters form one name: `ax` is an unknown variable, write `a x` (`$y = a x^2 + b x + c$`). A decimal comma needs `dc("0,5")`: a plain `0,5` in math prints as "0, 5". Russian notes use Russian operators (`tg`, `ctg`, `sh`, `ch`, see `reference.md`).
 
-Typst — не LaTeX и не Markdown: `\frac`, `\begin`, `**жирный**`, `# Заголовок`
-здесь не работают.
+**Function call**: `#`, name, `(arguments)`, optional `[text]`: `#definition(title: "limit")[...]`.
+- `#` switches from text to code, so it appears only in text, before a call: `#fig(canvas(...), [Caption])`, not `#fig(#canvas(...))`.
+- Arguments are separated by commas; named ones are `name: value`: `#fig(canvas(...), [Caption], label: "fig-1")`.
+- `[...]` content, `"..."` string, `(...)` array or dictionary, `{...}` code block. A one-element array needs a trailing comma: `("tag",)`. Dictionary `(a: 1, b: 2)`. Array item `arr.at(0)`, not `arr[0]`.
+- Units: `2.5cm`, `11pt`, `40%`, `90deg`. Some parameters take plain numbers (`width: 8` of `interactive-plot` is centimeters); `reference.md` says which.
+- Own variables and functions: `#let a = (1, 2, 3)`, `#let f(x) = x * x`; in code `for`, `if`, `range(4).map(i => i * i)`.
+- A `;` right after a call (`#see(...);`) ends the expression and disappears from the text: write `\;`.
 
-**Разметка (текст заметки):**
+## Errors of `notes check`
 
-| Что | Как писать |
-|---|---|
-| раздел / подраздел | `= Раздел`, `== Подраздел` (в книге `=` — глава) |
-| жирный, курсив, код | `*термин*`, `_курсив_`, `` `a[i]` `` |
-| списки | `- пункт`, нумерованный — `+ пункт` |
-| формула в строке / отдельно | `$x^2$` / `$ x^2 $` (пробелы у `$` — отдельная строка) |
-| метка и ссылка на неё | `= Раздел <sec-x>` … `в разделе @sec-x`; рисунку — `label: "рис-x"` … `рис. @рис-x` |
-| комментарий | `// до конца строки` |
-| знаки `# $ * _ @ < \` буквально | `\#`, `\$`, `\*`, `\_`, `\@`, `\<`, `\\` |
+- `expected comma`, `expected identifier` at `)`: a dot or nothing between arguments, e.g. `fig(...). [Caption]` instead of `fig(...), [Caption]`.
+- `unclosed delimiter`: an unclosed `(` `[` `{` or `$`.
+- `unknown variable: ax` in math: letters merged into one name; write `a x`, text as `"text"`.
+- `unknown variable: name` outside math: a typo in a function name; names are in `reference.md`.
+- `unexpected argument: name`: no such parameter; see the signature in `reference.md`.
+- `missing argument: caption`: `fig` needs a caption, `fig(figure, [Caption])`.
+- `expected expression`: an extra or missing `#`, or an empty argument `,,`.
+- `invalid number suffix`: an unknown unit; valid are `pt cm mm em % deg fr`.
+- `непонятный знак` in a formula of `interactive-plot`: the formula language has no `**` or `^`; write `x * x` or `calc.pow(x, 2)`.
+- `неизвестное имя` in such a formula: functions need `calc.`, e.g. `calc.sin(x)`.
+- `file not found ... /_baluk/...`: the import must be exactly `#import "/_baluk/lib.typ": *`.
+- warning `запятая между цифрами`: `dc("0,5")` instead of `0,5` in math.
+- warning about `;` after a call: `\;`.
+- warning `нет слов оформления`: the note language is neither ru nor en, so block words fall back to English; set own words with `words:` (keys in `reference.md`).
+- `битая ссылка` (broken link): the `#see("...")` path is not in `notes list`, or the anchor does not match a heading text. Either write the target note or drop the link.
+- `_folder.toml: unknown field`: only `title = "Title"` is allowed.
+- Other Russian messages come from the library and say what to change.
 
-**Формулы:** `x^2`, `x_1`, `x_(i+1)`, `a / b` (дробь), `sqrt(x)`,
-`sum_(i=1)^n`, `integral_a^b f(x) dd(x)`, `lim_(x -> 0)`, `oo`, `pi`,
-`alpha`, `epsilon`, `<=`, `>=`, `!=`, `->`, `dots`, `abs(x)`, текст —
-`"текст"`. **Буквы подряд — одно имя**: `ax` — ошибка, пиши `a x`
-(`$y = a x^2 + b x + c$`). Десятичная дробь — `dc("0,5")`, а не `0,5`.
+## Writing a good note
 
-**Вызов функции** — `#имя(аргументы)[текст]`:
+A note **explains** rather than lists: the reader wants to understand the topic from scratch and then solve problems. A dense cheat sheet (tables of "construct: meaning", walls of code) is a separate note (`book.with(kind: [Cheat sheet], ...)`), not a replacement for an explanation.
 
-- `#` — только в тексте, перед вызовом; внутри скобок вызова `#` не
-  нужен: `#fig(canvas(...), [Подпись])`.
-- Аргументы — через **запятую**; именованные — `имя: значение`:
-  `#fig(canvas(...), [Подпись], label: "рис-1")`. Точка вместо запятой
-  (`fig(...). [Подпись]`) — ошибка.
-- `[…]` — текст (содержание), `"…"` — строка, `(…)` — массив или словарь,
-  `{…}` — код. Массив из одного элемента — с запятой: `("тег",)`.
-  Словарь — `(a: 1, b: 2)`. Элемент массива — `arr.at(0)`, не `arr[0]`.
-- Числа с единицами: `2.5cm`, `11pt`, `40%`, `90deg`. Где в примере
-  число без единиц (`width: 8` у `interactive-plot`) — пиши число.
-- Свои переменные и функции — `#let a = (1, 2, 3)`, `#let f(x) = x * x`;
-  в коде — `for`, `if`: `range(4).map(i => i * i)`.
-- `;` сразу после `#вызова(…)` пропадает — пиши `\;`.
+**Note or book.** A note is one topic (a definition, a technique, a tool, a problem): `=` is a section, numbering runs through the note. A book is a course or a large topic: `=` is a chapter ("Chapter N") that starts a new PDF page and is shown separately in the app, with a title page and contents in the PDF. A short topic is therefore a section, not a chapter; aim for a chapter of at least 3 PDF pages. Short notes on one idea, linked with `#see`, work well: the app builds backlinks and a graph from the links.
 
-## Ошибки `notes check` → что исправить
+**Structure of a chapter (a section of a note is the same without `plan`):**
+- `#lead[...]`: 2-4 sentences, why this matters and what it builds on; `#plan(...)` in a book chapter.
+- Each `== Section`: motivation, intuition with a figure, then rigor (`#definition`, `#theorem`, `#proof`), a worked `#example` with `#step`s and `#answer`, and the main `#pitfall` right after the example.
+- At the end: `#pitfalls(...)`, `#summary(...)` (3-6 points to remember), `#quiz(...)`.
+- Every definition and theorem gets at least one worked example.
 
-| Сообщение | Причина и исправление |
-|---|---|
-| `expected comma`, `expected identifier` у `)` | между аргументами точка или ничего: `fig(...), [Подпись]` |
-| `unclosed delimiter` | не закрыта скобка `(` `[` `{` или `$` — посчитай пары |
-| `unknown variable: ax` (в формуле) | буквы слиплись в имя: `a x`; текст — `"текст"` |
-| `unknown variable: имя` (не в формуле) | опечатка в имени функции — сверь с `examples/` |
-| `unexpected argument: имя` | у функции нет такого параметра — сверь с `examples/` |
-| `missing argument: caption` | у `fig` нет подписи: `fig(рисунок, [Подпись])` |
-| `expected expression` | лишний или пропущенный `#`, пустой аргумент `,,` |
-| `invalid number suffix` | неизвестная единица: только `pt cm mm em % deg fr` |
-| `формула «…»: непонятный знак` | в формуле `interactive-plot` нет `**` и `^`: `x * x`, `calc.pow(x, 2)` |
-| `формула «…»: неизвестное имя «pow»` | функции — с `calc.`: `calc.sin(x)`, `calc.pow(x, 2)` |
-| `file not found … /_baluk/…` | импорт ровно `#import "/_baluk/lib.typ": *` |
-| предупреждение «запятая между цифрами» | `dc("0,5")` вместо `0,5` |
-| предупреждение «;» после #выражения | `\;` |
-| битая ссылка | в `#see("…")` путь из `notes list`; раздел — текст заголовка |
-| `Папка/_folder.toml: unknown field …` | в файле папки только `title = "Название"` |
-| другие сообщения по-русски | это библиотека — сделай, что сказано |
+**Text.**
+- Why first, then what, then how to use it. Hard parts get more room than easy ones: evenly compressed text fails exactly where the reader struggles. A hard spot gets 2-3 examples from simple to harder, a step-by-step trace, a proof sketch and the typical mistake.
+- A lively "we" voice ("let us split", "note that"). A new term in `*bold*` with its explanation right next to it.
+- No bare formulas: before one say what it means, after it how to use it. The key formula of a section goes in `#formula[...]`, one or two per section.
+- Callouts (`remark`, `idea`, `pitfall`, `margin-note`) are seasoning: about one per half page, or they stop standing out.
+- Recompute every number independently (Python, sympy, brute force, simulation), and check each figure caption against the figure's own coordinates.
 
-## Что писать — коротко
+**The web page is the main view.**
+- Layout only through library blocks: `side-by-side` (text and a small figure), `in-row` (figures in a row), `fig`, `data-table`. The Typst HTML export drops `grid`, `stack`, `align`, `place` and fractional `h`/`v`, so such layout silently disappears in the app.
+- No own HTML, JavaScript or styles, and no fixed colors (`rgb(...)`) or font sizes (`set text(size: ...)`): the theme sets colors and sizes, and the reader switches themes. Interactivity comes only from library blocks.
 
-Заметка **объясняет**: читатель хочет понять тему с нуля и потом решать
-задачи. Читают в основном в приложении (экран, телефон, светлая и тёмная
-тема), PDF — тот же текст для печати. Полные правила — `notes docs
-writing` (читать не обязательно, главное — здесь).
+**Figures.** Add them without being asked: 2-3 per chapter, and at least one in every section about geometry, a graph, a data structure, an algorithm or a scheme, placed next to the text that refers to it.
+- The caption is a statement about what is visible, not a name: not "Region D" but "The spoke enters D through the parabola and leaves through the line: these are the limits of the inner integral".
+- An algorithm is shown as `frames` (a slider and playback in the app, a storyboard `pdf: (1, 4, 8)` in the PDF); one static picture is not enough. A dependence on a parameter is an `interactive-plot` or `interactive-surface`.
+- Highlight the main thing with one theme color, `"second"`, not a rainbow; labels no smaller than the defaults.
+- A large figure can float in the PDF (`fig(..., floating: true)`); a small one sits next to its paragraph with `side-by-side`.
+- Use library helpers where they exist (axes, plots, 3D, arrays, matrices, graphs, trees, charts, the vault graph) instead of redrawing them. Beyond them, draw freely with CeTZ inside `canvas(theme => { ... })`: lines, polygons, arcs, labels, 3D points via `p3`, loops and own helper functions, always in theme colors (`reference.md`, "Own lines"). If the note needs a whole new kind of figure or layout that other notes would reuse, draw it for now and tell the user it belongs in the library.
+- Check figures in the dark theme too: a color outside the theme is invisible there.
 
-- Порядок: зачем → что → как пользоваться. Определение и теорема — рядом
-  с рисунком и разобранным примером. Трудное — подробнее лёгкого.
-- Живой язык от «мы»: «разобьём», «заметим». Новый термин — `*жирным*`.
-  Перед формулой — что она говорит, после — как ею пользоваться.
-- Врезки (`remark`, `idea`, `pitfall`, `margin-note`) — не больше одной на
-  полстраницы.
-- **Рисунки — без напоминаний**: хотя бы один на раздел про геометрию,
-  график, алгоритм, структуру. Подпись — утверждение («Спица входит через
-  параболу»), не название. Алгоритм — кадрами (`frames`), зависимость от
-  параметра — `interactive-plot`. Выделение — одним цветом `"second"`.
-- Раскладка — **только блоками библиотеки** (`side-by-side`, `in-row`,
-  `fig`, `data-table`): `grid`, `stack`, `align`, `place` в приложении
-  пропадают. Своих цветов (`rgb(…)`), кеглей (`set text(size: …)`) и
-  HTML нет.
-- Код — после объяснения идеи; `listing` до 25 строк; рабочий код — в
-  файле рядом с книгой (`code-from-file`).
-- Числа в примерах пересчитай (Python, перебор).
-- Не хватает инструмента в библиотеке — не рисуй своё: скажи
-  пользователю, библиотеку правят в репозитории BalukNotes.
+Figures by subject, as a starting point:
+- analysis: spokes for integration limits, graphs, 3D surfaces, solids and sections, Riemann sums as frames;
+- algorithms and data structures: arrays with blocks, pointers and arcs, algorithm frames, graphs with the current step, DP tables with arrows;
+- databases: the data before a query and the result, matched rows of a join, the window frame;
+- computer architecture: block diagrams, the memory hierarchy, a pipeline by cycles, address fields;
+- probability: geometric probability, outcome trees, density and distribution functions;
+- any subject: measurements and comparisons as a `chart`, not a table of numbers.
 
-Раздел (глава книги) обычно устроен так: `#lead[…]` → (в книге)
-`#plan(…)` → `== Разделы`: мотивация, рисунок, `#definition`/`#theorem`,
-`#example` с `#step` и `#answer`, `#pitfall` → в конце
-`#pitfalls(…)`, `#summary(…)`, `#quiz(…)`.
+**Code.**
+- Code comes after the idea and does not replace it; never two listings in a row without text between them.
+- A `listing` has at most 25 lines; mark key lines with `highlight:` and `callouts:` and refer to them in the text ("line #callout(1) ..."); add `complexity:` and a sample input and output.
+- Working code lives in the vault next to the book (`Folder/Book/code/...`), is compiled and tested (random tests against a naive solution), and a chapter takes a region of it with `code-from-file` (path from the vault root).
+- SQL: every query is followed by its result (the first 3-5 rows as a table).
 
-## Частые вызовы
+**Before calling a chapter done:**
+- lead and plan; each section has motivation, a figure and a worked example;
+- hard spots covered in more detail than easy ones;
+- 2-3 figures, each with a statement caption and a reference from the text;
+- algorithms as frames, SQL with results;
+- listings of at most 25 lines, code compiled and tested;
+- numbers recomputed independently;
+- `pitfalls`, `summary`, `quiz` at the end;
+- `notes check` clean for your note (problems in other notes: tell the user, do not fix them silently); PDF and, if possible, the app page viewed in both themes and a narrow window;
+- the header says what is done and what is next.
+
+## Common calls
 
 ```typst
-#lead[2–4 предложения: зачем эта тема.]
+#lead[2-4 sentences: why this topic matters.]
 
-#definition(title: "предел")[Число $a$ — *предел* $x_n$, если …]
-#theorem(title: "о зажиме")[…]
-#proof[…]
+#definition(title: "limit")[A number $a$ is the *limit* of $x_n$ if ...]
+#theorem(title: "squeeze")[...]
+#proof[...]
 
-#example(title: "зажим синусом")[
-  Найти $lim (sin n) / n$.
-  #step[Оценка] $-1 / n <= (sin n) / n <= 1 / n$.
-  #answer[предел равен нулю]
+#example(title: "squeeze with sine")[
+  Find $lim (sin n) / n$.
+  #step[Bound] $-1 / n <= (sin n) / n <= 1 / n$.
+  #answer[the limit is zero]
 ]
 
 #fig(
@@ -320,14 +227,14 @@ writing` (читать не обязательно, главное — здес�
     axes(x: (-3, 3), y: (-1, 5))
     plot(x => x * x, -2.2, 2.2, label: $y = x^2$, label-x: 1.5)
   }),
-  [Парабола $y = x^2$ симметрична относительно оси $y$],
-  label: "рис-парабола",
+  [The parabola $y = x^2$ is symmetric about the $y$ axis],
+  label: "fig-parabola",
 )
 
 #fig(
   interactive-plot(
-    "a * x * x + b * x + c",          // формула — СТРОКА; x² — это x * x
-    -5, 5,                            // x от и до
+    "a * x * x + b * x + c",          // formula is a STRING; x^2 is x * x
+    -5, 5,                            // x from, to
     params: (
       a: (from: -3, to: 3, step: 0.1, value: 1),
       b: (from: -5, to: 5, step: 0.5, value: 0),
@@ -335,32 +242,26 @@ writing` (читать не обязательно, главное — здес�
     ),
     y: (-10, 10),
   ),
-  [Коэффициент $a$ меняет раствор и направление ветвей, $c$ сдвигает параболу],
+  [$a$ changes the width and direction of the branches, $c$ shifts the parabola],
 )
 
-Про производную — #see("Математика/Производная")\;
+On derivatives see #see("Math/Derivative")\;
 ```
 
-## Примеры — все возможности библиотеки
+## Samples: `examples/`
 
-Каждый файл — целая заметка, которая собирается без ошибок. В каждом
-вызове — комментарий, что он делает. Прочитай нужный файл, прежде чем
-пользоваться тем, что в нём.
+Each file is a whole note that builds without errors, with comments on the calls. All functions and their parameters: `reference.md`.
 
-| Файл в `examples/` | Что внутри |
-|---|---|
-| `blocks.typ` | шаблон `note`; `lead`, `plan`, `definition`, `theorem`, `proof`, `example`+`step`+`answer`, `remark`, `idea`, `algorithm`, `pitfall`, `formula`, `margin-note`, `side-by-side`, `data-table`, `table`, `pitfalls`, `summary`, `quiz`, `small-caps`; ссылки `@метка` и `see`; математика: `dc`, `dd`, `defeq`, `tg ctg arctg arcctg sh ch th cth rot grad const` |
-| `figures.typ` | `fig`, `canvas`; 2D: `axes`, `tick`, `plot`, `parametric`, `fill-between`, `spoke`, `point`, `contours`, свои линии цветом темы, `pale`; `in-row`; диаграммы `chart` (линии, точки, столбцы, ступеньки, функция); 3D: `p3`, `axes3d`, `surface`, `cross-section`, `base-shape`, `prisms`, `revolution`; `floating` |
-| `algorithms.typ` | массив `array-cells` (подсветка, окно, указатели, блоки, дуги); таблица ДП `matrix-cells`; `graph` с `tree-layout`, `circle-layout`, `binary-layout`+`binary-edges`, подписи цветом темы через `current-theme`; алгоритм кадрами `frames` с раскадровкой для PDF; трассировка `data-table` |
-| `interactive.typ` | `interactive-plot` (парабола с ползунками; несколько кривых со стилями), `interactive-surface`, `frames` с числовым параметром |
-| `book/main.typ`, `book/01-идея.typ`, `book/02-код.typ`, `book/code/prefix.cpp` | книга: шаблон `book`, главы и `#include`; `listing` с `callout`; `code-from-file` с регионом; `vault-graph` — граф хранилища |
-| `english.typ` | заметка на другом языке: `lang: "en"`, свои слова `words:` |
-| `_folder.toml` | название папки (задача E) |
+- `blocks.typ`: template `note` with `lang`, `words`; all text blocks (definitions, worked examples, callouts, tables, summary); links `@label` and `see`; math (`dc`, `dd`, Russian operators).
+- `figures.typ`: `fig`, `canvas`; 2D: axes, plots, fills, spokes, points, contours, own lines in theme colors; figures in a row; `chart`; 3D: surfaces, sections, prisms, solids of revolution.
+- `algorithms.typ`: `array-cells`, DP table `matrix-cells`, graphs and trees `graph`; algorithm as `frames`; trace `data-table`.
+- `interactive.typ`: `interactive-plot` (sliders, several curves), `interactive-surface`, `frames` with a number.
+- `book/` (`main.typ`, `01-idea.typ`, `02-code.typ`, `code/prefix.cpp`): book template `book`, chapters, `#include`; `listing`, `code-from-file`; vault graph `vault-graph`.
+- `_folder.toml`: folder title (task E).
 
-В примерах ссылки `#see("examples/…")` ведут на соседние примеры — в
-своей заметке ставь пути из `notes list`.
+`#see("examples/...")` in the samples points to other samples; in your note use paths from `notes list`.
 
 ---
 
-**Ещё раз — просьба пользователя:** $ARGUMENTS
-Начни с шага 1 «Порядка действий».
+**User request again:** $ARGUMENTS
+Reply in the language of this request and write the note in it too. Start with step 1.

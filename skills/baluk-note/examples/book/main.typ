@@ -1,16 +1,17 @@
-// Пример навыка /baluk-note: КНИГА — папка с main.typ и главами NN-тема.typ.
-// Заготовку main.typ создаёт `notes new --book "Папка/Книга"`; главы —
-// обычные файлы рядом, каждая подключается строкой #include.
+// Skill sample: BOOK, a folder with main.typ and chapters NN-topic.typ.
+// `notes new --book` creates main.typ; chapters are plain files next to it,
+// each included by an #include line.
 #import "/_baluk/lib.typ": *
 #show: book.with(
-  kind: [Конспект],                 // надпись над названием: [Задачник], [Шпаргалка]…
-  title: [Префиксные суммы],
-  subtitle: [Сумма на отрезке за $O(1)$],
-  author: [Алгоритмы · 1 семестр],
+  lang: "en",
+  kind: [Course notes],             // label above the title: [Problem book], [Cheat sheet]...
+  title: [Prefix sums],
+  subtitle: [Range sum in $O(1)$],
+  author: [Algorithms, term 1],
   date: [2026],
-  description: [Для тех, кто знает циклы и массивы. Главы читаются по порядку.],
-  tags: ("пример", "алгоритмы"),
+  description: [For readers who know loops and arrays. Read the chapters in order.],
+  tags: ("example", "algorithms"),
 )
 
-#include "01-идея.typ"
-#include "02-код.typ"
+#include "01-idea.typ"
+#include "02-code.typ"

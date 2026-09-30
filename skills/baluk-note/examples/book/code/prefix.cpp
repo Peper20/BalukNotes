@@ -1,4 +1,4 @@
-// Рабочий код книги: компилируется и проверяется, в главу берётся регион.
+// Working code of the book: compiled and tested; a chapter takes a region.
 #include <cassert>
 #include <vector>
 

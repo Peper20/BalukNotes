@@ -95,7 +95,7 @@ vendor_tests() {
 
 # Навык /baluk-note: заготовки `notes new` (заметка и книга; имя файла — из
 # названия со знаками разметки и запрещёнными в именах файлов), примеры
-# skills/baluk-note/examples и блок «Частые вызовы» из SKILL.md (дописан в
+# skills/baluk-note/examples и блок «Common calls» из SKILL.md (дописан в
 # заготовку заметки) собираются во временном хранилище без ошибок,
 # предупреждений и битых ссылок.
 baluk_note() {
@@ -109,13 +109,14 @@ baluk_note() {
   [[ $("${notes[@]}" new --folder Сеть --title '/\:*?"<>|' | tail -n 1) == "Сеть/Без названия" ]] || return 1
   local vault=$dir/vaults/Проверка
   cp -r skills/baluk-note/examples "$vault/examples"
-  awk '/^## Частые вызовы/ {on = 1} on && /^```$/ {exit} on == 2 {print} on && /^```typst/ {on = 2}' \
+  awk '/^## Common calls/ {on = 1} on && /^```$/ {exit} on == 2 {print} on && /^```typst/ {on = 2}' \
     skills/baluk-note/SKILL.md >>"$vault/Математика/Заметка.typ"
   # цель ссылки #see из блока
-  printf '#import "/_baluk/lib.typ": *\n#show: note.with(title: [Производная])\n' >"$vault/Математика/Производная.typ"
+  mkdir -p "$vault/Math"
+  printf '#import "/_baluk/lib.typ": *\n#show: note.with(title: [Производная])\n' >"$vault/Math/Derivative.typ"
   local actual
   actual=$("${notes[@]}" check | tee /dev/stderr | tail -n 1)
-  [[ $actual == "заметок: 11, ошибок: 0, предупреждений: 0, битых ссылок: 0" ]]
+  [[ $actual == "заметок: 10, ошибок: 0, предупреждений: 0, битых ссылок: 0" ]]
 }
 
 in_app() { (cd app && "$@"); }

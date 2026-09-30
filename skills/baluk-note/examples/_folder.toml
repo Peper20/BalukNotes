@@ -1,4 +1,3 @@
-# Пример навыка /baluk-note: НАЗВАНИЕ ПАПКИ. Файл _folder.toml лежит в самой
-# папке; его title показывают дерево, граф и шапка вместо имени папки.
-# Другие ключи — ошибка (notes check).
-title = "Примеры: все возможности библиотеки"
+# Skill sample: FOLDER TITLE. _folder.toml lives in the folder itself; the tree,
+# graph and header show its title instead of the folder name. Other keys are errors.
+title = "Samples: every library feature"
