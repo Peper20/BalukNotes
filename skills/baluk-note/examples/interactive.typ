@@ -1,15 +1,15 @@
-// Пример навыка /baluk-note: ИНТЕРАКТИВ — график с ползунками, поверхность с
-// вращением, кадры с числовым параметром. В приложении рисунок живой, в PDF —
-// кадр при значениях по умолчанию (value:).
+// Skill sample: INTERACTIVE figures: a plot with sliders, a rotating
+// surface, frames with a number. Live in the app; the PDF shows the frame
+// at the default values (value:).
 #import "/_baluk/lib.typ": *
-#show: note.with(title: [Интерактив], tags: ("пример", "рисунки"))
+#show: note.with(lang: "en", title: [Interactive], tags: ("example", "figures"))
 
-= Парабола с ползунками
+= Parabola with sliders
 
-// interactive-plot(ФОРМУЛА-СТРОКА, x-от, x-до, params: (…), y: (…)) — и всё это внутри #fig(…, [Подпись]).
-// Формула — СТРОКА в кавычках: x, имена параметров, + - * /, скобки, calc.sin(…) и т. п.
-// Степени «**» и «^» нет: x² — это x * x или calc.pow(x, 2).
-// Параметр: имя: (from: мин, to: макс, step: шаг, value: начальное).
+// interactive-plot(FORMULA-STRING, x-from, x-to, params: (...), y: (...)), always inside #fig(..., [Caption]).
+// The formula is a STRING: x, parameter names, + - * /, parentheses, calc.sin(...) etc.
+// No "**" or "^": x^2 is x * x or calc.pow(x, 2).
+// A parameter: name: (from: min, to: max, step: step, value: initial).
 #fig(
   interactive-plot(
     "a * x * x + b * x + c",
@@ -21,13 +21,13 @@
     ),
     y: (-10, 10),
   ),
-  [Парабола $y = a x^2 + b x + c$: $a$ меняет раствор и направление ветвей, $c$ сдвигает вверх-вниз],
+  [Parabola $y = a x^2 + b x + c$: $a$ changes the width and direction of the branches, $c$ shifts it up and down],
 )
 
-= Несколько кривых
+= Several curves
 
-// Несколько кривых — массив; кривая со стилем — словарь (f:, label:, dashed:, color:).
-// labels — подписи осей; width, height — размер поля в см (числа, без cm).
+// Several curves: an array; a styled curve: a dict (f:, label:, dashed:, color:).
+// labels: axis labels; width, height: plot size in cm (numbers, no cm).
 #fig(
   interactive-plot(
     ("a * calc.sin(b * x)", (f: "calc.sin(x)", label: "sin x", dashed: true, color: "second")),
@@ -35,23 +35,23 @@
     params: (a: (from: 0, to: 3, step: 0.1, value: 1), b: (from: 0.5, to: 4, step: 0.1, value: 1)),
     y: (-3, 3), labels: ("x", "y"), width: 8, height: 5,
   ),
-  [Амплитуда $a$ растягивает синусоиду по вертикали, частота $b$ сжимает по горизонтали],
+  [Amplitude $a$ stretches the sine vertically, frequency $b$ compresses it horizontally],
 )
 
-= Поверхность
+= Surface
 
-// interactive-surface(формула от x и y, (x-от, x-до), (y-от, y-до), params:, z:) — вращается мышью.
+// interactive-surface(formula of x and y, (x-from, x-to), (y-from, y-to), params:, z:): rotates with the mouse.
 #fig(
   interactive-surface("calc.sin(k * x) * calc.cos(y)", (-3, 3), (-3, 3),
     params: (k: (from: 0.2, to: 2, step: 0.1, value: 1)), z: (-1, 1),
     style: "shaded", rotation: -30, tilt: 28),
-  [Поверхность $z = sin k x cos y$: при большом $k$ волны вдоль $x$ чаще],
+  [Surface $z = sin k x cos y$: larger $k$ makes waves along $x$ denser],
 )
 
-= Кадры с числовым параметром
+= Frames with a number
 
-// frames(n => canvas(…), n: (from:, to:, value:)) — любой рисунок с параметром.
-// Невидимая рамка rect(…, stroke: none) постоянного размера — чтобы кадры не «прыгали».
+// frames(n => canvas(...), n: (from:, to:, value:)): any figure with a parameter.
+// An invisible rect(..., stroke: none) of constant size keeps frames from jumping.
 #fig(
   frames(n => canvas(unit: 1.4cm, theme => {
     import cetz.draw: *
@@ -64,5 +64,5 @@
     }
     plot(f, 0, 3)
   }), n: (from: 1, to: 12, value: 4)),
-  [Нижняя сумма Римана: с ростом $n$ прямоугольники заполняют площадь под кривой],
+  [Lower Riemann sum: as $n$ grows, the rectangles fill the area under the curve],
 )

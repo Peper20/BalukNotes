@@ -146,6 +146,131 @@ fn skill_examples_use_every_public_name() {
     assert!(missing.is_empty(), "нет в примерах навыка skills/baluk-note/examples: {missing:?}");
 }
 
+/// Справочник навыка (`skills/baluk-note/reference.md`) — полный: у каждой
+/// публичной функции строка-сигнатура в блоке кода, её именованные
+/// параметры и значения по умолчанию — как в исходнике библиотеки.
+/// Лишний параметр допустим, только если функция принимает `..rest`.
+#[test]
+fn skill_reference_matches_library() {
+    const NOT_FOR_NOTES: [&str; 3] = ["customize", "themes", "cetz"];
+    let reference = std::fs::read_to_string(repo().join("skills/baluk-note/reference.md")).unwrap();
+    let blocks: Vec<&str> = reference.split("```").skip(1).step_by(2).collect();
+    let sources = library_sources();
+    let mut problems = Vec::new();
+    for name in public_names().into_iter().filter(|n| is_public(n)) {
+        if !has_word(&reference, &name) {
+            problems.push(format!("{name}: нет в справочнике"));
+            continue;
+        }
+        let Some(source) = find_signature(&sources, &name) else { continue };
+        if NOT_FOR_NOTES.contains(&name.as_str()) {
+            continue;
+        }
+        let Some(documented) = blocks.iter().flat_map(|b| b.lines()).find_map(|line| {
+            let line = line.trim_start();
+            line.starts_with(&format!("{name}(")).then(|| signature(line, name.len()))
+        }) else {
+            problems.push(format!("{name}: нет строки «{name}(…)» в блоке кода"));
+            continue;
+        };
+        let (real, real_rest) = named_params(source);
+        let (doc, _) = named_params(documented);
+        for (param, default) in &real {
+            match doc.iter().find(|(p, _)| p == param) {
+                None => problems.push(format!("{name}: не описан параметр {param}")),
+                Some((_, d)) if d != default && !default.starts_with('_') => {
+                    problems.push(format!("{name}: {param} по умолчанию {default}, в справочнике {d}"));
+                }
+                Some(_) => {}
+            }
+        }
+        if !real_rest {
+            for (param, _) in doc.iter().filter(|(p, _)| !real.iter().any(|(r, _)| r == p)) {
+                problems.push(format!("{name}: параметра {param} нет в библиотеке"));
+            }
+        }
+    }
+    assert!(problems.is_empty(), "skills/baluk-note/reference.md расходится с библиотекой:\n{}", problems.join("\n"));
+}
+
+/// Исходники библиотеки `baluk/` (все `.typ`).
+fn library_sources() -> Vec<String> {
+    let mut out = Vec::new();
+    let mut dirs = vec![repo().join("baluk")];
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().is_some_and(|e| e == "typ") {
+                out.push(std::fs::read_to_string(path).unwrap());
+            }
+        }
+    }
+    out
+}
+
+/// Параметры функции `#let name(…)` из исходников; `None` — не функция.
+fn find_signature<'a>(sources: &'a [String], name: &str) -> Option<&'a str> {
+    let head = format!("#let {name}(");
+    let mut found = sources.iter().flat_map(|s| s.match_indices(&head).map(move |(i, _)| (s, i)));
+    let (text, i) = found.next()?;
+    assert!(found.next().is_none(), "{name}: определена в библиотеке дважды");
+    Some(signature(&text[i..], head.len() - 1))
+}
+
+/// Текст между скобкой `(` на позиции `open` и парной ей `)`.
+fn signature(text: &str, open: usize) -> &str {
+    let mut depth = 0;
+    let mut quoted = false;
+    for (i, c) in text[open..].char_indices() {
+        match c {
+            '"' => quoted = !quoted,
+            '(' | '[' | '{' if !quoted => depth += 1,
+            ')' | ']' | '}' if !quoted => {
+                depth -= 1;
+                if depth == 0 {
+                    return &text[open + 1..open + i];
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("не закрыта скобка: {text}")
+}
+
+/// Именованные параметры `имя: значение` (значение без лишних пробелов) и
+/// есть ли `..rest`.
+fn named_params(params: &str) -> (Vec<(String, String)>, bool) {
+    let mut parts = Vec::new();
+    let (mut depth, mut quoted, mut start) = (0, false, 0);
+    for (i, c) in params.char_indices() {
+        match c {
+            '"' => quoted = !quoted,
+            '(' | '[' | '{' if !quoted => depth += 1,
+            ')' | ']' | '}' if !quoted => depth -= 1,
+            ',' if !quoted && depth == 0 => {
+                parts.push(&params[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&params[start..]);
+    let rest = parts.iter().any(|p| p.trim().starts_with(".."));
+    let named = parts
+        .iter()
+        .filter_map(|p| {
+            let (name, value) = p.split_once(':')?;
+            let name = name.trim();
+            name.chars()
+                .all(|c| c.is_ascii_lowercase() || c == '-')
+                .then(|| (name.to_owned(), value.split_whitespace().collect::<Vec<_>>().join(" ")))
+        })
+        .collect();
+    (named, rest)
+}
+
 /// Куски кода Markdown: блоки ``` … ``` и `…` в строке.
 fn code_spans(md: &str) -> Vec<&str> {
     let mut out = Vec::new();
