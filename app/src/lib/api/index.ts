@@ -28,6 +28,7 @@ export type { BookView } from "./types/BookView";
 export type { Chapter } from "./types/Chapter";
 export type { Diagnostic } from "./types/Diagnostic";
 export type { Graph } from "./types/Graph";
+export type { Forces } from "./types/Forces";
 export type { GraphFilter } from "./types/GraphFilter";
 export type { GraphLayout } from "./types/GraphLayout";
 export type { PlacedNode } from "./types/PlacedNode";

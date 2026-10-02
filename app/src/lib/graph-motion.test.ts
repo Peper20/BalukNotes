@@ -84,4 +84,12 @@ describe("движение графа", () => {
     expect(seen).toEqual([ease(0.5), 1]);
     expect(frames.active).toBe(false);
   });
+
+  it("переход: кадр с меткой раньше старта - на месте, а не шаг назад", () => {
+    const { frames, tick } = manualFrames();
+    const seen: number[] = [];
+    frames.tween(100, (e) => seen.push(e), 100);
+    tick(90);
+    expect(seen).toEqual([0]);
+  });
 });

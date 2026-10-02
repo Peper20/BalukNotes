@@ -3,7 +3,7 @@ name: baluk-note
 description: BalukNotes notes in Typst - create a note or a book, add a chapter, edit or rename a note (or name a folder) by the vault rules. Runs from any folder, often the one with the sources (lectures, problems).
 disable-model-invocation: true
 argument-hint: "[тема, книга ..., допиши ... или переименуй ...]"
-allowed-tools: Bash(notes info:*), Bash(notes vaults:*), Bash(notes docs:*), Bash(notes list:*), Bash(notes tags:*), Bash(notes new:*), Bash(notes check:*), Bash(notes pdf:*), Bash(pdftoppm:*), Bash(pgrep -x notes), Read, Glob, Grep
+allowed-tools: Bash(notes info:*), Bash(notes vaults:*), Bash(notes docs:*), Bash(notes list:*), Bash(notes tags:*), Bash(notes new:*), Bash(notes check:*), Bash(notes rename:*), Bash(notes pdf:*), Bash(pdftoppm:*), Bash(pgrep -x notes), Read, Glob, Grep
 ---
 
 # BalukNotes note
@@ -70,9 +70,12 @@ Work only in the chosen vault; never touch other vaults. In it, create or change
 
 **D. Edit.** Instead of steps 5-6: the path comes from `notes list`, the file is vault folder + path + `.typ` (a book is a folder with `main.typ` and chapters). Read the whole file and change what was asked.
 
-**E. Rename.** Steps 1, 2, the check and the report. Keep files and folders where they are: other notes link by path, so moving a file breaks their links.
-- Note or book: change the text in `title: [...]` (a book: in `main.typ`). Links `#see("path")` without own text show the new title automatically.
-- Folder: create or edit `_folder.toml` in it (vault folder + folder path); sample `examples/_folder.toml`.
+**E. Rename.** Steps 1, 2, the check and the report. Use `notes rename`, not a manual move: it writes the new title into the file (a folder: `_folder.toml`), renames the file or folder after the title (in the same parent folder) and rewrites `#see("path")` links to it in other notes, so nothing breaks.
+```sh
+notes rename --vault "Name" "Path" "New title" --dry-run   # prints the new path and the notes whose links will change; changes nothing
+notes rename --vault "Name" "Path" "New title"             # does it
+```
+The first output line is the new path; the next one names the notes with rewritten links (`ссылки поправлены: ...`) or says there are none (`ссылок сюда в других заметках нет`). Those link edits are part of the rename the user asked for: list them in the report. To change only the title and keep the file name, edit `title: [...]` by hand (a book: `main.typ`; a folder: `_folder.toml`, sample `examples/_folder.toml`).
 
 Check with `notes check --vault "Name"` without a path, since folder errors appear only in the full check.
 

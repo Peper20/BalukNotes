@@ -21,7 +21,7 @@
   import type { GraphLayout } from "../lib/api";
   import { Pointers } from "../lib/graph-gesture";
   import { anyMoving, blendView, Frames, glide, introDelays } from "../lib/graph-motion";
-  import { extentOf, Physics, type Point, type Rect } from "../lib/graph-physics";
+  import { DRAG, extentOf, Physics, type Drag, type Point, type Rect } from "../lib/graph-physics";
   import { FIT_ZOOM, fitView, groupColor, LABEL_GAP, LABEL_SIZE, zoomAt, type View } from "../lib/graph-view";
 
   let {
@@ -31,6 +31,7 @@
     highlight = null,
     titles = null,
     moved = $bindable(false),
+    drag = DRAG,
   }: {
     /** Граф с раскладкой из ядра (`POST /api/graph/layout` или `#vault-graph` заметки). */
     layout: GraphLayout;
@@ -43,6 +44,8 @@
     titles?: Map<string, string> | null;
     /** Узлы переставлены руками — картинка разошлась с раскладкой ядра. */
     moved?: boolean;
+    /** Отклик соседей на перетаскивание (настройки графа). */
+    drag?: Drag;
   } = $props();
 
   const graph = $derived(layout);
@@ -116,13 +119,21 @@
 
   // ── Страница графа: масштаб и сдвиг ──────────────────────────────────
   let view = $state<View>({ x: 0, y: 0, k: 1 });
+  /** Вид вписан и его не двигали: поле поменяло размер (окно, панель сил) — вписать заново. */
+  let snug = true;
   /** Вписать граф в окно (при смене графа и по кнопке). */
   export function fit() {
     if (width > 0 && height > 0) view = fitView(bounds, width, height);
+    snug = true;
   }
   export function zoom(factor: number) {
     view = zoomAt(view, factor, width / 2, height / 2);
+    snug = false;
   }
+  $effect(() => {
+    void [width, height];
+    if (interactive && fitted !== null && untrack(() => snug)) untrack(fit);
+  });
   /**
    * Вернуть раскладку ядра: узлы плавно переезжают на свои места (с
    * замедлением, без перелёта), физика забывает перестановки.
@@ -146,6 +157,7 @@
     const [x, y] = pos(id);
     const k = Math.max(view.k, 1);
     view = { k, x: width / 2 - x * k, y: height / 2 - y * k };
+    snug = false;
     focused = id;
   }
   // Новый граф (фильтр) или первый замер окна — вписать (при смене графа — плавно, вместе с узлами).
@@ -160,6 +172,7 @@
       viewFrames.stop();
       if (first || !GLIDE) return fit();
       const [from, to] = [view, fitView(bounds, width, height)];
+      snug = true;
       viewFrames.tween(GLIDE, (e) => (view = blendView(from, to, e)));
     });
   });
@@ -209,6 +222,7 @@
     });
     sim.setExtents(extents);
     sim.setFrame(interactive ? null : frameRect, extents);
+    sim.response = drag;
     return sim;
   }
 
@@ -251,6 +265,7 @@
     const move = pointers.move(e.pointerId, local(e), (id) => index.has(id));
     if (move.kind === "view") {
       view = move.view;
+      snug = false;
       if (move.pan) dragging = true;
     } else if (move.kind === "drag") {
       if (move.first || !sim) {
@@ -301,6 +316,7 @@
     const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
     const [x, y] = local(e);
     view = zoomAt(view, Math.exp(-delta * 0.0015), x, y);
+    snug = false;
   }
 
   function onkeydown(e: KeyboardEvent, id: string) {

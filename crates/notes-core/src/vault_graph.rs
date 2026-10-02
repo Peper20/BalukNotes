@@ -57,11 +57,53 @@ pub struct GraphFilter {
     /// сама остаётся, даже если её скрыл бы другой фильтр.
     pub around: Option<String>,
     pub depth: u32,
+    /// Силы раскладки (настройки вида на странице графа); граф в заметке -
+    /// по умолчанию.
+    pub forces: Forces,
 }
 
 impl Default for GraphFilter {
     fn default() -> Self {
-        Self { folders: vec![], hidden: vec![], tag: None, missing: true, orphans: true, around: None, depth: 1 }
+        Self {
+            folders: vec![],
+            hidden: vec![],
+            tag: None,
+            missing: true,
+            orphans: true,
+            around: None,
+            depth: 1,
+            forces: Forces::default(),
+        }
+    }
+}
+
+/// Силы раскладки в процентах от обычных (по умолчанию - раскладка как без
+/// них, бит в бит).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+#[serde(default)]
+pub struct Forces {
+    /// Насколько выражены папки: узлы папки держатся вместе, чужие папки
+    /// отталкивают сильнее (между папками просвет); 0 - папки держатся
+    /// вместе только начальными местами и связями.
+    pub clusters: u32,
+    /// Притяжение к центру: меньше - граф просторнее.
+    pub center: u32,
+    /// Отталкивание узлов.
+    pub repel: u32,
+    /// Притяжение связанных узлов (жёсткость рёбер).
+    pub links: u32,
+}
+
+impl Default for Forces {
+    fn default() -> Self {
+        Self { clusters: 0, center: 100, repel: 100, links: 100 }
+    }
+}
+
+impl Forces {
+    fn scale(percent: u32) -> f64 {
+        f64::from(percent) / 100.0
     }
 }
 
@@ -176,8 +218,17 @@ pub fn box_rect((x, y): (f64, f64), b: NodeBox) -> [f64; 4] {
 /// кашу подписей и не расползается. Начало — [`initial_positions`]. Без
 /// случайности и с тем же порядком сумм — одинаковый вход даёт одинаковые
 /// координаты бит в бит.
-pub fn layout(n: usize, links: &[(usize, usize)], boxes: Option<&[NodeBox]>) -> Vec<(f64, f64)> {
-    let mut pos = layout_forces(n, links);
+///
+/// `groups` - номер группы (папки) узла, для [`Forces::clusters`]; пустой -
+/// без групп.
+pub fn layout(
+    n: usize,
+    links: &[(usize, usize)],
+    groups: &[usize],
+    boxes: Option<&[NodeBox]>,
+    forces: Forces,
+) -> Vec<(f64, f64)> {
+    let mut pos = layout_forces(n, links, groups, forces);
     if let Some(boxes) = boxes {
         separate(&mut pos, boxes);
     }
@@ -196,30 +247,63 @@ const ITERATIONS: usize = 60;
 /// Наибольший шаг узла: сначала, потом убывает до ~2.
 const START_TEMP: f64 = 40.0;
 const COOLING: f64 = 0.95;
+/// Притяжение к папке при `clusters` = 100 %, в долях [`CENTER_PULL`].
+const CLUSTER_PULL: f64 = 4.0 * CENTER_PULL;
+/// Добавочное отталкивание чужой папки при `clusters` = 100 %, в долях
+/// обычного (папка - одно тело в её середине).
+const GROUP_REPEL: f64 = 1.0;
 
-fn layout_forces(n: usize, links: &[(usize, usize)]) -> Vec<(f64, f64)> {
+fn layout_forces(n: usize, links: &[(usize, usize)], groups: &[usize], forces: Forces) -> Vec<(f64, f64)> {
     let mut pos = initial_positions(n);
     let mut temp = START_TEMP;
     let mut tree = QuadTree::default();
     let mut stack = Vec::new();
     let mut force = vec![(0.0, 0.0); n];
+    let repel = Forces::scale(forces.repel);
+    let spring = Forces::scale(forces.links) / 2.0;
+    let center = CENTER_PULL * Forces::scale(forces.center);
+    let cluster = CLUSTER_PULL * Forces::scale(forces.clusters);
+    let group_repel = Forces::scale(forces.clusters) * GROUP_REPEL;
+    let clustered = cluster > 0.0 && groups.len() == n;
+    let mut middles = Vec::new();
     for _ in 0..ITERATIONS {
         tree.build(&pos);
         for (i, f) in force.iter_mut().enumerate() {
-            *f = tree.repulsion(i, pos[i], &mut stack);
+            let (x, y) = tree.repulsion(i, pos[i], &mut stack);
+            *f = (x * repel, y * repel);
         }
         for &(a, b) in links {
             let (dx, dy) = (pos[a].0 - pos[b].0, pos[a].1 - pos[b].1);
             let d = dx.hypot(dy).max(1.0);
-            let f = (d - EDGE) / d / 2.0;
+            let f = (d - EDGE) / d * spring;
             force[a].0 -= dx * f;
             force[a].1 -= dy * f;
             force[b].0 += dx * f;
             force[b].1 += dy * f;
         }
+        if clustered {
+            group_middles(&pos, groups, &mut middles);
+            // Только из-за края круга площади папки: отставшие подтягиваются,
+            // а плотнее, чем [`AREA`] на узел, папка не становится (иначе
+            // подписи наезжают).
+            // Чужие папки отталкивают сильнее - между папками просвет.
+            for ((f, p), &g) in force.iter_mut().zip(&pos).zip(groups) {
+                for (h, &(mx, my, radius, mass)) in middles.iter().enumerate() {
+                    let (dx, dy) = (mx - p.0, my - p.1);
+                    let d = dx.hypot(dy).max(1.0);
+                    let k = if h == g {
+                        (d - radius).max(0.0) / d * cluster
+                    } else {
+                        -mass * EDGE * EDGE / (d * d) * group_repel
+                    };
+                    f.0 += dx * k;
+                    f.1 += dy * k;
+                }
+            }
+        }
         for (p, f) in pos.iter_mut().zip(&mut force) {
-            f.0 -= p.0 * CENTER_PULL;
-            f.1 -= p.1 * CENTER_PULL;
+            f.0 -= p.0 * center;
+            f.1 -= p.1 * center;
             let len = f.0.hypot(f.1);
             if len > 0.0 {
                 let m = len.min(temp) / len;
@@ -230,6 +314,24 @@ fn layout_forces(n: usize, links: &[(usize, usize)]) -> Vec<(f64, f64)> {
         temp *= COOLING;
     }
     pos
+}
+
+/// Середины групп: `middles[g]` - центр масс узлов группы `g`, радиус
+/// круга площадью [`AREA`] на её узел и число узлов.
+#[allow(clippy::cast_precision_loss, reason = "узлов - тысячи")]
+fn group_middles(pos: &[(f64, f64)], groups: &[usize], middles: &mut Vec<(f64, f64, f64, f64)>) {
+    let count = groups.iter().max().map_or(0, |g| g + 1);
+    let mut sum = vec![(0.0, 0.0, 0usize); count];
+    for (p, &g) in pos.iter().zip(groups) {
+        sum[g].0 += p.0;
+        sum[g].1 += p.1;
+        sum[g].2 += 1;
+    }
+    middles.clear();
+    middles.extend(sum.iter().map(|&(x, y, k)| {
+        let k = k.max(1) as f64;
+        (x / k, y / k, (k * AREA / std::f64::consts::PI).sqrt(), k)
+    }));
 }
 
 /// Начальные места: узлы по порядку вдоль кривой Гильберта, квадрат площади
@@ -546,7 +648,7 @@ fn separate(pos: &mut [(f64, f64)], boxes: &[NodeBox]) {
 
 /// Разложить граф: радиусы, подписи, координаты, границы. `groups` — все
 /// группы хранилища (порядок цветов).
-pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>) -> GraphLayout {
+pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>, forces: Forces) -> GraphLayout {
     let index: HashMap<&str, usize> = graph.nodes.iter().enumerate().map(|(i, n)| (n.id.as_str(), i)).collect();
     let links: Vec<(usize, usize)> =
         graph.edges.iter().filter_map(|e| Some((*index.get(e.from.as_str())?, *index.get(e.to.as_str())?))).collect();
@@ -566,7 +668,9 @@ pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>) -> Grap
             NodeBox { r, label: label_width(&n.title, if book { LABEL_SIZE * 1.1 } else { LABEL_SIZE }) }
         })
         .collect();
-    let pos = layout(graph.nodes.len(), &links, Some(&boxes));
+    let node_groups: Vec<usize> =
+        graph.nodes.iter().map(|n| groups.iter().position(|g| g == group_of(&n.id)).unwrap_or(0)).collect();
+    let pos = layout(graph.nodes.len(), &links, &node_groups, Some(&boxes), forces);
     let bounds = pos.iter().zip(&boxes).map(|(&p, &b)| box_rect(p, b)).fold(None, |acc: Option<[f64; 4]>, r| {
         Some(acc.map_or(r, |a| [a[0].min(r[0]), a[1].min(r[1]), a[2].max(r[2]), a[3].max(r[3])]))
     });
@@ -634,8 +738,8 @@ fn unescape(s: &str) -> String {
 const LAYOUTS: usize = 32;
 
 /// Кэш раскладок: тот же показанный граф (узлы, рёбра, группы, центр) —
-/// та же раскладка, считать её заново незачем. Ключ — хэш самого графа,
-/// поэтому кэш не устаревает: изменилось хранилище — другой ключ.
+/// та же раскладка, считать её заново незачем. Ключ — хэш самого графа и
+/// сил, поэтому кэш не устаревает: изменилось хранилище — другой ключ.
 /// Переключатели страницы `/graph`, версия заметки с `#vault-graph`
 /// ([`GraphData`]) и её сборка берут готовую.
 #[derive(Debug, Default)]
@@ -646,9 +750,15 @@ pub struct Layouts {
 
 impl Layouts {
     /// Раскладка графа (см. [`place`]) — из кэша или посчитанная.
-    pub fn place(&self, graph: &Graph, groups: Vec<String>, center: Option<String>) -> Arc<GraphLayout> {
+    pub fn place(
+        &self,
+        graph: &Graph,
+        groups: Vec<String>,
+        center: Option<String>,
+        forces: Forces,
+    ) -> Arc<GraphLayout> {
         let key = {
-            let json = serde_json::to_vec(&(graph, &groups, &center)).unwrap_or_default();
+            let json = serde_json::to_vec(&(graph, &groups, &center, forces)).unwrap_or_default();
             crate::version::StableHasher::new().bytes(&json).finish()
         };
         {
@@ -659,7 +769,7 @@ impl Layouts {
                 return hit.1;
             }
         }
-        let layout = Arc::new(place(graph, groups, center));
+        let layout = Arc::new(place(graph, groups, center, forces));
         let mut entries = self.entries.lock();
         entries.push_front((key, layout.clone()));
         entries.truncate(LAYOUTS);
@@ -672,13 +782,13 @@ impl Snapshot {
     /// кэша `layouts`, если такой граф уже раскладывали.
     pub fn graph_layout_cached(&self, f: &GraphFilter, layouts: &Layouts) -> Arc<GraphLayout> {
         let (shown, groups) = self.shown(f);
-        layouts.place(&shown, groups, f.around.clone())
+        layouts.place(&shown, groups, f.around.clone(), f.forces)
     }
 
     /// Граф хранилища по фильтру, разложенный для рисования.
     pub fn graph_layout(&self, f: &GraphFilter) -> GraphLayout {
         let (shown, groups) = self.shown(f);
-        place(&shown, groups, f.around.clone())
+        place(&shown, groups, f.around.clone(), f.forces)
     }
 
     /// Показанный граф по фильтру и все группы хранилища.
@@ -860,7 +970,7 @@ mod tests {
     /// Время раскладки и раздвигания подписей (мс) и качество.
     fn bench_current(graph: &BenchGraph) -> (f64, f64, Quality) {
         let started = Instant::now();
-        let mut pos = layout_forces(graph.boxes.len(), &graph.links);
+        let mut pos = layout_forces(graph.boxes.len(), &graph.links, &graph.groups, Forces::default());
         let forces = started.elapsed().as_secs_f64() * 1000.0;
         let started = Instant::now();
         separate(&mut pos, &graph.boxes);
@@ -984,8 +1094,8 @@ mod tests {
 
     #[test]
     fn layout_is_deterministic_and_keeps_orphans_near() {
-        let pos = layout(7, &RING, None);
-        assert_eq!(pos, layout(7, &RING, None));
+        let pos = layout(7, &RING, &[], None, Forces::default());
+        assert_eq!(pos, layout(7, &RING, &[], None, Forces::default()));
         let dist = |p: usize, q: usize| (pos[p].0 - pos[q].0).hypot(pos[p].1 - pos[q].1);
         let cluster = dist(0, 1).max(dist(1, 2)).max(dist(0, 3));
         for lone in 4..7 {
@@ -1007,8 +1117,8 @@ mod tests {
         ];
         let star: Vec<_> = (1..names.len()).map(|i| (0, i)).collect();
         let boxes: Vec<_> = names.iter().map(|n| NodeBox { r: 6.0, label: label_width(n, LABEL_SIZE) }).collect();
-        let pos = layout(names.len(), &star, Some(&boxes));
-        assert_eq!(pos, layout(names.len(), &star, Some(&boxes)));
+        let pos = layout(names.len(), &star, &[], Some(&boxes), Forces::default());
+        assert_eq!(pos, layout(names.len(), &star, &[], Some(&boxes), Forces::default()));
         for i in 0..names.len() {
             for j in i + 1..names.len() {
                 let [a0, a1, a2, a3] = box_rect(pos[i], boxes[i]);
@@ -1033,21 +1143,24 @@ mod tests {
     fn layouts_are_cached_by_graph() {
         let layouts = Layouts::default();
         let g = sample();
-        let a = layouts.place(&g, vec![], None);
-        assert!(Arc::ptr_eq(&a, &layouts.place(&g, vec![], None)), "тот же граф — из кэша");
-        assert_eq!(*a, place(&g, vec![], None));
-        let other = layouts.place(&g, vec![], Some("D".into()));
+        let f = Forces::default();
+        let a = layouts.place(&g, vec![], None, f);
+        assert!(Arc::ptr_eq(&a, &layouts.place(&g, vec![], None, f)), "тот же граф — из кэша");
+        assert_eq!(*a, place(&g, vec![], None, f));
+        let other = layouts.place(&g, vec![], Some("D".into()), f);
         assert!(!Arc::ptr_eq(&a, &other), "другой центр — другая раскладка");
         let mut g2 = sample();
         g2.edges.pop();
-        assert!(!Arc::ptr_eq(&a, &layouts.place(&g2, vec![], None)), "другой граф — заново");
+        assert!(!Arc::ptr_eq(&a, &layouts.place(&g2, vec![], None, f)), "другой граф — заново");
+        let looser = layouts.place(&g, vec![], None, Forces { repel: 200, ..f });
+        assert!(!Arc::ptr_eq(&a, &looser), "другие силы — заново");
     }
 
     #[test]
     fn layout_handles_empty_single_and_without_links() {
-        assert!(layout(0, &[], Some(&[])).is_empty());
-        assert_eq!(layout(1, &[], None), vec![(0.0, 0.0)]);
-        let pos = layout(32, &[], None);
+        assert!(layout(0, &[], &[], Some(&[]), Forces::default()).is_empty());
+        assert_eq!(layout(1, &[], &[], None, Forces::default()), vec![(0.0, 0.0)]);
+        let pos = layout(32, &[], &[], None, Forces::default());
         assert_eq!(pos.len(), 32);
         assert!(pos.iter().all(|(x, y)| x.is_finite() && y.is_finite()));
     }
@@ -1055,8 +1168,8 @@ mod tests {
     #[test]
     fn layout_is_bit_identical_for_generated_graph() {
         let graph = synthetic_graph(480);
-        let a = layout(480, &graph.links, Some(&graph.boxes));
-        let b = layout(480, &graph.links, Some(&graph.boxes));
+        let a = layout(480, &graph.links, &[], Some(&graph.boxes), Forces::default());
+        let b = layout(480, &graph.links, &[], Some(&graph.boxes), Forces::default());
         let bits = |v: &[(f64, f64)]| v.iter().map(|p| (p.0.to_bits(), p.1.to_bits())).collect::<Vec<_>>();
         assert_eq!(bits(&a), bits(&b));
     }
@@ -1067,15 +1180,34 @@ mod tests {
         for b in &mut graph.boxes {
             b.label = label_width("узел", LABEL_SIZE);
         }
-        let pos = layout(180, &graph.links, Some(&graph.boxes));
+        let pos = layout(180, &graph.links, &[], Some(&graph.boxes), Forces::default());
         let q = quality(&pos, &graph);
         assert_eq!(q.overlaps, 0);
     }
 
     #[test]
+    fn forces_do_what_they_say() {
+        let graph = synthetic_graph(300);
+        let q = |forces| quality(&layout(300, &graph.links, &graph.groups, Some(&graph.boxes), forces), &graph);
+        let base = q(Forces::default());
+        let clusters = q(Forces { clusters: 100, ..Forces::default() });
+        let repel = q(Forces { repel: 200, ..Forces::default() });
+        let center = q(Forces { center: 50, ..Forces::default() });
+        let links = q(Forces { links: 500, ..Forces::default() });
+        let apart = |q: &Quality| q.group_gap / q.intra_group;
+        assert!(apart(&clusters) > apart(&base) * 1.4, "папки - врозь");
+        assert!(repel.area_per_node > base.area_per_node * 1.3, "просторнее");
+        assert!(center.area_per_node > base.area_per_node * 1.3, "слабее к центру - просторнее");
+        assert!(links.edge_mean < base.edge_mean * 0.9, "связи короче");
+        for q in [clusters, repel, center, links] {
+            assert_eq!(q.overlaps, 0);
+        }
+    }
+
+    #[test]
     fn placed_nodes_and_bounds() {
         let g = sample();
-        let l = place(&g, vec!["Сеть".into(), "Мат".into(), ROOT_GROUP.into()], None);
+        let l = place(&g, vec!["Сеть".into(), "Мат".into(), ROOT_GROUP.into()], None, Forces::default());
         let c = l.nodes.iter().find(|n| n.id == "Мат/C").unwrap();
         assert_eq!((c.name.as_str(), c.group.as_str(), c.degree), ("C", "Мат", 1));
         assert!(c.r > l.nodes.iter().find(|n| n.id == "E").unwrap().r, "книга крупнее");

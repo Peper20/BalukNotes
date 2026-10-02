@@ -90,11 +90,12 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, Can
 
 /* ── Верхняя строка ─────────────────────────────────────────────────── */
 .main { min-width: 0; }
-.topbar {
-  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 0.4rem;
-  padding: 0.4rem 0.6rem; background: color-mix(in srgb, var(--k-bg) 88%, transparent);
-  backdrop-filter: blur(6px); border-bottom: 1px solid var(--k-line);
+/* Верхняя строка и вкладки - одна панель: общий фон и прокрутка, без щели. */
+.chrome {
+  position: sticky; top: 0; z-index: 5; border-bottom: 1px solid var(--k-line);
+  background: color-mix(in srgb, var(--k-bg) 88%, transparent); backdrop-filter: blur(6px);
 }
+.topbar { display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.6rem; }
 .crumbs { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--k-muted); }
 .crumbs b { color: var(--k-text); font-weight: 600; }
 .status { color: var(--k-muted); font-size: 0.85em; white-space: nowrap; }
@@ -179,7 +180,30 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .graph-title .graph-all { font-weight: 400; color: var(--k-muted); }
 .graph-zoom { display: inline-flex; }
 .graph-count { margin-left: auto; font-variant-numeric: tabular-nums; }
-.graph-canvas { flex: 1; min-height: 0; position: relative; border-top: 1px solid var(--k-line); border-bottom: 1px solid var(--k-line); }
+.graph-body { flex: 1; min-height: 0; display: flex; border-top: 1px solid var(--k-line); border-bottom: 1px solid var(--k-line); }
+.graph-canvas { flex: 1; min-width: 0; position: relative; }
+.graph-zoom button.icon.on { color: var(--k-accent); }
+/* Силы графа: сбоку от графа (узкий экран - под ним), граф виден и отвечает сразу. */
+.graph-forces { flex: none; overflow: hidden; border-left: 1px solid var(--k-line); background: var(--k-surface); font-size: 0.85em; }
+/* Ширина содержимого постоянная: пока панель выезжает, ползунки не переносятся, а открываются. */
+.graph-forces-in { width: 15rem; height: 100%; box-sizing: border-box; overflow-y: auto; padding: 0.3rem 0.9rem 0.8rem; }
+.graph-forces-head { display: flex; align-items: center; justify-content: space-between; margin-right: -0.5rem; }
+.graph-forces-head h2 { margin: 0; font-size: 1em; font-weight: 600; color: var(--k-text); }
+.graph-forces h3 { margin: 0.6rem 0 0.2rem; font-size: 0.8em; letter-spacing: 0.06em; text-transform: uppercase; color: var(--k-muted); font-weight: 600; }
+.force { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0 0.5rem; padding: 0.3rem 0; cursor: pointer; }
+.force output { color: var(--k-muted); font-variant-numeric: tabular-nums; }
+.force input[type="range"] { grid-column: 1 / -1; width: 100%; margin: 0.25rem 0 0; accent-color: var(--k-accent); cursor: pointer; }
+.force-reset {
+  margin-top: 0.7rem; font: inherit; color: var(--k-text); background: none; cursor: pointer;
+  border: 1px solid var(--k-line); border-radius: 6px; padding: 0.25rem 0.7rem;
+}
+.force-reset:hover:not(:disabled) { border-color: var(--k-accent); color: var(--k-accent); }
+.force-reset:disabled { opacity: 0.45; cursor: default; }
+@media (max-width: 700px) {
+  .graph-body { flex-direction: column; }
+  .graph-forces { max-height: 45%; border-left: none; border-top: 1px solid var(--k-line); }
+  .graph-forces-in { width: auto; max-height: 45vh; }
+}
 .graph-empty { margin: 3rem auto; text-align: center; color: var(--k-muted); }
 .backlinks h2 .backlinks-graph { font-size: 0.75em; font-weight: 400; margin-left: 0.6em; }
 
@@ -192,8 +216,8 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
  * JS: ширина колонки зависит от кегля); иначе — всплывающая панель по §. */
 .toc { display: none; }
 :root[data-toc="true"] .app.toc-room .toc, .toc.open {
-  display: block; position: fixed; top: 3.6rem; z-index: 4; overflow-y: auto; box-sizing: border-box;
-  max-height: calc(100vh - 4.6rem); padding: 0.2rem 0.4rem 1rem; font-size: 13px;
+  display: block; position: fixed; top: calc(var(--chrome-h, 3rem) + 0.6rem); z-index: 4; overflow-y: auto; box-sizing: border-box;
+  max-height: calc(100vh - var(--chrome-h, 3rem) - 1.6rem); padding: 0.2rem 0.4rem 1rem; font-size: 13px;
 }
 :root[data-toc="true"] .app.toc-room .toc:not(.open) { right: 1rem; width: var(--toc-w, 15rem); }
 .toc.open {
@@ -359,7 +383,7 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 }
 
 /* Якорь не прячется под липкой верхней строкой. */
-.k-note [id] { scroll-margin-top: 3.5rem; }
+.k-note [id] { scroll-margin-top: calc(var(--chrome-h, 3rem) + 0.6rem); }
 
 /* ── Палитра: быстрый переход, команды, поиск ───────────────────────── */
 .palette-backdrop { position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / 0.25); }
@@ -410,15 +434,14 @@ kbd {
 
 /* ── Вкладки ────────────────────────────────────────────────────────── */
 .tabbar {
-  position: sticky; top: 2.9rem; z-index: 4; display: flex; gap: 2px; overflow-x: auto; padding: 0.25rem 0.5rem 0;
-  background: var(--k-surface); border-bottom: 1px solid var(--k-line); scrollbar-width: thin;
+  display: flex; gap: 2px; overflow-x: auto; padding: 0 0.5rem; margin-bottom: -1px; scrollbar-width: thin;
 }
 .tab {
   display: flex; align-items: center; gap: 0.3rem; max-width: 14rem; padding: 0.3rem 0.4rem 0.3rem 0.8rem;
   border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; cursor: pointer; color: var(--k-muted);
 }
 .tab:hover { color: var(--k-text); }
-.tab.active { background: var(--k-bg); color: var(--k-text); border-color: var(--k-line); margin-bottom: -1px; }
+.tab.active { background: var(--k-bg); color: var(--k-text); border-color: var(--k-line); }
 .tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab-close, .tab-new {
   display: inline-grid; place-items: center; padding: 0; flex: none;
@@ -470,5 +493,5 @@ kbd {
 /* Панель скрыта (display: none) — колонка заметки одна: иначе она встала бы в нулевую. */
 .app.reading { grid-template-columns: 1fr; }
 .app.reading .sidebar, .app.reading .tabbar, .app.reading .toc:not(.open) { display: none !important; }
-.app.reading .topbar { opacity: 0; transition: opacity 0.2s; }
-.app.reading .topbar:hover, .app.reading .topbar:focus-within { opacity: 1; }
+.app.reading .chrome { opacity: 0; transition: opacity 0.2s; }
+.app.reading .chrome:hover, .app.reading .chrome:focus-within { opacity: 1; }

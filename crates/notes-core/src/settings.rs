@@ -189,6 +189,20 @@ impl Schema {
             device: false,
             shared: false,
         };
+        // Силы графа, % от обычных: страница графа, для всех хранилищ.
+        let percent = |key, label, help, (min, max): (u32, u32), default: u32| {
+            SettingDef {
+                key,
+                label,
+                help: Some(help),
+                kind: Kind::Number { min: f64::from(min), max: f64::from(max), step: 5.0 },
+                default: json!(default),
+                apply: None,
+                device: false,
+                shared: false,
+            }
+            .shared()
+        };
         let number = |key, label, help, (min, max, step): (f64, f64, f64), default: u64| SettingDef {
             key,
             label,
@@ -209,6 +223,7 @@ impl Schema {
                 Group { key: "books", label: "Книги" },
                 Group { key: "figures", label: "Рисунки" },
                 Group { key: "panels", label: "Панели" },
+                Group { key: "graph", label: "Граф" },
                 Group { key: "refresh", label: "Обновление" },
                 Group { key: "device", label: "Это устройство" },
             ],
@@ -326,6 +341,30 @@ impl Schema {
                     shared: false,
                 },
                 bool_def("panels.backlinks", "«Ссылаются сюда» под заметкой", true).attr("data-backlinks"),
+                percent(
+                    "graph.clusters",
+                    "Папки, %",
+                    "Узлы папки держатся вместе, между папками - просвет",
+                    (0, 300),
+                    0,
+                ),
+                percent("graph.repel", "Отталкивание узлов, %", "Больше - граф просторнее", (25, 300), 100),
+                percent("graph.center", "Притяжение к центру, %", "Меньше - граф просторнее", (25, 300), 100),
+                percent("graph.links", "Притяжение связей, %", "Больше - связанные заметки ближе", (25, 500), 100),
+                percent(
+                    "graph.pull",
+                    "Соседи тянутся за узлом, %",
+                    "Насколько соседи следуют за перетаскиваемым узлом",
+                    (0, 300),
+                    100,
+                ),
+                percent(
+                    "graph.return",
+                    "Соседи возвращаются, %",
+                    "Какую часть пути назад соседи проходят, когда узел отпустили",
+                    (0, 100),
+                    25,
+                ),
                 SettingDef {
                     key: "refresh.mode",
                     label: "Показывать изменения заметок",

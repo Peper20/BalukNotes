@@ -58,11 +58,12 @@ export class Frames {
 
   /**
    * Переход за `duration` мс: `step(e)` с долей пути `e` (с замедлением),
-   * последний кадр — `e = 1`.
+   * последний кадр — `e = 1`. Метка кадра бывает раньше `start` (начало
+   * кадра, в котором позвали) — тогда `e = 0`, а не шаг назад.
    */
   tween(duration: number, step: (e: number) => void, start = performance.now()): void {
     this.run((now) => {
-      const t = Math.min((now - start) / duration, 1);
+      const t = Math.min(Math.max((now - start) / duration, 0), 1);
       step(ease(t));
       return t < 1;
     });

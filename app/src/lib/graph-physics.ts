@@ -40,6 +40,18 @@ const SPRING = 0.07;
 const DAMPING = 0.3;
 /** Какую долю пути к прежнему месту соседи проходят после отпускания. */
 const RETURN = 0.25;
+
+/**
+ * Отклик соседей на перетаскивание (настройки графа): `pull` — во сколько
+ * раз сильнее обычного рёбра тянут соседей за узлом (0 — стоят), `back` —
+ * какую долю пути к прежним местам они проходят, когда узел отпустили.
+ */
+export interface Drag {
+  pull: number;
+  back: number;
+}
+export const DRAG: Drag = { pull: 1, back: RETURN };
+
 /** Сдвиг (единиц раскладки за шаг), ниже которого граф считается осевшим. */
 const REST = 0.02;
 /** С какого числа узлов пары для раздвигания — по решётке, а не все. */
@@ -104,6 +116,8 @@ export class Physics {
   private held = -1;
   /** Брошенный узел: стоит, пока соседи оседают (иначе их пружины его качнут). */
   private dropped = -1;
+  /** Отклик соседей — можно менять на ходу. */
+  response: Drag = DRAG;
 
   constructor(nodes: PhysicsNode[], edges: [number, number][], frame: Rect | null = null) {
     this.n = nodes.length;
@@ -188,7 +202,7 @@ export class Physics {
     this.held = -1;
     this.dropped = i;
     for (let k = 0; k < 2 * this.n; k++) {
-      const back = k >> 1 === i ? 0 : RETURN;
+      const back = k >> 1 === i ? 0 : this.response.back;
       this.home[k] = this.pos[k]! + (this.home[k]! - this.pos[k]!) * back;
     }
     for (const l of this.links) l[2] = this.span(l[0], l[1]);
@@ -210,11 +224,12 @@ export class Physics {
     const before = pos.slice();
     const force = new Float64Array(2 * n);
     for (let i = 0; i < 2 * n; i++) force[i] = (home[i]! - pos[i]!) * HOME;
+    const spring = SPRING * this.response.pull;
     for (const [a, b, len] of this.links) {
       const dx = pos[2 * b]! - pos[2 * a]!;
       const dy = pos[2 * b + 1]! - pos[2 * a + 1]!;
       const d = Math.max(Math.hypot(dx, dy), 1e-6);
-      const f = ((d - len) / d) * SPRING;
+      const f = ((d - len) / d) * spring;
       force[2 * a]! += dx * f;
       force[2 * a + 1]! += dy * f;
       force[2 * b]! -= dx * f;

@@ -102,7 +102,7 @@ pub fn evict(max_age: usize) {
         subevict(max_age);
     }
 
-    accelerate::evict();
+    accelerate::evict(max_age == 0);
 }
 
 /// Register an eviction function in the global list.
