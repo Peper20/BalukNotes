@@ -2,11 +2,13 @@
 
 import { homeHref } from "../ids";
 import { load, save } from "../storage";
-import { clampActive, closeAt, dropTabs, openAfter, type Tab, type TabList } from "../tabs";
+import { clampActive, closeAt, dropTabs, openAfter, openBehind, type Tab, type TabList } from "../tabs";
 
 class Tabs {
   list = $state<Tab[]>(load<{ tabs: Tab[] }>("k-tabs", { tabs: [] }).tabs);
   active = $state(load<{ active: number }>("k-tabs", { active: 0 }).active);
+  /** Сколько фоновых вкладок открыто из активной (`from`) с её последнего перехода. */
+  #behind = { from: -1, url: "", count: 0 };
 
   /** После загрузки: хотя бы одна вкладка, активная — в пределах. */
   restore(): void {
@@ -23,6 +25,14 @@ class Tabs {
 
   openAfter(url: string): void {
     this.#set(openAfter(this.#state(), url));
+  }
+
+  /** Новая вкладка в фоне; переход в активной или другая активная — новые встают сразу за ней. */
+  openBehind(url: string): void {
+    const from = this.list[this.active]?.url ?? "";
+    if (this.#behind.from !== this.active || this.#behind.url !== from) this.#behind = { from: this.active, url: from, count: 0 };
+    this.#set(openBehind(this.#state(), url, this.#behind.count++));
+    this.save();
   }
 
   /** Закрыть; null — последняя вкладка (закрыть нельзя). */

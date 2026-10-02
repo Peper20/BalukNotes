@@ -134,11 +134,15 @@ test("вкладки: Ctrl+клик, переключение, закрытие"
   await open(page, "Особые случаи/Ссылки");
   await page.locator("#note").getByRole("link", { name: "Дно", exact: true }).click({ modifiers: ["Control"] });
   await ready(page);
+  // в фоне, как в браузере: страница та же
   const tabs = page.locator(".tabbar .tab");
   await expect(tabs).toHaveCount(2);
-  await expect(tabs.nth(1)).toHaveClass(/active/);
-  await expect(title(page)).toHaveText("Дно");
+  await expect(tabs.nth(0)).toHaveClass(/active/);
+  await expect(title(page)).toHaveText("Ссылки");
 
+  await tabs.nth(1).click();
+  await ready(page);
+  await expect(title(page)).toHaveText("Дно");
   await tabs.nth(0).click();
   await ready(page);
   await expect(title(page)).toHaveText("Ссылки");

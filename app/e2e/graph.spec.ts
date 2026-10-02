@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => localStorage.removeItem("k-graph@vault"));
 });
 
-test("граф: кнопки и колесо масштабируют, узел переставляется, щелчок открывает заметку", async ({ page }) => {
+test("граф: кнопки и колесо масштабируют, узел переставляется, щелчок открывает заметку, Ctrl+щелчок - в фоне", async ({ page }) => {
   await page.goto(vaultUrl("/graph"));
   await ready(page);
   await expect(page.locator(".graph-node")).not.toHaveCount(0);
@@ -37,6 +37,11 @@ test("граф: кнопки и колесо масштабируют, узел 
   await page.mouse.move(c.x + 60, c.y + 40, { steps: 5 });
   await page.mouse.up();
   expect(await nodeAt(page, "Сеть/SSH")).not.toBe(before);
+  await expect(page).toHaveURL(/\/graph$/);
+
+  // Ctrl+щелчок — заметка в фоновой вкладке, граф остаётся
+  await ssh.click({ modifiers: ["Control"] });
+  await expect(page.locator(".tabbar .tab")).toHaveCount(2);
   await expect(page).toHaveURL(/\/graph$/);
 
   await ssh.click();

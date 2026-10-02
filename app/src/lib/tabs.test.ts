@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { clampActive, closeAt, cycle, dropTabs, openAfter } from "./tabs";
+import { clampActive, closeAt, cycle, dropTabs, openAfter, openBehind } from "./tabs";
 
 const list = (...urls: string[]) => urls.map((url) => ({ url }));
 
@@ -34,4 +34,10 @@ it("убрать вкладки удалённой заметки", () => {
   expect(dropTabs({ tabs: list("/a", "/c"), active: 0 }, isA, "/")).toEqual({ tabs: list("/c"), active: 0, activeDropped: true });
   // Не осталось ни одной — одна новая.
   expect(dropTabs({ tabs: list("/a", "/a#y"), active: 1 }, isA, "/home")).toEqual({ tabs: list("/home"), active: 0, activeDropped: true });
+});
+
+it("фоновая вкладка — после активной и уже открытых из неё, активная та же", () => {
+  expect(openBehind({ tabs: list("/a", "/b"), active: 0 }, "/x", 0)).toEqual({ tabs: list("/a", "/x", "/b"), active: 0 });
+  expect(openBehind({ tabs: list("/a", "/x", "/b"), active: 0 }, "/y", 1)).toEqual({ tabs: list("/a", "/x", "/y", "/b"), active: 0 });
+  expect(openBehind({ tabs: list("/a"), active: 0 }, "/x", 5)).toEqual({ tabs: list("/a", "/x"), active: 0 });
 });
