@@ -20,16 +20,42 @@ pub fn id() -> usize {
     ID.fetch_add(1, Ordering::SeqCst)
 }
 
-/// Evict the accelerators.
-pub fn evict() {
+/// Evict the accelerators. With `release`, also free their memory (a full
+/// eviction: the vector and the maps can hold hundreds of megabytes).
+pub fn evict(release: bool) {
     let mut accelerators = ACCELERATORS.write();
     let (offset, vec) = &mut *accelerators;
 
     // Update the offset.
     *offset = ID.load(Ordering::SeqCst);
 
+    if release {
+        *vec = Vec::new();
+        return;
+    }
+
     // Clear all accelerators while keeping the memory allocated.
     vec.iter_mut().for_each(|accelerator| accelerator.lock().clear())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_evict_release() {
+        let a = id();
+        get(a).unwrap().lock().insert(1, 2);
+        evict(false);
+        assert!(get(a).is_none());
+        assert!(ACCELERATORS.read().1.capacity() > 0);
+        let b = id();
+        get(b).unwrap().lock().insert(3, 4);
+        evict(true);
+        assert_eq!(ACCELERATORS.read().1.capacity(), 0);
+        let c = id();
+        assert!(get(c).unwrap().lock().is_empty());
+    }
 }
 
 /// Get an accelerator by ID.
