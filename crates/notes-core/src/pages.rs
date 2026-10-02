@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -58,11 +58,36 @@ pub struct Pages {
     building: Mutex<HashMap<NoteId, Arc<Mutex<()>>>>,
     /// Сколько запросов страниц сейчас ждут: прогрев им уступает.
     waiting: AtomicUsize,
+    /// Состояние релиза памяти после серии сборок.
+    releaser: Arc<Mutex<ReleaserState>>,
+}
+
+/// E5: релиз даёт около +3 мс к следующей пересборке; 5 с - компромисс,
+/// который заметно снижает idle RSS и срабатывает в обычной работе.
+const IDLE_RELEASE_DELAY: Duration = Duration::from_secs(5);
+const RELEASE_POLL_DELAY: Duration = Duration::from_millis(200);
+
+#[derive(Debug, Default)]
+struct ReleaserState {
+    /// Была ли сборка после последнего релиза.
+    pending_release: bool,
+    /// Последняя запись сборки в кэш.
+    last_build: Option<Instant>,
 }
 
 impl Pages {
     pub fn new(vault: Vault, pipeline: Arc<dyn Pipeline>, cache: PageCache) -> Self {
-        Self { vault, pipeline, cache: Arc::new(cache), building: Mutex::default(), waiting: AtomicUsize::new(0) }
+        let pages = Self {
+            vault,
+            pipeline,
+            cache: Arc::new(cache),
+            building: Mutex::default(),
+            waiting: AtomicUsize::new(0),
+            releaser: Arc::new(Mutex::default()),
+        };
+        // Один дебаунсер на Pages: релиз памяти по простоям.
+        pages.spawn_releaser();
+        pages
     }
 
     pub fn vault(&self) -> &Vault {
@@ -190,7 +215,42 @@ impl Pages {
             links,
         };
         self.cache.store(&entry.id, record, raw, page.clone());
+        self.note_built();
         page.map(|(p, _)| p)
+    }
+
+    /// Отложенный выпуск памяти: отметить сборку (дебаунсер увидит простой).
+    fn note_built(&self) {
+        let mut state = self.releaser.lock();
+        state.pending_release = true;
+        state.last_build = Some(Instant::now());
+    }
+
+    /// Один рабочий поток на `Pages`, проверяет простой и вызывает релиз.
+    fn spawn_releaser(&self) {
+        let pipeline = Arc::downgrade(&self.pipeline);
+        let releaser = Arc::downgrade(&self.releaser);
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(RELEASE_POLL_DELAY);
+                let (Some(pipeline), Some(releaser)) = (pipeline.upgrade(), releaser.upgrade()) else {
+                    break;
+                };
+                let should_release = {
+                    let mut state = releaser.lock();
+                    let idle = state.last_build.as_ref().is_some_and(|built| built.elapsed() >= IDLE_RELEASE_DELAY);
+                    if state.pending_release && idle {
+                        state.pending_release = false;
+                        true
+                    } else {
+                        false
+                    }
+                };
+                if should_release {
+                    pipeline.release_memory();
+                }
+            }
+        });
     }
 }
 
@@ -395,5 +455,16 @@ pub(crate) mod tests {
         let s = Setup::new(&[("Книга/main.typ", "книга"), ("Книга/01.typ", "")]);
         let (pages, _) = s.pages(false, Duration::ZERO);
         assert_eq!(pages.page(&id("Книга"), OPTS).unwrap().kind, NoteKind::Book);
+    }
+
+    #[test]
+    fn drop_pages_drops_pipeline() {
+        let s = Setup::new(&[]);
+        let (pages, pipeline) = s.pages(false, Duration::ZERO);
+        let weak = Arc::downgrade(&pipeline);
+        drop(pipeline);
+        drop(pages);
+        std::thread::sleep(Duration::from_millis(250));
+        assert!(weak.upgrade().is_none(), "поток релиза не должен держать pipeline");
     }
 }
