@@ -19,6 +19,15 @@ export function openAfter({ tabs, active }: TabList, url: string): TabList {
 }
 
 /**
+ * Новая вкладка в фоне (Ctrl+щелчок): после активной и тех, что уже открыты
+ * так же из неё (`opened`), — по порядку, как в браузере; активная та же.
+ */
+export function openBehind({ tabs, active }: TabList, url: string, opened: number): TabList {
+  const at = Math.min(active + 1 + opened, tabs.length);
+  return { tabs: [...tabs.slice(0, at), { url }, ...tabs.slice(at)], active };
+}
+
+/**
  * Закрыть вкладку `i` (последнюю закрыть нельзя — null): активной остаётся
  * та же вкладка, а если закрыли её — соседняя слева (крайняя — справа).
  */

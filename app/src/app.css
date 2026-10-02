@@ -181,7 +181,6 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .graph-count { margin-left: auto; font-variant-numeric: tabular-nums; }
 .graph-canvas { flex: 1; min-height: 0; position: relative; border-top: 1px solid var(--k-line); border-bottom: 1px solid var(--k-line); }
 .graph-empty { margin: 3rem auto; text-align: center; color: var(--k-muted); }
-.graph-page .graph-hint { margin: 0; padding: 0.3rem 0.8rem; font-size: 0.8em; color: var(--k-muted); }
 .backlinks h2 .backlinks-graph { font-size: 0.75em; font-weight: 400; margin-left: 0.6em; }
 
 /* ── Пустое состояние и список ──────────────────────────────────────── */

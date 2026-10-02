@@ -46,7 +46,7 @@
 
   /**
    * Ссылки на заметки, теги и якоря — внутри клиента, без перезагрузки.
-   * Ctrl+клик и средняя кнопка — во вкладке приложения, а не браузера.
+   * Ctrl+клик и средняя кнопка — в фоновой вкладке приложения, а не браузера.
    */
   function onClick(e: MouseEvent) {
     const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
@@ -63,8 +63,9 @@
       return;
     }
     e.preventDefault();
+    if (newTab) return router.behind(url.pathname + url.search + url.hash);
     if (mobile.matches) ui.sidebarOpen = false;
-    router.go(url.pathname + url.search + url.hash, { newTab });
+    router.go(url.pathname + url.search + url.hash);
   }
 
   /** Горячие клавиши — по реестру команд; одиночные — не во время ввода. */

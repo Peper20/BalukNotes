@@ -34,7 +34,8 @@
   }: {
     /** Граф с раскладкой из ядра (`POST /api/graph/layout` или `#vault-graph` заметки). */
     layout: GraphLayout;
-    onopen: (id: string, newTab: boolean) => void;
+    /** `background` — Ctrl+щелчок или средняя кнопка: в фоновой вкладке. */
+    onopen: (id: string, background: boolean) => void;
     interactive?: boolean;
     /** Совпадения поиска: остальные узлы бледнеют. */
     highlight?: Set<string> | null;

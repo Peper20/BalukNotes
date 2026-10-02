@@ -31,8 +31,15 @@ class Router {
     this.sync();
   }
 
-  open(id: string, anchor?: string | null, { newTab = false } = {}): void {
-    this.go(noteHref(id, anchor), { newTab });
+  /** Заметка; `background` — в новой вкладке в фоне (Ctrl+щелчок). */
+  open(id: string, anchor?: string | null, { background = false } = {}): void {
+    if (background) this.behind(noteHref(id, anchor));
+    else this.go(noteHref(id, anchor));
+  }
+
+  /** Открыть в новой вкладке в фоне: страница и активная вкладка не меняются. */
+  behind(url: string | URL): void {
+    tabs.openBehind(inVault(String(url)));
   }
 
   switchTab(i: number): void {

@@ -134,12 +134,8 @@
         interactive
         {titles}
         highlight={hits}
-        onopen={(id, newTab) => router.open(id, null, { newTab })}
+        onopen={(id, background) => router.open(id, null, { background })}
       />
     {/if}
   </section>
-  <p class="graph-hint">
-    Колесо или два пальца — масштаб, протянуть фон — сдвиг, протянуть узел — переставить (соседи потянутся за ним;
-    вернуть всех на места — кнопкой ↶), щелчок — открыть (Ctrl — в новой вкладке).
-  </p>
 </main>

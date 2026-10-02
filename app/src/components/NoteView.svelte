@@ -58,7 +58,7 @@
     restoreDetails(el, open);
     linkTags(el);
     linkVault(el);
-    unmountLive = mountLive(el, (id, newTab) => router.open(id, null, { newTab }));
+    unmountLive = mountLive(el, (id, background) => router.open(id, null, { background }));
     ui.book = page.book;
     ui.chapter = page.book?.chapter ?? 0;
     reader.chapter = page.book ? page.book.chapter : null;

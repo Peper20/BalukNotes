@@ -1,7 +1,7 @@
 // Живой блок заметки: селектор разметки библиотеки и оживление одного элемента.
 
 /** Открыть заметку по щелчку на узле графа (без перезагрузки страницы). */
-export type OpenNote = (id: string, newTab: boolean) => void;
+export type OpenNote = (id: string, background: boolean) => void;
 
 export interface LiveContext {
   open: OpenNote;
