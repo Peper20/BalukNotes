@@ -52,6 +52,10 @@ serde = { version = "1", features = ["derive", "rc"] }
 # версия, что уже тянет typst.
 siphasher = "1"
 serde_json = { version = "1", features = ["preserve_order"] }
+# Аллокатор бинарника `notes`: возвращает системе память после сборок сам
+# (glibc держит сотни МБ свободных кусков; docs/research/E5.md). Под MSVC не
+# собирается - там системный.
+tikv-jemallocator = "0.6"
 tempfile = "3"
 trash = "5"
 thiserror = "2"

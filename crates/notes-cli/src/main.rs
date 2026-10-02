@@ -244,6 +244,11 @@ fn library(explicit: Option<&PathBuf>) -> LibrarySource {
     }
 }
 
+/// jemalloc: память после сборок возвращается системе (docs/research/E5.md).
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 fn main() -> ExitCode {
     tracing_subscriber::fmt()
         .with_env_filter(
