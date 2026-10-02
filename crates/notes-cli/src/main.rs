@@ -27,6 +27,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand, ValueEnum};
 use notes_core::check::{Report, check, check_note};
 use notes_core::new_note::NewNote;
+use notes_core::rename::RenameKind;
 use notes_core::search::{TaggedChapter, tagged_chapters};
 use notes_core::settings::{Platform, Schema, SettingsStore};
 use notes_core::vault::NoteKind;
@@ -137,6 +138,19 @@ enum Command {
         /// Тема; по умолчанию — первая (светлая).
         #[arg(long)]
         theme: Option<String>,
+    },
+    /// Переименовать заметку, книгу или папку, как в приложении: новое
+    /// название в файле (у папки — `_folder.toml`), имя файла (папки) — из
+    /// него, ссылки `#see` на неё в других заметках переписываются. Папка не
+    /// меняется. Печатает новый путь, затем — где поправлены ссылки.
+    Rename {
+        /// Путь заметки, книги или папки от корня хранилища: «Сеть/SSH».
+        id: String,
+        /// Новое название — любой текст.
+        title: String,
+        /// Только показать, что изменится.
+        #[arg(long)]
+        dry_run: bool,
     },
     /// Документация: как писать заметки, API библиотеки оформления.
     Docs {
@@ -353,10 +367,28 @@ fn run(cli: Cli) -> Result<ExitCode> {
             print_check(&report, json)
         }
         Command::Pdf { id, out, theme } => pdf(&notes, &note_id(&id, &vault)?, out, theme),
+        Command::Rename { id, title, dry_run } => rename(&notes, &note_id(&id, &vault)?, &title, dry_run),
         Command::Docs { .. } | Command::Info | Command::Vaults { .. } | Command::Serve { .. } => {
             unreachable!("обработано выше")
         }
     }
+}
+
+fn rename(notes: &Notes, id: &NoteId, title: &str, dry_run: bool) -> Result<ExitCode> {
+    // Не заметка и не книга — папка (её нет — ошибка ядра «не найдено»).
+    let kind = if notes.vault().entry(id).is_ok() { RenameKind::Note } else { RenameKind::Folder };
+    let plan = notes.rename(kind, id, title, !dry_run)?;
+    println!("{}", plan.to);
+    let links: Vec<String> = plan.links.iter().map(|l| format!("{} ({})", l.note, l.count)).collect();
+    match (links.is_empty(), dry_run) {
+        (true, _) => eprintln!("ссылок сюда в других заметках нет"),
+        (false, false) => eprintln!("ссылки поправлены: {}", links.join(", ")),
+        (false, true) => eprintln!("ссылки поправятся: {}", links.join(", ")),
+    }
+    if dry_run {
+        eprintln!("ничего не изменено (--dry-run)");
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn vaults_command(vaults: &Vaults, action: Option<VaultsAction>) -> Result<ExitCode> {

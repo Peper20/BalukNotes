@@ -40,6 +40,7 @@ notes new --vault "Имя" --title "Название"   # заготовка; е
 notes list --vault "Имя" | notes tags --vault "Имя"
 notes check --vault "Имя" [Путь]             # ошибки сборки, предупреждения, битые ссылки
 notes pdf --vault "Имя" Путь -o x.pdf [--theme night]
+notes rename --vault "Имя" Путь "Название"    # имя файла и ссылки на неё - тоже; --dry-run
 notes docs writing | library                 # как писать заметки; API библиотеки
 notes info                                   # где данные и хранилища
 ```
