@@ -193,8 +193,8 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
  * JS: ширина колонки зависит от кегля); иначе — всплывающая панель по §. */
 .toc { display: none; }
 :root[data-toc="true"] .app.toc-room .toc, .toc.open {
-  display: block; position: fixed; top: 3.6rem; z-index: 4; overflow-y: auto; box-sizing: border-box;
-  max-height: calc(100vh - 4.6rem); padding: 0.2rem 0.4rem 1rem; font-size: 13px;
+  display: block; position: fixed; top: calc(var(--chrome-h, 3rem) + 0.6rem); z-index: 4; overflow-y: auto; box-sizing: border-box;
+  max-height: calc(100vh - var(--chrome-h, 3rem) - 1.6rem); padding: 0.2rem 0.4rem 1rem; font-size: 13px;
 }
 :root[data-toc="true"] .app.toc-room .toc:not(.open) { right: 1rem; width: var(--toc-w, 15rem); }
 .toc.open {
@@ -360,7 +360,7 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 }
 
 /* Якорь не прячется под липкой верхней строкой. */
-.k-note [id] { scroll-margin-top: 3.5rem; }
+.k-note [id] { scroll-margin-top: calc(var(--chrome-h, 3rem) + 0.6rem); }
 
 /* ── Палитра: быстрый переход, команды, поиск ───────────────────────── */
 .palette-backdrop { position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / 0.25); }

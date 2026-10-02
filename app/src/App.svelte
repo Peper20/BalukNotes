@@ -37,6 +37,10 @@
 
   $effect(() => settings.apply(document.documentElement));
 
+  // Высота верхней панели (строка + вкладки) - для отступов якорей и оглавления.
+  let chromeHeight = $state(0);
+  $effect(() => document.documentElement.style.setProperty("--chrome-h", `${chromeHeight}px`));
+
   // Место чтения — по ходу прокрутки (к «назад» запись истории уже другая).
   let rememberTimer: ReturnType<typeof setTimeout> | undefined;
   function onScroll() {
@@ -106,7 +110,7 @@
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <div class="backdrop" onclick={() => (ui.sidebarOpen = false)}></div>
     <div class="main">
-      <div class="chrome">
+      <div class="chrome" bind:offsetHeight={chromeHeight}>
         <Topbar />
         <TabBar />
       </div>

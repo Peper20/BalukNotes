@@ -144,6 +144,28 @@ test("оглавление: сбоку на широком экране, всп�
   await expect(page.locator(`[id="${target}"]`)).toBeInViewport();
 });
 
+test("с вкладками: заголовок по якорю и оглавление - под панелью, а не за ней", async ({ page }) => {
+  await page.setViewportSize({ width: 1700, height: 900 });
+  await open(page, "демо/компоненты");
+  await page.keyboard.press("Alt+KeyT");
+  await ready(page);
+  await open(page, "демо/компоненты");
+  await expect(page.locator(".tabbar .tab")).toHaveCount(2);
+  const panel = (await page.locator(".chrome").boundingBox())!;
+  const toc = page.locator(".toc");
+  expect((await toc.boundingBox())!.y).toBeGreaterThanOrEqual(panel.y + panel.height);
+  const item = toc.locator("a").nth(2);
+  const target = decodeURIComponent((await item.getAttribute("href"))!.slice(1));
+  await item.click();
+  const heading = page.locator(`[id="${target}"]`);
+  await expect(async () => {
+    const y = (await heading.boundingBox())!.y;
+    expect(y).toBeGreaterThanOrEqual(panel.y + panel.height);
+    expect(y).toBeLessThan(panel.y + panel.height + 40);
+    expect(decodeURIComponent((await toc.locator("a.current").getAttribute("href"))!.slice(1))).toBe(target);
+  }).toPass();
+});
+
 test("оглавление: заголовок с формулой — формулой, а не текстом", async ({ page }) => {
   await page.setViewportSize({ width: 1700, height: 900 });
   await open(page, "Формулы и теги");

@@ -20,8 +20,9 @@
     // Докрутили до конца — последние разделы до верха окна не доедут.
     if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2) current = visible.at(-1);
     else {
+      const top = (document.querySelector(".chrome")?.getBoundingClientRect().bottom ?? 50) + 40;
       for (const el of visible) {
-        if (el.getBoundingClientRect().top > 90) break;
+        if (el.getBoundingClientRect().top > top) break;
         current = el;
       }
     }
