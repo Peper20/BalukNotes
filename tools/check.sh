@@ -28,6 +28,21 @@ if [[ $rust == 0 && $app == 0 ]]; then
   exit 2
 fi
 
+# target/ растёт без предела: cargo не удаляет старые варианты наших крейтов
+# (новый появляется от правки Cargo.toml, метки кэша, другого пути worktree).
+# Больше TARGET_LIMIT_GB (30) - сначала cargo clean. Чужой CARGO_TARGET_DIR
+# не чистим: его могут в это время собирать другие (агенты в worktree).
+limit_target() {
+  local limit=${TARGET_LIMIT_GB:-30} size
+  [[ -z ${CARGO_TARGET_DIR:-} && -d target ]] || return 0
+  size=$(du -s --block-size=1G target | cut -f1)
+  if (( size > limit )); then
+    echo "target/ - $size ГБ, больше предела $limit ГБ: cargo clean"
+    cargo clean
+  fi
+}
+limit_target
+
 logs=tests/.data/check
 rm -rf "$logs"
 mkdir -p "$logs"
