@@ -9,6 +9,7 @@
 
 use std::fmt;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::diag::Diagnostic;
@@ -53,16 +54,20 @@ pub trait Pipeline: Send + Sync + fmt::Debug {
 pub struct TypstPipeline {
     vault: Vault,
     compiler: Compiler,
-    themes: ThemeSet,
+    themes: Arc<ThemeSet>,
 }
 
 impl TypstPipeline {
-    pub fn new(vault: Vault, compiler: Compiler, themes: ThemeSet) -> Self {
+    pub fn new(vault: Vault, compiler: Compiler, themes: Arc<ThemeSet>) -> Self {
         Self { vault, compiler, themes }
     }
 
     pub fn themes(&self) -> &ThemeSet {
         &self.themes
+    }
+
+    pub fn themes_arc(&self) -> Arc<ThemeSet> {
+        self.themes.clone()
     }
 
     pub fn fonts(&self) -> &Fonts {

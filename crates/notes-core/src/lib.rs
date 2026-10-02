@@ -65,7 +65,7 @@ pub mod webfonts;
 pub mod world;
 
 pub use error::{Error, Result};
-pub use notes::{NotePage, Notes, NotesConfig};
+pub use notes::{NotePage, Notes, NotesConfig, SharedAssets};
 pub use vault::{Entry, NoteId, NoteKind, Vault};
 pub use vaults::{VaultName, Vaults};
 pub use world::LibrarySource;

@@ -97,10 +97,13 @@ impl AppState {
     /// Хранилище из адреса; ещё не открыто — открыть (в отдельном потоке).
     pub(crate) async fn vault(&self, name: String) -> error::ApiResult<Arc<OpenVault>> {
         if let Some(open) = self.vaults.opened(&name) {
+            open.touch();
             return Ok(open);
         }
         let vaults = self.vaults.clone();
-        error::blocking(move || vaults.get(&name)).await
+        let open = error::blocking(move || vaults.get(&name)).await?;
+        open.touch();
+        Ok(open)
     }
 
     /// С токеном доступа; пустая строка — как без токена.
@@ -144,6 +147,10 @@ pub async fn serve(
     std::thread::spawn(move || library.warm_fonts());
     // Прогрев и наблюдатель файлов — у каждого открытого хранилища.
     state.vaults.start_background();
+    // Неактивные хранилища без запросов и SSE закрываются по таймауту.
+    let vaults = state.vaults.clone();
+    let closing = state.closing.clone();
+    std::thread::spawn(move || vaults.close_idle_forever(&closing));
     let closing = state.closing.clone();
     let shutdown = async move {
         shutdown.await;

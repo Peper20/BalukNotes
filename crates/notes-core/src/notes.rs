@@ -60,6 +60,14 @@ pub struct NotesConfig {
     pub trash: Option<PathBuf>,
 }
 
+/// Общие для нескольких `Notes` ресурсы (сервер: ядро библиотеки и
+/// хранилища). Темы зависят только от библиотеки и шрифтов, не от хранилища.
+#[derive(Debug, Clone, Default)]
+pub struct SharedAssets {
+    pub fonts: Option<Arc<Fonts>>,
+    pub themes: Option<Arc<ThemeSet>>,
+}
+
 #[derive(Debug)]
 pub struct Notes {
     pages: Pages,
@@ -78,20 +86,25 @@ pub struct Notes {
 impl Notes {
     /// Хранилище — каталог `config.vault`.
     pub fn open(config: &NotesConfig) -> Result<Self> {
+        Self::open_with_shared(config, &SharedAssets::default())
+    }
+
+    /// То же, но с общими шрифтами и темами (сервер).
+    pub fn open_with_shared(config: &NotesConfig, shared: &SharedAssets) -> Result<Self> {
         let root = &config.vault;
         let storage = crate::storage::DirStorage::open(root).map_err(|e| Error::io(root, e))?;
         let storage = storage.with_trash(config.trash.clone());
-        let mut notes = Self::with_vault(Vault::new(Arc::new(storage)), config)?;
+        let mut notes = Self::with_vault(Vault::new(Arc::new(storage)), config, shared)?;
         notes.dir = Some(root.clone());
         Ok(notes)
     }
 
     /// Хранилище — любой [`Storage`] (`config.vault` не используется).
     pub fn with_storage(storage: Arc<dyn Storage>, config: &NotesConfig) -> Result<Self> {
-        Self::with_vault(Vault::new(storage), config)
+        Self::with_vault(Vault::new(storage), config, &SharedAssets::default())
     }
 
-    fn with_vault(vault: Vault, config: &NotesConfig) -> Result<Self> {
+    fn with_vault(vault: Vault, config: &NotesConfig, shared: &SharedAssets) -> Result<Self> {
         let library = match &config.library {
             LibrarySource::Dir(dir) => LibrarySource::Dir(fs::canonicalize(dir).map_err(|e| Error::io(dir, e))?),
             LibrarySource::Embedded => LibrarySource::Embedded,
@@ -99,8 +112,9 @@ impl Notes {
         if !library.is_valid() {
             return Err(Error::Library(format!("в библиотеке {library:?} нет lib.typ")));
         }
-        let fonts =
-            Arc::new(Fonts::load(&config.font_dirs).with_web_cache(config.cache.as_ref().map(|c| c.join("fonts"))));
+        let fonts = shared.fonts.clone().unwrap_or_else(|| {
+            Arc::new(Fonts::load(&config.font_dirs).with_web_cache(config.cache.as_ref().map(|c| c.join("fonts"))))
+        });
         let links = Arc::new(SourceIndex::default());
         let changes = Arc::new(Changes::default());
         links.set_changes(changes.clone());
@@ -119,7 +133,10 @@ impl Notes {
         };
         let stamp = crate::cache::stamp(&[library.fingerprint(), fonts.fingerprint()]);
         let compiler = Compiler::new(versions.clone(), library, fonts);
-        let themes = ThemeSet::load(&compiler)?;
+        let themes = match shared.themes.clone() {
+            Some(themes) => themes,
+            None => Arc::new(ThemeSet::load(&compiler)?),
+        };
         let disk = config.cache.as_ref().map(|dir| DiskCache::new(dir.join("pages"), &vault.location(), stamp));
         let cache = PageCache::new(versions, disk, MEMORY_BUDGET);
         let typst = Arc::new(TypstPipeline::new(vault.clone(), compiler, themes));
@@ -149,6 +166,11 @@ impl Notes {
 
     pub fn themes(&self) -> &ThemeSet {
         self.typst.themes()
+    }
+
+    /// Шрифты и темы этого ядра - для других ядер с той же библиотекой.
+    pub fn shared_assets(&self) -> SharedAssets {
+        SharedAssets { fonts: Some(self.typst.compiler().fonts().clone()), themes: Some(self.typst.themes_arc()) }
     }
 
     pub fn fonts(&self) -> &Fonts {

@@ -33,32 +33,33 @@ async fn events(
     let vault = s.vault(vault).await?;
     let watching = vault.notes.watching();
     let hello = Event::default().event("hello").json_data(EventsHello { watching });
-    let rx = vault.events.subscribe();
+    let (rx, stream) = vault.subscribe_events();
     let closing = s.closing.subscribe();
     let first = futures_util::stream::iter(hello.ok().map(Ok));
     let notes = vault.notes.clone();
-    let rest = futures_util::stream::unfold((rx, closing, false), move |(mut rx, mut closing, done)| {
-        let notes = notes.clone();
-        async move {
-            if done || *closing.borrow() {
-                return None;
+    let rest =
+        futures_util::stream::unfold((rx, closing, false, stream), move |(mut rx, mut closing, done, stream)| {
+            let notes = notes.clone();
+            async move {
+                if done || *closing.borrow() {
+                    return None;
+                }
+                let change = tokio::select! {
+                    got = rx.recv() => match got {
+                        Ok(change) => change,
+                        // Не успели прочитать — значит, что-то точно поменялось.
+                        Err(RecvError::Lagged(_)) => ChangeEvent { seq: 0, paths: Vec::new() },
+                        Err(RecvError::Closed) => return None,
+                    },
+                    _ = closing.changed() => return None,
+                };
+                let event = Event::default().event("change").json_data(&change).ok()?;
+                // Наблюдатель сломался — после этого события закрыть поток:
+                // клиент переподключится, получит `hello` без наблюдателя и
+                // перейдёт на опрос.
+                let done = watching && !notes.watching();
+                Some((Ok(event), (rx, closing, done, stream)))
             }
-            let change = tokio::select! {
-                got = rx.recv() => match got {
-                    Ok(change) => change,
-                    // Не успели прочитать — значит, что-то точно поменялось.
-                    Err(RecvError::Lagged(_)) => ChangeEvent { seq: 0, paths: Vec::new() },
-                    Err(RecvError::Closed) => return None,
-                },
-                _ = closing.changed() => return None,
-            };
-            let event = Event::default().event("change").json_data(&change).ok()?;
-            // Наблюдатель сломался — после этого события закрыть поток:
-            // клиент переподключится, получит `hello` без наблюдателя и
-            // перейдёт на опрос.
-            let done = watching && !notes.watching();
-            Some((Ok(event), (rx, closing, done)))
-        }
-    });
+        });
     Ok(Sse::new(futures_util::StreamExt::chain(first, rest)).keep_alive(KeepAlive::default()))
 }
