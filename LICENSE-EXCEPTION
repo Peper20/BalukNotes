@@ -1,0 +1,22 @@
+BalukNotes: additional permission under section 7 of the
+GNU Affero General Public License, version 3
+
+Copyright (C) 2026 Ivan Baluk
+
+BalukNotes is licensed under the GNU Affero General Public License,
+version 3 only (see LICENSE). As an additional permission under section 7
+of that license, the copyright holder grants you the following.
+
+You may create notes and other documents with BalukNotes and convey them,
+and any output produced from them by BalukNotes or by Typst (for example
+HTML, PDF and images), under terms of your choice. This holds even if the
+notes import the "baluk" styling library, and even if the output contains
+parts of that library or of the BalukNotes client (styles, scripts) that
+BalukNotes inserts while rendering.
+
+This permission does not extend to BalukNotes itself, to the "baluk"
+library itself, or to any work based on them: modified versions of them
+remain under the GNU Affero General Public License.
+
+You may remove this additional permission from your copy of BalukNotes,
+as section 7 allows.
