@@ -106,8 +106,10 @@
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <div class="backdrop" onclick={() => (ui.sidebarOpen = false)}></div>
     <div class="main">
-      <Topbar />
-      <TabBar />
+      <div class="chrome">
+        <Topbar />
+        <TabBar />
+      </div>
       {#if router.route.kind === "note"}
         {#if reader.page}<Problems page={reader.page} />{/if}
         <NoteView />

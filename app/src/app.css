@@ -90,11 +90,12 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, Can
 
 /* ── Верхняя строка ─────────────────────────────────────────────────── */
 .main { min-width: 0; }
-.topbar {
-  position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 0.4rem;
-  padding: 0.4rem 0.6rem; background: color-mix(in srgb, var(--k-bg) 88%, transparent);
-  backdrop-filter: blur(6px); border-bottom: 1px solid var(--k-line);
+/* Верхняя строка и вкладки - одна панель: общий фон и прокрутка, без щели. */
+.chrome {
+  position: sticky; top: 0; z-index: 5; border-bottom: 1px solid var(--k-line);
+  background: color-mix(in srgb, var(--k-bg) 88%, transparent); backdrop-filter: blur(6px);
 }
+.topbar { display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.6rem; }
 .crumbs { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--k-muted); }
 .crumbs b { color: var(--k-text); font-weight: 600; }
 .status { color: var(--k-muted); font-size: 0.85em; white-space: nowrap; }
@@ -410,15 +411,14 @@ kbd {
 
 /* ── Вкладки ────────────────────────────────────────────────────────── */
 .tabbar {
-  position: sticky; top: 2.9rem; z-index: 4; display: flex; gap: 2px; overflow-x: auto; padding: 0.25rem 0.5rem 0;
-  background: var(--k-surface); border-bottom: 1px solid var(--k-line); scrollbar-width: thin;
+  display: flex; gap: 2px; overflow-x: auto; padding: 0 0.5rem; margin-bottom: -1px; scrollbar-width: thin;
 }
 .tab {
   display: flex; align-items: center; gap: 0.3rem; max-width: 14rem; padding: 0.3rem 0.4rem 0.3rem 0.8rem;
   border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0; cursor: pointer; color: var(--k-muted);
 }
 .tab:hover { color: var(--k-text); }
-.tab.active { background: var(--k-bg); color: var(--k-text); border-color: var(--k-line); margin-bottom: -1px; }
+.tab.active { background: var(--k-bg); color: var(--k-text); border-color: var(--k-line); }
 .tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab-close, .tab-new {
   display: inline-grid; place-items: center; padding: 0; flex: none;
@@ -470,5 +470,5 @@ kbd {
 /* Панель скрыта (display: none) — колонка заметки одна: иначе она встала бы в нулевую. */
 .app.reading { grid-template-columns: 1fr; }
 .app.reading .sidebar, .app.reading .tabbar, .app.reading .toc:not(.open) { display: none !important; }
-.app.reading .topbar { opacity: 0; transition: opacity 0.2s; }
-.app.reading .topbar:hover, .app.reading .topbar:focus-within { opacity: 1; }
+.app.reading .chrome { opacity: 0; transition: opacity 0.2s; }
+.app.reading .chrome:hover, .app.reading .chrome:focus-within { opacity: 1; }
