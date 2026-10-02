@@ -91,6 +91,7 @@ mod tests {
             headings: vec![],
             links: vec![],
             tags: vec![],
+            sanitizer: None,
         };
         let themes = vec!["classic".to_owned()];
         let settings = Settings { themes: &themes, opts: FigureOptions::default() };

@@ -58,6 +58,9 @@ pub struct Rendered {
     pub headings: Vec<Heading>,
     pub links: Vec<LinkRef>,
     pub tags: Vec<String>,
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    pub sanitizer: Option<(usize, usize, usize)>,
 }
 
 /// Адрес ссылки на заметку. `None` — такой заметки нет.
@@ -95,13 +98,15 @@ pub fn render(docs: Vec<(String, HtmlDocument)>, links: &dyn LinkResolver) -> Re
 
     let mut ctx = Context::new(&themes, frames, ids, links);
     passes::run_tree(base.root_mut(), &mut ctx, passes::TREE);
-    let Context { headings, out_links, tags, .. } = ctx;
+    let Context { headings, out_links, tags, removed_tags, removed_attrs, removed_urls, .. } = ctx;
 
     let title = base.info().title.as_ref().map(ToString::to_string);
     let html = passes::timed("сериализация", || typst_html::html(&base, &HtmlOptions::default()))
         .map_err(|errs| errs.iter().map(|e| e.message.to_string()).collect::<Vec<_>>().join("; "))?;
     let (styles, body) = split_html(&html);
-    let mut page = Rendered { title, styles, body, headings, links: out_links, tags };
+    let sanitizer =
+        (removed_tags + removed_attrs + removed_urls > 0).then_some((removed_tags, removed_attrs, removed_urls));
+    let mut page = Rendered { title, styles, body, headings, links: out_links, tags, sanitizer };
     passes::run_text(&mut page, passes::TEXT);
     Ok(page)
 }

@@ -469,6 +469,7 @@ mod tests {
                 headings: vec![heading(1, "гл-1", "Первая"), heading(1, "Вторая", "Вторая & последняя")],
                 links: vec![],
                 tags: vec![],
+                sanitizer: None,
             })),
             errors: vec![],
             warnings: vec![],

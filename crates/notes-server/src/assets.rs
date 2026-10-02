@@ -35,8 +35,16 @@ pub(crate) fn routes() -> Router<AppState> {
 
 async fn shell() -> Response {
     match notes_assets::index_html() {
-        Some(file) => ([(header::CACHE_CONTROL, "no-cache")], Html(file.data)).into_response(),
-        None => (StatusCode::SERVICE_UNAVAILABLE, Html(NO_CLIENT)).into_response(),
+        Some(file) => {
+            ([(header::CACHE_CONTROL, "no-cache"), (header::CONTENT_SECURITY_POLICY, csp())], Html(file.data))
+                .into_response()
+        }
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            [(header::CACHE_CONTROL, "no-cache"), (header::CONTENT_SECURITY_POLICY, csp())],
+            Html(NO_CLIENT),
+        )
+            .into_response(),
     }
 }
 
@@ -60,4 +68,23 @@ fn is_hashed(path: &str) -> bool {
 /// Ответ CSS, который может поменяться (темы, шрифты): без долгого кэша.
 pub(crate) fn css(body: String) -> Response {
     ([(header::CONTENT_TYPE, "text/css; charset=utf-8"), (header::CACHE_CONTROL, "no-cache")], body).into_response()
+}
+
+/// CSP для клиента `notes serve` — строгая, без inline/eval для скриптов.
+fn csp() -> &'static str {
+    // Без unsafe-inline/-eval: скрипты — только из файлов; стили — из файлов
+    // и inline (<style> MatML), style-attr — по умолчанию разрешён.
+    // Изображения — self и data: (вставки SVG из Typst). Шрифты — self.
+    // Воркер dev-сервера не нужен (serve не использует Vite).
+    concat!(
+        "default-src 'self';",
+        "script-src 'self';",
+        "object-src 'none';",
+        "base-uri 'none';",
+        "img-src 'self' data: blob:;",
+        "style-src 'self' 'unsafe-inline';",
+        "font-src 'self';",
+        "connect-src 'self';",
+        "frame-ancestors 'self'"
+    )
 }

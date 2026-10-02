@@ -22,6 +22,7 @@ mod code_colors;
 mod fences;
 mod heading_html;
 mod links;
+mod sanitize;
 mod tags;
 mod themes;
 
@@ -33,7 +34,8 @@ use typst_html::{HtmlElement, HtmlFrame};
 use crate::render::{Heading, LinkRef, LinkResolver, Rendered, walk_mut};
 
 /// Проходы по дереву — по порядку.
-pub const TREE: &[TreePass] = &[themes::PASS, anchors::PASS, links::PASS, fences::PASS, tags::PASS];
+// Санитизация — первой: удаляет опасные элементы и атрибуты до сериализации.
+pub const TREE: &[TreePass] = &[sanitize::PASS, themes::PASS, anchors::PASS, links::PASS, fences::PASS, tags::PASS];
 
 /// Проходы по тексту сырой страницы — по порядку.
 pub const TEXT: &[TextPass] = &[code_colors::PASS, heading_html::PASS];
@@ -68,6 +70,10 @@ pub struct Context<'a> {
     pub headings: Vec<Heading>,
     pub out_links: Vec<LinkRef>,
     pub tags: Vec<String>,
+    /// Санитизация: сколько удалено.
+    pub removed_tags: usize,
+    pub removed_attrs: usize,
+    pub removed_urls: usize,
 }
 
 impl std::fmt::Debug for Context<'_> {
@@ -83,7 +89,19 @@ impl<'a> Context<'a> {
         ids: HashSet<String>,
         links: &'a dyn LinkResolver,
     ) -> Self {
-        Self { themes, frames, frame: 0, ids, links, headings: vec![], out_links: vec![], tags: vec![] }
+        Self {
+            themes,
+            frames,
+            frame: 0,
+            ids,
+            links,
+            headings: vec![],
+            out_links: vec![],
+            tags: vec![],
+            removed_tags: 0,
+            removed_attrs: 0,
+            removed_urls: 0,
+        }
     }
 }
 

@@ -128,6 +128,7 @@ mod tests {
             headings: vec![heading("Скобки", "Скобки"), heading("R", "Пространство ℝ𝑛"), heading("a&b", "Жирно & код"), heading("fig", "С рисунком")],
             links: vec![],
             tags: vec![],
+            sanitizer: None,
         };
         run(&mut page);
         let html: Vec<_> = page.headings.iter().map(|h| h.html.as_deref()).collect();

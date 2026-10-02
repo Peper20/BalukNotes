@@ -110,6 +110,16 @@ impl Pipeline for TypstPipeline {
         let files = combine(&compilation.deps);
         let deps: Vec<Dep> = compilation.deps.into_iter().map(|(d, _)| d).collect();
         let mut warnings = compilation.warnings;
+        if let Some((tags, attrs, urls)) = raw.as_ref().and_then(|r| r.sanitizer) {
+            warnings.push(Diagnostic {
+                severity: crate::diag::DiagSeverity::Warning,
+                message: format!("очищено HTML: удалено тегов {tags}, атрибутов {attrs}, опасных URL {urls}"),
+                file: None,
+                line: None,
+                column: None,
+                hints: vec![],
+            });
+        }
         warnings.extend(self.lint(&deps));
         Build { raw, errors, warnings, deps, files, took }
     }
