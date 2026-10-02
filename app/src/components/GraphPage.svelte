@@ -2,20 +2,24 @@
   Граф заметок во весь экран: масштаб, сдвиг, перестановка узлов, фильтры
   (папки, тег, несуществующие, без связей), поиск по графу и «соседи
   заметки» (`/graph?around=…&depth=…`). Фильтры запоминаются в браузере.
+  Силы графа — панель сбоку (`GraphForces`), значения — настройки `graph.*`.
 -->
 <script lang="ts">
   import Maximize from "@lucide/svelte/icons/maximize";
   import Minus from "@lucide/svelte/icons/minus";
   import Plus from "@lucide/svelte/icons/plus";
+  import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import Undo2 from "@lucide/svelte/icons/undo-2";
-  import { api, type GraphFilter, type GraphLayout } from "../lib/api";
-  import { notes, router } from "../lib/state";
+  import { api, type Forces, type GraphFilter, type GraphLayout } from "../lib/api";
+  import { DRAG, type Drag } from "../lib/graph-physics";
+  import { notes, router, settings } from "../lib/state";
   import { matches } from "../lib/graph-view";
   import { graphHref, noteHref } from "../lib/ids";
   import { plural } from "../lib/plural";
   import { noteTags } from "../lib/tags";
   import { load, save } from "../lib/storage";
   import Graph from "./Graph.svelte";
+  import GraphForces from "./GraphForces.svelte";
   import GraphLegend from "./GraphLegend.svelte";
 
   let { route }: { route: { around: string | null; depth: number } } = $props();
@@ -30,6 +34,33 @@
   });
   $effect(() => save("k-graph", $state.snapshot(prefs)));
 
+  // Силы графа: настройки `graph.*`; пока ползунок двигают — его значение (`live`).
+  const forceDefs = $derived(settings.schema?.settings.filter((d) => d.key.startsWith("graph.")) ?? []);
+  let live = $state<Record<string, number>>({});
+  const tune = $derived(
+    Object.fromEntries(forceDefs.map((d) => [d.key, live[d.key] ?? Number(settings.values[d.key] ?? d.default)])) as Record<string, number>,
+  );
+  // Силы раскладки — строкой: граф запрашивается заново, только когда они
+  // правда изменились (ползунки соседей раскладку не трогают). Схемы ещё
+  // нет — по умолчанию ядра.
+  const forces = $derived(
+    forceDefs.length
+      ? JSON.stringify({ clusters: tune["graph.clusters"]!, center: tune["graph.center"]!, repel: tune["graph.repel"]!, links: tune["graph.links"]! } satisfies Forces)
+      : null,
+  );
+  const drag = $derived<Drag>(forceDefs.length ? { pull: tune["graph.pull"]! / 100, back: tune["graph.return"]! / 100 } : DRAG);
+  let forcesOpen = $state(load<boolean>("k-graph-forces", false) === true);
+  $effect(() => save("k-graph-forces", forcesOpen));
+  async function saveForce(key: string, value: number) {
+    await settings.save({ [key]: value });
+    const { [key]: _, ...rest } = live;
+    live = rest;
+  }
+  function resetForces() {
+    live = {};
+    void settings.save(Object.fromEntries(forceDefs.map((d) => [d.key, d.default as number])));
+  }
+
   // Граф по фильтру — с сервера, уже разложенный (фильтр и раскладка — в ядре).
   let shown = $state.raw<GraphLayout | null>(null);
   let failed = $state(false);
@@ -38,7 +69,7 @@
     document.title = "Граф — Заметки";
   });
   $effect(() => {
-    const filter: Partial<GraphFilter> = { ...$state.snapshot(prefs), around: route.around, depth: route.depth };
+    const filter: Partial<GraphFilter> = { ...$state.snapshot(prefs), around: route.around, depth: route.depth, ...(forces && { forces: JSON.parse(forces) as Forces }) };
     if (first) document.documentElement.dataset.state = "loading";
     let stale = false;
     api
@@ -112,6 +143,7 @@
       <button type="button" class="icon" title="Крупнее" aria-label="крупнее" onclick={() => graph?.zoom(1.3)}><Plus size={18} strokeWidth={1.75} aria-hidden="true" /></button>
       <button type="button" class="icon" title="Вписать в окно" aria-label="вписать" onclick={() => graph?.fit()}><Maximize size={18} strokeWidth={1.75} aria-hidden="true" /></button>
       <button type="button" class="icon" title="Вернуть раскладку: узлы — на свои места" aria-label="вернуть раскладку" disabled={!moved} onclick={() => graph?.restore()}><Undo2 size={18} strokeWidth={1.75} aria-hidden="true" /></button>
+      <button type="button" class="icon" class:on={forcesOpen} title="Силы графа" aria-label="силы графа" aria-pressed={forcesOpen} onclick={() => (forcesOpen = !forcesOpen)}><SlidersHorizontal size={18} strokeWidth={1.75} aria-hidden="true" /></button>
     </span>
     {#if shown}
       <span class="graph-count">
@@ -121,21 +153,27 @@
     {/if}
   </div>
   {#if groups.length > 1}<GraphLegend {groups} hidden={prefs.hidden} ontoggle={toggleGroup} />{/if}
-  <section class="graph-canvas">
-    {#if failed}
-      <p class="graph-empty">Не удалось получить граф с сервера.</p>
-    {:else if shown && !shown.nodes.length}
-      <p class="graph-empty">Под фильтр ничего не подошло.</p>
-    {:else if shown}
-      <Graph
-        bind:this={graph}
-        bind:moved
-        layout={shown}
-        interactive
-        {titles}
-        highlight={hits}
-        onopen={(id, background) => router.open(id, null, { background })}
-      />
+  <div class="graph-body">
+    <section class="graph-canvas">
+      {#if failed}
+        <p class="graph-empty">Не удалось получить граф с сервера.</p>
+      {:else if shown && !shown.nodes.length}
+        <p class="graph-empty">Под фильтр ничего не подошло.</p>
+      {:else if shown}
+        <Graph
+          bind:this={graph}
+          bind:moved
+          layout={shown}
+          interactive
+          {titles}
+          highlight={hits}
+          {drag}
+          onopen={(id, background) => router.open(id, null, { background })}
+        />
+      {/if}
+    </section>
+    {#if forcesOpen && forceDefs.length}
+      <GraphForces defs={forceDefs} values={tune} oninput={(k, v) => (live = { ...live, [k]: v })} onchange={saveForce} onreset={resetForces} />
     {/if}
-  </section>
+  </div>
 </main>

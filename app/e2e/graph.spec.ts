@@ -213,3 +213,29 @@ test("граф: «вернуть раскладку» — узлы плавно,
   expect(await away()).toBeLessThan(1e-6);
   await expect(restore).toBeDisabled();
 });
+
+test("силы графа: панель сбоку, «Папки» меняют раскладку, значение запоминается, «По умолчанию» - обратно", async ({ page }) => {
+  try {
+    await page.goto(vaultUrl("/graph"));
+    await ready(page);
+    const before = await nodeAt(page, "Сеть/SSH");
+    await page.getByRole("button", { name: "силы графа" }).click();
+    const panel = page.locator(".graph-forces");
+    await expect(panel).toBeVisible();
+    const [canvas, side] = await Promise.all([page.locator(".graph-canvas").boundingBox(), panel.boundingBox()]);
+    expect(side!.x).toBeGreaterThanOrEqual(canvas!.x + canvas!.width - 1); // сбоку, а не поверх графа
+    const clusters = page.locator('input[data-key="graph.clusters"]');
+    await clusters.fill("300");
+    await expect.poll(() => nodeAt(page, "Сеть/SSH")).not.toBe(before);
+    await expect(panel.locator("output").first()).toHaveText("300 %");
+
+    await page.reload();
+    await ready(page);
+    await expect(clusters).toHaveValue("300");
+    await page.getByRole("button", { name: "По умолчанию" }).click();
+    await expect(clusters).toHaveValue("0");
+    await expect.poll(() => nodeAt(page, "Сеть/SSH")).toBe(before);
+  } finally {
+    await page.request.put("/api/settings", { data: { "graph.clusters": 0 } });
+  }
+});

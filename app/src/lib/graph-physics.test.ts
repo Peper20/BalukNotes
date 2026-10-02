@@ -64,6 +64,26 @@ describe("физика графа", () => {
     expect(p.at(3)).toEqual(drop); // брошенный не качнулся
   });
 
+  it("отклик соседей настраивается: сильнее тянутся, не возвращаются", () => {
+    const pulled = (pull: number) => {
+      const p = new Physics(nodes(), edges);
+      p.response = { pull, back: 0 };
+      for (let i = 0; i < 60; i++) {
+        p.drag(0, -80, 40);
+        p.step();
+      }
+      return p;
+    };
+    const shift = (p: Physics) => Math.abs(p.at(1)[0] - 70);
+    expect(shift(pulled(0))).toBe(0); // рёбра не тянут
+    expect(shift(pulled(3))).toBeGreaterThan(shift(pulled(1)));
+    const p = pulled(1);
+    const at = p.at(1);
+    p.release();
+    settle(p);
+    expect(p.at(1)[0]).toBeCloseTo(at[0], 0); // назад не пошли
+  });
+
   it("узел держат на месте — соседи подходят без раскачки", () => {
     const p = new Physics(nodes(), edges);
     const xs: number[] = [];
