@@ -233,6 +233,7 @@ pub(crate) mod tests {
                     headings: vec![],
                     links: vec![],
                     tags: vec![],
+                    sanitizer: None,
                 };
                 (Some(raw), vec![])
             };

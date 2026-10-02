@@ -310,6 +310,7 @@ mod tests {
             headings: vec![],
             links: vec![],
             tags: vec![],
+            sanitizer: None,
         }
     }
 
