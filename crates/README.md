@@ -11,6 +11,10 @@
 
 Логика - в ядре, остальные крейты - тонкие обёртки.
 
+Общие правила Rust - навык Claude Code `rust-best-practices`
+(`.claude/skills/`, сторонний: `apollographql/skills`, MIT); правила этого
+файла важнее.
+
 - **Сервер** - модуль на область API (`vaults`, `notes`, `graph`, `search`,
   `settings`, `assets`, `fonts`, `events`) со своими `routes()`; общее -
   `AppState` (`lib.rs`), `error.rs`, токен - `auth.rs`. Новая область - модуль
