@@ -184,10 +184,11 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .graph-canvas { flex: 1; min-width: 0; position: relative; }
 .graph-zoom button.icon.on { color: var(--k-accent); }
 /* Силы графа: сбоку от графа (узкий экран - под ним), граф виден и отвечает сразу. */
-.graph-forces {
-  flex: none; width: 15rem; box-sizing: border-box; overflow-y: auto; padding: 0.4rem 0.9rem 0.8rem;
-  border-left: 1px solid var(--k-line); background: var(--k-surface); font-size: 0.85em;
-}
+.graph-forces { flex: none; overflow: hidden; border-left: 1px solid var(--k-line); background: var(--k-surface); font-size: 0.85em; }
+/* Ширина содержимого постоянная: пока панель выезжает, ползунки не переносятся, а открываются. */
+.graph-forces-in { width: 15rem; height: 100%; box-sizing: border-box; overflow-y: auto; padding: 0.3rem 0.9rem 0.8rem; }
+.graph-forces-head { display: flex; align-items: center; justify-content: space-between; margin-right: -0.5rem; }
+.graph-forces-head h2 { margin: 0; font-size: 1em; font-weight: 600; color: var(--k-text); }
 .graph-forces h3 { margin: 0.6rem 0 0.2rem; font-size: 0.8em; letter-spacing: 0.06em; text-transform: uppercase; color: var(--k-muted); font-weight: 600; }
 .force { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0 0.5rem; padding: 0.3rem 0; cursor: pointer; }
 .force output { color: var(--k-muted); font-variant-numeric: tabular-nums; }
@@ -200,7 +201,8 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .force-reset:disabled { opacity: 0.45; cursor: default; }
 @media (max-width: 700px) {
   .graph-body { flex-direction: column; }
-  .graph-forces { width: auto; max-height: 45%; border-left: none; border-top: 1px solid var(--k-line); }
+  .graph-forces { max-height: 45%; border-left: none; border-top: 1px solid var(--k-line); }
+  .graph-forces-in { width: auto; max-height: 45vh; }
 }
 .graph-empty { margin: 3rem auto; text-align: center; color: var(--k-muted); }
 .backlinks h2 .backlinks-graph { font-size: 0.75em; font-weight: 400; margin-left: 0.6em; }

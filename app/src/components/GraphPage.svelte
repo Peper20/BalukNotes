@@ -49,8 +49,11 @@
       : null,
   );
   const drag = $derived<Drag>(forceDefs.length ? { pull: tune["graph.pull"]! / 100, back: tune["graph.return"]! / 100 } : DRAG);
-  let forcesOpen = $state(load<boolean>("k-graph-forces", false) === true);
-  $effect(() => save("k-graph-forces", forcesOpen));
+  /** Панель сил выдвигают кнопкой; при каждом заходе на граф она спрятана. */
+  let forcesOpen = $state(false);
+  function onkeydown(e: KeyboardEvent) {
+    if (e.key === "Escape" && forcesOpen && !e.defaultPrevented && !document.querySelector("dialog[open]")) forcesOpen = false;
+  }
   async function saveForce(key: string, value: number) {
     await settings.save({ [key]: value });
     const { [key]: _, ...rest } = live;
@@ -117,6 +120,8 @@
 
 </script>
 
+<svelte:window {onkeydown} />
+
 <main class="graph-page" id="note" bind:this={page} style:height="calc(100dvh - {top}px)">
   <div class="graph-bar">
     {#if route.around}
@@ -143,7 +148,7 @@
       <button type="button" class="icon" title="Крупнее" aria-label="крупнее" onclick={() => graph?.zoom(1.3)}><Plus size={18} strokeWidth={1.75} aria-hidden="true" /></button>
       <button type="button" class="icon" title="Вписать в окно" aria-label="вписать" onclick={() => graph?.fit()}><Maximize size={18} strokeWidth={1.75} aria-hidden="true" /></button>
       <button type="button" class="icon" title="Вернуть раскладку: узлы — на свои места" aria-label="вернуть раскладку" disabled={!moved} onclick={() => graph?.restore()}><Undo2 size={18} strokeWidth={1.75} aria-hidden="true" /></button>
-      <button type="button" class="icon" class:on={forcesOpen} title="Силы графа" aria-label="силы графа" aria-pressed={forcesOpen} onclick={() => (forcesOpen = !forcesOpen)}><SlidersHorizontal size={18} strokeWidth={1.75} aria-hidden="true" /></button>
+      <button type="button" class="icon" class:on={forcesOpen} title={forcesOpen ? "Спрятать силы графа" : "Силы графа"} aria-label="силы графа" aria-pressed={forcesOpen} onclick={() => (forcesOpen = !forcesOpen)}><SlidersHorizontal size={18} strokeWidth={1.75} aria-hidden="true" /></button>
     </span>
     {#if shown}
       <span class="graph-count">
@@ -173,7 +178,7 @@
       {/if}
     </section>
     {#if forcesOpen && forceDefs.length}
-      <GraphForces defs={forceDefs} values={tune} oninput={(k, v) => (live = { ...live, [k]: v })} onchange={saveForce} onreset={resetForces} />
+      <GraphForces defs={forceDefs} values={tune} oninput={(k, v) => (live = { ...live, [k]: v })} onchange={saveForce} onreset={resetForces} onclose={() => (forcesOpen = false)} />
     {/if}
   </div>
 </main>

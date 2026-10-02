@@ -214,14 +214,24 @@ test("граф: «вернуть раскладку» — узлы плавно,
   await expect(restore).toBeDisabled();
 });
 
-test("силы графа: панель сбоку, «Папки» меняют раскладку, значение запоминается, «По умолчанию» - обратно", async ({ page }) => {
+test("силы графа: выдвижная панель сбоку, «Папки» меняют раскладку, значение запоминается, «По умолчанию» - обратно", async ({ page }) => {
   try {
     await page.goto(vaultUrl("/graph"));
     await ready(page);
     const before = await nodeAt(page, "Сеть/SSH");
-    await page.getByRole("button", { name: "силы графа" }).click();
     const panel = page.locator(".graph-forces");
+    const toggle = page.getByRole("button", { name: "силы графа", exact: true });
+    await expect(panel).toBeHidden(); // по умолчанию спрятана
+    await toggle.click();
     await expect(panel).toBeVisible();
+    await page.getByRole("button", { name: "спрятать силы графа" }).click();
+    await expect(panel).toBeHidden();
+    await toggle.click();
+    await expect(panel).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+    await toggle.click();
+    await expect.poll(async () => (await panel.boundingBox())?.width).toBeGreaterThan(200); // выехала целиком
     const [canvas, side] = await Promise.all([page.locator(".graph-canvas").boundingBox(), panel.boundingBox()]);
     expect(side!.x).toBeGreaterThanOrEqual(canvas!.x + canvas!.width - 1); // сбоку, а не поверх графа
     const clusters = page.locator('input[data-key="graph.clusters"]');
@@ -231,6 +241,8 @@ test("силы графа: панель сбоку, «Папки» меняют 
 
     await page.reload();
     await ready(page);
+    await expect(panel).toBeHidden(); // после перезагрузки снова спрятана
+    await toggle.click();
     await expect(clusters).toHaveValue("300");
     await page.getByRole("button", { name: "По умолчанию" }).click();
     await expect(clusters).toHaveValue("0");
