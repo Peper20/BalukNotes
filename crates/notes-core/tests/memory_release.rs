@@ -1,7 +1,7 @@
 //! Измерение памяти и времени повторного открытия после сборок.
 //!
 //! Тест игнорируется по умолчанию: он тяжёлый и зависит от /proc.
-//! Запуск вручную: `cargo test -p notes-core --test memory_release -- --ignored`.
+//! Запуск вручную: `cargo test -p notes-core --features measure --test memory_release -- --ignored`.
 
 use std::fs;
 use std::time::{Duration, Instant};

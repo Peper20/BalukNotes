@@ -144,7 +144,8 @@ in_app() { (cd app && "$@"); }
 
 if [[ $rust == 1 ]]; then
   step cargo-test cargo test --workspace
-  step clippy cargo clippy --workspace --all-targets -- -D warnings
+  # С фичей measure — и тяжёлые замеры памяти (сами они в тестах не идут).
+  step clippy cargo clippy --workspace --all-targets --features notes-core/measure -- -D warnings
   step fmt cargo fmt --check
   step vendor vendor_tests
   step notes-check vault_check

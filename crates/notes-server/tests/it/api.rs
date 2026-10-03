@@ -1,7 +1,7 @@
 //! API на тестовом хранилище `tests/vault`: коды ответов и проверка ввода.
 
 use std::path::PathBuf;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -13,19 +13,7 @@ use notes_server::{AppState, VaultSet, router};
 use serde_json::Value;
 use tower::ServiceExt;
 
-static NOTES: LazyLock<Arc<Notes>> = LazyLock::new(|| {
-    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    Arc::new(
-        Notes::open(&NotesConfig {
-            trash: None,
-            vault: repo.join("tests/vault"),
-            library: LibrarySource::Dir(repo.join("baluk")),
-            font_dirs: vec![],
-            cache: None,
-        })
-        .unwrap(),
-    )
-});
+use crate::common::NOTES;
 
 /// Настройки во временном каталоге `dir`.
 fn settings(dir: &tempfile::TempDir) -> Arc<SettingsStore> {

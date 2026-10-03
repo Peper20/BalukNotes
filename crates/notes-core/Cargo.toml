@@ -10,6 +10,22 @@ publish.workspace = true
 [features]
 # Выгрузка типов API в app/src/lib/api/types (cd app && npm run types).
 ts = ["dep:ts-rs"]
+# Тяжёлые замеры памяти и пересборок (docs/research/E5.md): каждому нужен свой
+# процесс, поэтому - отдельные бинарники, и собираются они только по запросу
+# (иначе каждый `cargo test` линкует ещё три по сотне МБ).
+measure = []
+
+[[test]]
+name = "memory_release"
+required-features = ["measure"]
+
+[[test]]
+name = "memory_release_idle"
+required-features = ["measure"]
+
+[[test]]
+name = "memo_regression"
+required-features = ["measure"]
 
 [dependencies]
 brotli.workspace = true
