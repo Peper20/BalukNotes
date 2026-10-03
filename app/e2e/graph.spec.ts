@@ -263,9 +263,9 @@ test("силы графа: выдвижная панель сбоку, «Пап�
     await toggle.click();
     await expect(clusters).toHaveValue("300");
     await page.getByRole("button", { name: "По умолчанию" }).click();
-    await expect(clusters).toHaveValue("0");
+    await expect(clusters).toHaveValue("5");
     await expect.poll(() => nodeAt(page, "Сеть/SSH")).toBe(before);
   } finally {
-    await page.request.put("/api/settings", { data: { "graph.clusters": 0 } });
+    await page.request.put("/api/settings", { data: { "graph.clusters": 5 } });
   }
 });

@@ -403,7 +403,8 @@
           onpointerenter={() => !dragging && (focused = n.id)}
           onpointerleave={() => !dragging && (focused = null)}
         >
-          <circle {r} style:fill={n.kind ? color(n.id) : "none"} style:stroke={color(n.id)} />
+          <!-- Глава книги — полый кружок цвета книги: часть книги, а не заметка. -->
+          <circle {r} style:fill={n.chapter ? "var(--k-surface)" : n.kind ? color(n.id) : "none"} style:stroke={color(n.id)} />
           <text y={r + LABEL_GAP + labelPx * 0.9} text-anchor="middle">{n.name}</text>
           <title>
             {n.chapter
