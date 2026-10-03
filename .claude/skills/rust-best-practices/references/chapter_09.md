@@ -24,15 +24,15 @@ Rust tracks pointers using `Send` and `Sync` traits:
 
 | Pointer Type   	| Short Description                                                         	| Send + Sync?                          |  Main Use  	|
 |----------------	|---------------------------------------------------------------------------	|--------------------------------------	|------------	|
-| `&T`             	| Shared reference                                                          	| Yes                                 	| Shared access      |
-| `&mut T`         	| Exclusive mutable reference                                               	| No, not Send                         	| Exclusive mutation |
-| `Box<T>`         	| Heap-allocated owning pointer                                             	| Yes, if T: Send + Sync               	| Heap allocation    |
+| `&T`             	| Shared reference                                                          	| Send + Sync if `T: Sync`             	| Shared access      |
+| `&mut T`         	| Exclusive mutable reference                                               	| Send if `T: Send`, Sync if `T: Sync` 	| Exclusive mutation |
+| `Box<T>`         	| Heap-allocated owning pointer                                             	| Same as `T`                          	| Heap allocation    |
 | `Rc<T>`          	| Single-threaded ref counted pointer                                       	| No, neither                          	| Multiple owners (single-thread) |
-| `Arc<T>`         	| Atomic ref counter pointer                                                	| Yes                                  	| Multiple owners (multi-thread) |
+| `Arc<T>`         	| Atomic ref counter pointer                                                	| Send + Sync if `T: Send + Sync`      	| Multiple owners (multi-thread) |
 | `Cell<T>`        	| Interior mutability for copy types                                        	| No, not Sync                         	| Shared mutable, non-threaded |
 | `RefCell<T>`     	| Interior mutability (dynamic borrow checker)                              	| No, not Sync                         	| Shared mutable, non-threaded |
-| `Mutex<T>`       	| Thread-safe interior mutability with exclusive access                     	| Yes                                  	| Shared mutable, threaded |
-| `RwLock<T>`      	| Thread-safe shared readonly access OR exclusive mutable access            	| Yes                                  	| Shared mutable, threaded |
+| `Mutex<T>`       	| Thread-safe interior mutability with exclusive access                     	| Send + Sync if `T: Send`             	| Shared mutable, threaded |
+| `RwLock<T>`      	| Thread-safe shared readonly access OR exclusive mutable access            	| Send if `T: Send`, Sync if `T: Send + Sync` | Shared mutable, threaded |
 | `OnceCell<T>`    	| Single-thread one-time initialization container (interior mutability ONCE)    | No, not Sync                         	| Simple lazy value initialization |
 | `LazyCell<T>`    	| A lazy version of `OnceCell<T>` that calls function closure to initialize 	| No, not Sync                         	| Complex lazy value initialization 
 | `OnceLock<T>`    	| Thread-safe version of `OnceCell<T>`                                      	| Yes                                  	| Multi-thread single init |
@@ -46,7 +46,7 @@ Rust tracks pointers using `Send` and `Sync` traits:
 Probably the most common type in a Rust code base, it is **Safe, with no mutation** and allows **multiple readers**.
 
 ```rust
-let data: String = String::from_str("this is a string").unwrap();
+let data = String::from("this is a string");
 
 print_len(&data);
 print_capacity(&data);
@@ -69,7 +69,7 @@ fn print_bytes(s: &String) {
 Probably the most common *mutable* type in a Rust code base, it is **Safe, but only allows one mutable borrow at a time**.
 
 ```rust
-let mut data: String = String::from_str("this is a string").unwrap();
+let mut data = String::from("this is a string");
 mark_update(&mut data);
 
 fn mark_update(s: &mut String) {
@@ -106,7 +106,7 @@ use std::cell::RefCell;
 let x = RefCell::new(42);
 *x.borrow_mut() += 1;
 
-assert_eq!(&*x.borrow(), 42, "Not meaning of life");
+assert_eq!(*x.borrow(), 43);
 ```
 
 Panic example:
