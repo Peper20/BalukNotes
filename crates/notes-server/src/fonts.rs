@@ -1,6 +1,6 @@
 //! Шрифты оформления для браузера: `@font-face` по частям с `unicode-range`
-//! и сами части (WOFF2). Какие шрифты нужны — основные шрифты тем
-//! (`notes_core::themes::ThemeSet::web_fonts`).
+//! и сами части (WOFF2). Какие шрифты нужны — шрифты тем, основные и
+//! запасные (`notes_core::themes::ThemeSet::web_fonts`).
 
 use axum::Router;
 use axum::extract::{Path, State};
@@ -33,9 +33,9 @@ async fn font(State(s): State<AppState>, Path((family, style, file)): Path<(Stri
         return StatusCode::NOT_FOUND.into_response();
     };
     let notes = s.vaults.library().clone();
-    if !notes.themes().web_fonts().contains(&family) {
+    let Some(family) = notes.themes().web_fonts().iter().find(|f| f.name == family).cloned() else {
         return StatusCode::NOT_FOUND.into_response();
-    }
+    };
     let chunk = chunk.to_owned();
     let data = blocking(move || Ok(notes.fonts().web_face(&family, variant).and_then(|face| face.file(&chunk)))).await;
     match data {

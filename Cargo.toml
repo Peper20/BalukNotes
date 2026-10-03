@@ -38,6 +38,12 @@ brotli = "8"
 ttf2woff2 = { version = "0.13.3", default-features = false }
 fontcull = { version = "2.0.1", default-features = false }
 ttf-parser = "0.25"
+# Запасной текстовый шрифт CFF -> TrueType для браузера (webfonts::cff_to_truetype):
+# контуры - skrifa, glyf/loca - write-fonts, кривые - kurbo. Те же версии, что
+# уже тянут typst-svg и typst-pdf.
+skrifa = { version = "0.42", default-features = false, features = ["std"] }
+write-fonts = { version = "0.48", default-features = false }
+kurbo = { version = "0.13", default-features = false, features = ["std"] }
 clap = { version = "4.6", features = ["derive", "env"] }
 # Каталоги пользователя (данные, настройки) для `notes` — та же версия, что
 # уже тянет typst-kit.

@@ -24,6 +24,8 @@ use typst::text::{Font, FontBook, FontInfo, FontStyle, FontVariant, FontWeight};
 use typst::utils::LazyHash;
 use typst_kit::fonts::{self, FontPath, FontStore};
 
+use crate::themes::WebFamily;
+
 /// Шрифты оформления из `fonts/`. В отладочной сборке rust-embed читает их
 /// с диска.
 #[derive(RustEmbed)]
@@ -117,10 +119,20 @@ impl std::fmt::Debug for WebFace {
 }
 
 impl WebFace {
-    fn new(data: Bytes, cache: Option<&PathBuf>) -> Self {
+    /// Текстовый шрифт CFF — сначала в TrueType ([`crate::webfonts::cff_to_truetype`]);
+    /// шрифт формул — как есть. Метка кэша — по исходному файлу.
+    fn new(data: Bytes, math: bool, cache: Option<&PathBuf>) -> Self {
+        let cache = cache.map(|dir| (dir.clone(), crate::version::StableHasher::new().bytes(&data).finish()));
+        let started = std::time::Instant::now();
+        let data = match (!math).then(|| crate::webfonts::cff_to_truetype(&data)).flatten() {
+            Some(truetype) => {
+                tracing::debug!(ms = started.elapsed().as_millis(), bytes = truetype.len(), "шрифт CFF -> TrueType");
+                Bytes::new(truetype)
+            }
+            None => data,
+        };
         let chunks = crate::webfonts::plan(&data);
         let files = chunks.iter().map(|_| OnceLock::new()).collect();
-        let cache = cache.map(|dir| (dir.clone(), crate::version::StableHasher::new().bytes(&data).finish()));
         Self { data, chunks, files, cache }
     }
 
@@ -185,13 +197,14 @@ impl Fonts {
 
     /// Шрифт семейства `family` этого начертания для браузера (см. [`Self::web_font`]
     /// — когда его нет). План частей строится один раз.
-    pub fn web_face(&self, family: &str, variant: WebVariant) -> Option<Arc<WebFace>> {
+    pub fn web_face(&self, family: &WebFamily, variant: WebVariant) -> Option<Arc<WebFace>> {
         // Под замком целиком: сервер при запуске сжимает части в фоне, и
         // запрос страницы должен попасть в тот же кэш, а не начать заново.
         let mut web = self.web.lock();
-        web.entry((family.to_owned(), variant))
+        web.entry((family.name.clone(), variant))
             .or_insert_with(|| {
-                self.web_font(family, variant).map(|data| Arc::new(WebFace::new(data, self.web_cache.as_ref())))
+                let data = self.web_font(&family.name, variant)?;
+                Some(Arc::new(WebFace::new(data, family.math, self.web_cache.as_ref())))
             })
             .clone()
     }
@@ -199,12 +212,12 @@ impl Fonts {
     /// `@font-face` на каждую часть шрифтов `families` (браузер качает только
     /// части со знаками страницы — `unicode-range`). `base` — путь к файлам
     /// (`/fonts/`): файл части — `{base}{семейство}/{начертание}/{часть}.woff2`.
-    pub fn font_faces(&self, families: &[impl AsRef<str>], base: &str) -> String {
+    pub fn font_faces(&self, families: &[WebFamily], base: &str) -> String {
         let mut out = String::from("/* Шрифты оформления: те же файлы, что у Typst, в WOFF2 и по наборам знаков. */\n");
-        for family in families {
-            let family = family.as_ref();
+        for web in families {
+            let family = web.name.as_str();
             for v in WebVariant::ALL {
-                let Some(face) = self.web_face(family, v) else { continue };
+                let Some(face) = self.web_face(web, v) else { continue };
                 for chunk in &face.chunks {
                     let url = format!("{base}{}/{}/{}.woff2", family.replace(' ', "%20"), v.slug(), chunk.name);
                     let range =
@@ -223,10 +236,10 @@ impl Fonts {
 
     /// Сжать все части шрифтов `families` заранее (в фоне при запуске
     /// сервера: первая страница не ждёт сжатия).
-    pub fn warm_web(&self, families: &[impl AsRef<str>]) {
+    pub fn warm_web(&self, families: &[WebFamily]) {
         for family in families {
             for v in WebVariant::ALL {
-                if let Some(face) = self.web_face(family.as_ref(), v) {
+                if let Some(face) = self.web_face(family, v) {
                     for c in &face.chunks {
                         face.file(&c.name);
                     }
@@ -239,12 +252,12 @@ impl Fonts {
     /// шрифтов `families` (старый шрифт, прежний кодировщик), — если они
     /// старше `max_age`: сборка приложения, делящая каталог данных (отладочная
     /// и релизная), пользуется своими частями. Сколько удалено.
-    pub fn prune_web(&self, families: &[impl AsRef<str>], max_age: std::time::Duration) -> usize {
+    pub fn prune_web(&self, families: &[WebFamily], max_age: std::time::Duration) -> usize {
         let Some(dir) = &self.web_cache else { return 0 };
         let mut keep = HashSet::new();
         for family in families {
             for v in WebVariant::ALL {
-                let Some(face) = self.web_face(family.as_ref(), v) else { continue };
+                let Some(face) = self.web_face(family, v) else { continue };
                 keep.extend((0..face.chunks.len()).filter_map(|i| face.cached_path(i)));
             }
         }
@@ -322,6 +335,10 @@ impl Fonts {
 mod tests {
     use super::*;
 
+    fn text(name: &str) -> WebFamily {
+        WebFamily { name: name.into(), math: false }
+    }
+
     #[test]
     fn bundled_fonts_are_embedded_and_win_over_system() {
         let fonts = Fonts::load(&[]);
@@ -332,25 +349,38 @@ mod tests {
         }
         for family in ["Gentium Plus", "JetBrains Mono"] {
             for v in WebVariant::ALL {
-                let face = fonts.web_face(family, v).unwrap_or_else(|| panic!("{family} {}", v.slug()));
+                let face = fonts.web_face(&text(family), v).unwrap_or_else(|| panic!("{family} {}", v.slug()));
                 let names: Vec<_> = face.chunks.iter().map(|c| c.name.as_str()).collect();
                 assert_eq!(&names[..2], ["latin", "cyrillic"], "{family} {}: по наборам знаков", v.slug());
             }
         }
-        // Математический шрифт не режется (нет подмножеств для MATH и CFF).
-        let math = fonts.web_face("New Computer Modern Math", WebVariant::ALL[0]).unwrap();
-        assert_eq!(math.chunks.len(), 1);
-        assert!(
-            Arc::ptr_eq(&math, &fonts.web_face("New Computer Modern Math", WebVariant::ALL[0]).unwrap()),
-            "план — один раз"
-        );
+        // Запасные шрифты тем — тоже частями; текстовый CFF (New Computer
+        // Modern) — переведённый в TrueType.
+        for family in ["DejaVu Sans Mono", "New Computer Modern"] {
+            for v in WebVariant::ALL {
+                let face = fonts.web_face(&text(family), v).unwrap_or_else(|| panic!("{family} {}", v.slug()));
+                assert_eq!(face.chunks[0].name, "latin", "{family} {}", v.slug());
+            }
+        }
+        let serif = fonts.web_face(&text("New Computer Modern"), WebVariant::ALL[0]).unwrap();
+        let rest = serif.chunks.iter().find(|c| c.name == "rest").unwrap();
+        assert!(rest.unicode_range.as_deref().unwrap().contains("U+2103"), "℃ — в части rest");
+        assert_eq!(&serif.file("rest").unwrap()[4..8], [0, 1, 0, 0], "TrueType");
+        // Шрифт формул не режется и не перестраивается (CFF + MATH), но
+        // объявлен только для своих знаков.
+        let math = WebFamily { name: "New Computer Modern Math".into(), math: true };
+        let face = fonts.web_face(&math, WebVariant::ALL[0]).unwrap();
+        assert_eq!(face.chunks.len(), 1);
+        assert!(face.chunks[0].unicode_range.as_deref().unwrap().starts_with("U+20"));
+        assert_eq!(&face.file("all").unwrap()[4..8], b"OTTO");
+        assert!(Arc::ptr_eq(&face, &fonts.web_face(&math, WebVariant::ALL[0]).unwrap()), "план — один раз");
     }
 
     #[test]
     fn web_chunks_are_cached_on_disk() {
         let dir = tempfile::tempdir().unwrap();
         let first = Fonts::load(&[]).with_web_cache(Some(dir.path().to_path_buf()));
-        let face = first.web_face("JetBrains Mono", WebVariant::ALL[0]).unwrap();
+        let face = first.web_face(&text("JetBrains Mono"), WebVariant::ALL[0]).unwrap();
         let latin = face.file("latin").unwrap();
         let files: Vec<_> = fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.path()).collect();
         assert_eq!(files.len(), 1);
@@ -360,13 +390,13 @@ mod tests {
         marked.extend_from_slice(b"from-cache");
         fs::write(&files[0], &marked).unwrap();
         let second = Fonts::load(&[]).with_web_cache(Some(dir.path().to_path_buf()));
-        let again = second.web_face("JetBrains Mono", WebVariant::ALL[0]).unwrap().file("latin").unwrap();
+        let again = second.web_face(&text("JetBrains Mono"), WebVariant::ALL[0]).unwrap().file("latin").unwrap();
         assert!(again.ends_with(b"from-cache"));
         // Испорченный (не WOFF2) — сжимается заново.
         fs::write(&files[0], b"junk").unwrap();
         let third = Fonts::load(&[]).with_web_cache(Some(dir.path().to_path_buf()));
         assert_eq!(
-            &third.web_face("JetBrains Mono", WebVariant::ALL[0]).unwrap().file("latin").unwrap()[..],
+            &third.web_face(&text("JetBrains Mono"), WebVariant::ALL[0]).unwrap().file("latin").unwrap()[..],
             &latin[..]
         );
     }
@@ -375,7 +405,7 @@ mod tests {
     fn prune_keeps_current_and_recent_chunks() {
         let dir = tempfile::tempdir().unwrap();
         let fonts = Fonts::load(&[]).with_web_cache(Some(dir.path().to_path_buf()));
-        let face = fonts.web_face("JetBrains Mono", WebVariant::ALL[0]).unwrap();
+        let face = fonts.web_face(&text("JetBrains Mono"), WebVariant::ALL[0]).unwrap();
         face.file("latin").unwrap();
         let current = face.cached_path(0).unwrap();
         let day = std::time::Duration::from_hours(24);
@@ -386,7 +416,7 @@ mod tests {
         fs::File::options().write(true).open(dir.path().join("старая.woff2")).unwrap().set_modified(old).unwrap();
         fs::File::options().write(true).open(&current).unwrap().set_modified(old).unwrap();
 
-        assert_eq!(fonts.prune_web(&["JetBrains Mono"], 14 * day), 1);
+        assert_eq!(fonts.prune_web(&[text("JetBrains Mono")], 14 * day), 1);
         assert!(current.exists(), "часть нынешнего шрифта — даже старая");
         assert!(dir.path().join("чужая-свежая.woff2").exists(), "чужая — пока свежая");
         assert!(!dir.path().join("старая.woff2").exists());

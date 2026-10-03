@@ -1,0 +1,23 @@
+id: Особые случаи/Запасные шрифты
+kind: Note
+title: Запасные шрифты
+tags: фикстура, шрифты
+headings:
+  2 #Текст-New-Computer-Modern [Текст-New-Computer-Modern] Текст: New Computer Modern
+  2 #Код-DejaVu-Sans-Mono [Код-DejaVu-Sans-Mono] Код: DejaVu Sans Mono
+links:
+styles: 0 байт, fnv cbf29ce484222325
+---
+<article class="k-doc" data-doc="note" lang="ru">
+<header class="k-title">
+<h1>Запасные шрифты</h1>
+<ul class="k-tags">
+<li>фикстура</li>
+<li>шрифты</li></ul></header>
+<p>Знаков ниже нет в основных шрифтах тем: в PDF Typst берёт их из запасных (список <code>font</code> темы), и браузер - из тех же файлов.</p>
+<h2 class="k-h k-h2" id="Текст-New-Computer-Modern" data-k-anchor="Текст-New-Computer-Modern"><span class="k-num">1</span>Текст: New Computer Modern</h2>
+<p>Температура 36,6 ℃, рецепт ℞, оценка ℮. Буквы в кружках: Ⓐ Ⓑ ⓒ, в скобках: ⒜ ⒝. Значки: ☼ ♪ ✝ ⚲. Брайль: ⠃⠁⠇⠥⠅. Армянский: Բարեւ, иврит: שלום.</p>
+<p><strong>Жирный: ℃ Ⓐ ♪</strong> и <em>курсив: ℃ ♪ ℞</em>.</p>
+<h2 class="k-h k-h2" id="Код-DejaVu-Sans-Mono" data-k-anchor="Код-DejaVu-Sans-Mono"><span class="k-num">2</span>Код: DejaVu Sans Mono</h2>
+<pre><code>a ⇄ b, c ↯ d, ∛x ≝ y, цена ₹ 100 ₺</code></pre>
+<p><code>∛8 = 2</code>, <code>x ≝ 1</code>, <code>p ⇄ q</code>.</p></article>

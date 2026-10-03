@@ -38,8 +38,18 @@ fn themes_come_from_library() {
     assert_eq!(names, ["classic", "night"]);
     assert!(NOTES.themes().themes()[1].dark);
     assert!(NOTES.themes().css().contains("--k-box-def:"));
-    // Браузеру — основные шрифты тем (первые в списках `font`), без запасных.
-    assert_eq!(NOTES.themes().web_fonts(), ["Gentium Plus", "JetBrains Mono", "New Computer Modern Math"]);
+    // Браузеру — шрифты тем, основные и запасные (все списки `font`).
+    let fonts: Vec<_> = NOTES.themes().web_fonts().iter().map(|f| (f.name.as_str(), f.math)).collect();
+    assert_eq!(
+        fonts,
+        [
+            ("DejaVu Sans Mono", false),
+            ("Gentium Plus", false),
+            ("JetBrains Mono", false),
+            ("New Computer Modern", false),
+            ("New Computer Modern Math", true)
+        ]
+    );
 }
 
 #[test]
