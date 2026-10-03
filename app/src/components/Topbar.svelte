@@ -11,13 +11,20 @@
   import { nextTheme } from "../lib/appearance";
   import CloudOff from "@lucide/svelte/icons/cloud-off";
   import { connection, notes, reader, router, settings, updates } from "../lib/state";
-  import { splitId } from "../lib/ids";
+  import { folderHref } from "../lib/ids";
+  import { ancestors } from "../lib/tree";
   import { commands, toggleToc } from "../lib/commands.svelte";
   import { ui } from "../lib/ui.svelte";
 
   const run = (id: string) => commands().find((c) => c.id === id)?.run();
 
-  const crumbs = $derived(router.currentId ? splitId(router.currentId) : null);
+  /** Путь в верхней строке: папки (ссылки) и сама заметка или папка. */
+  const crumb = $derived.by(() => {
+    const r = router.route;
+    if (r.kind === "note") return { folders: ancestors(r.id), title: notes.title(r.id) };
+    if (r.kind === "folder") return { folders: ancestors(r.path), title: notes.folderTitle(r.path) };
+    return null;
+  });
   const title = (name: string) => settings.themes.find((t) => t.name === name)?.title ?? name;
   const next = $derived(settings.themes.find((t) => t.name === nextTheme(settings.theme, settings.themes)));
   const themeTitle = $derived(
@@ -35,7 +42,10 @@
 <header class="topbar">
   <button type="button" class="icon" title="Список заметок" aria-label="Список заметок" onclick={() => run("sidebar")}><PanelLeft {...icon} /></button>
   <div class="crumbs" id="crumbs">
-    {#if crumbs && router.currentId}{crumbs.folder ? `${notes.folderLabel(crumbs.folder)} / ` : ""}<b>{notes.title(router.currentId)}</b>{/if}
+    <!-- Папки пути - ссылки на их страницы. -->
+    {#if crumb}{#each crumb.folders as path (path)}<a class="crumb" href={folderHref(path)}
+          >{notes.folderTitle(path)}</a
+        >{" / "}{/each}<b>{crumb.title}</b>{/if}
   </div>
   <span class="status" class:busy={reader.busy} id="status" role="status">{reader.status}</span>
   {#if !connection.online}

@@ -12,8 +12,10 @@
     const u = new URL(url, location.origin);
     const route = parseRoute(u.pathname, u.search);
     if (route.kind === "home") return "Главная";
-    if (route.kind === "graph") return route.around ? `Граф: ${notes.title(route.around)}` : "Граф";
+    if (route.kind === "graph")
+      return route.around ? `Граф: ${notes.title(route.around)}` : route.folder ? `Граф: ${notes.folderTitle(route.folder)}` : "Граф";
     if (route.kind === "tags") return route.tag ? `#${route.tag}` : "Теги";
+    if (route.kind === "folder") return notes.folderTitle(route.path);
     return notes.title(route.id);
   }
 

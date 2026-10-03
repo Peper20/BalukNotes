@@ -16,8 +16,12 @@ export const homeHref = (): string => vaultHome();
 export type Route =
   | { kind: "home" }
   | { kind: "note"; id: string }
+  | { kind: "folder"; path: string }
   | { kind: "tags"; tag: string | null }
-  | { kind: "graph"; around: string | null; depth: number };
+  | { kind: "graph"; around: string | null; depth: number; folder: string | null };
+
+/** Адрес страницы папки (путь от корня хранилища). */
+export const folderHref = (path: string): string => `${vaultBase()}/f/${encodeId(path)}`;
 
 /** Адрес страницы тегов (или одного тега). */
 export const tagHref = (tag?: string | null): string => `${vaultBase()}${tag ? `/tags/${encodeURIComponent(tag)}` : "/tags"}`;
@@ -25,6 +29,9 @@ export const tagHref = (tag?: string | null): string => `${vaultBase()}${tag ? `
 /** Адрес графа: весь или соседи заметки на `depth` шагов. */
 export const graphHref = (around?: string | null, depth = 1): string =>
   `${vaultBase()}/graph${around ? `?around=${encodeURIComponent(around)}${depth === 1 ? "" : `&depth=${depth}`}` : ""}`;
+
+/** Адрес графа папки: её заметки с подпапками. */
+export const folderGraphHref = (path: string): string => `${vaultBase()}/graph?folder=${encodeURIComponent(path)}`;
 
 /**
  * Адрес клиента (заметка, теги, граф, главная) — показанного хранилища или
@@ -38,7 +45,14 @@ export function isAppPath(pathname: string): boolean {
     if (!own || pathname.slice(0, own.length + 1) !== `${own}/` && pathname !== own) return false;
     pathname = split.rest;
   }
-  return pathname === "/" || pathname.startsWith("/n/") || pathname === "/tags" || pathname.startsWith("/tags/") || pathname === "/graph";
+  return (
+    pathname === "/" ||
+    pathname.startsWith("/n/") ||
+    pathname.startsWith("/f/") ||
+    pathname === "/tags" ||
+    pathname.startsWith("/tags/") ||
+    pathname === "/graph"
+  );
 }
 
 /**
@@ -57,8 +71,10 @@ export function parseRoute(pathname: string, search = ""): Route {
   if (path === "/graph" || path === "/graph/") {
     const q = new URLSearchParams(search);
     const depth = Math.round(Number(q.get("depth") ?? 1));
-    return { kind: "graph", around: q.get("around") || null, depth: depth >= 1 && depth <= 5 ? depth : 1 };
+    return { kind: "graph", around: q.get("around") || null, depth: depth >= 1 && depth <= 5 ? depth : 1, folder: q.get("folder") || null };
   }
+  const folder = path.startsWith("/f/") ? path.slice(3).replace(/\/+$/, "") : "";
+  if (folder) return { kind: "folder", path: folder };
   const id = path.startsWith("/n/") ? path.slice(3).replace(/\/+$/, "") : "";
   return id ? { kind: "note", id } : { kind: "home" };
 }

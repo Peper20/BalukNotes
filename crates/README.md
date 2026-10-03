@@ -15,6 +15,11 @@
 бинарник `notes-<имя>` и строка в `notes::PARTS` (её команды); общие флаги
 `notes-typst` со значением - `notes::VALUE_FLAGS` (сверяет тест).
 
+Значок приложения - один источник `app/public/assets/icon.svg` (favicon сайта,
+меню - `tools/install.sh`); окну Tauri нужен PNG, после правки SVG:
+`rsvg-convert -w 256 -h 256 app/public/assets/icon.svg -o
+crates/notes-app/icons/icon.png`.
+
 Общие правила Rust - навык Claude Code `rust-best-practices`
 (`.claude/skills/`, сторонний: `apollographql/skills`, MIT); правила этого
 файла важнее.

@@ -1,7 +1,8 @@
 <!--
   Граф заметок во весь экран: масштаб, сдвиг, перестановка узлов, фильтры
-  (папки, тег, несуществующие, без связей, книги главами), поиск по графу и «соседи
-  заметки» (`/graph?around=…&depth=…`). Фильтры запоминаются в браузере.
+  (папки, тег, несуществующие, без связей, книги главами), поиск по графу, «соседи
+  заметки» (`/graph?around=…&depth=…`) и граф папки (`/graph?folder=…`, её
+  заметки с подпапками). Фильтры запоминаются в браузере.
   Силы графа — панель сбоку (`GraphForces`), значения — настройки `graph.*`.
 -->
 <script lang="ts">
@@ -14,7 +15,7 @@
   import { DRAG, type Drag } from "../lib/graph-physics";
   import { notes, router, settings } from "../lib/state";
   import { matches } from "../lib/graph-view";
-  import { graphHref, noteHref } from "../lib/ids";
+  import { folderHref, graphHref, noteHref } from "../lib/ids";
   import { plural } from "../lib/plural";
   import { noteTags } from "../lib/tags";
   import { load, save } from "../lib/storage";
@@ -22,7 +23,7 @@
   import GraphForces from "./GraphForces.svelte";
   import GraphLegend from "./GraphLegend.svelte";
 
-  let { route }: { route: { around: string | null; depth: number } } = $props();
+  let { route }: { route: { around: string | null; depth: number; folder: string | null } } = $props();
 
   type Saved = Pick<GraphFilter, "hidden" | "tag" | "missing" | "orphans" | "chapters">;
   const saved = load<Partial<Saved>>("k-graph", {});
@@ -73,7 +74,7 @@
     document.title = "Граф — Заметки";
   });
   $effect(() => {
-    const filter: Partial<GraphFilter> = { ...$state.snapshot(prefs), around: route.around, depth: route.depth, ...(forces && { forces: JSON.parse(forces) as Forces }) };
+    const filter: Partial<GraphFilter> = { ...$state.snapshot(prefs), around: route.around, depth: route.depth, folder: route.folder, ...(forces && { forces: JSON.parse(forces) as Forces }) };
     if (first) document.documentElement.dataset.state = "loading";
     let stale = false;
     api
@@ -132,6 +133,12 @@
         <select aria-label="Глубина" value={route.depth} onchange={(e) => router.go(graphHref(route.around, Number(e.currentTarget.value)), { replace: true })}>
           {#each [1, 2, 3] as d (d)}<option value={d}>{d} {plural(d, "шаг", "шага", "шагов")}</option>{/each}
         </select>
+        <a class="graph-all" href={graphHref()}>весь граф</a>
+      </span>
+    {:else if route.folder}
+      <span class="graph-title">
+        Граф папки
+        <a href={folderHref(route.folder)} title={`папка ${route.folder}`}>{notes.folderTitle(route.folder)}</a>
         <a class="graph-all" href={graphHref()}>весь граф</a>
       </span>
     {:else}

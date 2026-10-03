@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { NoteListItem } from "./api";
-import { ancestors, buildTree, countNotes } from "./tree";
+import { ancestors, buildTree, countNotes, findFolder } from "./tree";
 
 const note = (id: string, kind: "note" | "book" = "note", title?: string): NoteListItem => {
   const i = id.lastIndexOf("/");
@@ -17,6 +17,9 @@ it("папки по алфавиту, вложенность, заметки в 
   expect(deep.notes[0]!.name).toBe("Дно");
   expect(countNotes(tree)).toBe(4);
   expect(countNotes(tree.folders[1]!)).toBe(1);
+  expect(findFolder(tree, "Глубоко/а/б")).toBe(deep);
+  expect(findFolder(tree, "")).toBe(tree);
+  expect(findFolder(tree, "Глубоко/нет")).toBeUndefined();
 });
 
 it("путь к заметке — для раскрытия дерева", () => {

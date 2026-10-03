@@ -4,6 +4,9 @@
 /* Тема ещё не известна (первый запуск): цвета окна — по системе, не белые. */
 :root:not([data-theme]) { color-scheme: light dark; }
 body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, CanvasText); background: var(--k-bg, Canvas); }
+/* Без отскока страницы на краю (тачпад в WebKitGTK): с ним дрожит боковая
+ * панель. Телефону отскок и "потянуть - обновить" оставлены. */
+@media (pointer: fine) { :root { overscroll-behavior: none; } }
 
 .app { display: grid; grid-template-columns: 17rem 1fr; min-height: 100vh; }
 .app.sidebar-hidden { grid-template-columns: 0 1fr; }
@@ -33,7 +36,13 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, Can
   border: 1px solid var(--k-line); border-radius: 8px; background: var(--k-bg); box-shadow: 0 8px 28px rgb(0 0 0 / 0.22);
 }
 .vault-menu { position: absolute; left: 0.5rem; right: 0.5rem; bottom: calc(100% + 0.1rem); max-height: 60vh; overflow-y: auto; }
-.note-menu { position: fixed; }
+.note-menu { position: fixed; max-width: 20rem; }
+.note-menu-head {
+  display: flex; align-items: center; gap: 0.45rem; min-height: 1.9rem; padding: 0 0.5rem 0.2rem; margin-bottom: 0.2rem;
+  border-bottom: 1px solid var(--k-line); color: var(--k-muted);
+}
+.note-menu-head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-menu-head svg { flex: none; }
 .vault-menu a, .vault-menu button, .note-menu button {
   display: flex; align-items: center; gap: 0.45rem; min-height: 1.9rem; padding: 0 0.5rem; border: none; border-radius: 5px;
   font: inherit; text-align: left; color: var(--k-text); text-decoration: none; background: none; cursor: pointer;
@@ -76,8 +85,8 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, Can
 }
 .tree .items:has(> a.active) { border-left-color: color-mix(in srgb, var(--k-accent) 55%, transparent); }
 @media (pointer: coarse) { .tree summary, .tree a { min-height: 2.3rem; } }
-.tree a.active { background: color-mix(in srgb, var(--k-accent) 16%, transparent); color: var(--k-accent); font-weight: 600; }
-.tree a.active .tree-icon { color: var(--k-accent); }
+.tree a.active, .tree summary.active { background: color-mix(in srgb, var(--k-accent) 16%, transparent); color: var(--k-accent); font-weight: 600; }
+.tree a.active .tree-icon, .tree summary.active .tree-icon { color: var(--k-accent); }
 
 /* ── Нет связи с сервером: метка в верхней строке (Topbar) ───────────── */
 .offline-chip {
@@ -98,6 +107,8 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, Can
 .topbar { display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.6rem; }
 .crumbs { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--k-muted); }
 .crumbs b { color: var(--k-text); font-weight: 600; }
+.crumb { color: inherit; text-decoration: none; }
+.crumb:hover { color: var(--k-text); text-decoration: underline; text-underline-offset: 3px; }
 .status { color: var(--k-muted); font-size: 0.85em; white-space: nowrap; }
 .status.busy::before { content: "● "; color: var(--k-accent); }
 button.icon, a.icon {

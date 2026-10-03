@@ -32,7 +32,9 @@ npm test        # Vitest; ещё check, e2e
   или `.var("--...", "px")`) + правило CSS; `appearance.ts` применяет её по
   схеме.
 - Стили заметки - только внутри `.k-note { ... }`: блоки `src/baluk-css/`
-  (порядок - `@import` в `baluk.css`), склеиваются в `assets/baluk.css`.
+  (порядок - `@import` в `baluk.css`), склеиваются в `assets/baluk.css` и
+  проходят lightningcss (префиксы: окно приложения - WebKit, ему нужен
+  `-webkit-user-select`; браузеры - `TARGETS` в `bundle.ts`).
   Интерфейс - `src/app.css`.
 - Живые блоки (интерактивные рисунки, кадры, граф) - реестр `src/lib/live/`:
   модуль с `LiveBlock` + селектор в `selectors.ts` + строка в `BLOCKS`.

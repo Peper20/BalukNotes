@@ -16,6 +16,8 @@ class Router {
   anchorSeq = $state(0);
 
   currentId = $derived(this.route.kind === "note" ? this.route.id : null);
+  /** Открытая страница папки (путь). */
+  currentFolder = $derived(this.route.kind === "folder" ? this.route.path : null);
   currentNote = $derived(notes.byId(this.currentId));
 
   /**

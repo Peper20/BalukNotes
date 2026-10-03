@@ -2,7 +2,7 @@
 import { readdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { expect, it } from "vitest";
-import { bundle, ENTRY } from "./bundle";
+import { bundle, ENTRY, forBrowsers } from "./bundle";
 
 it("baluk.css: подключены все файлы блоков, по разу", async () => {
   const seen = new Set<string>();
@@ -14,4 +14,9 @@ it("baluk.css: подключены все файлы блоков, по раз�
   expect([...seen].map((f) => relative(dir, f)).sort()).toEqual(all.map((f) => relative(dir, f)).sort());
   expect(css).not.toMatch(/^@import/m);
   expect(css).toContain(".k-note");
+});
+
+it("baluk.css для браузеров: префиксы WebKit (окно приложения)", async () => {
+  const css = forBrowsers(await bundle());
+  expect(css).toMatch(/\.graph-svg\s*\{[^}]*-webkit-user-select:\s*none/);
 });

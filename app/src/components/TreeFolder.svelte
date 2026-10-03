@@ -24,17 +24,17 @@
 {#each folder.folders as f (f.path)}
   {@const open = !ui.collapsed.includes(f.path)}
   <details {open} ontoggle={(e) => ui.setCollapsed(f.path, !e.currentTarget.open)}>
-    <summary oncontextmenu={(e) => menu(e, "folder", f.path)}>
+    <summary data-path={f.path} class:active={f.path === router.currentFolder} oncontextmenu={(e) => menu(e, "folder", f.path)}>
       <ChevronRight class="tree-chevron" {...icon} />
       {#if open}<FolderOpen class="tree-icon" {...icon} />{:else}<FolderIcon class="tree-icon" {...icon} />{/if}
-      <span class="tree-name" title={f.title === f.name ? undefined : `папка ${f.path}`}>{f.title}</span>
+      <span class="tree-name" title={`${f.title}\nпапка ${f.path}`}>{f.title}</span>
       <span class="tree-count">{countNotes(f)}</span>
     </summary>
     <div class="items"><TreeFolder folder={f} /></div>
   </details>
 {/each}
 {#each folder.notes as n (n.id)}
-  <a href={noteHref(n.id)} data-id={n.id} class:book={n.kind === "book"} class:active={n.id === router.currentId} title={`${n.title}${n.kind === "book" ? " — книга" : ""}\n${n.id}`} oncontextmenu={(e) => menu(e, "note", n.id)}>
+  <a href={noteHref(n.id)} data-id={n.id} class:book={n.kind === "book"} class:active={n.id === router.currentId} oncontextmenu={(e) => menu(e, "note", n.id)}>
     {#if n.kind === "book"}<BookIcon class="tree-icon" {...icon} />{:else}<FileText class="tree-icon" {...icon} />{/if}
     <span class="tree-name">{n.title}</span>
   </a>

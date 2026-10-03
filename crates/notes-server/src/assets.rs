@@ -21,6 +21,7 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/v/{vault}", get(shell))
         .route("/v/{vault}/", get(shell))
         .route("/v/{vault}/n/{*id}", get(shell))
+        .route("/v/{vault}/f/{*path}", get(shell))
         .route("/v/{vault}/graph", get(shell))
         .route("/v/{vault}/tags", get(shell))
         .route("/v/{vault}/tags/{*tag}", get(shell))

@@ -43,6 +43,7 @@ done
 # (tauri.conf.json): по нему KDE и GNOME находят значок окна.
 app_id=$(sed -n 's/.*"identifier": "\(.*\)".*/\1/p' crates/notes-app/tauri.conf.json)
 data=${XDG_DATA_HOME:-$HOME/.local/share}
+install -Dm644 app/public/assets/icon.svg "$data/icons/hicolor/scalable/apps/$app_id.svg"
 install -Dm644 crates/notes-app/icons/icon.png "$data/icons/hicolor/256x256/apps/$app_id.png"
 mkdir -p "$data/applications"
 cat >"$data/applications/$app_id.desktop" <<DESKTOP
