@@ -12,6 +12,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Приоритет на ступень ниже обычного (наследуют cargo, npm, e2e): сборка на
+# всех ядрах уступает работе за компьютером (nice 1; ionice - шкала 0-7,
+# обычный 4), а свободный процессор занимает так же.
+renice -n 1 -p $$ >/dev/null 2>&1 || true
+ionice -c 2 -n 5 -p $$ >/dev/null 2>&1 || true
+
 bin=${BIN:-$HOME/.local/bin}
 skills=${CLAUDE_SKILLS:-$HOME/.claude/skills}
 
