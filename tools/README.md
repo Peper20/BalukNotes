@@ -3,7 +3,7 @@
 | Файл | Что |
 |---|---|
 | `check.sh` | полная проверка |
-| `install.sh` | `notes` в `~/.local/bin` и навык в `~/.claude/skills` одной версией; после изменений - снова |
+| `install.sh` | `notes` в `~/.local/bin` и навык в `~/.claude/skills` одной версией, служба `notes service` - перезапуск; после изменений - снова |
 | `test-env.sh` | сервер на `tests/vault` (данные `tests/.data`, порт 8432) |
 | `visual.mjs`, `shot.mjs` | снимки фикстур и страниц (браузер - `lib/browser.mjs`) |
 

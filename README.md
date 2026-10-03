@@ -16,7 +16,10 @@
    обновления репозитория): `tools/install.sh` (первая сборка - несколько
    минут). Дальше `notes` работает из любой папки.
 3. **Хранилище**: `notes vaults new "Заметки"` (или в приложении).
-4. **Приложение**: `notes serve` -> http://127.0.0.1:8421. Остановить - Ctrl+C.
+4. **Приложение**: `notes service install` - сервер в фоне, сам стартует при
+   входе в систему (служба systemd пользователя, без root; убрать - `notes
+   service remove`) -> http://127.0.0.1:8421. Без службы - `notes serve`
+   (остановить - Ctrl+C).
    Заметка собирается при первом открытии (книга с рисунками - секунды),
    потом берётся из кэша.
 5. **Заметка**: `notes new --vault "Заметки" --title "Моя заметка"` (книга -
@@ -34,7 +37,8 @@
 ## Команды
 
 ```sh
-notes serve                                  # приложение; --token - только с токеном
+notes service install | remove | status      # автозапуск приложения (systemd); лог - journalctl --user -u baluk-notes
+notes serve                                  # приложение без службы; --token - только с токеном
 notes vaults [new "Имя"]                     # хранилища
 notes new --vault "Имя" --title "Название"   # заготовка; ещё --folder, --book, --tag, --lang
 notes list --vault "Имя" | notes tags --vault "Имя"
