@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Поставить BalukNotes для работы из любой папки — одной версией из этого
-# репозитория: команду `notes` (релизная сборка: библиотека baluk, клиент и
-# шрифты встроены) и навык Claude Code /baluk-note. После изменений проекта —
+# репозитория: команду `notes` с частями `notes-typst` (релизная сборка:
+# библиотека baluk, клиент и шрифты встроены) и `notes-app` (окно, с ярлыком
+# в меню и значком), навык Claude Code /baluk-note. После изменений проекта —
 # запустить снова.
 #
 #   tools/install.sh
 #
-# Куда: notes — в $BIN (по умолчанию ~/.local/bin), навык — в
+# Куда: notes и части — в $BIN (по умолчанию ~/.local/bin), ярлык и значок — в
+# $XDG_DATA_HOME (~/.local/share), навык — в
 # $CLAUDE_SKILLS/baluk-note (по умолчанию ~/.claude/skills). Хранилище не
 # трогается: где оно — `notes info`.
 set -euo pipefail
@@ -26,13 +28,36 @@ echo "▶ клиент (app/dist)"
 npm --prefix app run -s build
 
 echo "▶ notes, релизная сборка"
-cargo build --release -p notes-cli
+cargo build --release -p notes -p notes-typst -p notes-app
 
-# Через временный файл: работающий `notes serve` не мешает замене.
+# Через временный файл: работающий `notes serve` не мешает замене. Части -
+# в той же папке, что notes (там он их ищет).
 mkdir -p "$bin"
-install -m755 target/release/notes "$bin/.notes.new"
-mv -f "$bin/.notes.new" "$bin/notes"
-echo "  $bin/notes"
+for name in notes notes-typst notes-app; do
+  install -m755 "target/release/$name" "$bin/.$name.new"
+  mv -f "$bin/.$name.new" "$bin/$name"
+  echo "  $bin/$name"
+done
+
+# Ярлык окна в меню и значок. Имя файла ярлыка - идентификатор приложения
+# (tauri.conf.json): по нему KDE и GNOME находят значок окна.
+app_id=$(sed -n 's/.*"identifier": "\(.*\)".*/\1/p' crates/notes-app/tauri.conf.json)
+data=${XDG_DATA_HOME:-$HOME/.local/share}
+install -Dm644 app/public/assets/icon.svg "$data/icons/hicolor/scalable/apps/$app_id.svg"
+install -Dm644 crates/notes-app/icons/icon.png "$data/icons/hicolor/256x256/apps/$app_id.png"
+mkdir -p "$data/applications"
+cat >"$data/applications/$app_id.desktop" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=baluk notes
+Comment=Заметки на Typst
+Exec=$bin/notes-app
+Icon=$app_id
+Terminal=false
+Categories=Office;Education;
+StartupWMClass=$app_id
+DESKTOP
+echo "  $data/applications/$app_id.desktop"
 
 # Навык целиком заменяется копией из репозитория (skills/baluk-note).
 target=$skills/baluk-note
@@ -59,13 +84,23 @@ case ":$PATH:" in
 esac
 # Служба автозапуска (`notes service`, юнит baluk-notes.service) — на новую
 # версию; запущенный вручную `notes serve` перезапускает пользователь.
+# Юнит без `--socket` - окно `notes app` не найдёт ядро службы и запустит
+# второе: юнит с флагами по умолчанию переписывается, со своими - подсказка.
+unit=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/baluk-notes.service
 service_pid=0
 if systemctl --user -q is-active baluk-notes.service 2>/dev/null; then
-  systemctl --user restart baluk-notes.service
+  if grep -q '^ExecStart=.* serve --addr 127.0.0.1:8421$' "$unit"; then
+    "$bin/notes" service install >/dev/null 2>&1
+    echo "  служба baluk-notes: юнит обновлён (сокет для окна), перезапущена"
+  else
+    systemctl --user restart baluk-notes.service
+    echo "  служба baluk-notes перезапущена"
+    grep -q -- '--socket' "$unit" ||
+      echo "Служба без --socket: окно запустит своё ядро. Обновить - notes service install с её флагами." >&2
+  fi
   service_pid=$(systemctl --user show -p MainPID --value baluk-notes.service)
-  echo "  служба baluk-notes перезапущена"
 fi
-if pgrep -x notes | grep -vqx "$service_pid"; then
+if pgrep -x notes-typst | grep -vqx "$service_pid"; then
   echo "Работает notes serve старой версии — перезапустите его."
 fi
 echo

@@ -44,8 +44,7 @@ class Updates {
 
   #schedule(): void {
     this.#stop();
-    const reach = (ok: boolean) => (ok ? connection.reached() : connection.lost());
-    this.#stop = changeSource(this.#mode(), api.eventsUrl(), reach).start(() => void this.check());
+    this.#stop = changeSource(this.#mode(), api.events).start(() => void this.check());
   }
 
   #settingsSaved(keys: string[]): void {

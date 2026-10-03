@@ -8,6 +8,7 @@
   import { mobile, ui } from "./lib/ui.svelte";
   import Backlinks from "./components/Backlinks.svelte";
   import ChapterNav from "./components/ChapterNav.svelte";
+  import FolderPage from "./components/FolderPage.svelte";
   import GraphPage from "./components/GraphPage.svelte";
   import Help from "./components/Help.svelte";
   import Home from "./components/Home.svelte";
@@ -124,6 +125,8 @@
         <GraphPage route={router.route} />
       {:else if router.route.kind === "tags" && started}
         <Tags tag={router.route.tag} />
+      {:else if router.route.kind === "folder" && started}
+        <FolderPage path={router.route.path} />
       {:else if started}
         <Home />
       {/if}

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { encodeId, graphHref, hashAnchor, homeHref, isAppPath, noteHref, parseRoute, splitId, tagHref } from "./ids";
+import { encodeId, folderGraphHref, folderHref, graphHref, hashAnchor, homeHref, isAppPath, noteHref, parseRoute, splitId, tagHref } from "./ids";
 import { setVault } from "./vault";
 
 describe("адреса заметок", () => {
@@ -20,11 +20,15 @@ describe("адреса заметок", () => {
   });
 
   it("граф: весь и соседи заметки", () => {
-    expect(parseRoute("/graph")).toEqual({ kind: "graph", around: null, depth: 1 });
+    expect(parseRoute("/graph")).toEqual({ kind: "graph", around: null, depth: 1, folder: null });
     const url = new URL(graphHref("Имена/C++ и C#", 2), "http://x");
-    expect(parseRoute(url.pathname, url.search)).toEqual({ kind: "graph", around: "Имена/C++ и C#", depth: 2 });
-    expect(parseRoute("/graph", "?around=A&depth=99")).toEqual({ kind: "graph", around: "A", depth: 1 });
+    expect(parseRoute(url.pathname, url.search)).toEqual({ kind: "graph", around: "Имена/C++ и C#", depth: 2, folder: null });
+    expect(parseRoute("/graph", "?around=A&depth=99")).toEqual({ kind: "graph", around: "A", depth: 1, folder: null });
     expect(graphHref("A")).toBe("/graph?around=A");
+    // Папка: страница и граф её поддерева.
+    expect(parseRoute(new URL(folderHref("Мат/Анализ: предел"), "http://x").pathname)).toEqual({ kind: "folder", path: "Мат/Анализ: предел" });
+    const g = new URL(folderGraphHref("Мат/Анализ"), "http://x");
+    expect(parseRoute(g.pathname, g.search)).toEqual({ kind: "graph", around: null, depth: 1, folder: "Мат/Анализ" });
   });
 
   it("якорь и имя", () => {
@@ -49,14 +53,14 @@ describe("адреса в хранилище", () => {
     expect(parseRoute(new URL(noteHref("Сеть/SSH"), "http://x").pathname)).toEqual({ kind: "note", id: "Сеть/SSH" });
     expect(parseRoute(`${base}/`)).toEqual({ kind: "home" });
     expect(parseRoute(base)).toEqual({ kind: "home" });
-    expect(parseRoute(`${base}/graph`, "?around=A")).toEqual({ kind: "graph", around: "A", depth: 1 });
+    expect(parseRoute(`${base}/graph`, "?around=A")).toEqual({ kind: "graph", around: "A", depth: 1, folder: null });
     expect(parseRoute("/n/A")).toEqual({ kind: "note", id: "A" });
   });
 
   it("свои адреса — клиенту, чужого хранилища — нет", () => {
     setVault("Учёба");
     const base = `/v/${encodeURIComponent("Учёба")}`;
-    for (const own of [`${base}/`, base, `${base}/n/A`, `${base}/tags`, `${base}/graph`, "/n/A", "/", "/graph"]) {
+    for (const own of [`${base}/`, base, `${base}/n/A`, `${base}/tags`, `${base}/graph`, `${base}/f/A`, "/n/A", "/", "/graph"]) {
       expect(isAppPath(own), own).toBe(true);
     }
     for (const other of ["/v/Другое/n/A", "/v/Другое/", `${base}x/n/A`, "/assets/x.css", "/api/notes"]) {

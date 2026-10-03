@@ -20,10 +20,12 @@ it("запрос: адрес и токен из настройки", async () =>
   expect(calls[0]![1].headers).toEqual({ Authorization: "Bearer t" });
   expect(calls[1]![1].headers).toEqual({ Authorization: "Bearer t", "Content-Type": "application/json" });
   expect(api.pdfUrl("a/b", "night")).toBe("http://127.0.0.1:9000/api/vaults/a%20b/pdf/a/b?theme=night&token=t");
-  expect(api.eventsUrl()).toBe("http://127.0.0.1:9000/api/vaults/a%20b/events?token=t");
+  await api.events(7);
+  expect(calls[2]![0]).toBe("http://127.0.0.1:9000/api/vaults/a%20b/events?after=7");
+  expect(calls[2]![1].headers).toEqual({ Authorization: "Bearer t" });
   // Общее — без хранилища.
   await api.vaults();
-  expect(calls[2]![0]).toBe("http://127.0.0.1:9000/api/vaults");
+  expect(calls[3]![0]).toBe("http://127.0.0.1:9000/api/vaults");
 });
 
 it("ошибки сети и сервера — ApiError; отмена — нет", async () => {

@@ -10,6 +10,10 @@ export type GraphFilter = {
  */
 folders: Array<string>, 
 /**
+ * Только заметки в этой папке и её подпапках (путь от корня: `Мат/Анализ`).
+ */
+folder: string | null, 
+/**
  * Скрытые группы.
  */
 hidden: Array<string>, 

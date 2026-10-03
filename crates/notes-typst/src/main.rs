@@ -1,6 +1,8 @@
-//! `notes` — заметки на Typst из командной строки. Работает из любой папки:
-//! хранилище — в каталоге данных пользователя, библиотека, клиент и шрифты
-//! встроены в бинарник (релизная сборка).
+//! `notes-typst` — часть `notes` со сборкой Typst: все команды, кроме команд
+//! других частей; вызывается через тонкий `notes` (крейт `notes`,
+//! architecture §1). Работает из любой папки: хранилище — в каталоге данных
+//! пользователя, библиотека, клиент и шрифты встроены в бинарник (релизная
+//! сборка).
 //!
 //!   notes serve            локальный сервер с клиентом (http://127.0.0.1:8421)
 //!   notes new <путь>       заготовка заметки (--book — книги)
@@ -42,7 +44,7 @@ const APP: &str = "baluk-notes";
 const ADDR: &str = "127.0.0.1:8421";
 
 #[derive(Debug, Parser)]
-#[command(version, about = "Заметки на Typst")]
+#[command(name = "notes", version, about = "Заметки на Typst")]
 struct Cli {
     /// Каталог данных: хранилища vaults/, settings.json, кэш. По умолчанию —
     /// `data` из ~/.config/baluk-notes/config.toml, иначе ~/.local/share/baluk-notes.
@@ -78,12 +80,19 @@ struct Cli {
 enum Command {
     /// Локальный сервер с клиентом.
     Serve {
-        /// Адрес; для доступа из сети — 0.0.0.0:8421.
-        #[arg(long, default_value = ADDR)]
-        addr: SocketAddr,
+        /// Адрес для браузера; для доступа из сети — 0.0.0.0:8421. По
+        /// умолчанию — 127.0.0.1:8421, если не задан только --socket.
+        #[arg(long)]
+        addr: Option<SocketAddr>,
+        /// Ещё и сокет Unix — для окна `notes app` (права — только у
+        /// пользователя, без токена). Без пути —
+        /// $XDG_RUNTIME_DIR/baluk-notes/notes.sock.
+        #[arg(long, num_args = 0..=1, value_name = "ПУТЬ")]
+        #[allow(clippy::option_option, reason = "clap: флага нет, флаг без пути, флаг с путём")]
+        socket: Option<Option<PathBuf>>,
         /// Токен доступа: без него сервер отвечает 401. Передаётся заголовком
         /// `Authorization: Bearer …`, параметром `?token=` (сервер ставит
-        /// cookie) или cookie `notes_token`. Нужен встроенному серверу Tauri.
+        /// cookie) или cookie `notes_token`. Сокета Unix не касается.
         #[arg(long, env = "NOTES_TOKEN", hide_env_values = true)]
         token: Option<String>,
     },
@@ -284,6 +293,10 @@ fn main() -> ExitCode {
         .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
         .with_writer(std::io::stderr)
         .init();
+    if let Err(e) = notes::check_version("notes-typst") {
+        eprintln!("ошибка: {e}");
+        return ExitCode::FAILURE;
+    }
     match run(Cli::parse()) {
         Ok(code) => code,
         Err(e) => {
@@ -377,7 +390,14 @@ fn run(cli: Cli) -> Result<ExitCode> {
     match cli.command {
         Command::Vaults { action } => return vaults_command(&vaults, action),
         Command::Info => return info(&vaults, &data, arg.as_ref(), cli.library.as_ref()),
-        Command::Serve { addr, token } => return serve(vaults, config, &data, arg, addr, token),
+        Command::Serve { addr, socket, token } => {
+            let socket = socket
+                .map(|path| {
+                    path.or_else(notes::default_socket).context("нет $XDG_RUNTIME_DIR — укажите путь: --socket <путь>")
+                })
+                .transpose()?;
+            return serve(vaults, config, &data, arg, Listen { addr, socket }, token);
+        }
         _ => {}
     }
 
@@ -439,7 +459,8 @@ fn service_args(cli: &Cli, addr: SocketAddr) -> Result<Vec<String>> {
     let absolute = |p: &PathBuf| -> Result<String> {
         Ok(std::path::absolute(p).with_context(|| format!("путь {}", p.display()))?.to_string_lossy().into_owned())
     };
-    let mut args = vec!["serve".to_owned(), "--addr".to_owned(), addr.to_string()];
+    // Сокет — чтобы окно `notes app` работало с ядром службы, а не запускало второе.
+    let mut args = vec!["serve".to_owned(), "--addr".to_owned(), addr.to_string(), "--socket".to_owned()];
     if let Some(data) = &cli.data {
         args.extend(["--data".to_owned(), absolute(data)?]);
     }
@@ -556,12 +577,20 @@ fn open_settings(notes: &Notes, data: &Path) -> Result<SettingsStore> {
 /// Сервер: все хранилища каталога данных (открываются по запросу;
 /// хранилищ может не быть — первое создают в приложении) или одно
 /// (`--vault <имя или путь>`).
+/// Где слушать `notes serve`: `--addr` и `--socket`; ни того ни другого —
+/// адрес по умолчанию.
+#[derive(Debug)]
+struct Listen {
+    addr: Option<SocketAddr>,
+    socket: Option<PathBuf>,
+}
+
 fn serve(
     vaults: Vaults,
     config: NotesConfig,
     data: &Path,
     arg: Option<VaultArg>,
-    addr: SocketAddr,
+    listen: Listen,
     token: Option<String>,
 ) -> Result<ExitCode> {
     let set = if let Some(arg) = arg {
@@ -585,15 +614,57 @@ fn serve(
     }
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async move {
-        let listener = tokio::net::TcpListener::bind(addr).await.with_context(|| format!("занять {addr}"))?;
-        tracing::info!("открыть: http://{addr}/");
-        notes_server::serve(listener, state, stop_signal()).await?;
+        let mut listeners = Vec::new();
+        let addr = listen.addr.or_else(|| listen.socket.is_none().then(|| ADDR.parse().expect("адрес")));
+        if let Some(addr) = addr {
+            let listener = tokio::net::TcpListener::bind(addr).await.with_context(|| format!("занять {addr}"))?;
+            tracing::info!("открыть: http://{addr}/");
+            listeners.push(notes_server::Listen::Tcp(listener));
+        }
+        if let Some(path) = &listen.socket {
+            listeners.push(bind_socket(path)?);
+            tracing::info!("сокет: {}", path.display());
+        }
+        let served = notes_server::serve(listeners, state, stop_signal()).await;
+        // Штатная остановка - сокет убрать (после падения его уберёт следующий запуск).
+        if let Some(path) = &listen.socket {
+            let _ = std::fs::remove_file(path);
+        }
+        served?;
         Ok(ExitCode::SUCCESS)
     })
 }
 
+/// Сокет Unix для окна: папка и сокет — только у пользователя. Сокет от
+/// упавшего сервера убирается; на живой (кто-то отвечает) — ошибка.
+#[cfg(unix)]
+fn bind_socket(path: &Path) -> Result<notes_server::Listen> {
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+    if let Some(dir) = path.parent() {
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(dir)
+            .with_context(|| format!("создать {}", dir.display()))?;
+    }
+    if path.exists() {
+        if std::os::unix::net::UnixStream::connect(path).is_ok() {
+            bail!("сокет {} занят — notes serve уже работает", path.display());
+        }
+        std::fs::remove_file(path).with_context(|| format!("убрать старый сокет {}", path.display()))?;
+    }
+    let listener = tokio::net::UnixListener::bind(path).with_context(|| format!("занять {}", path.display()))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    Ok(notes_server::Listen::Unix(listener))
+}
+
+#[cfg(not(unix))]
+fn bind_socket(_path: &Path) -> Result<notes_server::Listen> {
+    bail!("--socket — только в Linux и macOS")
+}
+
 /// Ctrl+C или SIGTERM (так останавливает служба systemd): сервер
-/// завершается штатно, потоки событий закрываются.
+/// завершается штатно, ждущие запросы событий получают ответ.
 async fn stop_signal() {
     #[cfg(unix)]
     {
@@ -721,6 +792,28 @@ mod tests {
 
     fn err(result: Result<NoteId>) -> String {
         result.unwrap_err().to_string()
+    }
+
+    /// Тонкий `notes` ищет команду за общими флагами со значением - его
+    /// список совпадает с `Cli`; команды других частей здесь не заняты.
+    #[test]
+    fn thin_notes_knows_global_flags_and_commands() {
+        use clap::CommandFactory;
+        let cli = Cli::command();
+        let mut flags: Vec<String> = cli
+            .get_arguments()
+            .filter(|a| a.is_global_set() && a.get_action().takes_values())
+            .filter_map(|a| a.get_long().map(|l| format!("--{l}")))
+            .collect();
+        flags.sort();
+        let mut expected: Vec<&str> = notes::VALUE_FLAGS.to_vec();
+        expected.sort_unstable();
+        assert_eq!(flags, expected);
+        for part in notes::PARTS {
+            for command in part.commands {
+                assert!(cli.find_subcommand(command).is_none(), "команда {command} - у части {}", part.bin);
+            }
+        }
     }
 
     #[test]

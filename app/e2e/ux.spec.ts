@@ -130,6 +130,42 @@ test("превью ссылки при наведении", async ({ page }) => 
   await expect(card).toBeHidden();
 });
 
+test("папка: страница из пути верхней строки, граф её поддерева", async ({ page }) => {
+  await open(page, "Глубоко/а/б/в/г/Дно");
+  const crumbs = page.locator("#crumbs");
+  await expect(crumbs).toHaveText("Глубоко / а / б / в / г / Дно");
+  // Ctrl+щелчок - фоновая вкладка, как у ссылок в заметке.
+  await crumbs.getByRole("link", { name: "б", exact: true }).click({ modifiers: ["Control"] });
+  await expect(page.locator(".tabbar .tab")).toHaveCount(2);
+  await expect(title(page)).toHaveText("Дно");
+
+  await crumbs.getByRole("link", { name: "б", exact: true }).click();
+  await ready(page);
+  const folder = page.locator("#note .folder-page");
+  await expect(folder.locator("h1")).toHaveText("б");
+  await expect(folder.getByRole("link", { name: "в", exact: true })).toBeVisible();
+  await expect(crumbs).toHaveText("Глубоко / а / б");
+  await expect(page.locator('#tree summary[data-path="Глубоко/а/б"]')).toHaveClass(/active/);
+
+  await folder.getByRole("link", { name: "Граф папки" }).click();
+  await ready(page);
+  await expect(page.locator(".graph-title")).toContainText("Граф папки б");
+  await expect(page.locator(".graph-node")).toHaveCount(1);
+  await expect(page.locator('.graph-node[data-id="Глубоко/а/б/в/г/Дно"]')).toBeVisible();
+});
+
+test("превью заметки в дереве - справа от строки", async ({ page }) => {
+  await open(page, "Сеть/UFW");
+  const row = page.locator('#tree a[data-id="Сеть/SSH"]');
+  await row.hover();
+  const card = page.locator(".link-preview");
+  await expect(card.locator(".lp-title")).toContainText("SSH");
+  const [r, c] = [await row.boundingBox(), await card.boundingBox()];
+  expect(c!.x).toBeGreaterThanOrEqual(r!.x + r!.width);
+  await page.mouse.move(900, 5);
+  await expect(card).toBeHidden();
+});
+
 test("вкладки: Ctrl+клик, переключение, закрытие", async ({ page }) => {
   await open(page, "Особые случаи/Ссылки");
   await page.locator("#note").getByRole("link", { name: "Дно", exact: true }).click({ modifiers: ["Control"] });

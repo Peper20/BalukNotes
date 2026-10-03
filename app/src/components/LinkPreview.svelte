@@ -2,14 +2,19 @@
   Превью ссылки на заметку при наведении (задержка — чтобы не мигать при
   случайном проходе мышью): название, раздел, начало текста, теги. Текст —
   из индекса исходников, без сборки заметки: быстро даже для большой книги.
+  В дереве карточка — справа от строки, не закрывает соседние.
 -->
 <script lang="ts">
   import { api, type Preview } from "../lib/api";
   import { router } from "../lib/state";
   import { hashAnchor, isAppPath, parseRoute } from "../lib/ids";
 
-  /** Ссылки на заметки: в HTML заметки и в «Ссылаются сюда» (адреса хранилища). */
-  const NOTE_LINKS = [".k-note", ".backlinks"].flatMap((c) => [`${c} a[href^='/v/']`, `${c} a[href^='/n/']`]).join(", ");
+  /** Ссылки на заметки: в HTML заметки, в «Ссылаются сюда» (адреса хранилища) и в дереве. */
+  const NOTE_LINKS = [".k-note", ".backlinks"]
+    .flatMap((c) => [`${c} a[href^='/v/']`, `${c} a[href^='/n/']`])
+    .concat(".tree a[data-id]")
+    .join(", ");
+  const CARD_W = 384; // ширина .link-preview (24rem)
 
   const DELAY = 350;
   const cache = new Map<string, Preview | null>();
@@ -48,8 +53,13 @@
       const p = cache.get(key) ?? null;
       if (!p) return;
       const r = a.getBoundingClientRect();
-      const above = r.bottom + 240 > innerHeight && r.top > 260;
-      pos = { x: Math.min(Math.max(r.left, 8), innerWidth - 400), y: above ? innerHeight - r.top + 6 : r.bottom + 6, above };
+      if (a.closest(".tree")) {
+        const above = r.top + 240 > innerHeight;
+        pos = { x: Math.min(r.right + 8, innerWidth - CARD_W - 8), y: above ? innerHeight - r.bottom : r.top, above };
+      } else {
+        const above = r.bottom + 240 > innerHeight && r.top > 260;
+        pos = { x: Math.min(Math.max(r.left, 8), innerWidth - CARD_W - 16), y: above ? innerHeight - r.top + 6 : r.bottom + 6, above };
+      }
       preview = p;
     }, DELAY);
   }

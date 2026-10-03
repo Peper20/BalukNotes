@@ -5,11 +5,14 @@
 
 import { api, type FolderListItem, type NoteListItem } from "../api";
 import { splitId } from "../ids";
+import { buildTree } from "../tree";
 
 class Notes {
   all = $state.raw<NoteListItem[]>([]);
   folders = $state.raw<FolderListItem[]>([]);
   #folderTitles = $derived(new Map(this.folders.map((f) => [f.path, f.title])));
+  /** Дерево папок и заметок (боковая панель, страница папки). */
+  tree = $derived(buildTree(this.all, (path) => this.folderTitle(path), this.folders.map((f) => f.path)));
 
   byId(id: string | null): NoteListItem | undefined {
     return id == null ? undefined : this.all.find((n) => n.id === id);

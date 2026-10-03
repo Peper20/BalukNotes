@@ -16,7 +16,7 @@ npm test        # Vitest; ещё check, e2e
   компоненты - `src/components/`.
 - Сервер - только через `src/lib/api/` (адрес и токен - `api/config.ts`, ошибки
   - `ApiError`), без `fetch` в компонентах. Источник изменений - `changes.ts`
-  (события `GET .../events`, опроса нет); связь с сервером -
+  (долгий опрос `GET .../events?after=`, опроса раз в N секунд нет); связь с сервером -
   `state/connection.svelte.ts` (ответил ли он - `api.onReach`).
 - **Типы API - из Rust** (`ts-rs`, фича `ts`): `npm run types` выгружает их в
   `src/lib/api/types/` (в git). Поменял структуру ответа - выгрузи и закоммить;
@@ -32,7 +32,9 @@ npm test        # Vitest; ещё check, e2e
   или `.var("--...", "px")`) + правило CSS; `appearance.ts` применяет её по
   схеме.
 - Стили заметки - только внутри `.k-note { ... }`: блоки `src/baluk-css/`
-  (порядок - `@import` в `baluk.css`), склеиваются в `assets/baluk.css`.
+  (порядок - `@import` в `baluk.css`), склеиваются в `assets/baluk.css` и
+  проходят lightningcss (префиксы: окно приложения - WebKit, ему нужен
+  `-webkit-user-select`; браузеры - `TARGETS` в `bundle.ts`).
   Интерфейс - `src/app.css`.
 - Живые блоки (интерактивные рисунки, кадры, граф) - реестр `src/lib/live/`:
   модуль с `LiveBlock` + селектор в `selectors.ts` + строка в `BLOCKS`.

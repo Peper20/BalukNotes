@@ -88,7 +88,7 @@ vault_check() {
     return 1
   fi
   # Код выхода 1 — ожидаем: в фикстуре есть намеренные ошибки.
-  actual=$(cargo run -q -p notes-cli -- --data tests/.data --vault tests/vault check | tee /dev/stderr | tail -n 1)
+  actual=$(cargo run -q -p notes-typst -- --data tests/.data --vault tests/vault check | tee /dev/stderr | tail -n 1)
   echo "ожидается: $expected"
   echo "получено:  $actual"
   [[ $actual == "$expected" ]]
@@ -120,7 +120,7 @@ vendor_tests() {
 # заготовку заметки) собираются во временном хранилище без ошибок,
 # предупреждений и битых ссылок.
 baluk_note() {
-  local dir=tests/.data/baluk-note notes=(cargo run -q -p notes-cli -- --data tests/.data/baluk-note)
+  local dir=tests/.data/baluk-note notes=(cargo run -q -p notes-typst -- --data tests/.data/baluk-note)
   rm -rf "$dir"
   "${notes[@]}" vaults new Проверка >/dev/null || return 1
   notes+=(--vault Проверка)
@@ -142,10 +142,17 @@ baluk_note() {
 
 in_app() { (cd app && "$@"); }
 
+# Окно notes-app (Tauri) - только с WebKitGTK; без него (облако) - мимо.
+no_webkit=()
+if ! pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
+  no_webkit=(--exclude notes-app)
+  echo "нет webkit2gtk-4.1 — notes-app не собирается"
+fi
+
 if [[ $rust == 1 ]]; then
-  step cargo-test cargo test --workspace
+  step cargo-test cargo test --workspace "${no_webkit[@]}"
   # С фичей measure — и тяжёлые замеры памяти (сами они в тестах не идут).
-  step clippy cargo clippy --workspace --all-targets --features notes-core/measure -- -D warnings
+  step clippy cargo clippy --workspace "${no_webkit[@]}" --all-targets --features notes-core/measure -- -D warnings
   step fmt cargo fmt --check
   step vendor vendor_tests
   step notes-check vault_check

@@ -205,6 +205,8 @@ test("пустая папка — в дереве; переименовать з
 
     // Заметка: план по ходу ввода — новый файл и чьи ссылки поправятся.
     await tree.getByRole("link", { name: "Старое" }).click({ button: "right" });
+    // Сверху меню - для чего оно.
+    await expect(page.locator("#note-menu .note-menu-head")).toHaveText("Старое");
     await page.locator("#note-menu").getByRole("menuitem", { name: "Переименовать…" }).click();
     const input = dialog.getByLabel("Название");
     await expect(input).toHaveValue("Старое");

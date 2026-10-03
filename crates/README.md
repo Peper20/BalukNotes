@@ -7,9 +7,18 @@
 | `notes-core` | ядро без async и HTTP: хранилище, компиляция Typst, обработка HTML, кэш, прогрев, ссылки, граф, поиск, настройки |
 | `notes-server` | HTTP API (axum) и раздача клиента |
 | `notes-assets` | клиент `app/dist` для сервера |
-| `notes-cli` | команда `notes` |
+| `notes` | тонкая команда `notes`: вызывает части из своей папки, без зависимостей (architecture §1) |
+| `notes-typst` | часть со сборкой Typst: все команды, кроме команд других частей |
+| `notes-app` | окно (Tauri 2) без Typst: схема `notes://` -> ядро через сокет Unix; нужен WebKitGTK |
 
-Логика - в ядре, остальные крейты - тонкие обёртки.
+Логика - в ядре, остальные крейты - тонкие обёртки. Новая часть приложения -
+бинарник `notes-<имя>` и строка в `notes::PARTS` (её команды); общие флаги
+`notes-typst` со значением - `notes::VALUE_FLAGS` (сверяет тест).
+
+Значок приложения - один источник `app/public/assets/icon.svg` (favicon сайта,
+меню - `tools/install.sh`); окну Tauri нужен PNG, после правки SVG:
+`rsvg-convert -w 256 -h 256 app/public/assets/icon.svg -o
+crates/notes-app/icons/icon.png`.
 
 Общие правила Rust - навык Claude Code `rust-best-practices`
 (`.claude/skills/`, сторонний: `apollographql/skills`, MIT); правила этого

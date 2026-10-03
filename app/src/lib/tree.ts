@@ -45,6 +45,13 @@ export function buildTree(
   return root;
 }
 
+/** Папка дерева по пути; нет такой — `undefined`. */
+export function findFolder(root: Folder, path: string): Folder | undefined {
+  let f: Folder | undefined = root;
+  for (const name of path ? path.split("/") : []) f = f?.folders.find((sub) => sub.name === name);
+  return f;
+}
+
 /** Сколько заметок в папке вместе с вложенными. */
 export function countNotes(f: Folder): number {
   return f.notes.length + f.folders.reduce((sum, sub) => sum + countNotes(sub), 0);

@@ -38,9 +38,14 @@ pub fn group_of(id: &str) -> &str {
     id.split_once('/').map_or(ROOT_GROUP, |(g, _)| g)
 }
 
+/// Заметка вершины: у главы — её книга.
+fn node_note(n: &Node) -> &str {
+    n.chapter.as_ref().map_or(&n.id, |c| &c.book)
+}
+
 /// Группа вершины: у главы — группа её книги.
 fn node_group(n: &Node) -> &str {
-    group_of(n.chapter.as_ref().map_or(&n.id, |c| &c.book))
+    group_of(node_note(n))
 }
 
 /// Что показать. Пустой `folders` — все папки.
@@ -50,6 +55,8 @@ fn node_group(n: &Node) -> &str {
 pub struct GraphFilter {
     /// Только эти группы (папки верхнего уровня; корень — [`ROOT_GROUP`]).
     pub folders: Vec<String>,
+    /// Только заметки в этой папке и её подпапках (путь от корня: `Мат/Анализ`).
+    pub folder: Option<String>,
     /// Скрытые группы.
     pub hidden: Vec<String>,
     /// Только заметки с этим тегом.
@@ -73,6 +80,7 @@ impl Default for GraphFilter {
     fn default() -> Self {
         Self {
             folders: vec![],
+            folder: None,
             hidden: vec![],
             tag: None,
             missing: true,
@@ -185,6 +193,9 @@ pub fn filter(graph: &Graph, has_tag: impl Fn(&Node, &str) -> bool, f: &GraphFil
         Some(n.id.as_str()) == center
             || (near.as_ref().is_none_or(|near| near.contains(&n.id))
                 && (f.folders.is_empty() || f.folders.iter().any(|g| g == group))
+                && f.folder
+                    .as_ref()
+                    .is_none_or(|p| node_note(n).strip_prefix(p.as_str()).is_some_and(|r| r.starts_with('/')))
                 && !f.hidden.iter().any(|g| g == group)
                 && (f.missing || n.kind.is_some())
                 && f.tag.as_ref().is_none_or(|t| has_tag(n, t)))
@@ -1135,8 +1146,19 @@ mod tests {
         let only_net = filter(&g, tags, &GraphFilter { folders: vec!["Сеть".into()], ..f.clone() });
         assert_eq!(ids(&only_net), ["Сеть/A", "Сеть/B"]);
         assert_eq!(ids(&filter(&g, tags, &GraphFilter { tag: Some("ssh".into()), ..f.clone() })), ["Сеть/B"]);
-        let linked = filter(&g, tags, &GraphFilter { missing: false, orphans: false, ..f });
+        let linked = filter(&g, tags, &GraphFilter { missing: false, orphans: false, ..f.clone() });
         assert_eq!(ids(&linked), ["D", "Мат/C", "Сеть/A", "Сеть/B"]);
+        // Папка - с подпапками, но не соседка с тем же началом имени.
+        let mut deep = g.clone();
+        deep.nodes.extend(["Сеть/Linux/SSH", "Сетевое"].map(|id| node(id, Some(NoteKind::Note))));
+        assert_eq!(
+            ids(&filter(&deep, tags, &GraphFilter { folder: Some("Сеть".into()), ..f.clone() })),
+            ["Сеть/A", "Сеть/B", "Сеть/Linux/SSH"]
+        );
+        assert_eq!(
+            ids(&filter(&deep, tags, &GraphFilter { folder: Some("Сеть/Linux".into()), ..f })),
+            ["Сеть/Linux/SSH"]
+        );
     }
 
     #[test]
