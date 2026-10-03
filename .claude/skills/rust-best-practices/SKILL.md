@@ -68,11 +68,12 @@ handbook chapters only when the task touches their topic.
 - No new test dependencies (`rstest`, `insta`) without need: snapshots are `tests/snapshots/`.
 
 ### Language
-- Target (user decision, `docs/roadmap.md` "Потом"): the whole project in English - identifiers, comments,
-  docs, logs, error and CLI messages, `docs/`, READMEs, `CLAUDE.md`. Russian stays only in the client UI (and a
-  Russian copy of the root README).
-- The move is one separate task (message texts are checked by tests). Until then, follow the language of the
-  file you edit, so each file stays in one language; identifiers are English already.
+- Target (user decision, `docs/roadmap.md` "Приоритетное"): the whole project in English - identifiers,
+  comments, docs, logs, error and CLI messages, `docs/`, READMEs, `CLAUDE.md`. Russian stays only in the client
+  UI (and a Russian copy of the root README).
+- `crates/` moves to English together with the rewrite by this skill: a file you bring to these rules, you
+  also translate whole (comments, docs, messages) and update the tests that check message texts. Do not leave
+  a file half Russian, half English.
 
 ### Comments and docs
 - `//!` at the top of a module says how it works and why; `///` on items says what they are. Comments explain
