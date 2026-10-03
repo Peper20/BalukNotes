@@ -1,8 +1,8 @@
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
-use notes_core::figures::FigureOptions;
+use notes_core::LibrarySource;
 use notes_core::fonts::Fonts;
 use notes_core::passes::{self, Context, TreePass};
 use notes_core::pipeline::encode;
@@ -11,27 +11,10 @@ use notes_core::themes::ThemeSet;
 use notes_core::vault::{NoteId, Vault};
 use notes_core::version::Versions;
 use notes_core::world::{Compiler, Priority};
-use notes_core::{LibrarySource, NotePage, Notes, NotesConfig};
 use typst::model::Document as _;
 use typst_html::{HtmlDocument, HtmlElement, HtmlFrame, HtmlNode, HtmlOptions, attr};
 
-fn repo() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-fn compile(source: &str) -> Arc<NotePage> {
-    let vault = tempfile::tempdir().unwrap();
-    std::fs::write(vault.path().join("t.typ"), source).unwrap();
-    let notes = Notes::open(&NotesConfig {
-        trash: None,
-        vault: vault.path().to_path_buf(),
-        library: LibrarySource::Dir(repo().join("baluk")),
-        font_dirs: vec![],
-        cache: None,
-    })
-    .unwrap();
-    notes.page(&NoteId::new("t").unwrap(), FigureOptions::default()).unwrap()
-}
+use crate::common::{compile, repo};
 
 #[test]
 fn vault_pages_are_identical_with_and_without_sanitizer() {

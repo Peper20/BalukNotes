@@ -18,8 +18,8 @@ tools/check.sh          # полная, перед коммитом и PR (~4 м
 tools/check.sh --fast   # без сборки клиента и e2e; ещё --rust, --app
 ```
 
-`check.sh` и `install.sh` идут с приоритетом на ступень ниже обычного
-(`nice` 1, `ionice` 5): компьютер не подлагивает. Шаги: cargo test, clippy (`-D warnings`), fmt; `notes check` на `tests/vault`
+`check.sh` и `install.sh` идут с приоритетом ниже обычного
+(`nice` 2 и 1, `ionice` 5): компьютер не подлагивает. Шаги: cargo test, clippy (`-D warnings`), fmt; `notes check` на `tests/vault`
 (итог сверяется со строкой "Итог" в его README); заготовки `notes new` и
 навык (`skills/README.md`); выгруженные типы API совпадают с закоммиченными
 (незакоммиченные - тоже "упал"); клиент - check, Vitest, build, e2e. В конце -

@@ -2,8 +2,8 @@
 //! в `tests/snapshots/`. Любое изменение библиотеки, ядра или Typst, которое
 //! меняет HTML, видно в диффе снимка.
 //!
-//!   cargo test -p notes-core --test snapshots                       # сравнить
-//!   UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test snapshots    # обновить
+//!   cargo test -p notes-core --test it snapshots::                       # сравнить
+//!   UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it snapshots::    # обновить
 //!
 //! Содержимое SVG (пути, глифы) и data-адресов заменено размером и хэшем:
 //! иначе снимки весили бы мегабайты, а дифф был бы нечитаем. Изменение
@@ -12,23 +12,14 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use notes_core::NotePage;
 use notes_core::figures::FigureOptions;
-use notes_core::{LibrarySource, NotePage, Notes, NotesConfig};
 
-fn repo() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
+use crate::common::{NOTES, repo};
 
 #[test]
 fn rendering_matches_snapshots() {
-    let notes = Notes::open(&NotesConfig {
-        trash: None,
-        vault: repo().join("tests/vault"),
-        library: LibrarySource::Dir(repo().join("baluk")),
-        font_dirs: vec![],
-        cache: None,
-    })
-    .unwrap();
+    let notes = &*NOTES;
     let dir = repo().join("tests/snapshots");
     let update = std::env::var_os("UPDATE_SNAPSHOTS").is_some();
 
@@ -65,7 +56,7 @@ fn rendering_matches_snapshots() {
     assert!(
         failed.is_empty(),
         "отрисовка изменилась — проверьте дифф и обновите снимки: \
-         UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test snapshots\n{}",
+         UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it snapshots::\n{}",
         failed.join("\n")
     );
 }

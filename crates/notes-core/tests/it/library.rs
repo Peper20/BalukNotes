@@ -3,38 +3,17 @@
 //! пропавший реэкспорт при перекройке модулей библиотеки ловит снимок
 //! `tests/snapshots/baluk-api.txt`:
 //!
-//!   cargo test -p notes-core --test library                       # сравнить
-//!   UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test library    # обновить
+//!   cargo test -p notes-core --test it library::                       # сравнить
+//!   UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library::    # обновить
 //!
 //! Имя добавлено или убрано намеренно — обновить снимок и README библиотеки
 //! (второй тест проверяет, что каждое имя там упомянуто). Так же обновляется
 //! размер текстов навыка `tests/snapshots/skill-size.txt`.
 
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::Path;
 
-use notes_core::figures::FigureOptions;
-use notes_core::{LibrarySource, NoteId, NotePage, Notes, NotesConfig};
-
-fn repo() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-/// Собирает заметку из одного файла с библиотекой репозитория.
-fn compile(source: &str) -> Arc<NotePage> {
-    let vault = tempfile::tempdir().unwrap();
-    std::fs::write(vault.path().join("t.typ"), source).unwrap();
-    let notes = Notes::open(&NotesConfig {
-        trash: None,
-        vault: vault.path().to_path_buf(),
-        library: LibrarySource::Dir(repo().join("baluk")),
-        font_dirs: vec![],
-        cache: None,
-    })
-    .unwrap();
-    notes.page(&NoteId::new("t").unwrap(), FigureOptions::default()).unwrap()
-}
+use crate::common::{compile, repo};
 
 /// Имена модуля `lib.typ` по алфавиту — так, как их видит заметка.
 fn public_names() -> Vec<String> {
@@ -70,7 +49,7 @@ fn public_api_matches_snapshot() {
     let new: Vec<&str> = names.iter().map(String::as_str).filter(|n| !old.contains(n)).collect();
     panic!(
         "публичные имена baluk изменились — пропали: {gone:?}, появились: {new:?}.\n\
-         Если так задумано: UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test library \
+         Если так задумано: UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library:: \
          и поправьте baluk/README.md"
     );
 }
@@ -416,7 +395,7 @@ fn skill_texts_are_plain_english() {
 /// Размер навыка — бюджет: текст растёт, только когда это задумано. Меряем
 /// знаки (у английского текста токенов около четверти от них); вырос больше
 /// чем на 10 % от записанного — тест падает. Задумано — обновить:
-/// `UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test library`.
+/// `UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library::`.
 #[test]
 fn skill_size_within_budget() {
     const GROWTH: f64 = 1.10;
@@ -433,17 +412,16 @@ fn skill_size_within_budget() {
         return;
     }
     let recorded = std::fs::read_to_string(&path).unwrap_or_default();
-    let budget: usize = recorded
-        .lines()
-        .find_map(|l| l.strip_suffix(" всего"))
-        .and_then(|n| n.parse().ok())
-        .expect("нет tests/snapshots/skill-size.txt — UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test library");
+    let budget: usize =
+        recorded.lines().find_map(|l| l.strip_suffix(" всего")).and_then(|n| n.parse().ok()).expect(
+            "нет tests/snapshots/skill-size.txt — UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library::",
+        );
     #[allow(clippy::cast_precision_loss, reason = "размер текста — тысячи знаков, точность f64 с запасом")]
     let over = total as f64 > budget as f64 * GROWTH;
     assert!(
         !over,
         "навык вырос больше чем на 10 %: было {budget} знаков, стало {total}. Сократить или, если рост задуман, \
-         UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test library\n{table}"
+         UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library::\n{table}"
     );
 }
 

@@ -4,28 +4,13 @@
 //! кэше Typst (или сеть — он скачается).
 
 use std::path::PathBuf;
-use std::sync::LazyLock;
 
 use notes_core::check::check;
 use notes_core::figures::FigureOptions;
 use notes_core::vault_graph::GraphFilter;
+
+use crate::common::{NOTES, repo};
 use notes_core::{LibrarySource, NoteId, NoteKind, Notes, NotesConfig};
-
-fn repo() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
-}
-
-/// Одно ядро на все тесты: загрузка шрифтов и тем — самое долгое.
-static NOTES: LazyLock<Notes> = LazyLock::new(|| {
-    Notes::open(&NotesConfig {
-        trash: None,
-        vault: repo().join("tests/vault"),
-        library: LibrarySource::Dir(repo().join("baluk")),
-        font_dirs: vec![],
-        cache: None,
-    })
-    .expect("тестовое хранилище открывается")
-});
 
 const OPTS: FigureOptions = FigureOptions { precision: Some(2) };
 

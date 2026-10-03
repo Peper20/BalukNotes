@@ -1,7 +1,7 @@
 //! Измерение памяти и времени повторного открытия после сборок.
 //!
 //! Тест игнорируется по умолчанию: он тяжёлый и зависит от /proc.
-//! Запуск вручную: `cargo test -p notes-core --test memory_release -- --ignored`.
+//! Запуск вручную: `cargo test -p notes-core --features measure --test memory_release -- --ignored`.
 
 use std::fs;
 use std::time::{Duration, Instant};
@@ -52,6 +52,7 @@ fn measure_memory_and_reopen_time() {
         memory: 8 * 1024 * 1024,
         disk: notes_core::cache::DiskLimits::default(),
         memo: 10,
+        packages: vec![],
     };
     notes.apply_device(&device);
 

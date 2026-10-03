@@ -1,6 +1,6 @@
 //! Измерение idle RSS после прогрева с коротким простоем (релиз по простою).
 //!
-//! Запуск вручную: `cargo test -p notes-core --test memory_release_idle --release -- --ignored --nocapture`.
+//! Запуск вручную: `cargo test -p notes-core --features measure --test memory_release_idle --release -- --ignored --nocapture`.
 
 use std::fs;
 use std::time::Duration;
@@ -44,6 +44,7 @@ fn measure_idle_after_warm_release() {
         memory: 8 * 1024 * 1024,
         disk: notes_core::cache::DiskLimits::default(),
         memo: 10,
+        packages: vec![],
     };
     notes.apply_device(&device);
 

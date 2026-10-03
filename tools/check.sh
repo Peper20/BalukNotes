@@ -28,10 +28,10 @@ if [[ $rust == 0 && $app == 0 ]]; then
   exit 2
 fi
 
-# Приоритет на ступень ниже обычного (наследуют cargo, npm, e2e): сборка на
-# всех ядрах уступает работе за компьютером (nice 1; ionice - шкала 0-7,
+# Приоритет ниже обычного (наследуют cargo, npm, e2e): сборка на
+# всех ядрах уступает работе за компьютером (nice 2; ionice - шкала 0-7,
 # обычный 4), а свободный процессор занимает так же.
-renice -n 1 -p $$ >/dev/null 2>&1 || true
+renice -n 2 -p $$ >/dev/null 2>&1 || true
 ionice -c 2 -n 5 -p $$ >/dev/null 2>&1 || true
 
 # target/ растёт без предела: cargo не удаляет старые варианты наших крейтов
@@ -144,7 +144,8 @@ in_app() { (cd app && "$@"); }
 
 if [[ $rust == 1 ]]; then
   step cargo-test cargo test --workspace
-  step clippy cargo clippy --workspace --all-targets -- -D warnings
+  # С фичей measure — и тяжёлые замеры памяти (сами они в тестах не идут).
+  step clippy cargo clippy --workspace --all-targets --features notes-core/measure -- -D warnings
   step fmt cargo fmt --check
   step vendor vendor_tests
   step notes-check vault_check

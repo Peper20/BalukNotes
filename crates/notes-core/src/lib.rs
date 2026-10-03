@@ -44,6 +44,7 @@ pub mod lint;
 pub mod new_note;
 pub mod notes;
 pub mod outline;
+pub mod packages;
 pub mod page_cache;
 pub mod pages;
 pub mod passes;

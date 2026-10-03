@@ -159,6 +159,7 @@ Typst is neither LaTeX nor Markdown: `\frac`, `\begin`, `**bold**`, `# Heading` 
 - warning `нет слов оформления`: the note language is neither ru nor en, so block words fall back to English; set own words with `words:` (keys in `reference.md`).
 - `битая ссылка` (broken link): the `#see("...")` path is not in `notes list`, or the anchor does not match a heading text. Either write the target note or drop the link.
 - `_folder.toml: unknown field`: only `title = "Title"` is allowed.
+- `пакет ... не из белого списка`: notes may import only whitelisted Typst packages (the library already brings CeTZ). Draw with the library instead; if a package is really needed, ask the user - only they can allow it in the device settings.
 - Other Russian messages come from the library and say what to change.
 
 ## Writing a good note

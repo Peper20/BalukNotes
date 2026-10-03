@@ -81,6 +81,8 @@ pub struct Notes {
     library_dir: Option<PathBuf>,
     /// Папка хранилища на диске ([`Notes::open`]); в памяти — `None`.
     dir: Option<PathBuf>,
+    /// Какие пакеты Typst можно брать (настройка устройства).
+    packages: Arc<crate::packages::PackagePolicy>,
 }
 
 impl Notes {
@@ -119,8 +121,10 @@ impl Notes {
         let changes = Arc::new(Changes::default());
         links.set_changes(changes.clone());
         let layouts = Arc::new(Layouts::default());
+        let packages = Arc::new(crate::packages::PackagePolicy::default());
         // Данные хранилища для заметок: `/_vault/<префикс>/…`.
         let data = VaultData::new()
+            .with(crate::packages::DATA_PREFIX, crate::packages::PolicyData(packages.clone()))
             .with(
                 crate::vault_graph::DATA_PREFIX,
                 GraphData { vault: vault.clone(), index: links.clone(), layouts: layouts.clone() },
@@ -132,7 +136,7 @@ impl Notes {
             LibrarySource::Embedded => None,
         };
         let stamp = crate::cache::stamp(&[library.fingerprint(), fonts.fingerprint()]);
-        let compiler = Compiler::new(versions.clone(), library, fonts);
+        let compiler = Compiler::new(versions.clone(), library, fonts).with_packages(packages.clone());
         let themes = match shared.themes.clone() {
             Some(themes) => themes,
             None => Arc::new(ThemeSet::load(&compiler)?),
@@ -152,7 +156,7 @@ impl Notes {
                 w.poke();
             }
         });
-        Ok(Self { pages, typst, links, layouts, warmer, changes, library_dir, dir: None })
+        Ok(Self { pages, typst, links, layouts, warmer, changes, library_dir, dir: None, packages })
     }
 
     pub fn vault(&self) -> &Vault {
@@ -289,6 +293,9 @@ impl Notes {
         compiler.set_memo(device.memo);
         self.pages.cache().set_limits(device.memory, device.disk);
         self.warmer.set_mode(device.warm);
+        if self.packages.set_extra(&device.packages) {
+            tracing::info!(packages = ?device.packages, "пакеты сверх белого списка");
+        }
     }
 
     /// Сжать части шрифтов для браузера заранее (фон при запуске сервера) и

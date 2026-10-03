@@ -417,7 +417,11 @@ fn run(cli: Cli) -> Result<ExitCode> {
             };
             print_check(&report, json)
         }
-        Command::Pdf { id, out, theme } => pdf(&notes, &note_id(&id, &vault)?, out, theme),
+        Command::Pdf { id, out, theme } => {
+            // Пакеты сверх белого списка — как в приложении.
+            notes.apply_device(&open_settings(&notes, &data)?.device());
+            pdf(&notes, &note_id(&id, &vault)?, out, theme)
+        }
         Command::Rename { id, title, dry_run } => rename(&notes, &note_id(&id, &vault)?, &title, dry_run),
         Command::Docs { .. }
         | Command::Service { .. }

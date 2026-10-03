@@ -1,25 +1,12 @@
 use axum::body::Body;
 use axum::http::Request;
 use notes_core::settings::{Platform, Schema, SettingsStore};
-use notes_core::{LibrarySource, Notes, NotesConfig, VaultName};
+use notes_core::{Notes, VaultName};
 use notes_server::{AppState, VaultSet, router};
-use std::path::PathBuf;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 use tower::ServiceExt;
 
-static NOTES: LazyLock<Arc<Notes>> = LazyLock::new(|| {
-    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    Arc::new(
-        Notes::open(&NotesConfig {
-            trash: None,
-            vault: repo.join("tests/vault"),
-            library: LibrarySource::Dir(repo.join("baluk")),
-            font_dirs: vec![],
-            cache: None,
-        })
-        .unwrap(),
-    )
-});
+use crate::common::NOTES;
 
 fn app() -> (axum::Router, tempfile::TempDir) {
     fn single(notes: Arc<Notes>, dir: &tempfile::TempDir) -> AppState {

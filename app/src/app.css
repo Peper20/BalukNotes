@@ -300,7 +300,15 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .settings legend { font-weight: 600; color: var(--k-accent); padding: 0.4rem 0 0.2rem; }
 .setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.2rem 1rem; padding: 0.35rem 0; }
 .setting-help { grid-column: 1 / -1; color: var(--k-muted); font-size: 0.85em; }
-.setting select, .setting input[type="number"] {
+/* Чем опасна настройка (пакеты сверх белого списка) — цветом «осторожно». */
+.setting-warning {
+  grid-column: 1 / -1; font-size: 0.85em; padding: 0.35rem 0.55rem; border-radius: 5px;
+  border-left: 3px solid var(--k-box-pitfall); color: var(--k-text);
+  background: color-mix(in srgb, var(--k-box-pitfall) 10%, transparent);
+}
+/* Текст — во всю ширину строки под подписью. */
+.setting input[type="text"] { grid-column: 1 / -1; min-width: 0; }
+.setting select, .setting input[type="number"], .setting input[type="text"] {
   font: inherit; padding: 0.2rem 0.4rem; border-radius: 5px;
   border: 1px solid var(--k-line); background: var(--k-surface); color: var(--k-text);
 }

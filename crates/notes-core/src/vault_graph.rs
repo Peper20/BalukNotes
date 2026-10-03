@@ -85,8 +85,8 @@ impl Default for GraphFilter {
     }
 }
 
-/// Силы раскладки в процентах от обычных (по умолчанию - раскладка как без
-/// них, бит в бит).
+/// Силы раскладки в процентах от обычных; по умолчанию папки чуть держатся
+/// вместе (`clusters` 5 %, решение пользователя), остальное - обычное.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
@@ -105,7 +105,7 @@ pub struct Forces {
 
 impl Default for Forces {
     fn default() -> Self {
-        Self { clusters: 0, center: 100, repel: 100, links: 100 }
+        Self { clusters: 5, center: 100, repel: 100, links: 100 }
     }
 }
 
@@ -689,6 +689,11 @@ fn separate(pos: &mut [(f64, f64)], boxes: &[NodeBox]) {
     }
 }
 
+/// Радиус кружка заметки без связей (связи прибавляют) и главы книги (всегда
+/// один, меньше любой заметки).
+const NOTE_R: f64 = 5.5;
+const CHAPTER_R: f64 = 4.5;
+
 /// Разложить граф: радиусы, подписи, координаты, границы. `groups` — все
 /// группы хранилища (порядок цветов).
 pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>, forces: Forces) -> GraphLayout {
@@ -709,7 +714,15 @@ pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>, forces:
         .map(|(n, &d)| {
             let book = n.kind == Some(NoteKind::Book) && n.chapter.is_none();
             #[allow(clippy::cast_precision_loss, reason = "не больше 8")]
-            let r = if book { 11.0 } else { 5.5 } + d.min(8) as f64 * 0.7;
+            let grown = |base: f64| base + d.min(8) as f64 * 0.7;
+            // Глава - меньше любой заметки: она часть книги, а не отдельная заметка.
+            let r = if n.chapter.is_some() {
+                CHAPTER_R
+            } else if book {
+                grown(11.0)
+            } else {
+                grown(NOTE_R)
+            };
             NodeBox { r, label: label_width(&n.title, if book { LABEL_SIZE * 1.1 } else { LABEL_SIZE }) }
         })
         .collect();
@@ -1239,11 +1252,14 @@ mod tests {
     fn forces_do_what_they_say() {
         let graph = synthetic_graph(300);
         let q = |forces| quality(&layout(300, &graph.links, &graph.groups, Some(&graph.boxes), forces), &graph);
-        let base = q(Forces::default());
-        let clusters = q(Forces { clusters: 100, ..Forces::default() });
-        let repel = q(Forces { repel: 200, ..Forces::default() });
-        let center = q(Forces { center: 50, ..Forces::default() });
-        let links = q(Forces { links: 500, ..Forces::default() });
+        // Каждая сила — против нейтральной раскладки (папки 0 %).
+        let neutral = Forces { clusters: 0, ..Forces::default() };
+        let base = q(neutral);
+        let clusters = q(Forces { clusters: 100, ..neutral });
+        let repel = q(Forces { repel: 200, ..neutral });
+        let center = q(Forces { center: 50, ..neutral });
+        let links = q(Forces { links: 500, ..neutral });
+        assert_eq!(q(Forces::default()).overlaps, 0, "по умолчанию (папки 5 %)");
         let apart = |q: &Quality| q.group_gap / q.intra_group;
         assert!(apart(&clusters) > apart(&base) * 1.4, "папки - врозь");
         assert!(repel.area_per_node > base.area_per_node * 1.3, "просторнее");
