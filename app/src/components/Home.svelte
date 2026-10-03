@@ -47,7 +47,7 @@
       {#if !graphFailed}
         <section class="graph">
           {#if graph}
-            <Graph layout={graph} onopen={(id, background) => router.open(id, null, { background })} />
+            <Graph layout={graph} onopen={(id, background, anchor) => router.open(id, anchor, { background })} />
             <GraphLegend groups={graph.groups} />
           {/if}
         </section>

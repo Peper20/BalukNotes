@@ -51,6 +51,9 @@ describe("движение графа", () => {
       ["new", [3, 3]],
     ]);
     expect(glide(from, to, 1)).toEqual(to);
+    // Конец пути — ровно цель, без ошибки округления в последнем знаке.
+    const [f, t] = [new Map<string, Point>([["a", [0.1, 300.7]]]), new Map<string, Point>([["a", [32.97356778396921, 20.8423722023761]]])];
+    expect(glide(f, t, 1).get("a")).toStrictEqual(t.get("a"));
   });
 
   it("вид — по доле пути", () => {

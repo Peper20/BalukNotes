@@ -208,7 +208,7 @@ pub fn section_at(outline: &Outline, anchor: &str) -> Option<(usize, String)> {
 /// `id` разделов — по тем же правилам, что у отрисовки (`render.rs`): метка,
 /// иначе слаг текста с `-2`, `-3` у повторов. Слаг одинаковых заголовков
 /// («Итоги» в каждой главе) привёл бы к первому из них.
-fn section_ids(outline: &Outline) -> Vec<Option<String>> {
+pub(crate) fn section_ids(outline: &Outline) -> Vec<Option<String>> {
     let mut used = HashSet::new();
     outline
         .sections

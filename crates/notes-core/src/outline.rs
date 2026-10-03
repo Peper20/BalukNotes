@@ -43,6 +43,9 @@ pub struct Section {
     /// Свои теги главы книги (`chapter.with(tags: …)`); у остальных разделов пусто.
     pub tags: Vec<String>,
     pub text: String,
+    /// Ссылки `#see` в тексте раздела (без повторов) — чьи они на графе с
+    /// главами книг. Полный список ссылок заметки — у индекса ([`crate::graph`]).
+    pub links: Vec<crate::render::LinkRef>,
 }
 
 impl Outline {
@@ -62,7 +65,7 @@ pub fn parse_outline(source: &str) -> Outline {
     let mut w = Walker::default();
     w.walk(&root, SyntaxKind::Markup);
     w.finish_section();
-    w.out.sections.retain(|s| s.heading.is_some() || !s.text.is_empty());
+    w.out.sections.retain(|s| s.heading.is_some() || !s.text.is_empty() || !s.links.is_empty());
     w.out
 }
 
@@ -74,6 +77,7 @@ struct Walker {
     level: usize,
     label: Option<String>,
     tags: Vec<String>,
+    links: Vec<crate::render::LinkRef>,
     /// Название или заголовок: формула — исходником, а не пропуском.
     formulas: bool,
 }
@@ -171,6 +175,7 @@ impl Walker {
             label: self.label.take(),
             tags: std::mem::take(&mut self.tags),
             text,
+            links: std::mem::take(&mut self.links),
         });
     }
 
@@ -195,6 +200,13 @@ impl Walker {
                     }
                 }
                 _ => {}
+            }
+        }
+        if let Some(target) = &target {
+            let link =
+                crate::render::LinkRef { target: target.to_string(), anchor: anchor.as_ref().map(ToString::to_string) };
+            if !self.links.contains(&link) {
+                self.links.push(link);
             }
         }
         if let Some(body) = body {

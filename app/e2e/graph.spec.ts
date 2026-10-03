@@ -74,6 +74,24 @@ test("граф: папки, тег, поиск; фильтры запомина�
   await expect(page.locator(".graph-count")).toContainText("найдено 1");
 });
 
+test("граф: книги главами — корень и главы, щелчок по главе открывает книгу на ней; переключатель запоминается", async ({ page }) => {
+  await page.goto(vaultUrl("/graph"));
+  await ready(page);
+  await expect(page.locator('.graph-node[data-id="Книга/.2"]')).toHaveCount(0);
+  await page.getByLabel("книги главами").check();
+  const chapters = page.locator('.graph-node.chapter[data-id^="Книга/"]');
+  await expect(chapters).toHaveCount(3);
+  // Связь «книга - глава» — у каждой главы (ещё одна книга фикстуры — English).
+  await expect(page.locator(".graph-edge.chapter")).toHaveCount(await page.locator(".graph-node.chapter").count());
+  await expect(page.locator('.graph-node.book[data-id="Книга"]')).toHaveCount(1);
+  await page.reload();
+  await ready(page);
+  await expect(chapters).toHaveCount(3);
+  await page.locator('.graph-node[data-id="Книга/.2"] circle').click();
+  await ready(page);
+  await expect.poll(() => decodeURIComponent(new URL(page.url()).pathname + new URL(page.url()).hash)).toBe("/v/vault/n/Книга#Продолжение");
+});
+
 test("граф: соседи заметки — из «Ссылаются сюда», глубина в адресе", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await page.locator("#backlinks").getByRole("link", { name: "на графе" }).click();

@@ -4,4 +4,8 @@ export type Edge = { from: string, to: string,
 /**
  * Сколько ссылок (с разными якорями) ведёт по этому ребру.
  */
-count: number, };
+count: number, 
+/**
+ * Не ссылка, а книга - её глава (граф с главами).
+ */
+chapter: boolean, };

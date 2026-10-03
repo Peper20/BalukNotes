@@ -35,8 +35,11 @@
   }: {
     /** Граф с раскладкой из ядра (`POST /api/graph/layout` или `#vault-graph` заметки). */
     layout: GraphLayout;
-    /** `background` — Ctrl+щелчок или средняя кнопка: в фоновой вкладке. */
-    onopen: (id: string, background: boolean) => void;
+    /**
+     * `background` — Ctrl+щелчок или средняя кнопка: в фоновой вкладке. Глава
+     * книги — книга (`id`) на заголовке главы (`anchor`).
+     */
+    onopen: (id: string, background: boolean, anchor: string | null) => void;
     interactive?: boolean;
     /** Совпадения поиска: остальные узлы бледнеют. */
     highlight?: Set<string> | null;
@@ -199,7 +202,9 @@
     return [x0, y0, x0 + w, y0 + h];
   });
   const index = $derived(new Map(layout.nodes.map((n, i) => [n.id, i])));
-  const labelSize = (n: { kind: string | null }, px: number) => (n.kind === "book" ? px * 1.1 : px);
+  /** Корень книги — крупнее; глава — как заметка. */
+  const isBook = (n: { kind: string | null; chapter: unknown }) => n.kind === "book" && !n.chapter;
+  const labelSize = (n: { kind: string | null; chapter: unknown }, px: number) => (isBook(n) ? px * 1.1 : px);
 
   function physics(): Physics {
     sim ??= new Physics(
@@ -299,7 +304,7 @@
       focused = null;
     if (g?.kind === "node" && !g.far && e.type === "pointerup") {
       const node = graph.nodes.find((n) => n.id === g.id);
-      if (node?.kind) onopen(g.id, e.ctrlKey || e.metaKey || e.button === 1);
+      if (node?.kind) open(g.id, e.ctrlKey || e.metaKey || e.button === 1);
     }
   }
 
@@ -319,8 +324,15 @@
     snug = false;
   }
 
+  /** Открыть узел: заметку, книгу или книгу на главе. */
+  function open(id: string, background: boolean) {
+    const n = nodeById.get(id);
+    if (n?.chapter) onopen(n.chapter.book, background, n.chapter.anchor);
+    else onopen(id, background, null);
+  }
+
   function onkeydown(e: KeyboardEvent, id: string) {
-    if (e.key === "Enter") onopen(id, e.ctrlKey || e.metaKey);
+    if (e.key === "Enter") open(id, e.ctrlKey || e.metaKey);
   }
 
   let focused = $state<string | null>(null);
@@ -363,6 +375,7 @@
           x2={b[0]}
           y2={b[1]}
           class="graph-edge"
+          class:chapter={e.chapter}
           class:near={focused != null && (e.from === focused || e.to === focused)}
           stroke-width={Math.min(1 + e.count * 0.4, 3)}
         />
@@ -377,7 +390,8 @@
           style:--delay={delay(n.id)}
           class="graph-node"
           class:missing={!n.kind}
-          class:book={n.kind === "book"}
+          class:book={isBook(n)}
+          class:chapter={n.chapter != null}
           class:near={near?.has(n.id)}
           class:hit={highlight?.has(n.id)}
           class:center={n.id === center}
@@ -392,9 +406,11 @@
           <circle {r} style:fill={n.kind ? color(n.id) : "none"} style:stroke={color(n.id)} />
           <text y={r + LABEL_GAP + labelPx * 0.9} text-anchor="middle">{n.name}</text>
           <title>
-            {n.kind
-              ? `${titles?.get(n.id) ?? n.id}${n.kind === "book" ? " (книга)" : ""} · связей: ${n.degree}`
-              : `${n.id} — такой заметки нет`}
+            {n.chapter
+              ? `Глава «${n.name}» · ${titles?.get(n.chapter.book) ?? n.chapter.book} · связей: ${n.degree}`
+              : n.kind
+                ? `${titles?.get(n.id) ?? n.id}${n.kind === "book" ? " (книга)" : ""} · связей: ${n.degree}`
+                : `${n.id} — такой заметки нет`}
           </title>
         </g>
       {/each}
