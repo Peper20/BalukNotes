@@ -1,127 +1,111 @@
 ---
 name: rust-best-practices
 description: >
-  Rust rules for the baluk notes workspace (crates/): Apollo GraphQL's Rust best practices handbook,
-  adapted to this project. Load before writing, editing or reviewing any .rs file here:
-  (1) new Rust code or functions, (2) reviewing or refactoring, (3) borrowing vs cloning,
-  (4) error handling, (5) tests, (6) comments and docs.
+  Guide for writing idiomatic Rust code based on Apollo GraphQL's best practices handbook. Use this skill when:
+  (1) writing new Rust code or functions,
+  (2) reviewing or refactoring existing Rust code,
+  (3) deciding between borrowing vs cloning or ownership patterns,
+  (4) implementing error handling with Result types,
+  (5) optimizing Rust code for performance,
+  (6) writing tests or documentation for Rust projects.
 license: MIT
-compatibility: Rust 1.92+ (edition 2024), Cargo workspace
+compatibility: Rust 1.81+, Cargo
 metadata:
-  author: apollographql (adapted for baluk notes)
-  version: "1.1.2-baluk.1"
+  author: apollographql
+  version: "1.1.2-fixed.1"
 allowed-tools: Bash(cargo:*) Bash(rustc:*) Bash(rustfmt:*) Bash(clippy:*) Read Write Edit Glob Grep
 ---
 
-# Rust Best Practices (baluk notes)
+# Rust Best Practices
 
-Based on Apollo GraphQL's [Rust Best Practices Handbook](https://github.com/apollographql/rust-best-practices)
-(MIT, `LICENSE`). The chapters in `references/` are the handbook text with broken examples fixed; this
-file adapts it to the project. Where they disagree, the order is: `crates/README.md` (project layout and rules) > "Project rules"
-below > the handbook.
+Apply these guidelines when writing or reviewing Rust code. Based on Apollo GraphQL's [Rust Best Practices Handbook](https://github.com/apollographql/rust-best-practices)
+(MIT, `LICENSE`); the chapters in `references/` are the handbook text with broken examples fixed.
 
-Before editing, read `crates/README.md` (modules, `NoteId`, `trait Storage`, cache keys, test layout). Read
-handbook chapters only when the task touches their topic.
+**The project comes first.** Before writing Rust, read the project's own rules (`CLAUDE.md`, the README of the
+crate or workspace): where they differ from this skill, they win. Check `rust-version` in `Cargo.toml` and the
+project's lint and format config before applying anything below.
 
-## Project rules (override the handbook)
+## Best Practices Reference
 
-### Panics: no `unwrap`/`expect` outside tests (handbook 4.2)
-- Restructure instead: `let ... else`, `?` with an error, a constructor that cannot fail, a type that makes the
-  case impossible.
-- Only what the code itself guarantees and cannot express in types may panic: `expect("<the invariant>")` under
-  `#[expect(clippy::expect_used, reason = "...")]`.
-- Anything from the user, the disk, the network or Typst is not an invariant: return `Result`.
-- The code base is being brought to this rule (`docs/roadmap.md`, "Приоритетное"): older code may still have
-  bare `expect`; do not add new ones.
-- Note compile errors are not `Err`: they are `Diagnostic`s in `NotePage` (`crates/README.md`).
+Read the chapters relevant to the task (all of them for a review), in parallel:
 
-### Errors
-- Libraries: `thiserror` (`notes_core::Error`); binaries (`notes-typst`, `notes-app`): `anyhow` or a message
-  string - as the handbook says. HTTP errors go through `notes-server/src/error.rs`.
+- [Chapter 1 - Coding Styles and Idioms](references/chapter_01.md): Borrowing vs cloning, Copy trait, Option/Result handling, iterators, comments, when to extract a function (duplication vs. wrong abstraction)
+- [Chapter 2 - Clippy and Linting](references/chapter_02.md): Clippy configuration, important lints, workspace lint setup
+- [Chapter 3 - Performance Mindset](references/chapter_03.md): Profiling, avoiding redundant clones, stack vs heap, zero-cost abstractions
+- [Chapter 4 - Error Handling](references/chapter_04.md): Result vs panic, thiserror vs anyhow, error hierarchies
+- [Chapter 5 - Automated Testing](references/chapter_05.md): Test naming, one assertion per test, snapshot testing
+- [Chapter 6 - Generics and Dispatch](references/chapter_06.md): Static vs dynamic dispatch, trait objects
+- [Chapter 7 - Type State Pattern](references/chapter_07.md): Compile-time state safety, when to use it
+- [Chapter 8 - Comments vs Documentation](references/chapter_08.md): When to comment, doc comments, rustdoc
+- [Chapter 9 - Understanding Pointers](references/chapter_09.md): Thread safety, Send/Sync, pointer types
 
-### Lints
-- `[workspace.lints]`: clippy `all` + `pedantic` as warnings, `unsafe_code = "forbid"`; `tools/check.sh` denies warnings.
-- Silence a lint locally with `#[expect(clippy::x, reason = "...")]`, never without a reason (handbook 2.4).
-  Older code has `#[allow(..., reason)]`: switch it to `expect` when you touch it.
-- Full check: `tools/check.sh`. Quick: `cargo clippy --workspace --all-targets --features notes-core/measure
-  -- -D warnings`. Not `--all-features`: features `ts` and `measure` are for type export and measurements, and
-  `notes-app` needs WebKitGTK.
-- `rustfmt.toml`: `max_width = 120`. Stable rustfmt: no `group_imports`/`imports_granularity` (handbook 1.7
-  needs nightly).
-- `rust-version = "1.92"`: no newer std features (`assert_matches!` from handbook 5.4 is 1.96).
+## Quick Reference
 
-### Performance: correct and clear first
-- User decision: optimization is not a goal now. Do not micro-optimize (under ~1 MB, tens of ms); a known weak
-  spot goes to `docs/tech-debt.md` with numbers.
-- Borrowing over cloning stays the default idiom (handbook 1.1), for clarity, not speed. Do not contort code to
-  save a clone of a small value (handbook 3.2 is advice, not a rule here).
-- Measuring: feature `measure` (heavy tests), `RUST_LOG=notes_core=debug`, write-ups in `docs/research/`. No
-  flamegraph or criterion setup unless asked.
+### Borrowing & Ownership
+- Prefer `&T` over `.clone()` unless ownership transfer is required
+- Use `&str` over `String` or `&String`, `&[T]` over `Vec<T>` or `&Vec<T>` in function parameters
+- Small `Copy` types (≤24 bytes) can be passed by value
+- Use `Cow<'_, T>` when ownership is ambiguous
 
-### Tests
-- Unit tests next to the code; integration tests in `crates/*/tests/it/` (one binary per crate, new file = a
-  module in `main.rs`). Fixture vault: `tests/vault`; core layer tests without Typst
-  (`pages::tests::Setup`, `MemStorage`).
-- Handbook 5.1 ("one assertion per test", long `should_..._when_...` names) does not apply: a test here checks
-  one behaviour with several cases in a row (table style), and its short name says the behaviour
-  (`filters`, `center_stays`). Typst compilation is slow, so cases share one setup.
-- No new test dependencies (`rstest`, `insta`) without need: snapshots are `tests/snapshots/`.
+### Error Handling
+- Return `Result<T, E>` for fallible operations; avoid `panic!` in production
+- No `unwrap()`/`expect()` outside tests: restructure first (`let ... else`, `?`, a constructor that cannot
+  fail, a type that makes the case impossible)
+- If failure is truly impossible and the type system cannot show it, `expect("<the invariant>")` - with
+  `#[expect(clippy::expect_used, reason = "...")]` when the project enables that lint (handbook 4.2)
+- Input from users, files, the network or other libraries is never an invariant
+- Use `thiserror` for library errors, `anyhow` for binaries only
+- Prefer `?` operator over match chains for error propagation
 
-### Language
-- Target (user decision, `docs/roadmap.md` "Приоритетное"): the whole project in English - identifiers,
-  comments, docs, logs, error and CLI messages, `docs/`, READMEs, `CLAUDE.md`. Russian stays only in the client
-  UI (and a Russian copy of the root README).
-- `crates/` moves to English together with the rewrite by this skill: a file you bring to these rules, you
-  also translate whole (comments, docs, messages) and update the tests that check message texts. Do not leave
-  a file half Russian, half English.
+### Performance
+- Measure before optimizing; always benchmark with `--release`
+- Run `cargo clippy -- -D clippy::perf` for performance hints
+- Avoid cloning in loops; use `.iter()` instead of `.into_iter()` for Copy types
+- Prefer iterators over manual loops; avoid intermediate `.collect()` calls
 
-### Comments and docs
-- `//!` at the top of a module says how it works and why; `///` on items says what they are. Comments explain
-  why, briefly (handbook 1.6 and 8.2 agree).
-- Long design reasoning lives in `docs/architecture.md` (the project's ADRs); comments point to it
-  (`architecture §1`) instead of repeating it. Each fact in one place.
-- No `TODO` in code (handbook 8.6 wants an issue): record the debt in `docs/tech-debt.md`.
-- `missing_docs` is not enabled (crates are internal, `publish = false`); `missing_errors_doc` and
-  `missing_panics_doc` are allowed.
-- Describe how the code works now, not its history (git keeps history).
+### Linting
+Run regularly (or the project's own check script, if it has one):
+`cargo clippy --all-targets --all-features --locked -- -D warnings`
+(`--all-features` may not fit a workspace with platform-specific or tooling-only features.)
 
-### Concurrency
-- Core: `parking_lot` locks. With `std::sync::Mutex`, handle poisoning explicitly
-  (`unwrap_or_else(PoisonError::into_inner)`).
-- Async server: blocking work (Typst, disk) in `spawn_blocking` (`notes-server/src/error.rs`).
+Key lints to watch:
+- `redundant_clone` - unnecessary cloning
+- `large_enum_variant` - oversized variants (consider boxing)
+- `needless_collect` - premature collection
 
-## Handbook quick reference (still applies)
+Silence a lint only locally, with `#[expect(clippy::lint, reason = "...")]` - not `#[allow(...)]`: `expect`
+warns once the lint no longer fires.
 
-### Borrowing & ownership
-- Prefer `&T` over `.clone()` unless ownership is needed; `&str` / `&[T]` in parameters.
-- Small `Copy` types (≤24 bytes) by value; `Cow<'_, T>` when ownership is ambiguous.
+### Toolchain
+- Do not use std APIs newer than the project's `rust-version` (e.g. `assert_matches!` needs 1.96).
+- Import grouping options (`group_imports`, `imports_granularity`) need nightly rustfmt: do not add them to a
+  project formatted with stable.
 
-### Errors
-- `?` over match chains; map errors with context at the boundary.
+### Testing
+- Name tests descriptively: `process_should_return_error_when_input_empty()`
+- One assertion per test when possible
+- Use doc tests (`///`) for public API examples
+- Consider `cargo insta` for snapshot testing generated output
 
-### Iterators
-- Iterators over manual index loops; no intermediate `.collect()` just to iterate again. A plain `for` is fine
-  when it reads better (handbook 1.5).
+### Generics & Dispatch
+- Prefer generics (static dispatch) for performance-critical code
+- Use `dyn Trait` only when heterogeneous collections are needed
+- Box at API boundaries, not internally
 
-### Functions
-- Extract on the third repetition or when a block has a name of its own; do not extract a wrong abstraction
-  (handbook 1.8). Test code: readability beats DRY.
+### Type State Pattern
+Encode valid states in the type system to catch invalid operations at compile time:
+```rust
+struct Connection<State> { /* ... */ _state: PhantomData<State> }
+struct Disconnected;
+struct Connected;
 
-### Generics & dispatch
-- Generics (static dispatch) by default; `dyn Trait` for heterogeneous collections and plugin-like registries.
+impl Connection<Connected> {
+    fn send(&self, data: &[u8]) { /* only connected can send */ }
+}
+```
 
-### Type state
-- Use it when invalid states would otherwise be easy to reach at runtime; not for simple flags (handbook 7.5).
-
-## Handbook chapters
-
-- [1 - Coding styles and idioms](references/chapter_01.md): borrowing vs cloning, Copy, Option/Result,
-  iterators, comments, extracting functions
-- [2 - Clippy and linting](references/chapter_02.md)
-- [3 - Performance mindset](references/chapter_03.md) - see "Performance" above
-- [4 - Error handling](references/chapter_04.md) - see "Panics" above
-- [5 - Automated testing](references/chapter_05.md) - see "Tests" above
-- [6 - Generics and dispatch](references/chapter_06.md)
-- [7 - Type state pattern](references/chapter_07.md)
-- [8 - Comments vs documentation](references/chapter_08.md) - see "Comments and docs" above
-- [9 - Understanding pointers](references/chapter_09.md): Send/Sync, `Arc`, `Mutex`, `OnceLock`
+### Documentation
+- `//` comments explain *why* (safety, workarounds, design rationale)
+- `///` doc comments explain *what* and *how* for public APIs
+- Every `TODO` needs a linked issue: `// TODO(#42): ...`
+- Enable `#![deny(missing_docs)]` for published libraries

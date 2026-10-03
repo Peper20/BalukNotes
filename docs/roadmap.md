@@ -15,7 +15,7 @@
       падения - перезапуск, лог - journald); `tools/install.sh` её
       перезапускает
 - [ ] Rust по навыку `rust-best-practices` (решение пользователя): весь код
-      `crates/` - под правила `.claude/skills/rust-best-practices/SKILL.md`.
+      `crates/` - под навык и правила проекта (`crates/README.md`).
       Начать с `unwrap`/`expect` вне тестов (21 место, `unwrap` нет):
       остаются 4 - `world.rs` `StoreGuard` (2, `Option` для `Drop`),
       `render::attr_name` (имена из кода), `world::spawn_compile` (поток не

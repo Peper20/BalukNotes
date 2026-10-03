@@ -60,7 +60,7 @@ def main() -> None:
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
                         f"Правка Rust - только после навыка {SKILL}: вызовите Skill "
-                        f'"{SKILL}" (правила проекта поверх справочника), затем повторите правку.'
+                        f'"{SKILL}" и прочитайте crates/README.md (правила проекта), затем повторите правку.'
                     ),
                 }
             },
