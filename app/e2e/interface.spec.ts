@@ -300,3 +300,23 @@ test("телефон: панель выезжает и прячется посл
   await expect(title(page)).toHaveText("UFW");
   await expect(sidebar).not.toBeInViewport();
 });
+
+test("настройки: пакеты сверх белого списка — с предупреждением; неверная запись — ошибка, верная сохраняется", async ({ page }) => {
+  try {
+    await open(page, "Сеть/SSH");
+    await page.locator("#open-settings").click();
+    const row = page.locator('.setting[data-key="device.packages"]');
+    const input = row.locator('input[type="text"]');
+    await expect(row.locator(".setting-warning")).toContainText("чужой код");
+    await input.fill("fletcher");
+    await input.dispatchEvent("change");
+    await expect(page.locator(".settings-error")).toContainText("@пространство/имя:версия");
+    await input.fill("@preview/fletcher:0.5.8,  @preview/tablem:0.2.0");
+    await input.dispatchEvent("change");
+    await expect(row.locator(".setting-badge")).toHaveText("изменено на этом устройстве");
+    const saved = async () => (await (await page.request.get("/api/settings")).json()).values["device.packages"];
+    expect(await saved()).toBe("@preview/fletcher:0.5.8 @preview/tablem:0.2.0");
+  } finally {
+    await page.request.put("/api/settings", { data: { "device.packages": "" } });
+  }
+});

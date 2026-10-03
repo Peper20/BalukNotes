@@ -36,6 +36,9 @@ use crate::themes::Theme;
 use crate::warm::WarmMode;
 use crate::{Error, Result};
 
+/// Проверка текстовой настройки: приведённое значение или текст ошибки.
+pub type TextCheck = fn(&str) -> std::result::Result<String, String>;
+
 /// Описание одной настройки.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
@@ -64,6 +67,14 @@ pub struct SettingDef {
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub shared: bool,
+    /// Предупреждение рядом с настройкой: чем она опасна.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub warning: Option<&'static str>,
+    /// Проверка текста ([`Kind::Text`]): приведённое значение или ошибка.
+    #[serde(skip)]
+    #[cfg_attr(feature = "ts", ts(skip))]
+    pub check: Option<TextCheck>,
 }
 
 /// Применение настройки вида: значение — на `<html>`, правило — в CSS.
@@ -103,8 +114,18 @@ impl SettingDef {
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Kind {
     Bool,
-    Number { min: f64, max: f64, step: f64 },
-    Choice { options: Vec<Choice> },
+    Number {
+        min: f64,
+        max: f64,
+        step: f64,
+    },
+    Choice {
+        options: Vec<Choice>,
+    },
+    /// Строка; `placeholder` — пример значения в пустом поле.
+    Text {
+        placeholder: &'static str,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -156,7 +177,7 @@ impl Platform {
 }
 
 /// Настройки устройства, как их применяет ядро (`Notes::apply_device`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Device {
     pub warm: WarmMode,
     /// Сборок разных заметок одновременно.
@@ -166,6 +187,8 @@ pub struct Device {
     pub disk: DiskLimits,
     /// Сколько сборок Typst помнит рисунки (`comemo::evict`).
     pub memo: usize,
+    /// Пакеты Typst сверх белого списка ([`crate::packages`]).
+    pub packages: Vec<String>,
 }
 
 /// Мегабайт в байтах.
@@ -188,6 +211,8 @@ impl Schema {
             apply: None,
             device: false,
             shared: false,
+            warning: None,
+            check: None,
         };
         // Силы графа, % от обычных: страница графа, для всех хранилищ.
         let percent = |key, label, help, (min, max): (u32, u32), default: u32| {
@@ -200,6 +225,8 @@ impl Schema {
                 apply: None,
                 device: false,
                 shared: false,
+                warning: None,
+                check: None,
             }
             .shared()
         };
@@ -212,6 +239,8 @@ impl Schema {
             apply: None,
             device: true,
             shared: false,
+            warning: None,
+            check: None,
         };
         let p = platform;
 
@@ -237,6 +266,8 @@ impl Schema {
                     apply: None,
                     device: false,
                     shared: false,
+                    warning: None,
+                    check: None,
                 }
                 .shared(),
                 SettingDef {
@@ -248,6 +279,8 @@ impl Schema {
                     apply: None,
                     device: false,
                     shared: false,
+                    warning: None,
+                    check: None,
                 }
                 .var("--k-size", "px")
                 .shared(),
@@ -260,6 +293,8 @@ impl Schema {
                     apply: None,
                     device: false,
                     shared: false,
+                    warning: None,
+                    check: None,
                 }
                 .var("--k-measure", "em"),
                 bool_def("header.title", "Название", true).attr("data-header-title"),
@@ -282,6 +317,8 @@ impl Schema {
                     apply: None,
                     device: false,
                     shared: false,
+                    warning: None,
+                    check: None,
                 }
                 .attr("data-numbering"),
                 SettingDef {
@@ -298,6 +335,8 @@ impl Schema {
                     apply: None,
                     device: false,
                     shared: false,
+                    warning: None,
+                    check: None,
                 }
                 .attr("data-chapters"),
                 SettingDef {
@@ -311,6 +350,8 @@ impl Schema {
                     apply: None,
                     device: false,
                     shared: false,
+                    warning: None,
+                    check: None,
                 },
                 SettingDef {
                     key: "figures.precision",
@@ -328,6 +369,8 @@ impl Schema {
                     apply: None,
                     device: false,
                     shared: false,
+                    warning: None,
+                    check: None,
                 },
                 bool_def("panels.toc", "Оглавление сбоку, если хватает места", true).attr("data-toc"),
                 SettingDef {
@@ -339,6 +382,8 @@ impl Schema {
                     apply: None,
                     device: false,
                     shared: false,
+                    warning: None,
+                    check: None,
                 },
                 bool_def("panels.backlinks", "«Ссылаются сюда» под заметкой", true).attr("data-backlinks"),
                 percent(
@@ -376,6 +421,8 @@ impl Schema {
                     apply: None,
                     device: false,
                     shared: false,
+                    warning: None,
+                    check: None,
                 },
                 SettingDef {
                     key: "device.warm",
@@ -392,6 +439,8 @@ impl Schema {
                     apply: None,
                     device: true,
                     shared: false,
+                    warning: None,
+                    check: None,
                 },
                 number(
                     "device.builds",
@@ -415,6 +464,23 @@ impl Schema {
                     p.pick(64, 32),
                 ),
                 number("device.disk", "Кэш на диске, МБ", "Собранные заметки", (64.0, 8192.0, 64.0), p.pick(512, 256)),
+                SettingDef {
+                    key: "device.packages",
+                    label: "Пакеты Typst сверх белого списка",
+                    help: Some(
+                        "Через пробел, с версией: @preview/fletcher:0.5.8. Без списка заметки берут только пакеты белого списка (CeTZ)",
+                    ),
+                    kind: Kind::Text { placeholder: "@preview/имя:версия" },
+                    default: json!(""),
+                    apply: None,
+                    device: true,
+                    shared: false,
+                    warning: Some(
+                        "Пакет — чужой код: он выполняется при каждой сборке заметки и может её повесить или \
+                         подменить содержимое. Добавляйте только пакеты авторов, которым доверяете.",
+                    ),
+                    check: Some(|text| crate::packages::parse_list(text).map(|list| list.join(" "))),
+                },
                 number(
                     "device.foreign_days",
                     "Кэш других хранилищ и версий, дней",
@@ -448,6 +514,13 @@ impl Schema {
                 // Целое остаётся целым: 19, а не 19.0.
                 #[allow(clippy::cast_possible_truncation)]
                 Ok(if n.fract() == 0.0 { json!(n as i64) } else { json!(n) })
+            }
+            Kind::Text { .. } => {
+                let s = value.as_str().ok_or_else(|| setting_err(key, "ожидалась строка"))?.trim();
+                match def.check {
+                    Some(check) => check(s).map(Value::String).map_err(|e| setting_err(key, &e)),
+                    None => Ok(json!(s)),
+                }
             }
             Kind::Choice { options } => {
                 let s = value.as_str().ok_or_else(|| setting_err(key, "ожидалась строка"))?;
@@ -554,6 +627,11 @@ impl SettingsStore {
                 foreign_ttl: Duration::from_hours(24 * number("device.foreign_days")),
             },
             memo: size(number("device.memo")),
+            packages: values
+                .get("device.packages")
+                .and_then(Value::as_str)
+                .and_then(|s| crate::packages::parse_list(s).ok())
+                .unwrap_or_default(),
         }
     }
 

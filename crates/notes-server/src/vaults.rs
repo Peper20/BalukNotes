@@ -377,7 +377,7 @@ impl VaultSet {
         let active = lock(&self.active).clone();
         for (name, vault) in lock(&self.open).iter() {
             let warm = if Some(name) == active.as_ref() { device.warm } else { WarmMode::Off };
-            vault.notes.apply_device(&notes_core::settings::Device { warm, ..device });
+            vault.notes.apply_device(&notes_core::settings::Device { warm, ..device.clone() });
         }
     }
 

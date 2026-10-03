@@ -5,6 +5,7 @@
 
 mod common;
 mod library;
+mod packages;
 mod sanitize;
 mod snapshots;
 mod vault;

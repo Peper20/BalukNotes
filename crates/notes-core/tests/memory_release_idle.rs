@@ -44,6 +44,7 @@ fn measure_idle_after_warm_release() {
         memory: 8 * 1024 * 1024,
         disk: notes_core::cache::DiskLimits::default(),
         memo: 10,
+        packages: vec![],
     };
     notes.apply_device(&device);
 

@@ -37,6 +37,8 @@ use typst_kit::datetime::Time;
 use typst_kit::downloader::SystemDownloader;
 use typst_kit::files::{FileLoader, FileStore};
 use typst_kit::packages::SystemPackages;
+
+use crate::packages::PackagePolicy;
 use typst_layout::PagedDocument;
 
 use crate::diag::Diagnostic;
@@ -106,6 +108,8 @@ struct Loader {
     versions: Versions,
     lib: LibrarySource,
     packages: Arc<SystemPackages>,
+    /// Какие пакеты можно брать ([`crate::packages`]).
+    policy: Arc<PackagePolicy>,
     /// Отпечатки прочитанных файлов на момент чтения (с последнего сброса).
     read: Mutex<HashMap<FileId, Token>>,
 }
@@ -139,13 +143,21 @@ impl Loader {
                 (Some(rest), LibrarySource::Dir(dir)) => (dir.clone(), rest),
                 (None, _) => return Ok(Location::Vault(vpath.get_without_slash().to_owned())),
             },
-            VirtualRoot::Package(spec) => (self.packages.obtain(spec)?.path().to_path_buf(), vpath.clone()),
+            VirtualRoot::Package(spec) => {
+                // Не из списка — ошибка сборки, и пакет даже не скачивается.
+                self.policy.check(spec).map_err(|e| FileError::Other(Some(e.into())))?;
+                (self.packages.obtain(spec)?.path().to_path_buf(), vpath.clone())
+            }
         };
         vpath.realize(&root).map(Location::Disk).map_err(Into::into)
     }
 
-    /// Файл хранилища или библиотеки на диске (не пакет) — для версий.
+    /// Файл хранилища или библиотеки на диске — для версий; у пакета —
+    /// список разрешённых пакетов (сами пакеты по версии неизменны).
     fn dep(&self, id: FileId) -> Option<Dep> {
+        if matches!(id.root(), VirtualRoot::Package(_)) {
+            return Some(Dep::Data(crate::packages::POLICY_FILE.to_owned()));
+        }
         match (id.root(), self.locate(id)) {
             (VirtualRoot::Project, Ok(Location::Vault(path))) => Some(Dep::Vault(path)),
             (VirtualRoot::Project, Ok(Location::Disk(path))) => Some(Dep::Library(path)),
@@ -231,6 +243,7 @@ struct Stores {
     versions: Versions,
     lib: LibrarySource,
     packages: Arc<SystemPackages>,
+    policy: Arc<PackagePolicy>,
     max: AtomicUsize,
     /// Свободные кэши и сколько сейчас занято.
     state: Mutex<(Vec<FileStore<Loader>>, usize)>,
@@ -253,6 +266,7 @@ impl Stores {
                 versions: self.versions.clone(),
                 lib: self.lib.clone(),
                 packages: self.packages.clone(),
+                policy: self.policy.clone(),
                 read: Mutex::default(),
             })
         });
@@ -336,6 +350,7 @@ impl Compiler {
             versions,
             lib,
             packages: Arc::new(SystemPackages::new(downloader)),
+            policy: Arc::default(),
             max: AtomicUsize::new(PARALLEL),
             state: Mutex::default(),
             freed: Condvar::new(),
@@ -353,6 +368,14 @@ impl Compiler {
 
     /// Сколько сборок помнить рисунки Typst: больше — быстрее пересборка
     /// после правки, но больше памяти.
+    /// Пакеты по этому списку (общему с поставщиком `/_vault/packages/…`);
+    /// по умолчанию — только белый список. До первой сборки.
+    #[must_use]
+    pub fn with_packages(mut self, policy: Arc<PackagePolicy>) -> Self {
+        self.stores.policy = policy;
+        self
+    }
+
     pub fn set_memo(&self, n: usize) {
         self.memo.store(n, Ordering::Relaxed);
     }

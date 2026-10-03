@@ -25,4 +25,8 @@ device?: boolean,
  * решение пользователя), а не только для открытого; у хранилища можно
  * задать своё. Остальные — наоборот (см. модуль).
  */
-shared?: boolean, } & ({ "type": "bool" } | { "type": "number", min: number, max: number, step: number, } | { "type": "choice", options: Array<Choice>, });
+shared?: boolean, 
+/**
+ * Предупреждение рядом с настройкой: чем она опасна.
+ */
+warning?: string, } & ({ "type": "bool" } | { "type": "number", min: number, max: number, step: number, } | { "type": "choice", options: Array<Choice>, } | { "type": "text", placeholder: string, });

@@ -66,12 +66,23 @@
                 value={value}
                 onchange={(e) => e.currentTarget.reportValidity() && save(def, Number(e.currentTarget.value))}
               />
+            {:else if def.type === "text"}
+              <input
+                id="setting-{def.key}"
+                type="text"
+                spellcheck="false"
+                autocomplete="off"
+                placeholder={def.placeholder}
+                value={value}
+                onchange={(e) => save(def, e.currentTarget.value)}
+              />
             {:else}
               <select id="setting-{def.key}" value={value} onchange={(e) => save(def, e.currentTarget.value)}>
                 {#each def.options as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
               </select>
             {/if}
             {#if def.help}<div class="setting-help">{def.help}</div>{/if}
+            {#if def.warning}<div class="setting-warning" role="note">{def.warning}</div>{/if}
             {#if source !== "default" || def.shared}
               <div class="setting-source">
                 {#if source === "own"}
