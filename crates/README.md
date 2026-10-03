@@ -21,8 +21,10 @@
 crates/notes-app/icons/icon.png`.
 
 Общие правила Rust - навык Claude Code `rust-best-practices`
-(`.claude/skills/`, сторонний: `apollographql/skills`, MIT); правила этого
-файла важнее.
+(`.claude/skills/`: справочник `apollographql/skills`, MIT, и правила
+проекта поверх него в `SKILL.md`); правила этого файла важнее. Без
+загруженного навыка правку `.rs` (Edit, Write и запись из Bash) запрещает
+хук `.claude/hooks/require-rust-skill.py` (`.claude/settings.json`).
 
 - **Сервер** - модуль на область API (`vaults`, `notes`, `graph`, `search`,
   `settings`, `assets`, `fonts`, `events`) со своими `routes()`; общее -
@@ -58,8 +60,8 @@ crates/notes-app/icons/icon.png`.
 - Шрифты оформления встроены (`fonts/README.md`); браузеру - шрифты тем
   (основные и запасные) частями WOFF2 (`webfonts.rs`). Правка кодирования частей или обновление
   `fontcull` - подними `webfonts::ENCODER`.
-- Линты - `[workspace.lints]` (clippy pedantic); `#[allow]` - точечно и с
-  причиной.
+- Линты - `[workspace.lints]` (clippy pedantic); заглушить - точечно,
+  `#[expect(..., reason = "...")]`.
 - Тесты: модульные - рядом с кодом, сквозные - `crates/*/tests/it/` (один
   бинарник на крейт: общее ядро на фикстуру - `common.rs`; новый файл -
   модуль в `main.rs`, не отдельный бинарник; тяжёлые замеры - фича

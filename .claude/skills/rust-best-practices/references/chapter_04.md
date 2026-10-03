@@ -38,11 +38,11 @@ Although `expect` is preferred to `unwrap`, as it can have context, they should 
 ```rust
 let Ok(json) = serde_json::from_str(&input) else {
     return Err(MyError::InvalidJson);
-}
+};
 ```
 * If your `Result` (or `Option`) needs error recovery in case of `Result::Err`, that doesn't need to know the `Err` value, use `if let Ok(..) else { ... }` pattern:
 ```rust
-if let Ok(json) = serde_json::from_str(&input) else {
+if let Ok(json) = serde_json::from_str(&input) {
     ...
 } else {
     Err(do_something_with_input(&input))

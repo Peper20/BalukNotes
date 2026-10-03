@@ -25,7 +25,7 @@ fn get_config(&self) -> Config {
 * Cloning large data structures like `Vec<T>` or `HashMap<K, V>`.
 * Clone because of bad API design instead of adjusting lifetimes.
 * Prefer `&[T]` instead of `Vec<T>` or `&Vec<T>`.
-* Prefer `&str` or `&String` instead of `String`.
+* Prefer `&str` instead of `String` or `&String`.
 * Prefer `&T` instead of `T`.
 * Clone a reference argument, if you need ownership, make it explicit in the arguments for the caller. Example:
 ```rust
@@ -180,7 +180,7 @@ match self {
 ```rust
 let Some(&Direction::North) = self.direction.as_ref() else {
 	return Err(DirectionNotAvailable(self.direction));
-}
+};
 ```
 
 * Use `let PATTERN = EXPRESSION else {  DIVERGING_CODE; }` when you want to break or continue a pattern match
@@ -188,11 +188,11 @@ let Some(&Direction::North) = self.direction.as_ref() else {
 for x in self {
     let Some(x) = x else {
 	continue;
-    }
+    };
 }
 ```
 
-* Use `if let PATTERN = EXPRESSION else {  DIVERGING_CODE; }` when `DIVERGING_CODE` needs extra computation:
+* Use `if let PATTERN = EXPRESSION { ... } else { ... }` when the `else` branch needs extra computation:
 ```rust
 if let Some(x) = self.next() {
   // computation
@@ -223,7 +223,7 @@ if let Some(values) = self.next() {
 }
 ```
 
-* Using `unwrap` or `expect` outside tests:
+* Using `unwrap` or `expect` outside tests when failure is possible (see [Chapter 4.2](./chapter_04.md#42-avoid-unwrapexpect-in-production)):
 ```rust
 let port = config.port.unwrap();
 ```
@@ -351,7 +351,7 @@ for value in vec.iter().enumerate()
 * Don't chain without formatting. Prefer each chained function on its own line with the correct indentation (`rustfmt` should take care of this).
 * Don't chain if it makes the code unreadable.
 * Avoid needlessly collect/allocate of a collection (e.g. vector) just to throw it away later by some larger operation or by another iteration.
-* Prefer `iter` over `into_iter` unless you don't need the ownership of the collection.
+* Prefer `iter` over `into_iter` unless you need ownership of the collection.
 * Prefer `iter` over `into_iter` for collections that inner type implements `Copy`, e.g. `Vec<T: Copy>`.
 * **Never implement (or derive) both `Copy` and `Iterator` on the same type.** Copying an iterator and advancing one copy leaves the other untouched, which silently yields wrong results -- it is a well-known footgun. The standard library hit exactly this: it is why `Range` historically could not be `Copy`, and why the new `core::range` types (stabilized in Rust 1.96) implement `IntoIterator` instead of `Iterator` so they *can* be `Copy`. If you need an iterator on a `Copy` type, implement `IntoIterator` and return a separate iterator struct.
 * For summing numbers prefer `.sum` over `.fold`. `.sum` is specialized for summing values, so the compiler knows it can make optimizations on that front, while fold has a blackbox closure that needs to be applied at every step. If you need to sum by an initial value, just add it in the expression `let my_sum = [1, 2, 3].sum() + 3`.

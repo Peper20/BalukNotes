@@ -187,7 +187,7 @@ impl Client<Disconnected> {
 }
 
 impl Client<Connected> {
-    fn send(&mut self, msg: &str) {
+    fn send(&mut self, msg: &str) -> std::io::Result<()> {
         use std::io::Write;
         let Some(stream) = self.stream.as_mut() else {
             unreachable!("Stream is guaranteed to be set");
@@ -215,7 +215,6 @@ impl Client<Connected> {
 ### 🚨 Downsides and Cautions
 * Can lead to more **verbose solutions**.
 * Can lead to **complex type signatures**.
-* May require **unsafe** to return **variant outputs** based on different states.
 * May require a bunch of duplication (e.g. same struct field reused).
 * PhantomData is not intuitive for beginners and can feel a bit hacky.
 
