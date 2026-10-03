@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::graph::{Edge, Graph, Snapshot, SourceIndex};
+use crate::graph::{ChapterOf, Edge, Graph, Node, Snapshot, SourceIndex};
 use crate::vault::{NoteKind, Vault};
 use crate::vault_data::DataProvider;
 
@@ -36,6 +36,11 @@ const EDGE: f64 = 70.0;
 /// Группа узла — папка верхнего уровня.
 pub fn group_of(id: &str) -> &str {
     id.split_once('/').map_or(ROOT_GROUP, |(g, _)| g)
+}
+
+/// Группа вершины: у главы — группа её книги.
+fn node_group(n: &Node) -> &str {
+    group_of(n.chapter.as_ref().map_or(&n.id, |c| &c.book))
 }
 
 /// Что показать. Пустой `folders` — все папки.
@@ -57,6 +62,8 @@ pub struct GraphFilter {
     /// сама остаётся, даже если её скрыл бы другой фильтр.
     pub around: Option<String>,
     pub depth: u32,
+    /// Книги — корнем и главами вокруг него, а не одной вершиной.
+    pub chapters: bool,
     /// Силы раскладки (настройки вида на странице графа); граф в заметке -
     /// по умолчанию.
     pub forces: Forces,
@@ -72,6 +79,7 @@ impl Default for GraphFilter {
             orphans: true,
             around: None,
             depth: 1,
+            chapters: false,
             forces: Forces::default(),
         }
     }
@@ -114,6 +122,8 @@ pub struct PlacedNode {
     pub id: String,
     /// `None` — заметки нет.
     pub kind: Option<NoteKind>,
+    /// Глава книги: открывается книга на этой главе.
+    pub chapter: Option<ChapterOf>,
     /// Подпись: название заметки.
     pub name: String,
     pub group: String,
@@ -165,21 +175,21 @@ pub fn neighbourhood(graph: &Graph, start: &str, depth: u32) -> HashSet<String> 
     seen
 }
 
-/// Подграф по фильтру. `has_tag(путь, тег)` — есть ли тег у заметки (у книги —
-/// и у любой её главы).
-pub fn filter(graph: &Graph, has_tag: impl Fn(&str, &str) -> bool, f: &GraphFilter) -> Graph {
+/// Подграф по фильтру. `has_tag(вершина, тег)` — есть ли тег у заметки (у
+/// книги — и у любой её главы; у главы — её или книги).
+pub fn filter(graph: &Graph, has_tag: impl Fn(&Node, &str) -> bool, f: &GraphFilter) -> Graph {
     let center = f.around.as_deref();
     let near = center.map(|c| neighbourhood(graph, c, f.depth));
-    let keep = |id: &str, missing: bool| {
-        let group = group_of(id);
-        Some(id) == center
-            || (near.as_ref().is_none_or(|n| n.contains(id))
+    let keep = |n: &Node| {
+        let group = node_group(n);
+        Some(n.id.as_str()) == center
+            || (near.as_ref().is_none_or(|near| near.contains(&n.id))
                 && (f.folders.is_empty() || f.folders.iter().any(|g| g == group))
                 && !f.hidden.iter().any(|g| g == group)
-                && (f.missing || !missing)
-                && f.tag.as_ref().is_none_or(|t| has_tag(id, t)))
+                && (f.missing || n.kind.is_some())
+                && f.tag.as_ref().is_none_or(|t| has_tag(n, t)))
     };
-    let mut nodes: Vec<_> = graph.nodes.iter().filter(|n| keep(&n.id, n.kind.is_none())).cloned().collect();
+    let mut nodes: Vec<_> = graph.nodes.iter().filter(|n| keep(n)).cloned().collect();
     let ids: HashSet<&str> = nodes.iter().map(|n| n.id.as_str()).collect();
     let edges: Vec<_> =
         graph.edges.iter().filter(|e| ids.contains(e.from.as_str()) && ids.contains(e.to.as_str())).cloned().collect();
@@ -228,7 +238,20 @@ pub fn layout(
     boxes: Option<&[NodeBox]>,
     forces: Forces,
 ) -> Vec<(f64, f64)> {
-    let mut pos = layout_forces(n, links, groups, forces);
+    layout_with(n, links, &[], groups, boxes, forces)
+}
+
+/// [`layout`] с добавочными пружинами `tight` (книга - глава): короче
+/// ([`TIGHT_EDGE`]) и жёстче ([`TIGHT_SPRING`]) обычных.
+fn layout_with(
+    n: usize,
+    links: &[(usize, usize)],
+    tight: &[(usize, usize)],
+    groups: &[usize],
+    boxes: Option<&[NodeBox]>,
+    forces: Forces,
+) -> Vec<(f64, f64)> {
+    let mut pos = layout_forces(n, links, tight, groups, forces);
     if let Some(boxes) = boxes {
         separate(&mut pos, boxes);
     }
@@ -253,7 +276,18 @@ const CLUSTER_PULL: f64 = 4.0 * CENTER_PULL;
 /// обычного (папка - одно тело в её середине).
 const GROUP_REPEL: f64 = 1.0;
 
-fn layout_forces(n: usize, links: &[(usize, usize)], groups: &[usize], forces: Forces) -> Vec<(f64, f64)> {
+/// Длина и жёсткость пружины «книга - глава» (в долях обычной; сама связь
+/// тоже ребро графа — пружины складываются).
+const TIGHT_EDGE: f64 = 0.4 * EDGE;
+const TIGHT_SPRING: f64 = 10.0;
+
+fn layout_forces(
+    n: usize,
+    links: &[(usize, usize)],
+    tight: &[(usize, usize)],
+    groups: &[usize],
+    forces: Forces,
+) -> Vec<(f64, f64)> {
     let mut pos = initial_positions(n);
     let mut temp = START_TEMP;
     let mut tree = QuadTree::default();
@@ -276,6 +310,15 @@ fn layout_forces(n: usize, links: &[(usize, usize)], groups: &[usize], forces: F
             let (dx, dy) = (pos[a].0 - pos[b].0, pos[a].1 - pos[b].1);
             let d = dx.hypot(dy).max(1.0);
             let f = (d - EDGE) / d * spring;
+            force[a].0 -= dx * f;
+            force[a].1 -= dy * f;
+            force[b].0 += dx * f;
+            force[b].1 += dy * f;
+        }
+        for &(a, b) in tight {
+            let (dx, dy) = (pos[a].0 - pos[b].0, pos[a].1 - pos[b].1);
+            let d = dx.hypot(dy).max(1.0);
+            let f = (d - TIGHT_EDGE) / d * spring * TIGHT_SPRING;
             force[a].0 -= dx * f;
             force[a].1 -= dy * f;
             force[b].0 += dx * f;
@@ -650,8 +693,10 @@ fn separate(pos: &mut [(f64, f64)], boxes: &[NodeBox]) {
 /// группы хранилища (порядок цветов).
 pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>, forces: Forces) -> GraphLayout {
     let index: HashMap<&str, usize> = graph.nodes.iter().enumerate().map(|(i, n)| (n.id.as_str(), i)).collect();
-    let links: Vec<(usize, usize)> =
-        graph.edges.iter().filter_map(|e| Some((*index.get(e.from.as_str())?, *index.get(e.to.as_str())?))).collect();
+    let pair = |e: &Edge| Some((*index.get(e.from.as_str())?, *index.get(e.to.as_str())?));
+    let links: Vec<(usize, usize)> = graph.edges.iter().filter_map(pair).collect();
+    // Книга и главы — кластер: рёбра «книга - глава» короче и жёстче ссылок.
+    let tight: Vec<(usize, usize)> = graph.edges.iter().filter(|e| e.chapter).filter_map(pair).collect();
     let mut degree = vec![0usize; graph.nodes.len()];
     for &(a, b) in &links {
         degree[a] += 1;
@@ -662,15 +707,15 @@ pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>, forces:
         .iter()
         .zip(&degree)
         .map(|(n, &d)| {
-            let book = n.kind == Some(NoteKind::Book);
+            let book = n.kind == Some(NoteKind::Book) && n.chapter.is_none();
             #[allow(clippy::cast_precision_loss, reason = "не больше 8")]
             let r = if book { 11.0 } else { 5.5 } + d.min(8) as f64 * 0.7;
             NodeBox { r, label: label_width(&n.title, if book { LABEL_SIZE * 1.1 } else { LABEL_SIZE }) }
         })
         .collect();
     let node_groups: Vec<usize> =
-        graph.nodes.iter().map(|n| groups.iter().position(|g| g == group_of(&n.id)).unwrap_or(0)).collect();
-    let pos = layout(graph.nodes.len(), &links, &node_groups, Some(&boxes), forces);
+        graph.nodes.iter().map(|n| groups.iter().position(|g| g == node_group(n)).unwrap_or(0)).collect();
+    let pos = layout_with(graph.nodes.len(), &links, &tight, &node_groups, Some(&boxes), forces);
     let bounds = pos.iter().zip(&boxes).map(|(&p, &b)| box_rect(p, b)).fold(None, |acc: Option<[f64; 4]>, r| {
         Some(acc.map_or(r, |a| [a[0].min(r[0]), a[1].min(r[1]), a[2].max(r[2]), a[3].max(r[3])]))
     });
@@ -682,8 +727,9 @@ pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>, forces:
         .map(|((n, (x, y)), (b, degree))| PlacedNode {
             id: n.id.clone(),
             kind: n.kind,
+            chapter: n.chapter.clone(),
             name: n.title.clone(),
-            group: group_of(&n.id).to_owned(),
+            group: node_group(n).to_owned(),
             x,
             y,
             r: b.r,
@@ -793,15 +839,19 @@ impl Snapshot {
 
     /// Показанный граф по фильтру и все группы хранилища.
     fn shown(&self, f: &GraphFilter) -> (Graph, Vec<String>) {
-        let full = self.graph();
+        let full = self.graph_of(f.chapters);
         let mut groups: Vec<String> = Vec::new();
         for n in &full.nodes {
-            let g = group_of(&n.id);
+            let g = node_group(n);
             if !groups.iter().any(|x| x == g) {
                 groups.push(g.to_owned());
             }
         }
-        (filter(&full, |id, tag| self.has_tag(id, tag), f), groups)
+        let has_tag = |n: &Node, tag: &str| match &n.chapter {
+            Some(c) => self.chapter_has_tag(&c.book, &c.anchor, tag),
+            None => self.has_tag(&n.id, tag),
+        };
+        (filter(&full, has_tag, f), groups)
     }
 }
 
@@ -970,7 +1020,7 @@ mod tests {
     /// Время раскладки и раздвигания подписей (мс) и качество.
     fn bench_current(graph: &BenchGraph) -> (f64, f64, Quality) {
         let started = Instant::now();
-        let mut pos = layout_forces(graph.boxes.len(), &graph.links, &graph.groups, Forces::default());
+        let mut pos = layout_forces(graph.boxes.len(), &graph.links, &[], &graph.groups, Forces::default());
         let forces = started.elapsed().as_secs_f64() * 1000.0;
         let started = Instant::now();
         separate(&mut pos, &graph.boxes);
@@ -979,11 +1029,11 @@ mod tests {
     }
 
     fn node(id: &str, kind: Option<NoteKind>) -> Node {
-        Node { id: id.into(), kind, title: id.rsplit('/').next().unwrap_or(id).into() }
+        Node { id: id.into(), kind, title: id.rsplit('/').next().unwrap_or(id).into(), chapter: None }
     }
 
     fn edge(from: &str, to: &str, count: usize) -> Edge {
-        Edge { from: from.into(), to: to.into(), count }
+        Edge { from: from.into(), to: to.into(), count, chapter: false }
     }
 
     /// A → B → C, D → B, E — без связей, «Нет» — ссылка на несуществующую заметку.
@@ -1006,8 +1056,8 @@ mod tests {
         }
     }
 
-    fn tags(id: &str, tag: &str) -> bool {
-        let tags: &[&str] = match id {
+    fn tags(n: &Node, tag: &str) -> bool {
+        let tags: &[&str] = match n.id.as_str() {
             "Сеть/A" => &["сеть"],
             "Сеть/B" => &["сеть", "ssh"],
             _ => &[],

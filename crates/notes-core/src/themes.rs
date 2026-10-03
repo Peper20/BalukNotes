@@ -5,8 +5,8 @@
 //! превращаются в блоки `:root[data-theme="…"] { --k-…: … }`. Новая тема в
 //! `theme.typ` появляется в приложении без правок Rust и CSS.
 //!
-//! Там же — основные шрифты тем ([`ThemeSet::web_fonts`]): их сервер
-//! отдаёт браузеру (WOFF2 по частям, `notes-core::webfonts`).
+//! Там же — шрифты тем, основные и запасные ([`ThemeSet::web_fonts`]): их
+//! сервер отдаёт браузеру (WOFF2 по частям, `notes-core::webfonts`).
 //! Тема со своим шрифтом не требует правки Rust. И языки словарей оформления
 //! ([`ThemeSet::languages`], `<k-langs>`) — для проверки `lang:` в `notes check`.
 
@@ -27,6 +27,15 @@ const CSS_FILE: &str = "css.typ";
 const CSS_LABEL: &str = "k-css";
 const LANGS_LABEL: &str = "k-langs";
 
+/// Шрифт тем для браузера.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct WebFamily {
+    /// Семейство: «Gentium Plus».
+    pub name: String,
+    /// Шрифт формул (`font.math` темы): отдаётся как есть, с таблицей `MATH`.
+    pub math: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Theme {
@@ -42,7 +51,7 @@ pub struct Theme {
 pub struct ThemeSet {
     themes: Vec<Theme>,
     css: String,
-    web_fonts: Vec<String>,
+    web_fonts: Vec<WebFamily>,
     /// Языки словарей оформления (`i18n.typ`); пусто — библиотека их не
     /// выгружает (старая), язык заметок не проверяется.
     languages: Vec<String>,
@@ -90,11 +99,14 @@ impl ThemeSet {
             let bg = colors.get("bg").and_then(Value::as_str).ok_or_else(|| bad("у темы нет bg"))?;
             let dark = is_dark(bg);
             themes.push(Theme { name: name.clone(), title: title.to_owned(), dark });
-            if let Some(fonts) = theme.get("fonts") {
+            let names = |key: &str| -> Result<Vec<String>> {
+                let Some(fonts) = theme.get(key) else { return Ok(Vec::new()) };
                 let fonts = fonts.as_array().ok_or_else(|| bad("шрифты темы — список"))?;
-                for font in fonts {
-                    web_fonts.insert(font.as_str().ok_or_else(|| bad("шрифт — строка"))?.to_owned());
-                }
+                fonts.iter().map(|f| f.as_str().map(str::to_owned).ok_or_else(|| bad("шрифт — строка"))).collect()
+            };
+            let math = names("math-fonts")?;
+            for name in names("fonts")? {
+                web_fonts.insert(WebFamily { math: math.contains(&name), name });
             }
             let _ = writeln!(css, ":root[data-theme=\"{name}\"] {{");
             for (var, color) in colors {
@@ -124,9 +136,10 @@ impl ThemeSet {
         &self.css
     }
 
-    /// Основные шрифты всех тем — те, что нужны браузеру: по алфавиту, без
-    /// повторов. Шрифт, которого нет среди доступных Typst, просто не отдаётся.
-    pub fn web_fonts(&self) -> &[String] {
+    /// Шрифты всех тем, основные и запасные, — те, что нужны браузеру: по
+    /// алфавиту, без повторов. Шрифт, которого нет среди доступных Typst,
+    /// просто не отдаётся.
+    pub fn web_fonts(&self) -> &[WebFamily] {
         &self.web_fonts
     }
 
@@ -152,7 +165,7 @@ mod tests {
     fn css_from_json() {
         let json = serde_json::json!({
             "light": {"title": "Светлая", "colors": {"bg": "#ffffff", "text": "#1b1b1b"}, "fonts": ["Serif", "Mono"]},
-            "dark": {"title": "Тёмная", "colors": {"bg": "#16181e", "text": "#dde2ea"}, "fonts": ["Serif", "Math"]},
+            "dark": {"title": "Тёмная", "colors": {"bg": "#16181e", "text": "#dde2ea"}, "fonts": ["Serif", "Math"], "math-fonts": ["Math"]},
         });
         let set = ThemeSet::from_json(&json).unwrap();
         assert_eq!(set.names(), ["light", "dark"]);
@@ -162,7 +175,8 @@ mod tests {
         assert!(set.css().contains(":root[data-theme=\"dark\"] {\n  --k-bg: #16181e;"));
         assert!(set.css().contains(".k-frame-v[data-theme=\"light\"] { display: contents; }"));
         assert!(set.css().contains("  --k-text: #dde2ea;\n  color-scheme: dark;\n}"));
-        assert_eq!(set.web_fonts(), ["Math", "Mono", "Serif"], "по алфавиту, без повторов");
+        let fonts: Vec<_> = set.web_fonts().iter().map(|f| (f.name.as_str(), f.math)).collect();
+        assert_eq!(fonts, [("Math", true), ("Mono", false), ("Serif", false)], "по алфавиту, без повторов");
     }
 
     #[test]

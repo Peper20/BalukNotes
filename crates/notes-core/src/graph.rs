@@ -62,11 +62,25 @@ pub struct Backlink {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Node {
+    /// Путь заметки; у главы книги — `<книга>/.<номер>` (сегмент на `.` в
+    /// пути заметки невозможен).
     pub id: String,
     /// `None` — заметки нет (на неё ссылаются, но её не написали).
     pub kind: Option<NoteKind>,
-    /// Название ([`Snapshot::title`]).
+    /// Название ([`Snapshot::title`]); у главы — её заголовок.
     pub title: String,
+    /// Глава книги (граф с главами, [`Snapshot::graph_of`]).
+    pub chapter: Option<ChapterOf>,
+}
+
+/// Чья глава вершина и куда она ведёт.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct ChapterOf {
+    /// Путь книги.
+    pub book: String,
+    /// `id` заголовка главы на странице книги.
+    pub anchor: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -76,6 +90,8 @@ pub struct Edge {
     pub to: String,
     /// Сколько ссылок (с разными якорями) ведёт по этому ребру.
     pub count: usize,
+    /// Не ссылка, а книга - её глава (граф с главами).
+    pub chapter: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -288,6 +304,15 @@ impl Snapshot {
         NoteId::new(id).ok().and_then(|id| self.outlines.get(&id)).is_some_and(|o| o.has_tag(tag))
     }
 
+    /// Есть ли тег у главы книги: у корня книги или у самой главы (`anchor` —
+    /// `id` её заголовка).
+    pub fn chapter_has_tag(&self, book: &str, anchor: &str, tag: &str) -> bool {
+        let Some(outline) = NoteId::new(book).ok().and_then(|id| self.outlines.get(&id)) else { return false };
+        outline.tags.iter().any(|t| t == tag)
+            || crate::search::section_at(outline, anchor)
+                .is_some_and(|(i, _)| outline.sections[i].tags.iter().any(|t| t == tag))
+    }
+
     /// Название заметки для показа: из шаблона (`title: […]`), иначе —
     /// имя файла. Для ненаписанной (на неё только ссылаются) — последний
     /// сегмент пути.
@@ -348,23 +373,124 @@ impl Snapshot {
     /// Граф: все заметки и те, на которые ссылаются, но которых нет.
     /// Рёбра — между заметками (якоря сливаются), без петель.
     pub fn graph(&self) -> Graph {
-        let mut nodes: BTreeMap<String, Option<NoteKind>> =
-            self.entries.iter().map(|e| (e.id.to_string(), Some(e.kind))).collect();
-        let mut edges: BTreeMap<(String, String), usize> = BTreeMap::new();
+        self.graph_of(false)
+    }
+
+    /// Граф; `chapters` — книга не одной вершиной, а корнем и главами вокруг
+    /// него (рёбра «книга - глава»). Ссылка из главы — от её вершины, в
+    /// раздел книги (`anchor`) — к главе с этим разделом; ссылки до первой
+    /// главы и без якоря — у корня.
+    pub fn graph_of(&self, chapters: bool) -> Graph {
+        let books: BTreeMap<&str, Vec<Chapter>> = if chapters {
+            self.entries
+                .iter()
+                .filter(|e| e.kind == NoteKind::Book)
+                .filter_map(|e| Some((e.id.as_str(), book_chapters(e.id.as_str(), self.outlines.get(&e.id)?))))
+                .filter(|(_, c)| !c.is_empty())
+                .collect()
+        } else {
+            BTreeMap::new()
+        };
+        let mut nodes: BTreeMap<String, Node> = self
+            .entries
+            .iter()
+            .map(|e| {
+                (
+                    e.id.to_string(),
+                    Node { id: e.id.to_string(), kind: Some(e.kind), title: self.title(e.id.as_str()), chapter: None },
+                )
+            })
+            .collect();
+        let mut edges: BTreeMap<(String, String), (usize, bool)> = BTreeMap::new();
+        for (book, list) in &books {
+            for c in list {
+                let chapter = ChapterOf { book: (*book).to_owned(), anchor: c.anchor.clone() };
+                let node = Node {
+                    id: c.node.clone(),
+                    kind: Some(NoteKind::Book),
+                    title: c.title.clone(),
+                    chapter: Some(chapter),
+                };
+                nodes.insert(c.node.clone(), node);
+                edges.insert(((*book).to_owned(), c.node.clone()), (0, true));
+            }
+        }
+        // Куда ведёт ссылка: в главу (раздел книги), иначе — в заметку.
+        let target_of = |link: &LinkRef| -> String {
+            let chapter = books.get(link.target.as_str()).and_then(|list| {
+                let outline = self.outlines.get(&NoteId::new(&link.target).ok()?)?;
+                let (section, _) = crate::search::section_at(outline, link.anchor.as_deref()?)?;
+                list.iter().rev().find(|c| c.section <= section)
+            });
+            chapter.map_or_else(|| link.target.clone(), |c| c.node.clone())
+        };
         for (from, links) in &self.links {
+            let own = books.get(from.as_str());
             for link in links {
-                if link.target == from.as_str() {
+                // Ссылка главы — от главы (у ссылки в нескольких главах — от каждой).
+                let mut sources: Vec<String> =
+                    own.into_iter().flatten().filter(|c| c.links.contains(link)).map(|c| c.node.clone()).collect();
+                if sources.is_empty() {
+                    sources.push(from.to_string());
+                }
+                let to = target_of(link);
+                if to == link.target && link.target == from.as_str() {
                     continue;
                 }
-                nodes.entry(link.target.clone()).or_insert(None);
-                *edges.entry((from.to_string(), link.target.clone())).or_default() += 1;
+                if !nodes.contains_key(&to) {
+                    let title = self.title(&to);
+                    nodes.insert(to.clone(), Node { id: to.clone(), kind: None, title, chapter: None });
+                }
+                for source in sources.into_iter().filter(|s| *s != to) {
+                    edges.entry((source, to.clone())).or_insert((0, false)).0 += 1;
+                }
             }
         }
         Graph {
-            nodes: nodes.into_iter().map(|(id, kind)| Node { title: self.title(&id), id, kind }).collect(),
-            edges: edges.into_iter().map(|((from, to), count)| Edge { from, to, count }).collect(),
+            nodes: nodes.into_values().collect(),
+            edges: edges.into_iter().map(|((from, to), (count, chapter))| Edge { from, to, count, chapter }).collect(),
         }
     }
+}
+
+/// Глава книги на графе.
+#[derive(Debug)]
+struct Chapter {
+    /// Вершина: `<книга>/.<номер>`.
+    node: String,
+    title: String,
+    anchor: String,
+    /// Номер раздела заголовка главы в содержании книги.
+    section: usize,
+    /// Ссылки всех разделов главы.
+    links: Vec<LinkRef>,
+}
+
+/// Главы книги — разделы первого уровня, со ссылками своих подразделов.
+fn book_chapters(book: &str, outline: &Outline) -> Vec<Chapter> {
+    let ids = crate::search::section_ids(outline);
+    let mut out: Vec<Chapter> = Vec::new();
+    for (i, (s, id)) in outline.sections.iter().zip(ids).enumerate() {
+        match (s.level, id) {
+            (1, Some(anchor)) => out.push(Chapter {
+                node: format!("{book}/.{}", out.len() + 1),
+                title: s.heading.clone().unwrap_or_default(),
+                anchor,
+                section: i,
+                links: s.links.clone(),
+            }),
+            _ => {
+                if let Some(c) = out.last_mut().filter(|_| s.level != 1) {
+                    for link in &s.links {
+                        if !c.links.contains(link) {
+                            c.links.push(link.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Префикс названий в данных хранилища: `/_vault/title/<путь>`.

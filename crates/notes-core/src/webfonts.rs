@@ -12,7 +12,9 @@
 //!
 //! Режутся только шрифты TrueType (`glyf`) без таблицы `MATH`: подмножество
 //! строит `fontcull` (порт hb-subset), а он не умеет CFF и `MATH`. Такие
-//! шрифты (New Computer Modern Math) отдаются целиком — но тоже в WOFF2.
+//! шрифты (New Computer Modern и его Math) отдаются целиком — но тоже в
+//! WOFF2 и с `unicode-range` по своим знакам: запасной шрифт браузер качает,
+//! только если на странице есть его знак, которого нет в основном.
 //!
 //! WOFF2 шрифтов TrueType (`glyf`) — `ttf2woff2`, с преобразованием `glyf` и
 //! `loca` из спецификации: на ~11 % меньше, чем без него (замер —
@@ -56,14 +58,15 @@ const MARKS: (u32, u32) = (0x0300, 0x036F);
 /// Версия кодировщика для кэша частей на диске ([`chunk_key`]): менять при
 /// любом изменении того, как часть превращается в байты (подмножество,
 /// WOFF2, brotli).
-const ENCODER: u64 = 2;
+const ENCODER: u64 = 3;
 
 /// Часть шрифта для браузера.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chunk {
     /// Имя в URL и в имени файла: `latin`, `cyrillic`, …; `all` — шрифт целиком.
     pub name: String,
-    /// Значение `unicode-range` для `@font-face`; у целого шрифта — нет.
+    /// Значение `unicode-range` для `@font-face`; у целого шрифта — его знаки
+    /// (нет — если таблица знаков не читается).
     pub unicode_range: Option<String>,
     /// Знаки части (с комбинируемыми); у целого шрифта — пусто.
     codepoints: Vec<u32>,
@@ -86,18 +89,12 @@ pub fn chunk_key(font_hash: u64, chunk: &Chunk) -> String {
 pub fn plan(font: &[u8]) -> Vec<Chunk> {
     let whole = || vec![Chunk { name: "all".into(), unicode_range: None, codepoints: Vec::new() }];
     let Some(tables) = table_records(font) else { return whole() };
+    let Some(all) = codepoints(font) else { return whole() };
     let has = |tag: &[u8; 4]| tables.iter().any(|t| &t.tag == tag);
     if !has(b"glyf") || has(b"MATH") {
-        return whole();
-    }
-    let Ok(face) = ttf_parser::Face::parse(font, 0) else { return whole() };
-    let mut all = BTreeSet::new();
-    if let Some(cmap) = face.tables().cmap {
-        for sub in cmap.subtables.into_iter().filter(ttf_parser::cmap::Subtable::is_unicode) {
-            sub.codepoints(|c| {
-                all.insert(c);
-            });
-        }
+        // Целиком, но только для своих знаков.
+        let range = (!all.is_empty()).then(|| css_ranges(&all.into_iter().collect::<Vec<_>>()));
+        return vec![Chunk { name: "all".into(), unicode_range: range, codepoints: Vec::new() }];
     }
     let marks: Vec<u32> = all.range(MARKS.0..=MARKS.1).copied().collect();
     let mut left: BTreeSet<u32> = all.iter().copied().filter(|c| !(MARKS.0..=MARKS.1).contains(c)).collect();
@@ -124,6 +121,20 @@ pub fn plan(font: &[u8]) -> Vec<Chunk> {
         return whole();
     }
     out
+}
+
+/// Знаки шрифта (таблица `cmap`); `None` — шрифт не читается.
+fn codepoints(font: &[u8]) -> Option<BTreeSet<u32>> {
+    let face = ttf_parser::Face::parse(font, 0).ok()?;
+    let mut all = BTreeSet::new();
+    if let Some(cmap) = face.tables().cmap {
+        for sub in cmap.subtables.into_iter().filter(ttf_parser::cmap::Subtable::is_unicode) {
+            sub.codepoints(|c| {
+                all.insert(c);
+            });
+        }
+    }
+    Some(all)
 }
 
 /// Файл части: подмножество шрифта в WOFF2. `None` — не вышло (тогда
@@ -159,6 +170,127 @@ fn css_ranges(sorted: &[u32]) -> String {
         i += 1;
     }
     out
+}
+
+// ── CFF → TrueType ──────────────────────────────────────────────────────
+
+/// Точность перевода кубических кривых в квадратичные, в единицах шрифта (у
+/// New Computer Modern 1000 на кегль): тысячные доли кегля, на экране не видно.
+const QUAD_ACCURACY: f64 = 0.5;
+
+/// Текстовый шрифт CFF → TrueType: те же глифы с теми же номерами (GSUB,
+/// GPOS ссылаются на номера), контуры — квадратичные (`glyf` и `loca` вместо
+/// `CFF `), хинтов нет, `MATH` убран (у текстового шрифта он не нужен, а с ним
+/// шрифт не режется). Зачем: Chrome (OTS) отвергает CFF New Computer Modern
+/// Regular и Italic целиком («Failed validating CharStrings INDEX» — хинты), а
+/// TrueType ещё и режется на части. `None` — не CFF или не вышло.
+pub fn cff_to_truetype(font: &[u8]) -> Option<Vec<u8>> {
+    use skrifa::MetadataProvider as _;
+    use skrifa::instance::{LocationRef, Size};
+    use skrifa::outline::DrawSettings;
+    use skrifa::raw::TableProvider as _;
+    use write_fonts::from_obj::ToOwnedTable as _;
+    use write_fonts::tables::glyf::{Contour, GlyfLocaBuilder, Glyph, SimpleGlyph};
+    use write_fonts::tables::head::Head;
+    use write_fonts::tables::loca::LocaFormat;
+    use write_fonts::tables::maxp::Maxp;
+
+    let source = skrifa::FontRef::new(font).ok()?;
+    let tag = |t: &[u8; 4]| skrifa::Tag::new(t);
+    if source.table_data(tag(b"CFF ")).is_none() || source.table_data(tag(b"glyf")).is_some() {
+        return None;
+    }
+    let num_glyphs = source.maxp().ok()?.num_glyphs();
+    let outlines = source.outline_glyphs();
+    let mut glyf = GlyfLocaBuilder::new();
+    let (mut max_points, mut max_contours) = (0usize, 0usize);
+    for gid in 0..num_glyphs {
+        let mut pen = QuadPen::default();
+        if let Some(outline) = outlines.get(skrifa::GlyphId::new(u32::from(gid))) {
+            outline.draw(DrawSettings::unhinted(Size::unscaled(), LocationRef::default()), &mut pen).ok()?;
+        }
+        // Внешний контур CFF — против часовой, TrueType — по часовой.
+        let path = pen.path.reverse_subpaths();
+        let glyph = if path.elements().is_empty() {
+            Glyph::Empty
+        } else {
+            let simple = SimpleGlyph::from_bezpath(&path).ok()?;
+            max_points = max_points.max(simple.contours.iter().map(Contour::len).sum());
+            max_contours = max_contours.max(simple.contours.len());
+            Glyph::Simple(simple)
+        };
+        glyf.add_glyph(&glyph).ok()?;
+    }
+    let (glyf, loca, format) = glyf.build();
+    let mut head: Head = source.head().ok()?.to_owned_table();
+    head.index_to_loc_format = match format {
+        LocaFormat::Short => 0,
+        LocaFormat::Long => 1,
+    };
+    let maxp = Maxp {
+        num_glyphs,
+        max_points: Some(u16::try_from(max_points).ok()?),
+        max_contours: Some(u16::try_from(max_contours).ok()?),
+        max_composite_points: Some(0),
+        max_composite_contours: Some(0),
+        max_zones: Some(1),
+        max_twilight_points: Some(0),
+        max_storage: Some(0),
+        max_function_defs: Some(0),
+        max_instruction_defs: Some(0),
+        max_stack_elements: Some(0),
+        max_size_of_instructions: Some(0),
+        max_component_elements: Some(0),
+        max_component_depth: Some(0),
+    };
+    let mut out = write_fonts::FontBuilder::new();
+    out.add_table(&glyf).ok()?.add_table(&loca).ok()?.add_table(&head).ok()?.add_table(&maxp).ok()?;
+    for record in source.table_directory().table_records() {
+        let t = record.tag();
+        let drop = [tag(b"CFF "), tag(b"CFF2"), tag(b"VORG"), tag(b"MATH")].contains(&t);
+        if !drop && !out.contains(t) {
+            out.add_raw(t, source.data_for_tag(t)?.as_bytes());
+        }
+    }
+    Some(out.build())
+}
+
+/// Контур глифа в `kurbo::BezPath`, кубические кривые — квадратичными.
+#[derive(Default)]
+struct QuadPen {
+    path: kurbo::BezPath,
+    at: kurbo::Point,
+}
+
+impl skrifa::outline::OutlinePen for QuadPen {
+    fn move_to(&mut self, x: f32, y: f32) {
+        self.at = (f64::from(x), f64::from(y)).into();
+        self.path.move_to(self.at);
+    }
+
+    fn line_to(&mut self, x: f32, y: f32) {
+        self.at = (f64::from(x), f64::from(y)).into();
+        self.path.line_to(self.at);
+    }
+
+    fn quad_to(&mut self, cx0: f32, cy0: f32, x: f32, y: f32) {
+        self.at = (f64::from(x), f64::from(y)).into();
+        self.path.quad_to(kurbo::Point::new(f64::from(cx0), f64::from(cy0)), self.at);
+    }
+
+    fn curve_to(&mut self, cx0: f32, cy0: f32, cx1: f32, cy1: f32, x: f32, y: f32) {
+        let to = kurbo::Point::new(f64::from(x), f64::from(y));
+        let point = |x: f32, y: f32| kurbo::Point::new(f64::from(x), f64::from(y));
+        let cubic = kurbo::CubicBez::new(self.at, point(cx0, cy0), point(cx1, cy1), to);
+        for (_, _, quad) in cubic.to_quads(QUAD_ACCURACY) {
+            self.path.quad_to(quad.p1, quad.p2);
+        }
+        self.at = to;
+    }
+
+    fn close(&mut self) {
+        self.path.close_path();
+    }
 }
 
 // ── WOFF2 ───────────────────────────────────────────────────────────────

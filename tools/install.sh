@@ -57,7 +57,15 @@ case ":$PATH:" in
   *":$bin:"*) ;;
   *) echo "Внимание: $bin нет в PATH — добавьте его, иначе команды notes не будет." >&2 ;;
 esac
-if pgrep -x notes >/dev/null; then
+# Служба автозапуска (`notes service`, юнит baluk-notes.service) — на новую
+# версию; запущенный вручную `notes serve` перезапускает пользователь.
+service_pid=0
+if systemctl --user -q is-active baluk-notes.service 2>/dev/null; then
+  systemctl --user restart baluk-notes.service
+  service_pid=$(systemctl --user show -p MainPID --value baluk-notes.service)
+  echo "  служба baluk-notes перезапущена"
+fi
+if pgrep -x notes | grep -vqx "$service_pid"; then
   echo "Работает notes serve старой версии — перезапустите его."
 fi
 echo

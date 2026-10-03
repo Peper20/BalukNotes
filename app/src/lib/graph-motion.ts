@@ -14,6 +14,8 @@ export const ease = (t: number): number => 1 - (1 - t) ** 3;
  */
 export function glide(from: ReadonlyMap<string, Point>, to: ReadonlyMap<string, Point>, e: number): Map<string, Point> {
   const next = new Map(to);
+  // Конец пути — ровно цель: `f + (x - f) * 1` бывает не равно `x` в последнем знаке.
+  if (e >= 1) return next;
   for (const [id, [x, y]] of to) {
     const f = from.get(id);
     if (f) next.set(id, [f[0] + (x - f[0]) * e, f[1] + (y - f[1]) * e]);

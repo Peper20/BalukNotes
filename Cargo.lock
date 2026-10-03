@@ -2091,6 +2091,7 @@ dependencies = [
  "comemo",
  "ecow",
  "fontcull",
+ "kurbo 0.13.1",
  "notify",
  "parking_lot",
  "rust-embed",
@@ -2098,6 +2099,7 @@ dependencies = [
  "serde",
  "serde_json",
  "siphasher",
+ "skrifa",
  "tempfile",
  "thiserror 2.0.21",
  "toml",
@@ -2112,6 +2114,7 @@ dependencies = [
  "typst-kit",
  "typst-layout",
  "typst-pdf",
+ "write-fonts",
 ]
 
 [[package]]

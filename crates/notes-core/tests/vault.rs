@@ -8,6 +8,7 @@ use std::sync::LazyLock;
 
 use notes_core::check::check;
 use notes_core::figures::FigureOptions;
+use notes_core::vault_graph::GraphFilter;
 use notes_core::{LibrarySource, NoteId, NoteKind, Notes, NotesConfig};
 
 fn repo() -> PathBuf {
@@ -38,8 +39,18 @@ fn themes_come_from_library() {
     assert_eq!(names, ["classic", "night"]);
     assert!(NOTES.themes().themes()[1].dark);
     assert!(NOTES.themes().css().contains("--k-box-def:"));
-    // Браузеру — основные шрифты тем (первые в списках `font`), без запасных.
-    assert_eq!(NOTES.themes().web_fonts(), ["Gentium Plus", "JetBrains Mono", "New Computer Modern Math"]);
+    // Браузеру — шрифты тем, основные и запасные (все списки `font`).
+    let fonts: Vec<_> = NOTES.themes().web_fonts().iter().map(|f| (f.name.as_str(), f.math)).collect();
+    assert_eq!(
+        fonts,
+        [
+            ("DejaVu Sans Mono", false),
+            ("Gentium Plus", false),
+            ("JetBrains Mono", false),
+            ("New Computer Modern", false),
+            ("New Computer Modern Math", true)
+        ]
+    );
 }
 
 #[test]
@@ -503,4 +514,50 @@ fn delete_note_and_book() {
     let ids: Vec<String> = notes.entries().unwrap().into_iter().map(|e| e.id.to_string()).collect();
     assert_eq!(ids, ["A"], "папка — целиком, со вложенными");
     assert!(matches!(notes.delete_folder(&id("Папка")), Err(notes_core::Error::NotFound(_))));
+}
+
+/// Граф с главами: книга — корень и главы вокруг; ссылка в раздел книги — к
+/// главе этого раздела, ссылка главы — от главы; фильтр по тегу — и по тегам глав.
+#[test]
+fn book_chapters_on_graph() {
+    let index = NOTES.index().unwrap();
+    let plain = index.graph();
+    assert!(plain.nodes.iter().all(|n| n.chapter.is_none()), "без глав — как раньше");
+    let g = index.graph_of(true);
+    let chapters: Vec<_> = g
+        .nodes
+        .iter()
+        .filter_map(|n| Some((n.id.as_str(), n.title.as_str(), n.chapter.as_ref()?.anchor.as_str())))
+        .filter(|(id, ..)| id.starts_with("Книга/"))
+        .collect();
+    assert_eq!(
+        chapters,
+        [
+            ("Книга/.1", "Основы", "гл-основы"),
+            ("Книга/.2", "Продолжение", "Продолжение"),
+            ("Книга/.3", "Приложение", "Приложение")
+        ]
+    );
+    let edge = |from: &str, to: &str| g.edges.iter().find(|e| e.from == from && e.to == to);
+    for c in ["Книга/.1", "Книга/.2", "Книга/.3"] {
+        assert!(edge("Книга", c).is_some_and(|e| e.chapter), "книга - {c}");
+    }
+    // Внутри книги: первая глава ссылается на вторую (по тексту и по метке).
+    assert_eq!(edge("Книга/.1", "Книга/.2").map(|e| (e.count, e.chapter)), Some((2, false)));
+    // Снаружи: «Ссылки» — в раздел второй главы.
+    assert!(edge("Особые случаи/Ссылки", "Книга/.2").is_some());
+    assert!(edge("Особые случаи/Ссылки", "Книга").is_none(), "ссылка с якорем — к главе");
+
+    let shown = |tag: &str| {
+        let filter = GraphFilter { tag: Some(tag.into()), chapters: true, ..GraphFilter::default() };
+        let mut ids: Vec<String> = index.graph_layout(&filter).nodes.into_iter().map(|n| n.id).collect();
+        ids.retain(|id| id.starts_with("Книга"));
+        ids
+    };
+    // Тег корня — у всех глав; тег главы — только у неё (и у книги, как раньше).
+    assert_eq!(shown("книга"), ["Книга", "Книга/.1", "Книга/.2", "Книга/.3"]);
+    assert_eq!(shown("код"), ["Книга", "Книга/.2"]);
+    let layout = index.graph_layout(&GraphFilter { chapters: true, ..GraphFilter::default() });
+    let group = |id: &str| layout.nodes.iter().find(|n| n.id == id).map(|n| n.group.clone());
+    assert_eq!(group("Книга/.1"), group("Книга"), "глава — цвета своей книги");
 }

@@ -10,6 +10,7 @@
 //!   notes docs <тема>      как писать заметки, API библиотеки
 //!   notes info             где хранилище, настройки, библиотека
 //!   notes vaults [new <имя>]  хранилища / создать новое
+//!   notes service install  автозапуск notes serve (служба systemd пользователя)
 //!
 //! Каталог данных (`vaults/`, `settings.json`, `cache/`): `--data` или
 //! `NOTES_DATA`, иначе `data` из `~/.config/baluk-notes/config.toml`, иначе
@@ -32,6 +33,8 @@ use notes_core::search::{TaggedChapter, tagged_chapters};
 use notes_core::settings::{Platform, Schema, SettingsStore};
 use notes_core::vault::NoteKind;
 use notes_core::{LibrarySource, NoteId, Notes, NotesConfig, VaultName, Vaults};
+
+mod service;
 
 /// Имя каталогов приложения: `~/.config/<APP>`, `~/.local/share/<APP>`.
 const APP: &str = "baluk-notes";
@@ -164,6 +167,28 @@ enum Command {
         #[command(subcommand)]
         action: Option<VaultsAction>,
     },
+    /// Автозапуск `notes serve`: служба systemd пользователя (Linux), без root.
+    Service {
+        #[command(subcommand)]
+        action: ServiceAction,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ServiceAction {
+    /// Поставить и запустить: сервер работает в фоне и стартует при входе в
+    /// систему, после падения перезапускается. Уже стоит — перезапустить
+    /// (после обновления notes). Запускает этот же бинарник `notes`; --data,
+    /// --library, --font-path передаются службе.
+    Install {
+        /// Адрес; для доступа из сети — 0.0.0.0:8421.
+        #[arg(long, default_value = ADDR)]
+        addr: SocketAddr,
+    },
+    /// Остановить и убрать службу.
+    Remove,
+    /// Стоит ли служба, работает ли, что запускает, где лог.
+    Status,
 }
 
 #[derive(Debug, Subcommand)]
@@ -255,6 +280,8 @@ fn main() -> ExitCode {
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,notes=info".into()),
         )
         .with_target(false)
+        // Без цветов вне терминала: лог службы (journald), файл.
+        .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
         .with_writer(std::io::stderr)
         .init();
     match run(Cli::parse()) {
@@ -311,10 +338,29 @@ fn pick_vault(vaults: &Vaults, arg: Option<&VaultArg>) -> Result<(VaultName, Pat
 }
 
 fn run(cli: Cli) -> Result<ExitCode> {
-    // Без хранилища: документация.
-    if let Command::Docs { topic } = cli.command {
-        print!("{}", topic.text());
-        return Ok(ExitCode::SUCCESS);
+    // Без хранилища: документация, служба.
+    match &cli.command {
+        Command::Docs { topic } => {
+            print!("{}", topic.text());
+            return Ok(ExitCode::SUCCESS);
+        }
+        Command::Service { action } => {
+            match action {
+                ServiceAction::Install { addr } => {
+                    let exe = std::env::current_exe().context("путь бинарника notes")?;
+                    if cfg!(debug_assertions) {
+                        eprintln!(
+                            "внимание: отладочная сборка — служба запустит её; обычно — tools/install.sh и notes из PATH"
+                        );
+                    }
+                    service::install(&exe, &service_args(&cli, *addr)?, *addr)?;
+                }
+                ServiceAction::Remove => service::remove()?,
+                ServiceAction::Status => service::status()?,
+            }
+            return Ok(ExitCode::SUCCESS);
+        }
+        _ => {}
     }
     let data = data_dir(cli.data.as_ref(), &load_config()?)?;
     let vaults = Vaults::new(&data);
@@ -373,10 +419,33 @@ fn run(cli: Cli) -> Result<ExitCode> {
         }
         Command::Pdf { id, out, theme } => pdf(&notes, &note_id(&id, &vault)?, out, theme),
         Command::Rename { id, title, dry_run } => rename(&notes, &note_id(&id, &vault)?, &title, dry_run),
-        Command::Docs { .. } | Command::Info | Command::Vaults { .. } | Command::Serve { .. } => {
+        Command::Docs { .. }
+        | Command::Service { .. }
+        | Command::Info
+        | Command::Vaults { .. }
+        | Command::Serve { .. } => {
             unreachable!("обработано выше")
         }
     }
+}
+
+/// Аргументы службы: `serve --addr …` и общие флаги этого запуска (пути —
+/// абсолютные: у службы своя текущая папка).
+fn service_args(cli: &Cli, addr: SocketAddr) -> Result<Vec<String>> {
+    let absolute = |p: &PathBuf| -> Result<String> {
+        Ok(std::path::absolute(p).with_context(|| format!("путь {}", p.display()))?.to_string_lossy().into_owned())
+    };
+    let mut args = vec!["serve".to_owned(), "--addr".to_owned(), addr.to_string()];
+    if let Some(data) = &cli.data {
+        args.extend(["--data".to_owned(), absolute(data)?]);
+    }
+    if let Some(library) = &cli.library {
+        args.extend(["--library".to_owned(), absolute(library)?]);
+    }
+    for dir in &cli.font_paths {
+        args.extend(["--font-path".to_owned(), absolute(dir)?]);
+    }
+    Ok(args)
 }
 
 fn rename(notes: &Notes, id: &NoteId, title: &str, dry_run: bool) -> Result<ExitCode> {
@@ -514,14 +583,34 @@ fn serve(
     runtime.block_on(async move {
         let listener = tokio::net::TcpListener::bind(addr).await.with_context(|| format!("занять {addr}"))?;
         tracing::info!("открыть: http://{addr}/");
-        notes_server::serve(listener, state, async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
-        .await?;
+        notes_server::serve(listener, state, stop_signal()).await?;
         Ok(ExitCode::SUCCESS)
     })
 }
 
+/// Ctrl+C или SIGTERM (так останавливает служба systemd): сервер
+/// завершается штатно, потоки событий закрываются.
+async fn stop_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        match signal(SignalKind::terminate()) {
+            Ok(mut term) => {
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = term.recv() => {}
+                }
+            }
+            Err(_) => {
+                let _ = tokio::signal::ctrl_c().await;
+            }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+}
 /// Строка списка или объект JSON: заметка из индекса исходников.
 #[derive(Debug, serde::Serialize)]
 struct ListItem<'a> {

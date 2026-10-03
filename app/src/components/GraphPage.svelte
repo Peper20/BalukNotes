@@ -1,6 +1,6 @@
 <!--
   Граф заметок во весь экран: масштаб, сдвиг, перестановка узлов, фильтры
-  (папки, тег, несуществующие, без связей), поиск по графу и «соседи
+  (папки, тег, несуществующие, без связей, книги главами), поиск по графу и «соседи
   заметки» (`/graph?around=…&depth=…`). Фильтры запоминаются в браузере.
   Силы графа — панель сбоку (`GraphForces`), значения — настройки `graph.*`.
 -->
@@ -24,13 +24,14 @@
 
   let { route }: { route: { around: string | null; depth: number } } = $props();
 
-  type Saved = Pick<GraphFilter, "hidden" | "tag" | "missing" | "orphans">;
+  type Saved = Pick<GraphFilter, "hidden" | "tag" | "missing" | "orphans" | "chapters">;
   const saved = load<Partial<Saved>>("k-graph", {});
   let prefs = $state<Saved>({
     hidden: Array.isArray(saved.hidden) ? saved.hidden : [],
     tag: typeof saved.tag === "string" ? saved.tag : null,
     missing: saved.missing ?? true,
     orphans: saved.orphans ?? true,
+    chapters: saved.chapters ?? false,
   });
   $effect(() => save("k-graph", $state.snapshot(prefs)));
 
@@ -143,6 +144,7 @@
     </select>
     <label><input type="checkbox" bind:checked={prefs.missing} /> ненаписанные</label>
     <label><input type="checkbox" bind:checked={prefs.orphans} /> без связей</label>
+    <label title="Книга — корнем и главами вокруг него"><input type="checkbox" bind:checked={prefs.chapters} /> книги главами</label>
     <span class="graph-zoom">
       <button type="button" class="icon" title="Мельче" aria-label="мельче" onclick={() => graph?.zoom(1 / 1.3)}><Minus size={18} strokeWidth={1.75} aria-hidden="true" /></button>
       <button type="button" class="icon" title="Крупнее" aria-label="крупнее" onclick={() => graph?.zoom(1.3)}><Plus size={18} strokeWidth={1.75} aria-hidden="true" /></button>
@@ -173,7 +175,7 @@
           {titles}
           highlight={hits}
           {drag}
-          onopen={(id, background) => router.open(id, null, { background })}
+          onopen={(id, background, anchor) => router.open(id, anchor, { background })}
         />
       {/if}
     </section>
