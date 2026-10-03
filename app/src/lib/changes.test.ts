@@ -1,73 +1,91 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { changeSource, serverEvents, type EventStream } from "./changes";
+import type { EventsResponse } from "./api/types/EventsResponse";
+import { changeSource, RETRY_MS, serverEvents, type Poll } from "./changes";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
-/** Подделка EventSource: события — вручную. */
-class FakeStream implements EventStream {
-  listeners = new Map<string, (e: MessageEvent<string>) => void>();
-  onerror: ((e: Event) => void) | null = null;
-  closed = false;
-  addEventListener(type: string, fn: (e: MessageEvent<string>) => void) {
-    this.listeners.set(type, fn);
-  }
-  emit(type: string, data = "{}") {
-    this.listeners.get(type)?.(new MessageEvent(type, { data }));
-  }
-  close() {
-    this.closed = true;
+/** Подделка сервера: каждый запрос ждёт, пока тест ответит. */
+class FakeServer {
+  calls: { after: number | null; signal: AbortSignal; resolve: (r: EventsResponse) => void; reject: (e: unknown) => void }[] = [];
+  poll: Poll = (after, signal) => new Promise((resolve, reject) => this.calls.push({ after, signal, resolve, reject }));
+  get last() {
+    return this.calls.at(-1)!;
   }
 }
 
-it("события сервера: change — проверить; разрыв — нет связи, возврат — одна проверка", () => {
-  const stream = new FakeStream();
-  const seen = vi.fn();
-  const reach = vi.fn();
-  const stop = serverEvents("/api/events", reach, () => stream).start(seen);
-  stream.emit("hello", '{"watching":true}');
-  expect(reach).toHaveBeenLastCalledWith(true);
-  stream.emit("change", '{"seq":1,"paths":["a.typ"]}');
-  expect(seen).toHaveBeenCalledTimes(1);
+const res = (seq: number, paths: string[] | null = null, watching = true): EventsResponse => ({
+  watching,
+  seq,
+  changes: paths ? [{ seq, paths }] : [],
+});
+const flush = () => vi.advanceTimersByTimeAsync(0);
 
-  stream.onerror!(new Event("error"));
-  expect(reach).toHaveBeenLastCalledWith(false);
-  // Опроса нет: пока связи нет, проверок нет.
-  vi.advanceTimersByTime(60_000);
+it("изменения — проверить; следующий запрос — с номером ответа", async () => {
+  const server = new FakeServer();
+  const seen = vi.fn();
+  const stop = serverEvents(server.poll).start(seen);
+  await flush();
+  expect(server.last.after).toBeNull();
+  server.last.resolve(res(0));
+  await flush();
+  expect(seen).not.toHaveBeenCalled();
+  expect(server.last.after).toBe(0);
+
+  server.last.resolve(res(3, ["a.typ"]));
+  await flush();
   expect(seen).toHaveBeenCalledTimes(1);
-  stream.emit("hello", '{"watching":true}');
-  expect(reach).toHaveBeenLastCalledWith(true);
-  expect(seen).toHaveBeenCalledTimes(2);
+  expect(server.last.after).toBe(3);
+  // Ответ по тайм-ауту — без изменений.
+  server.last.resolve(res(3));
+  await flush();
+  expect(seen).toHaveBeenCalledTimes(1);
+  expect(server.calls).toHaveLength(4);
 
   stop();
-  expect(stream.closed).toBe(true);
+  expect(server.last.signal.aborted).toBe(true);
 });
 
-it("сервер не следит за файлами — проверок нет, только по кнопке", () => {
-  const stream = new FakeStream();
+it("сервер не ответил — повтор через паузу; ответил — одна проверка", async () => {
+  const server = new FakeServer();
   const seen = vi.fn();
-  serverEvents("/api/events", undefined, () => stream).start(seen);
-  stream.emit("hello", '{"watching":false}');
-  vi.advanceTimersByTime(60_000);
+  serverEvents(server.poll).start(seen);
+  await flush();
+  server.last.resolve(res(2));
+  await flush();
+  server.last.reject(new Error("offline"));
+  await flush();
+  expect(server.calls).toHaveLength(2);
+  await vi.advanceTimersByTimeAsync(RETRY_MS - 1);
+  expect(server.calls).toHaveLength(2);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(server.calls).toHaveLength(3);
+  expect(server.last.after).toBe(2);
+  server.last.resolve(res(2));
+  await flush();
+  expect(seen).toHaveBeenCalledTimes(1);
+});
+
+it("сервер не следит за файлами — запросов больше нет, только по кнопке", async () => {
+  const server = new FakeServer();
+  const seen = vi.fn();
+  serverEvents(server.poll).start(seen);
+  await flush();
+  server.last.resolve(res(0, null, false));
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(server.calls).toHaveLength(1);
   expect(seen).not.toHaveBeenCalled();
 });
 
-it("настройка: автоматически — события; по кнопке — ничего", () => {
-  const streams: FakeStream[] = [];
-  const connect = () => {
-    const s = new FakeStream();
-    streams.push(s);
-    return s;
-  };
-  const manual = vi.fn();
-  changeSource("manual", "/api/events", undefined, connect).start(manual);
-  expect(streams).toHaveLength(0);
+it("настройка: автоматически — события; по кнопке — ни одного запроса", async () => {
+  const server = new FakeServer();
+  changeSource("manual", server.poll).start(vi.fn());
+  await flush();
+  expect(server.calls).toHaveLength(0);
 
-  const auto = vi.fn();
-  const stop = changeSource("auto", "/api/events", undefined, connect).start(auto);
-  streams[0]!.emit("hello", JSON.stringify({ watching: true }));
-  streams[0]!.emit("change");
-  expect(auto).toHaveBeenCalledTimes(1);
+  const stop = changeSource("auto", server.poll).start(vi.fn());
+  await flush();
+  expect(server.calls).toHaveLength(1);
   stop();
-  expect(streams[0]!.closed).toBe(true);
+  expect(server.last.signal.aborted).toBe(true);
 });

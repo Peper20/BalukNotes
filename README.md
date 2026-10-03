@@ -14,7 +14,10 @@
    сборке заметки с рисунком.
 2. **Установить** `notes` и навык Claude Code `/baluk-note` (и после каждого
    обновления репозитория): `tools/install.sh` (первая сборка - несколько
-   минут). Дальше `notes` работает из любой папки.
+   минут). Дальше `notes` работает из любой папки. `notes` - тонкая
+   команда: передаёт работу частям из своей папки (`notes-typst` - сборка и
+   все команды ниже; окно `notes-app` - в работе); какие стоят - `notes
+   --version`.
 3. **Хранилище**: `notes vaults new "Заметки"` (или в приложении).
 4. **Приложение**: `notes service install` - сервер в фоне, сам стартует при
    входе в систему (служба systemd пользователя, без root; убрать - `notes
@@ -38,7 +41,7 @@
 
 ```sh
 notes service install | remove | status      # автозапуск приложения (systemd); лог - journalctl --user -u baluk-notes
-notes serve                                  # приложение без службы; --token - только с токеном
+notes serve                                  # приложение без службы; --token - только с токеном; --socket - сокет для окна
 notes vaults [new "Имя"]                     # хранилища
 notes new --vault "Имя" --title "Название"   # заготовка; ещё --folder, --book, --tag, --lang
 notes list --vault "Имя" | notes tags --vault "Имя"
@@ -47,6 +50,7 @@ notes pdf --vault "Имя" Путь -o x.pdf [--theme night]
 notes rename --vault "Имя" Путь "Название"    # имя файла и ссылки на неё - тоже; --dry-run
 notes docs writing | library                 # как писать заметки; API библиотеки
 notes info                                   # где данные и хранилища
+notes --version                              # версия и какие части стоят
 ```
 
 **Данные** - по умолчанию `~/.local/share/baluk-notes`: `vaults/` -
@@ -57,7 +61,7 @@ notes info                                   # где данные и храни
 
 ## Разработка
 
-Из репозитория без установки - `cargo run -p notes-cli -- <команда>`
+Из репозитория без установки - `cargo run -p notes-typst -- <команда>`
 (отладочная сборка берёт `baluk/` и `app/dist` с диска); тестовый сервер на
 хранилище со всеми возможностями - `tools/test-env.sh`
 (http://127.0.0.1:8432). Проверка - `tools/check.sh` (`tools/README.md`).

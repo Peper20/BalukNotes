@@ -338,11 +338,19 @@ async fn token_is_required_when_set() {
     assert_eq!(status(open.oneshot(get("/api/vaults/test/notes")).await.unwrap()), StatusCode::OK);
 }
 
-/// Следующий кадр тела ответа как текст (с тайм-аутом).
-async fn next_frame(body: &mut Body) -> String {
-    let frame =
-        tokio::time::timeout(std::time::Duration::from_secs(10), body.frame()).await.expect("событие не пришло");
-    String::from_utf8(frame.unwrap().unwrap().into_data().unwrap().to_vec()).unwrap()
+/// `GET …/events` как JSON (с тайм-аутом: долгий опрос не должен зависнуть).
+async fn events(app: &axum::Router, after: Option<u64>) -> serde_json::Value {
+    let uri =
+        after.map_or_else(|| "/api/vaults/test/events".to_owned(), |a| format!("/api/vaults/test/events?after={a}"));
+    let res = tokio::time::timeout(
+        std::time::Duration::from_secs(10),
+        app.clone().oneshot(Request::get(uri).body(Body::empty()).unwrap()),
+    )
+    .await
+    .expect("ответ не пришёл")
+    .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    serde_json::from_slice(&res.into_body().collect().await.unwrap().to_bytes()).unwrap()
 }
 
 #[tokio::test]
@@ -363,30 +371,38 @@ async fn events_report_file_changes() {
     let dir = tempfile::tempdir().unwrap();
     let state = single(notes.clone(), &dir);
     assert!(notes.watch(), "каталог на диске — с наблюдателем");
-    let res = router(state.clone())
-        .oneshot(Request::get("/api/vaults/test/events").body(Body::empty()).unwrap())
-        .await
-        .unwrap();
-    assert_eq!(res.status(), StatusCode::OK);
-    assert_eq!(res.headers()["content-type"], "text/event-stream");
-    let mut body = res.into_body();
-    assert_eq!(next_frame(&mut body).await, "event: hello\ndata: {\"watching\":true}\n\n");
+    let app = router(state.clone());
+    let hello = events(&app, None).await;
+    assert_eq!(hello, serde_json::json!({ "watching": true, "seq": 0, "changes": [] }));
 
+    // Запрос ждёт, изменение отвечает на него.
+    let waiting = tokio::spawn({
+        let app = app.clone();
+        async move { events(&app, Some(0)).await }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     std::fs::write(vault.path().join("B.typ"), "b").unwrap();
-    let change = next_frame(&mut body).await;
-    assert!(
-        change.starts_with("event: change\ndata: {\"seq\":") && change.contains(r#""paths":["B.typ"]"#),
-        "{change}"
-    );
+    let got = waiting.await.unwrap();
+    let seq = got["seq"].as_u64().unwrap();
+    assert!(seq > 0);
+    assert_eq!(got["changes"], serde_json::json!([{ "seq": seq, "paths": ["B.typ"] }]));
+    // Пропустил ответ - изменения из журнала, сразу.
+    assert_eq!(events(&app, Some(0)).await["changes"][0]["paths"], serde_json::json!(["B.typ"]));
+    // Номер впереди (сервер перезапущен) - "проверь всё".
+    assert_eq!(events(&app, Some(seq + 100)).await["changes"], serde_json::json!([{ "seq": seq, "paths": [] }]));
 
-    // Остановка сервера закрывает поток.
+    // Остановка сервера отвечает ждущим.
+    let waiting = tokio::spawn({
+        let app = app.clone();
+        async move { events(&app, Some(seq)).await }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     state.closing.send_replace(true);
-    let end = tokio::time::timeout(std::time::Duration::from_secs(10), body.frame()).await.unwrap();
-    assert!(end.is_none());
+    assert_eq!(waiting.await.unwrap()["changes"], serde_json::json!([]));
 }
 
 #[tokio::test]
-async fn broken_watcher_closes_events() {
+async fn broken_watcher_stops_events() {
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mem = Arc::new(MemStorage::new());
     mem.write("A.typ", "a");
@@ -401,21 +417,23 @@ async fn broken_watcher_closes_events() {
     let dir = tempfile::tempdir().unwrap();
     let state = single(notes.clone(), &dir);
     assert!(notes.watch());
-    let res = router(state.clone())
-        .oneshot(Request::get("/api/vaults/test/events").body(Body::empty()).unwrap())
-        .await
-        .unwrap();
-    let mut body = res.into_body();
-    assert_eq!(next_frame(&mut body).await, "event: hello\ndata: {\"watching\":true}\n\n");
+    let app = router(state);
+    let waiting = tokio::spawn({
+        let app = app.clone();
+        async move { events(&app, Some(0)).await }
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
-    // Изменения потеряны: «проверь всё», и поток закрывается — клиент
-    // переподключится и перейдёт на опрос.
+    // Изменения потеряны: «проверь всё» и `watching: false` - клиент
+    // перестаёт ждать, изменения - по кнопке.
     mem.lose_changes();
     assert!(!notes.watching());
-    let change = next_frame(&mut body).await;
-    assert!(change.starts_with("event: change\n") && change.contains(r#""paths":[]"#), "{change}");
-    let end = tokio::time::timeout(std::time::Duration::from_secs(10), body.frame()).await.unwrap();
-    assert!(end.is_none());
+    let got = waiting.await.unwrap();
+    assert_eq!(got["watching"], false);
+    assert_eq!(got["changes"][0]["paths"], serde_json::json!([]));
+    // Дальше ждать нечего - ответ сразу.
+    let seq = got["seq"].as_u64().unwrap();
+    assert_eq!(events(&app, Some(seq)).await["changes"], serde_json::json!([]));
 }
 
 /// Хранилища каталога данных: у каждого свои заметки; создание нового.
@@ -640,4 +658,38 @@ async fn rename_plan_and_apply() {
 
     let body = r#"{"kind":"folder","id":"Пустая","title":"  "}"#;
     assert_eq!(call(app, "POST", &uri("/api/vaults/test/rename"), Some(body)).await.0, StatusCode::BAD_REQUEST);
+}
+
+/// Сервер слушает TCP и сокет Unix сразу; токен - только у TCP (сокет -
+/// окно `notes-app`, права - у пользователя).
+#[cfg(unix)]
+#[tokio::test]
+async fn serves_tcp_with_token_and_unix_socket_without() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    async fn get(mut stream: impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin) -> String {
+        stream.write_all(b"GET /api/vaults HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").await.unwrap();
+        let mut out = String::new();
+        stream.read_to_string(&mut out).await.unwrap();
+        out.lines().next().unwrap().to_owned()
+    }
+    // Путь сокета короче 108 байт: временная папка target/tmp, а не $TMPDIR.
+    let tmp = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    let path = tmp.path().join("s.sock");
+    let dir = tempfile::tempdir().unwrap();
+    let state = single(NOTES.clone(), &dir).with_token(Some("t".into()));
+    let tcp = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = tcp.local_addr().unwrap();
+    let unix = tokio::net::UnixListener::bind(&path).unwrap();
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let server = tokio::spawn(notes_server::serve(
+        vec![notes_server::Listen::Tcp(tcp), notes_server::Listen::Unix(unix)],
+        state,
+        async move {
+            let _ = stopped.await;
+        },
+    ));
+    assert_eq!(get(tokio::net::TcpStream::connect(addr).await.unwrap()).await, "HTTP/1.1 401 Unauthorized");
+    assert_eq!(get(tokio::net::UnixStream::connect(&path).await.unwrap()).await, "HTTP/1.1 200 OK");
+    stop.send(()).unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(10), server).await.unwrap().unwrap().unwrap();
 }

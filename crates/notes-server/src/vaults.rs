@@ -5,10 +5,10 @@
 //! API заметок — под `/api/vaults/{хранилище}/…` (модули `notes`, `graph`,
 //! `search`, `events`). Хранилище открывается при первом обращении: у
 //! каждого своё ядро (`Notes`: кэш, индекс ссылок, наблюдатель, прогрев) и
-//! свой поток событий. Прогревается только **активное** — открытое последним
+//! свой журнал изменений (`events`). Прогревается только **активное** — открытое последним
 //! или то, которому клиент последним подсказал прогрев (`POST …/warm`, при
 //! запуске клиента): остальные собирают заметки по запросу. Неактивные
-//! хранилища без запросов и потоков событий сервер закрывает через
+//! хранилища без запросов и ждущих событий сервер закрывает через
 //! [`IDLE_CLOSE`]: следующий запрос откроет заново.
 //!
 //! Источник хранилищ — каталог данных (`notes_core::vaults`, по запросу;
@@ -17,7 +17,7 @@
 //! новые не создаются, а это не переименовывается и не удаляется. Темы и шрифты у всех общие (библиотека одна) — их
 //! отдаёт ядро без хранилища ([`VaultSet::library`]).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
@@ -30,7 +30,7 @@ use notes_core::figures::FigureOptions;
 use notes_core::settings::{Schema, SettingsStore, VaultSettings};
 use notes_core::warm::WarmMode;
 use notes_core::{Notes, NotesConfig, SharedAssets, VaultName, Vaults};
-use tokio::sync::{broadcast, watch};
+use tokio::sync::watch;
 
 use crate::AppState;
 use crate::api::{ChangeEvent, CreateVaultRequest, RenameVaultRequest, VaultsResponse};
@@ -110,24 +110,84 @@ async fn remove(State(s): State<AppState>, Path(vault): Path<String>) -> ApiResu
 pub struct OpenVault {
     pub name: VaultName,
     pub notes: Arc<Notes>,
-    /// Изменения хранилища для `GET …/events`.
-    pub events: broadcast::Sender<ChangeEvent>,
+    /// Последние изменения хранилища для `GET …/events`.
+    pub(crate) events: Arc<VaultEvents>,
     /// Настройки, заданные только для этого хранилища (поверх общих).
     pub settings: VaultSettings,
     /// Последний запрос к API этого хранилища.
     last_request: Mutex<Instant>,
-    /// Сколько открытых `GET …/events` держат SSE-поток.
-    streams: AtomicUsize,
+    /// Сколько запросов `GET …/events` ждут изменений.
+    waiting: AtomicUsize,
 }
 
+/// Сколько последних изменений помнит хранилище для `GET …/events?after=`.
+const CHANGE_LOG: usize = 64;
+
+/// Изменения хранилища: журнал последних и номер последнего (его смена
+/// будит ждущие `GET …/events`).
 #[derive(Debug)]
-pub(crate) struct EventStreamGuard {
+pub(crate) struct VaultEvents {
+    log: Mutex<ChangeLog>,
+    seq: watch::Sender<u64>,
+}
+
+#[derive(Debug, Default)]
+struct ChangeLog {
+    /// Номер последнего изменения (0 - не было).
+    latest: u64,
+    /// Номер последнего вытесненного: `after` меньше - изменения потеряны.
+    dropped: u64,
+    items: VecDeque<ChangeEvent>,
+}
+
+impl VaultEvents {
+    fn new() -> Self {
+        Self { log: Mutex::default(), seq: watch::Sender::new(0) }
+    }
+
+    fn push(&self, change: ChangeEvent) {
+        let seq = change.seq;
+        {
+            let mut log = lock(&self.log);
+            log.latest = seq;
+            log.items.push_back(change);
+            if log.items.len() > CHANGE_LOG
+                && let Some(old) = log.items.pop_front()
+            {
+                log.dropped = old.seq;
+            }
+        }
+        self.seq.send_replace(seq);
+    }
+
+    /// Номер последнего изменения.
+    pub(crate) fn latest(&self) -> u64 {
+        lock(&self.log).latest
+    }
+
+    /// Изменения после `after`. Потеряны (старше журнала) или номер впереди
+    /// (хранилище открыто заново, сервер перезапущен) - одно "проверь всё".
+    pub(crate) fn since(&self, after: u64) -> Vec<ChangeEvent> {
+        let log = lock(&self.log);
+        if after == log.latest {
+            Vec::new()
+        } else if after > log.latest || after < log.dropped {
+            vec![ChangeEvent { seq: log.latest, paths: Vec::new() }]
+        } else {
+            log.items.iter().filter(|c| c.seq > after).cloned().collect()
+        }
+    }
+}
+
+/// Запрос `GET …/events` ждёт изменений: хранилище не закрывается.
+#[derive(Debug)]
+pub(crate) struct EventsWait {
     vault: Arc<OpenVault>,
 }
 
-impl Drop for EventStreamGuard {
+impl Drop for EventsWait {
     fn drop(&mut self) {
-        self.vault.streams.fetch_sub(1, Ordering::SeqCst);
+        self.vault.waiting.fetch_sub(1, Ordering::SeqCst);
         self.vault.touch();
     }
 }
@@ -140,13 +200,10 @@ impl OpenVault {
             tracing::warn!("настройки хранилища «{name}»: {e} — пока без них");
             VaultSettings::open(None, schema).expect("без файла — без ошибок")
         });
-        let (events, _) = broadcast::channel(64);
-        let tx = events.clone();
-        notes.on_change(move |c| {
-            // Нет слушателей — не страшно.
-            let _ = tx.send(ChangeEvent { seq: c.seq, paths: c.paths.clone() });
-        });
-        Self { name, notes, events, settings, last_request: Mutex::new(Instant::now()), streams: AtomicUsize::new(0) }
+        let events = Arc::new(VaultEvents::new());
+        let log = events.clone();
+        notes.on_change(move |c| log.push(ChangeEvent { seq: c.seq, paths: c.paths.clone() }));
+        Self { name, notes, events, settings, last_request: Mutex::new(Instant::now()), waiting: AtomicUsize::new(0) }
     }
 
     /// Обработка рисунков по настройкам этого хранилища.
@@ -162,14 +219,16 @@ impl OpenVault {
         now.saturating_duration_since(*lock(&self.last_request))
     }
 
-    fn has_streams(&self) -> bool {
-        self.streams.load(Ordering::SeqCst) > 0
+    fn has_waiting(&self) -> bool {
+        self.waiting.load(Ordering::SeqCst) > 0
     }
 
-    pub(crate) fn subscribe_events(self: &Arc<Self>) -> (broadcast::Receiver<ChangeEvent>, EventStreamGuard) {
-        self.streams.fetch_add(1, Ordering::SeqCst);
+    /// Ждать изменений: приёмник номера (подписан до проверки журнала - смена
+    /// не потеряется) и отметка "ждёт", пока жива.
+    pub(crate) fn wait_events(self: &Arc<Self>) -> (watch::Receiver<u64>, EventsWait) {
+        self.waiting.fetch_add(1, Ordering::SeqCst);
         self.touch();
-        (self.events.subscribe(), EventStreamGuard { vault: self.clone() })
+        (self.events.seq.subscribe(), EventsWait { vault: self.clone() })
     }
 }
 
@@ -189,7 +248,7 @@ pub struct VaultSet {
     library: Arc<Notes>,
     /// Общие шрифты и темы для открываемых хранилищ.
     shared: SharedAssets,
-    /// Через сколько без запросов и SSE-подписок закрывать неактивное.
+    /// Через сколько без запросов и ждущих событий закрывать неактивное.
     idle_close: Duration,
     settings: Arc<SettingsStore>,
     open: Mutex<BTreeMap<VaultName, Arc<OpenVault>>>,
@@ -385,7 +444,7 @@ impl VaultSet {
         self.idle_close.min(IDLE_POLL_MAX).max(IDLE_POLL_MIN)
     }
 
-    /// Закрыть неактивные хранилища без запросов и потоков событий дольше
+    /// Закрыть неактивные хранилища без запросов и ждущих событий дольше
     /// `idle_close`. Сервер на одном хранилище (`--vault`) не закрывает.
     fn close_idle_once(&self) {
         if !self.can_create() || self.idle_close.is_zero() {
@@ -397,7 +456,7 @@ impl VaultSet {
         let to_close: Vec<_> = open
             .iter()
             .filter_map(|(name, vault)| {
-                if Some(name) == active.as_ref() || vault.has_streams() {
+                if Some(name) == active.as_ref() || vault.has_waiting() {
                     return None;
                 }
                 (vault.idle_for(now) >= self.idle_close).then(|| name.clone())
@@ -512,17 +571,39 @@ mod tests {
     }
 
     #[test]
-    fn does_not_close_while_sse_stream_is_open() {
+    fn change_log_answers_since_seq() {
+        let events = VaultEvents::new();
+        let change = |seq: u64| ChangeEvent { seq, paths: vec![format!("{seq}.typ")] };
+        assert!(events.since(0).is_empty());
+        events.push(change(2));
+        events.push(change(5));
+        let seqs = |v: Vec<ChangeEvent>| v.iter().map(|c| c.seq).collect::<Vec<_>>();
+        assert_eq!(seqs(events.since(0)), [2, 5]);
+        assert_eq!(seqs(events.since(2)), [5]);
+        assert!(events.since(5).is_empty());
+        // Номер впереди: хранилище открыто заново - "проверь всё".
+        assert_eq!(events.since(9)[0].paths, Vec::<String>::new());
+        for seq in 6..6 + CHANGE_LOG as u64 {
+            events.push(change(seq));
+        }
+        // Вытеснены 2 и 5: с 2 потеряно, с 5 - всё на месте.
+        assert!(events.since(2)[0].paths.is_empty());
+        assert_eq!(events.since(5).len(), CHANGE_LOG);
+        assert_eq!(events.latest(), 5 + CHANGE_LOG as u64);
+    }
+
+    #[test]
+    fn does_not_close_while_events_wait() {
         let (set, _data, _cfg_dir) = registry(&["A", "B"]);
         let inactive = set.get("A").unwrap();
         let _active = set.get("B").unwrap();
-        let (_rx, stream) = inactive.subscribe_events();
+        let (_rx, wait) = inactive.wait_events();
         age(&inactive);
 
         set.close_idle_once();
-        assert!(set.opened("A").is_some(), "пока SSE-подписка открыта, закрывать нельзя");
+        assert!(set.opened("A").is_some(), "пока запрос событий ждёт, закрывать нельзя");
 
-        drop(stream);
+        drop(wait);
         let inactive = set.opened("A").unwrap();
         age(&inactive);
         drop(inactive);

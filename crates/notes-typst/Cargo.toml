@@ -1,6 +1,6 @@
 [package]
-name = "notes-cli"
-description = "Командная строка: notes serve | new | list | check | pdf | …"
+name = "notes-typst"
+description = "Часть notes со сборкой Typst: serve | new | list | check | pdf | …"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,10 +8,11 @@ license.workspace = true
 publish.workspace = true
 
 [[bin]]
-name = "notes"
+name = "notes-typst"
 path = "src/main.rs"
 
 [dependencies]
+notes.workspace = true
 notes-core.workspace = true
 notes-server.workspace = true
 anyhow.workspace = true

@@ -5,6 +5,7 @@ import { encodeId } from "../ids";
 import { vault } from "../vault";
 import { apiUrl, authHeaders } from "./config";
 import type { ErrorResponse } from "./types/ErrorResponse";
+import type { EventsResponse } from "./types/EventsResponse";
 import type { FolderListItem } from "./types/FolderListItem";
 import type { Graph } from "./types/Graph";
 import type { GraphFilter } from "./types/GraphFilter";
@@ -159,6 +160,7 @@ export const api = {
   warm: (req: WarmRequest) => request<unknown>(inVault("/warm"), json("POST", req)).then(() => {}),
   /** Адрес PDF — его открывает браузер (новая вкладка), токен — в адресе. */
   pdfUrl: (id: string, theme: string) => apiUrl(inVault(`/pdf/${encodeId(id)}?theme=${encodeURIComponent(theme)}`), { withToken: true }),
-  /** Адрес потока событий хранилища (`EventSource`), токен — в адресе. */
-  eventsUrl: () => apiUrl(inVault("/events"), { withToken: true }),
+  /** Изменения хранилища после `after` (долгий опрос: ответ — на изменении или через ~25 с). */
+  events: (after: number | null, signal?: AbortSignal) =>
+    request<EventsResponse>(inVault(`/events${after == null ? "" : `?after=${after}`}`), { signal }),
 };

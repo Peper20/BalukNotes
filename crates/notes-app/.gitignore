@@ -1,0 +1,2 @@
+# Схемы прав Tauri - их пишет tauri-build при сборке.
+/gen/schemas

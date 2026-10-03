@@ -85,7 +85,7 @@ pub fn install(exe: &Path, args: &[String], addr: SocketAddr) -> Result<()> {
     // Адрес занят не службой — запущенный вручную `notes serve`: служба
     // падала бы и перезапускалась.
     if !running && std::net::TcpListener::bind(addr).is_err() {
-        bail!("адрес {addr} занят — остановите запущенный notes serve (kill $(pgrep -x notes)) и повторите");
+        bail!("адрес {addr} занят — остановите запущенный notes serve (kill $(pgrep -x notes-typst)) и повторите");
     }
     let path = unit_path()?;
     let dir = path.parent().unwrap_or(Path::new("."));

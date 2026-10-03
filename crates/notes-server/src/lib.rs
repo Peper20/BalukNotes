@@ -41,7 +41,7 @@
 //! | `GET …/preview/{*id}?anchor=` | превью заметки/раздела (без компиляции)     |
 //! | `GET …/pdf/{*id}?theme=`     | заметка в PDF (по умолчанию — первая тема)   |
 //! | `POST …/warm`                | что собрать заранее первым (см. `notes_core::warm`) |
-//! | `GET …/events`               | события: файлы изменились (SSE, см. `events`) |
+//! | `GET …/events?after=`        | изменения файлов (долгий опрос, см. `events`) |
 //! | `GET …/settings`             | настройки хранилища: итог, общие, свои       |
 //! | `PUT …/settings`             | задать свои (`null` — снова общая)           |
 //!
@@ -63,6 +63,7 @@ mod search;
 mod settings;
 mod vaults;
 
+use std::future::IntoFuture;
 use std::sync::Arc;
 
 use axum::Router;
@@ -80,7 +81,7 @@ pub struct AppState {
     pub settings: Arc<SettingsStore>,
     /// Токен доступа: если задан, без него сервер отвечает 401 (см. `auth`).
     pub token: Option<Arc<str>>,
-    /// Сервер останавливается: потоки событий закрываются.
+    /// Сервер останавливается: ждущие запросы событий получают ответ.
     pub closing: Arc<watch::Sender<bool>>,
 }
 
@@ -134,9 +135,20 @@ pub fn router(state: AppState) -> Router {
     .with_state(state)
 }
 
-/// Запускает сервер на готовом сокете до сигнала `shutdown`.
+/// Где слушать сервер.
+#[derive(Debug)]
+pub enum Listen {
+    /// TCP (`notes serve --addr`): браузер; токен - если задан.
+    Tcp(tokio::net::TcpListener),
+    /// Сокет Unix (`notes serve --socket`): окно `notes-app`. Права на сокет -
+    /// только у пользователя, поэтому без токена.
+    #[cfg(unix)]
+    Unix(tokio::net::UnixListener),
+}
+
+/// Запускает сервер на готовых сокетах до сигнала `shutdown`.
 pub async fn serve(
-    listener: tokio::net::TcpListener,
+    listeners: Vec<Listen>,
     state: AppState,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> std::io::Result<()> {
@@ -147,14 +159,37 @@ pub async fn serve(
     std::thread::spawn(move || library.warm_fonts());
     // Прогрев и наблюдатель файлов — у каждого открытого хранилища.
     state.vaults.start_background();
-    // Неактивные хранилища без запросов и SSE закрываются по таймауту.
+    // Неактивные хранилища без запросов и ждущих событий закрываются по таймауту.
     let vaults = state.vaults.clone();
     let closing = state.closing.clone();
     std::thread::spawn(move || vaults.close_idle_forever(&closing));
     let closing = state.closing.clone();
-    let shutdown = async move {
+    tokio::spawn(async move {
         shutdown.await;
         closing.send_replace(true);
+    });
+    let stopped = |closing: &Arc<watch::Sender<bool>>| {
+        let mut rx = closing.subscribe();
+        async move {
+            let _ = rx.wait_for(|c| *c).await;
+        }
     };
-    axum::serve(listener, router(state)).with_graceful_shutdown(shutdown).await
+    let mut servers = tokio::task::JoinSet::new();
+    for listen in listeners {
+        let stop = stopped(&state.closing);
+        match listen {
+            Listen::Tcp(l) => {
+                servers.spawn(axum::serve(l, router(state.clone())).with_graceful_shutdown(stop).into_future());
+            }
+            #[cfg(unix)]
+            Listen::Unix(l) => {
+                let state = AppState { token: None, ..state.clone() };
+                servers.spawn(axum::serve(l, router(state)).with_graceful_shutdown(stop).into_future());
+            }
+        }
+    }
+    while let Some(done) = servers.join_next().await {
+        done.map_err(std::io::Error::other)??;
+    }
+    Ok(())
 }

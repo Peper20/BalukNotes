@@ -3,7 +3,7 @@
 | Файл | Что |
 |---|---|
 | `check.sh` | полная проверка |
-| `install.sh` | `notes` в `~/.local/bin` и навык в `~/.claude/skills` одной версией, служба `notes service` - перезапуск; после изменений - снова |
+| `install.sh` | `notes` и части (`notes-typst`, окно `notes-app` с ярлыком и значком) в `~/.local/bin` и навык в `~/.claude/skills` одной версией, служба `notes service` - перезапуск; после изменений - снова |
 | `test-env.sh` | сервер на `tests/vault` (данные `tests/.data`, порт 8432) |
 | `visual.mjs`, `shot.mjs` | снимки фикстур и страниц (браузер - `lib/browser.mjs`) |
 
@@ -25,7 +25,9 @@ tools/check.sh --fast   # без сборки клиента и e2e; ещё --ru
 (незакоммиченные - тоже "упал"); клиент - check, Vitest, build, e2e. В конце -
 таблица шагов со временем, код возврата ненулевой при любой ошибке, логи -
 `tests/.data/check/`. Для e2e нужен системный Chromium (`/usr/bin/chromium`,
-другой - `CHROMIUM=...`). Перед шагами: `target/` больше 30 ГБ
+другой - `CHROMIUM=...`). Окно `notes-app` собирается, если есть WebKitGTK
+(`pkg-config webkit2gtk-4.1`), иначе - исключается из шагов cargo (облако).
+Перед шагами: `target/` больше 30 ГБ
 (`TARGET_LIMIT_GB`) - `cargo clean`, cargo сам старые сборки не удаляет; при
 своём `CARGO_TARGET_DIR` (общий для worktree) - не чистит.
 
@@ -51,7 +53,7 @@ tools/shot.mjs URL out.png --print 'scrollY'     # замер в страниц�
   эмулирует телефон (с эмуляцией замеры врут): узкий экран - шириной.
 - Отладочная сборка берёт `baluk/` и `app/dist` с диска; правки Rust - после
   перезапуска `notes serve`.
-- Остановить сервер - `kill $(pgrep -x notes)`, не `pkill -f ...`, и не ждать
+- Остановить сервер - `kill $(pgrep -x notes-typst)`, не `pkill -f ...`, и не ждать
   процесс через `pgrep -f ...`: шаблон совпадает с командной строкой самой
   оболочки (убивает её или ждёт вечно).
 

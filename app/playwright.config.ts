@@ -29,7 +29,7 @@ export default defineConfig({
       "rm -rf tests/.data/e2e",
       "mkdir -p tests/.data/e2e/vaults",
       "cp -r tests/vault tests/.data/e2e/vaults/vault",
-      `cargo run -q -p notes-cli -- --data tests/.data/e2e --trash tests/.data/e2e/trash serve --addr 127.0.0.1:${port}`,
+      `cargo run -q -p notes-typst -- --data tests/.data/e2e --trash tests/.data/e2e/trash serve --addr 127.0.0.1:${port}`,
     ].join(" && "),
     cwd: "..",
     url: `http://127.0.0.1:${port}/api/vaults`,
