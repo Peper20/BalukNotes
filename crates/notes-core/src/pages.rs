@@ -121,7 +121,7 @@ impl Pages {
             return Ok(page);
         }
         let built = self.pipeline.build(&entry, Priority::User);
-        Ok(self.store(&entry, built, Some(opts)).expect("страница с настройками"))
+        Ok(self.store_page(&entry, built, opts))
     }
 
     /// Текущая версия заметки. Для известной — только `stat` её файлов,
@@ -161,7 +161,7 @@ impl Pages {
             return Ok(false);
         }
         let built = self.pipeline.build(&entry, Priority::Background);
-        self.store(&entry, built, None);
+        self.store(&entry, built);
         Ok(true)
     }
 
@@ -180,7 +180,33 @@ impl Pages {
 
     /// Запомнить сборку. Ошибка — под ней прежняя удачная отрисовка.
     /// С настройками `opts` — страница (она же остаётся в памяти).
-    fn store(&self, entry: &Entry, built: Build, opts: Option<FigureOptions>) -> Option<Arc<NotePage>> {
+    /// Stores a build without a page (warm-up).
+    fn store(&self, entry: &Entry, built: Build) {
+        let (record, raw, _) = self.record(entry, built);
+        self.cache.store(&entry.id, record, raw, None);
+        self.note_built();
+    }
+
+    /// Stores a build with its page in `opts` and returns the page.
+    fn store_page(&self, entry: &Entry, built: Build, opts: FigureOptions) -> Arc<NotePage> {
+        let (record, raw, shown) = self.record(entry, built);
+        let page = Arc::new(NotePage {
+            id: entry.id.clone(),
+            kind: entry.kind,
+            version: page_version(&record.files, opts),
+            rendered: shown.map(|r| Arc::new(self.pipeline.finish(&r, opts))),
+            errors: record.errors.clone(),
+            warnings: record.warnings.clone(),
+            book: None,
+        });
+        self.cache.store(&entry.id, record, raw, Some((page.clone(), opts)));
+        self.note_built();
+        page
+    }
+
+    /// The cache record of a build, its raw rendering for the cache and the
+    /// rendering to show (the previous good one if the build failed).
+    fn record(&self, entry: &Entry, built: Build) -> (Record, Raw, Option<Arc<Rendered>>) {
         let (raw, shown) = match built.raw {
             Some(r) => {
                 let r = Arc::new(r);
@@ -193,18 +219,6 @@ impl Pages {
         };
         // Ссылки показанной отрисовки — для индекса ссылок (вычисляемые пути).
         let links = shown.as_ref().map(|r| r.links.clone()).unwrap_or_default();
-        let page = opts.map(|opts| {
-            let page = NotePage {
-                id: entry.id.clone(),
-                kind: entry.kind,
-                version: page_version(&built.files, opts),
-                rendered: shown.map(|r| Arc::new(self.pipeline.finish(&r, opts))),
-                errors: built.errors.clone(),
-                warnings: built.warnings.clone(),
-                book: None,
-            };
-            (Arc::new(page), opts)
-        });
         let record = Record {
             files: built.files,
             deps: built.deps,
@@ -214,9 +228,7 @@ impl Pages {
             raw: None,
             links,
         };
-        self.cache.store(&entry.id, record, raw, page.clone());
-        self.note_built();
-        page.map(|(p, _)| p)
+        (record, raw, shown)
     }
 
     /// Отложенный выпуск памяти: отметить сборку (дебаунсер увидит простой).

@@ -90,6 +90,10 @@ missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 doc_markdown = "allow"
 non_ascii_literal = "allow"
+# Panic outside tests only through an `expect` under
+# `#[expect(clippy::expect_used, reason = "...")]` (crates/README.md).
+unwrap_used = "warn"
+expect_used = "warn"
 
 [profile.dev.package."*"]
 # Typst в отладочной сборке компилирует заметки в разы медленнее.

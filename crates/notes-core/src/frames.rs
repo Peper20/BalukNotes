@@ -212,12 +212,12 @@ fn subtrees(toks: &[&str]) -> Option<Vec<Node>> {
         }
         let name = tag_name(t);
         let self_closing = t.ends_with("/>");
-        let eligible = !stack.is_empty() && defs_depth == 0 && name != "defs";
+        let eligible = !stack.is_empty()
+            && defs_depth == 0
+            && name != "defs"
+            && (!self_closing || (t.len() >= MIN_LEN && !t.contains(" id=\"")));
         nodes.push(Node { start: i, end: i, eligible });
-        if self_closing {
-            let n = nodes.last_mut().expect("только что добавлен");
-            n.eligible &= t.len() >= MIN_LEN && !t.contains(" id=\"");
-        } else {
+        if !self_closing {
             if name == "defs" {
                 defs_depth += 1;
             }

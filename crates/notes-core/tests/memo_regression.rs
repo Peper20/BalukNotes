@@ -5,6 +5,8 @@
 //! правками). Числа печатаются; тест по умолчанию игнорируется. Запуск вручную:
 //! `cargo test -p notes-core --features measure --test memo_regression --release -- --ignored --nocapture`.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, reason = "test helpers fail the test by panicking")]
+
 use std::fs;
 use std::time::{Duration, Instant};
 

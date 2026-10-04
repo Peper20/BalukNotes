@@ -21,7 +21,7 @@
 //! (папку вне каталога данных — путём: `--vault tests/vault`), первое
 //! хранилище создаёт пользователь (`notes vaults new`, приложение).
 
-use std::net::SocketAddr;
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
@@ -41,7 +41,7 @@ mod service;
 /// Имя каталогов приложения: `~/.config/<APP>`, `~/.local/share/<APP>`.
 const APP: &str = "baluk-notes";
 /// Адрес `notes serve` по умолчанию.
-const ADDR: &str = "127.0.0.1:8421";
+const ADDR: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 8421));
 
 #[derive(Debug, Parser)]
 #[command(name = "notes", version, about = "Заметки на Typst")]
@@ -88,7 +88,7 @@ enum Command {
         /// пользователя, без токена). Без пути —
         /// $XDG_RUNTIME_DIR/baluk-notes/notes.sock.
         #[arg(long, num_args = 0..=1, value_name = "ПУТЬ")]
-        #[allow(clippy::option_option, reason = "clap: флага нет, флаг без пути, флаг с путём")]
+        #[expect(clippy::option_option, reason = "clap: no flag, a flag without a path, a flag with a path")]
         socket: Option<Option<PathBuf>>,
         /// Токен доступа: без него сервер отвечает 401. Передаётся заголовком
         /// `Authorization: Bearer …`, параметром `?token=` (сервер ставит
@@ -191,7 +191,7 @@ enum ServiceAction {
     /// --library, --font-path передаются службе.
     Install {
         /// Адрес; для доступа из сети — 0.0.0.0:8421.
-        #[arg(long, default_value = ADDR)]
+        #[arg(long, default_value_t = ADDR)]
         addr: SocketAddr,
     },
     /// Остановить и убрать службу.
@@ -615,7 +615,7 @@ fn serve(
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async move {
         let mut listeners = Vec::new();
-        let addr = listen.addr.or_else(|| listen.socket.is_none().then(|| ADDR.parse().expect("адрес")));
+        let addr = listen.addr.or_else(|| listen.socket.is_none().then_some(ADDR));
         if let Some(addr) = addr {
             let listener = tokio::net::TcpListener::bind(addr).await.with_context(|| format!("занять {addr}"))?;
             tracing::info!("открыть: http://{addr}/");

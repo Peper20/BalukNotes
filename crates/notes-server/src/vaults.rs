@@ -198,7 +198,7 @@ impl OpenVault {
         // Испорченный файл не перезаписываем: настройки хранилища — только в памяти.
         let settings = VaultSettings::open(path, schema).unwrap_or_else(|e| {
             tracing::warn!("настройки хранилища «{name}»: {e} — пока без них");
-            VaultSettings::open(None, schema).expect("без файла — без ошибок")
+            VaultSettings::in_memory()
         });
         let events = Arc::new(VaultEvents::new());
         let log = events.clone();

@@ -197,8 +197,7 @@ const MB: u64 = 1 << 20;
 impl Schema {
     /// Схема для набора тем (тема — выбор из того, что есть в `theme.typ`) и
     /// платформы (значения по умолчанию настроек устройства).
-    // Длинная, потому что это таблица настроек, а не логика.
-    #[allow(clippy::too_many_lines)]
+    #[expect(clippy::too_many_lines, reason = "a table of settings, not logic")]
     pub fn new(themes: &[Theme], platform: Platform) -> Self {
         let mut theme_options = vec![choice("auto", "как в системе")];
         theme_options.extend(themes.iter().map(|t| choice(&t.name, &t.title)));
@@ -512,7 +511,7 @@ impl Schema {
                     return Err(setting_err(key, &format!("допустимо от {min} до {max}")));
                 }
                 // Целое остаётся целым: 19, а не 19.0.
-                #[allow(clippy::cast_possible_truncation)]
+                #[expect(clippy::cast_possible_truncation, reason = "a whole number within the setting's range")]
                 Ok(if n.fract() == 0.0 { json!(n as i64) } else { json!(n) })
             }
             Kind::Text { .. } => {
@@ -612,9 +611,10 @@ impl SettingsStore {
     /// Настройки устройства для ядра.
     pub fn device(&self) -> Device {
         let values = self.values.read();
+        // Every key below has a number default in the schema (test `device_settings_by_platform`).
         let number = |key: &str| {
             let n = values.get(key).and_then(Value::as_u64);
-            n.or_else(|| self.schema.get(key)?.default.as_u64()).expect("число в схеме")
+            n.or_else(|| self.schema.get(key)?.default.as_u64()).unwrap_or_default()
         };
         let warm = values.get("device.warm").and_then(Value::as_str).and_then(WarmMode::from_key);
         let size = |n: u64| usize::try_from(n).unwrap_or(usize::MAX);
@@ -678,11 +678,14 @@ fn not_device(key: &str) -> std::result::Result<(), &'static str> {
 
 impl VaultSettings {
     pub fn open(path: Option<PathBuf>, schema: &Schema) -> Result<Self> {
-        let own = match &path {
-            Some(path) => load(path, schema, not_device)?,
-            None => Map::new(),
-        };
-        Ok(Self { path, own: RwLock::new(own) })
+        let Some(path) = path else { return Ok(Self::in_memory()) };
+        let own = load(&path, schema, not_device)?;
+        Ok(Self { path: Some(path), own: RwLock::new(own) })
+    }
+
+    /// No settings of its own, changes are kept in memory only.
+    pub fn in_memory() -> Self {
+        Self { path: None, own: RwLock::default() }
     }
 
     /// Заданные в хранилище.

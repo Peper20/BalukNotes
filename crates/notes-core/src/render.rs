@@ -19,6 +19,7 @@ use crate::passes::{self, Context};
 pub(crate) static DATA_TARGET: LazyLock<HtmlAttr> = LazyLock::new(|| attr_name("data-k-target"));
 pub(crate) static DATA_ANCHOR: LazyLock<HtmlAttr> = LazyLock::new(|| attr_name("data-k-anchor"));
 
+#[expect(clippy::expect_used, reason = "names are literals in this crate, checked by its tests")]
 pub(crate) fn attr_name(name: &str) -> HtmlAttr {
     HtmlAttr::intern(name).expect("имя атрибута задано в коде и верно")
 }

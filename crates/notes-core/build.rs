@@ -9,6 +9,7 @@
 //! (и новые файлы) входит в метку — забыть файл безопасно, лишний прогрев
 //! и только.
 
+use std::error::Error;
 use std::hash::Hasher as _;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
@@ -33,8 +34,8 @@ const AFTER_CACHE: &[&str] = &[
     "webfonts.rs", // шрифты для браузера
 ];
 
-fn main() {
-    let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+fn main() -> Result<(), Box<dyn Error>> {
+    let manifest = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     let repo = manifest.join("../..");
     let mut h = siphasher::sip::SipHasher13::new();
     let mut add = |name: &str, data: &[u8]| {
@@ -46,16 +47,17 @@ fn main() {
 
     let src = manifest.join("src");
     for file in files(&src) {
-        let rel = file.strip_prefix(&src).unwrap().to_string_lossy().replace('\\', "/");
+        let rel = file.strip_prefix(&src)?.to_string_lossy().replace('\\', "/");
         if !AFTER_CACHE.contains(&rel.as_str()) {
-            add(&rel, &fs::read(&file).unwrap());
+            add(&rel, &fs::read(&file)?);
         }
     }
     let fonts = repo.join("fonts");
     for file in files(&fonts) {
-        let name = file.file_name().unwrap().to_string_lossy().into_owned();
+        let Some(name) = file.file_name() else { continue };
+        let name = name.to_string_lossy().into_owned();
         if file.extension().is_some_and(|e| e == "ttf" || e == "otf") {
-            add(&name, &fs::read(&file).unwrap());
+            add(&name, &fs::read(&file)?);
         }
     }
     // Версии Typst: блоки `[[package]]` крейтов typst*.
@@ -70,6 +72,7 @@ fn main() {
     println!("cargo:rerun-if-changed=src");
     println!("cargo:rerun-if-changed={}", fonts.display());
     println!("cargo:rerun-if-changed={}", repo.join("Cargo.lock").display());
+    Ok(())
 }
 
 /// Все файлы каталога, по порядку путей.

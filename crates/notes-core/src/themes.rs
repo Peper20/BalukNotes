@@ -64,9 +64,12 @@ impl ThemeSet {
         let docs = compilation
             .docs
             .map_err(|errs| Error::Library(errs.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n")))?;
-        let (_, doc) = docs.into_iter().next().expect("одна компиляция без темы");
+        let Some((_, doc)) = docs.into_iter().next() else {
+            return Err(Error::Library(format!("{CSS_FILE}: no document")));
+        };
         let metadata = |name: &str| -> Result<Value> {
-            let label = Label::new(PicoStr::intern(name)).expect("метка не пустая");
+            let label = Label::new(PicoStr::intern(name))
+                .ok_or_else(|| Error::Library(format!("{CSS_FILE}: empty label name")))?;
             let content = doc
                 .introspector()
                 .query_label(label)

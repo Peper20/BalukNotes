@@ -269,12 +269,11 @@ impl PageCache {
         state.held.insert(id.clone(), held);
         let budget = self.budget.load(Ordering::Relaxed);
         while state.bytes > budget && state.held.len() > 1 {
-            let Some(victim) =
-                state.held.iter().filter(|(k, _)| *k != id).min_by_key(|(_, h)| h.used).map(|(k, _)| k.clone())
-            else {
+            let oldest =
+                state.held.iter().filter(|(k, _)| *k != id).min_by_key(|(_, h)| h.used).map(|(k, _)| k.clone());
+            let Some((victim, h)) = oldest.and_then(|k| state.held.remove_entry(&k)) else {
                 break;
             };
-            let h = state.held.remove(&victim).expect("есть");
             state.bytes -= h.bytes;
             tracing::debug!(id = %victim, bytes = h.bytes, "вытеснена из памяти");
         }

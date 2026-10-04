@@ -245,7 +245,7 @@ impl Page {
         }
         // Сначала — проверить весь рисунок, и только потом заводить
         // переменные: отвергнутый рисунок не должен оставить их в таблице.
-        let mut plan: Vec<Option<Vec<ColorDiff>>> = Vec::with_capacity(base.len());
+        let mut plan: Vec<Option<(Tag, Vec<ColorDiff>)>> = Vec::with_capacity(base.len());
         for (i, tok) in base.iter().enumerate() {
             if svgs.iter().all(|s| s[i] == *tok) {
                 plan.push(None);
@@ -270,17 +270,17 @@ impl Page {
                 }
                 differing.push((a, values.iter().map(ToString::to_string).collect()));
             }
-            plan.push(Some(differing));
+            let tag = tags.into_iter().next()?;
+            plan.push(Some((tag, differing)));
         }
 
         let mut out = String::new();
         let digits = self.opts.precision;
         for (i, (tok, step)) in base.iter().zip(plan).enumerate() {
-            let Some(differing) = step else {
+            let Some((mut tag, differing)) = step else {
                 out.push_str(&if i == 0 { Cow::Borrowed(*tok) } else { round_tag(tok, digits) });
                 continue;
             };
-            let mut tag = Tag::parse(tok).expect("разобран выше");
             let mut style = String::new();
             for (a, values) in &differing {
                 let n = self.color_var(values.clone());
@@ -440,7 +440,7 @@ fn round_tag(raw: &str, digits: Option<u8>) -> Cow<'_, str> {
 
 /// Число в целых долях `10^-p`.
 fn to_grid(v: f64, p: u8) -> i64 {
-    #[allow(clippy::cast_possible_truncation)]
+    #[expect(clippy::cast_possible_truncation, reason = "coordinates of a figure are far below i64::MAX in grid units")]
     let n = (v * 10f64.powi(i32::from(p))).round() as i64;
     n
 }

@@ -3,6 +3,8 @@
 //! Тест игнорируется по умолчанию: он тяжёлый и зависит от /proc.
 //! Запуск вручную: `cargo test -p notes-core --features measure --test memory_release -- --ignored`.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, reason = "test helpers fail the test by panicking")]
+
 use std::fs;
 use std::time::{Duration, Instant};
 
