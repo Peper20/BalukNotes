@@ -1,6 +1,6 @@
 [package]
 name = "notes-core"
-description = "Ядро: хранилище заметок, компиляция Typst → HTML, темы, ссылки, настройки"
+description = "The core: the note vault, Typst -> HTML compiling, themes, links, settings"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,11 +8,11 @@ license.workspace = true
 publish.workspace = true
 
 [features]
-# Выгрузка типов API в app/src/lib/api/types (cd app && npm run types).
+# Exports the API types to app/src/lib/api/types (cd app && npm run types).
 ts = ["dep:ts-rs"]
-# Тяжёлые замеры памяти и пересборок (docs/research/E5.md): каждому нужен свой
-# процесс, поэтому - отдельные бинарники, и собираются они только по запросу
-# (иначе каждый `cargo test` линкует ещё три по сотне МБ).
+# Heavy measurements of memory and rebuilds (docs/research/E5.md): each needs
+# its own process, so they are separate binaries built only on request
+# (otherwise every `cargo test` links three more of about 100 MB each).
 measure = []
 
 [[test]]
@@ -49,28 +49,28 @@ serde.workspace = true
 serde_json.workspace = true
 siphasher.workspace = true
 thiserror.workspace = true
-# Файл папки `_folder.toml` (folders.rs).
+# The folder file `_folder.toml` (folders.rs).
 toml.workspace = true
 tracing.workspace = true
 ts-rs = { workspace = true, optional = true }
 
-# Пониженный приоритет потока прогрева (`world.rs`) без `unsafe` — та же
-# версия, что уже тянет typst-kit.
+# Lower priority of the warming thread (`world.rs`) without `unsafe`: the same
+# version typst-kit already pulls in.
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 rustix = { version = "1", features = ["process", "thread"] }
 
-# Корзина системы для удалённых заметок (`storage.rs`); на телефоне и в
-# браузере её нет.
+# The system trash for deleted notes (`storage.rs`); phones and browsers have
+# none.
 [target.'cfg(not(any(target_os = "android", target_os = "ios", target_family = "wasm")))'.dependencies]
 trash.workspace = true
 
 [build-dependencies]
-# Метка кода отрисовки для кэша на диске (build.rs).
+# A label of the rendering code for the disk cache (build.rs).
 siphasher.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
-# Математический шрифт для теста WOFF2 (тот же, что встроен в typst-kit).
+# A math font for the WOFF2 test (the one embedded in typst-kit).
 typst-assets = { version = "=0.15.1", features = ["fonts"] }
 
 [lints]

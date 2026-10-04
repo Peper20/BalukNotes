@@ -1,9 +1,9 @@
-//! Хранилище: папка с `.typ`, она же корень Typst-проекта.
+//! A vault: a folder of `.typ` files, which is also the root of the Typst project.
 //!
-//! - **Заметка** — файл `путь/Имя.typ`, идентификатор `путь/Имя`.
-//! - **Книга** — папка с `main.typ`, идентификатор — путь к папке. Файлы
-//!   внутри книги (главы, код) заметками не считаются.
-//! - Служебное пропускается: имена на `_` (библиотека `_baluk`) и на `.`.
+//! - **Note**: a file `path/Name.typ`, id `path/Name`.
+//! - **Book**: a folder with `main.typ`, id is the folder path. Files inside a
+//!   book (chapters, code) are not notes.
+//! - Internal names are skipped: those starting with `_` (the `_baluk` library) and `.`.
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -15,14 +15,13 @@ use serde::Serialize;
 use crate::storage::{DirStorage, Storage, is_typ};
 use crate::{Error, Result};
 
-/// Главный файл книги.
+/// The main file of a book.
 pub const BOOK_MAIN: &str = "main.typ";
 
-/// Путь заметки от корня хранилища без `.typ`, через `/`: `Сеть/SSH`.
+/// A note path from the vault root, without `.typ`, separated by `/`: `Network/SSH`.
 ///
-/// Проверяется при создании, поэтому из него всегда можно безопасно
-/// получить путь внутри хранилища (без `..`, абсолютных путей и служебных
-/// каталогов).
+/// It is checked on creation, so a path inside the vault can always be safely
+/// derived from it (no `..`, absolute paths or internal directories).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(transparent)]
@@ -33,24 +32,24 @@ impl NoteId {
         let id = id.into();
         let invalid = |reason| Err(Error::InvalidId { id: id.clone(), reason });
         if id.is_empty() {
-            return invalid("пустой путь");
+            return invalid("empty path");
         }
         if id.starts_with('/') || id.ends_with('/') {
-            return invalid("путь без / в начале и в конце");
+            return invalid("no / at the start or the end");
         }
         if id.contains('\\') {
-            return invalid("разделитель — /");
+            return invalid("the separator is /");
         }
         for segment in id.split('/') {
             if segment.is_empty() || segment == "." || segment == ".." {
-                return invalid("пустые сегменты, . и .. не допускаются");
+                return invalid("empty segments, . and .. are not allowed");
             }
             if segment.starts_with('_') || segment.starts_with('.') {
-                return invalid("имена на _ и . — служебные");
+                return invalid("names starting with _ and . are internal");
             }
         }
         if Path::new(&id).extension().is_some_and(|e| e == "typ") {
-            return invalid("путь без .typ");
+            return invalid("no .typ in the path");
         }
         Ok(Self(id))
     }
@@ -59,12 +58,12 @@ impl NoteId {
         &self.0
     }
 
-    /// Последний сегмент — имя для показа: `Сеть/SSH` → `SSH`.
+    /// The last segment, the display name: `Network/SSH` -> `SSH`.
     pub fn name(&self) -> &str {
         self.0.rsplit('/').next().unwrap_or(&self.0)
     }
 
-    /// Папка заметки (`Сеть` для `Сеть/SSH`), для корня — пусто.
+    /// The note folder (`Network` for `Network/SSH`), empty for the root.
     pub fn parent(&self) -> &str {
         self.0.rsplit_once('/').map_or("", |(p, _)| p)
     }
@@ -84,32 +83,32 @@ pub enum NoteKind {
     Book,
 }
 
-/// Заметка или книга в хранилище.
+/// A note or a book in the vault.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Entry {
     pub id: NoteId,
     pub kind: NoteKind,
-    /// Главный файл относительно корня хранилища.
+    /// The main file relative to the vault root.
     #[serde(skip)]
     pub main: PathBuf,
 }
 
-/// Хранилище: заметки и книги поверх [`Storage`].
+/// A vault: notes and books over a [`Storage`].
 #[derive(Debug, Clone)]
 pub struct Vault {
     storage: Arc<dyn Storage>,
 }
 
 impl Vault {
-    /// Открывает существующий каталог-хранилище.
+    /// Opens an existing vault directory.
     pub fn open(root: impl AsRef<Path>) -> Result<Self> {
         let root = root.as_ref();
         let storage = DirStorage::open(root).map_err(|e| Error::io(root, e))?;
         Ok(Self::new(Arc::new(storage)))
     }
 
-    /// Хранилище поверх любого [`Storage`] (в тестах — [`crate::storage::MemStorage`]).
+    /// A vault over any [`Storage`] (in tests, [`crate::storage::MemStorage`]).
     pub fn new(storage: Arc<dyn Storage>) -> Self {
         Self { storage }
     }
@@ -118,17 +117,17 @@ impl Vault {
         &self.storage
     }
 
-    /// Где хранилище (для журнала).
+    /// Where the vault is (for the log).
     pub fn location(&self) -> String {
         self.storage.location()
     }
 
-    /// Ошибка ввода-вывода с путём файла.
+    /// An I/O error with the file path.
     pub(crate) fn io_error(&self, path: &str, e: std::io::Error) -> Error {
         Error::io(self.storage.display(path), e)
     }
 
-    /// Прочитать файл хранилища как текст.
+    /// Reads a vault file as text.
     pub(crate) fn read_text(&self, path: &str) -> Result<String> {
         let data = self.storage.read(path).map_err(|e| self.io_error(path, e))?;
         String::from_utf8(data)
@@ -139,10 +138,10 @@ impl Vault {
         self.storage.stat(path).is_ok_and(|m| !m.is_dir)
     }
 
-    /// Все заметки и книги, по алфавиту путей.
+    /// All notes and books, sorted by path.
     ///
-    /// Книга — каталог с `main.typ` (ближайший к корню: книга в книге не
-    /// ищется); `.typ` вне книг — заметки.
+    /// A book is a directory with `main.typ` (the one closest to the root: no
+    /// books inside books); `.typ` files outside books are notes.
     pub fn entries(&self) -> Result<Vec<Entry>> {
         let files = self.storage.list().map_err(|e| self.io_error("", e))?;
         let books: BTreeSet<&str> = files.iter().filter_map(|f| f.strip_suffix(&format!("/{BOOK_MAIN}"))).collect();
@@ -171,10 +170,10 @@ impl Vault {
         Ok(out)
     }
 
-    /// Папки хранилища по алфавиту путей: с заметками и пустые (в них нет
-    /// файлов, кроме служебных). Каталог только с файлами не заметок (`code/`,
-    /// `img/` рядом с заметкой) — не папка; книга и всё, что в ней, — тоже;
-    /// служебные и с недопустимыми для [`NoteId`] именами пропускаются.
+    /// Vault folders sorted by path: those with notes and empty ones (with no
+    /// files except internal ones). A directory with only non-note files
+    /// (`code/`, `img/` next to a note) is not a folder; neither is a book or
+    /// anything in it; internal names and names invalid for [`NoteId`] are skipped.
     pub fn folders(&self) -> Result<Vec<String>> {
         let files = self.storage.list().map_err(|e| self.io_error("", e))?;
         let books: BTreeSet<&str> = files.iter().filter_map(|f| f.strip_suffix(&format!("/{BOOK_MAIN}"))).collect();
@@ -193,7 +192,7 @@ impl Vault {
         Ok(out.into_iter().collect())
     }
 
-    /// Заметка или книга по идентификатору.
+    /// A note or a book by id.
     pub fn entry(&self, id: &NoteId) -> Result<Entry> {
         let note = format!("{id}.typ");
         if self.is_file(&note) {
@@ -206,9 +205,9 @@ impl Vault {
         Err(Error::NotFound(id.to_string()))
     }
 
-    /// Исходники заметки относительно корня (через `/`): у заметки — её
-    /// файл, у книги — все `.typ` в папке (кроме служебных `_*` и `.*`), по
-    /// алфавиту путей.
+    /// Note sources relative to the root (with `/`): a note has its file, a
+    /// book has every `.typ` in its folder (except internal `_*` and `.*`),
+    /// sorted by path.
     pub fn files_of(&self, entry: &Entry) -> Result<Vec<String>> {
         let main = entry.main.to_string_lossy().replace('\\', "/");
         match entry.kind {
@@ -225,13 +224,13 @@ impl Vault {
         }
     }
 
-    /// Размер исходников: у заметки — главный файл, у книги — все её `.typ`.
+    /// Source size: the main file of a note, all `.typ` files of a book.
     pub fn source_size(&self, entry: &Entry) -> u64 {
         self.files_of(entry).unwrap_or_default().iter().map(|f| self.storage.stat(f).map_or(0, |m| m.len)).sum()
     }
 }
 
-/// Книга, в которую входит файл: ближайший к корню каталог с `main.typ`.
+/// The book a file belongs to: the directory with `main.typ` closest to the root.
 fn book_of<'a>(books: &BTreeSet<&'a str>, file: &str) -> Option<&'a str> {
     let mut end = 0;
     while let Some(i) = file[end..].find('/') {
@@ -244,7 +243,7 @@ fn book_of<'a>(books: &BTreeSet<&'a str>, file: &str) -> Option<&'a str> {
     None
 }
 
-/// Относительный путь → идентификатор (`/`-разделители на любой ОС).
+/// A relative path -> an id (`/` separators on any OS).
 fn rel_to_id(rel: &Path) -> Option<NoteId> {
     let parts: Option<Vec<&str>> = rel.components().map(|c| c.as_os_str().to_str()).collect();
     NoteId::new(parts?.join("/")).ok()
@@ -261,7 +260,7 @@ mod tests {
         assert!(NoteId::new("Сеть/SSH").is_ok());
         assert!(NoteId::new("SSH").is_ok());
         for bad in ["", "/SSH", "Сеть/", "a//b", "../x", "a/./b", "_baluk/lib", ".git/x", "a\\b", "SSH.typ"] {
-            assert!(NoteId::new(bad).is_err(), "{bad} должен быть отвергнут");
+            assert!(NoteId::new(bad).is_err(), "{bad} must be rejected");
         }
     }
 
@@ -306,7 +305,7 @@ mod tests {
         assert_eq!(
             vault.folders().unwrap(),
             ["Пустая", "Пустая/Вложенная", "Сеть"],
-            "пустые — тоже; книга и код рядом с заметкой — не папки"
+            "empty ones too; a book and code next to a note are not folders"
         );
     }
 }

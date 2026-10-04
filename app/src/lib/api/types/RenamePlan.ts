@@ -3,22 +3,22 @@ import type { LinkRewrite } from "./LinkRewrite";
 import type { RenameKind } from "./RenameKind";
 
 /**
- * Что сделает переименование (или сделало).
+ * What the rename will do (or did).
  */
 export type RenamePlan = { kind: RenameKind, 
 /**
- * Прежний путь.
+ * The old path.
  */
 from: string, 
 /**
- * Новый путь: имя — из названия; совпадает с `from` — меняется только название.
+ * The new path: the name comes from the title; equal to `from` means only the title changes.
  */
 to: string, 
 /**
- * Новое название (пробелы схлопнуты).
+ * The new title (whitespace collapsed).
  */
 title: string, 
 /**
- * Другие заметки со ссылками сюда (у папки — на то, что в ней), по алфавиту.
+ * Other notes with links here (for a folder, to what is in it), in alphabetical order.
  */
 links: Array<LinkRewrite>, };

@@ -1,25 +1,25 @@
-//! Настройки клиента: схема, проверка, хранение.
+//! Client settings: schema, validation, storage.
 //!
-//! Схема описана здесь, а клиент рисует форму **по схеме** — новая настройка
-//! добавляется одной записью в [`Schema::new`]. Настройка вида говорит, как
-//! её применить ([`Apply`]: атрибут `data-…` или CSS-переменная на `<html>`),
-//! — клиент (`app/src/lib/appearance.ts`) применяет её по схеме, а правило
-//! пишется в CSS (`app/src/baluk-css/`); правок TS не нужно. Значения хранятся в JSON-файле плоским словарём
-//! «ключ → значение»; неизвестные ключи и неверные значения при загрузке
-//! отбрасываются (с предупреждением в журнал), вместо них — значения по умолчанию.
+//! The schema is described here, and the client draws the form **by the
+//! schema**: a new setting is one entry in [`Schema::new`]. An appearance
+//! setting says how to apply it ([`Apply`]: a `data-...` attribute or a CSS
+//! variable on `<html>`); the client (`app/src/lib/appearance.ts`) applies it
+//! by the schema, and the rule goes to CSS (`app/src/baluk-css/`), with no TS
+//! changes. Values are stored in a JSON file as a flat "key -> value" map;
+//! unknown keys and invalid values are dropped on load (with a warning in the
+//! log) and replaced by the defaults.
 //!
-//! **Настройки устройства** ([`SettingDef::device`], группа `device`) —
-//! производительность: у каждого устройства свои, со своими значениями по
-//! умолчанию ([`Platform`]), и при синхронизации они не переносятся. Вид —
-//! общий. Ядро применяет их на ходу ([`SettingsStore::device`] →
-//! `Notes::apply_device`).
+//! **Device settings** ([`SettingDef::device`], the `device` group) are about
+//! performance: each device has its own, with its own defaults ([`Platform`]),
+//! and they are not synced. Appearance is shared. The core applies them on the
+//! fly ([`SettingsStore::device`] -> `Notes::apply_device`).
 //!
-//! **Настройки хранилища** ([`VaultSettings`], `<хранилище>/.baluk/settings.json`)
-//! — поверх общих: любую настройку, кроме настроек устройства, можно задать
-//! только для одного хранилища (решение пользователя); не задана — общая.
-//! Файл переезжает вместе с папкой хранилища. Изменение из интерфейса — для
-//! открытого хранилища, у настроек [`SettingDef::shared`] (тема, кегль) и
-//! устройства — для всех (решения пользователя).
+//! **Vault settings** ([`VaultSettings`], `<vault>/.baluk/settings.json`) sit
+//! on top of the shared ones: any setting except device settings can be set
+//! for one vault only (the user's decision); if not set, the shared one holds.
+//! The file moves with the vault folder. A change from the interface goes to
+//! the open vault; for [`SettingDef::shared`] settings (theme, font size) and
+//! device settings, to all (the user's decisions).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -36,14 +36,14 @@ use crate::themes::Theme;
 use crate::warm::WarmMode;
 use crate::{Error, Result};
 
-/// Проверка текстовой настройки: приведённое значение или текст ошибки.
+/// Checks a text setting: the normalized value or an error text.
 pub type TextCheck = fn(&str) -> std::result::Result<String, String>;
 
-/// Описание одной настройки.
+/// The description of one setting.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SettingDef {
-    /// `группа.имя`, например `view.numbering`.
+    /// `group.name`, for example `view.numbering`.
     pub key: &'static str,
     pub label: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -52,59 +52,96 @@ pub struct SettingDef {
     #[serde(flatten)]
     pub kind: Kind,
     pub default: Value,
-    /// Как клиент применяет настройку к странице; `None` — сам, в своём коде
-    /// (тема, книги, обновление) или она для сервера (рисунки).
+    /// How the client applies the setting to the page; `None` means the client
+    /// does it in its own code (theme, books, refresh) or it is for the server (figures).
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub apply: Option<Apply>,
-    /// Настройка устройства: своя у каждого устройства, не синхронизируется.
+    /// A device setting: each device has its own, not synced.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub device: bool,
-    /// Изменение из интерфейса по умолчанию — для всех хранилищ (тема, кегль:
-    /// решение пользователя), а не только для открытого; у хранилища можно
-    /// задать своё. Остальные — наоборот (см. модуль).
+    /// A change from the interface goes to all vaults by default (theme, font
+    /// size: the user's decision), not only to the open one; a vault can set
+    /// its own. The others are the other way round (see the module).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     #[cfg_attr(feature = "ts", ts(as = "Option<bool>", optional))]
     pub shared: bool,
-    /// Предупреждение рядом с настройкой: чем она опасна.
+    /// A warning next to the setting: why it is dangerous.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub warning: Option<&'static str>,
-    /// Проверка текста ([`Kind::Text`]): приведённое значение или ошибка.
+    /// Checks the text ([`Kind::Text`]): the normalized value or an error.
     #[serde(skip)]
     #[cfg_attr(feature = "ts", ts(skip))]
     pub check: Option<TextCheck>,
 }
 
-/// Применение настройки вида: значение — на `<html>`, правило — в CSS.
+/// How an appearance setting is applied: the value goes on `<html>`, the rule into CSS.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(tag = "to", rename_all = "lowercase")]
 pub enum Apply {
-    /// Атрибут `name` (`data-…`) со значением строкой: `data-numbering="all"`,
+    /// The attribute `name` (`data-...`) with the value as a string: `data-numbering="all"`,
     /// `data-toc="false"`.
     Attr { name: &'static str },
-    /// CSS-переменная `name` (`--…`) — значение с единицей: `--k-size: 19px`.
+    /// The CSS variable `name` (`--...`): the value with a unit, `--k-size: 19px`.
     Var { name: &'static str, unit: &'static str },
 }
 
 impl SettingDef {
-    /// Применять атрибутом `data-…` на `<html>`.
+    /// A setting with nothing but its key, label, kind and default.
+    fn new(key: &'static str, label: &'static str, kind: Kind, default: Value) -> Self {
+        Self {
+            key,
+            label,
+            help: None,
+            kind,
+            default,
+            apply: None,
+            device: false,
+            shared: false,
+            warning: None,
+            check: None,
+        }
+    }
+
+    fn help(mut self, help: &'static str) -> Self {
+        self.help = Some(help);
+        self
+    }
+
+    /// Applied as a `data-...` attribute on `<html>`.
     fn attr(mut self, name: &'static str) -> Self {
         self.apply = Some(Apply::Attr { name });
         self
     }
 
-    /// Изменение по умолчанию — для всех хранилищ.
+    /// Applied as a CSS variable on `<html>`.
+    fn var(mut self, name: &'static str, unit: &'static str) -> Self {
+        self.apply = Some(Apply::Var { name, unit });
+        self
+    }
+
+    /// A change goes to all vaults by default.
     fn shared(mut self) -> Self {
         self.shared = true;
         self
     }
 
-    /// Применять CSS-переменной на `<html>`.
-    fn var(mut self, name: &'static str, unit: &'static str) -> Self {
-        self.apply = Some(Apply::Var { name, unit });
+    /// A device setting.
+    fn device(mut self) -> Self {
+        self.device = true;
+        self
+    }
+
+    fn warning(mut self, warning: &'static str) -> Self {
+        self.warning = Some(warning);
+        self
+    }
+
+    fn check(mut self, check: TextCheck) -> Self {
+        self.check = Some(check);
         self
     }
 }
@@ -122,7 +159,7 @@ pub enum Kind {
     Choice {
         options: Vec<Choice>,
     },
-    /// Строка; `placeholder` — пример значения в пустом поле.
+    /// A string; `placeholder` is an example value in the empty field.
     Text {
         placeholder: &'static str,
     },
@@ -153,8 +190,8 @@ fn choice(value: &str, label: &str) -> Choice {
     Choice { value: value.into(), label: label.into() }
 }
 
-/// Устройство, под которое выбираются значения по умолчанию настроек
-/// устройства: что допустимо на компьютере, на телефоне — нет.
+/// The device the defaults of device settings are picked for: what is fine on
+/// a computer is not on a phone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Platform {
     Desktop,
@@ -162,12 +199,12 @@ pub enum Platform {
 }
 
 impl Platform {
-    /// Платформа сборки.
+    /// The build platform.
     pub fn current() -> Self {
         if cfg!(any(target_os = "android", target_os = "ios")) { Self::Phone } else { Self::Desktop }
     }
 
-    /// Значение по умолчанию для этой платформы.
+    /// The default for this platform.
     fn pick<T>(self, desktop: T, phone: T) -> T {
         match self {
             Self::Desktop => desktop,
@@ -176,73 +213,47 @@ impl Platform {
     }
 }
 
-/// Настройки устройства, как их применяет ядро (`Notes::apply_device`).
+/// Device settings as the core applies them (`Notes::apply_device`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Device {
     pub warm: WarmMode,
-    /// Сборок разных заметок одновременно.
+    /// Builds of different notes at once.
     pub builds: usize,
-    /// Предел страниц в памяти, байт.
+    /// The limit of pages in memory, in bytes.
     pub memory: usize,
     pub disk: DiskLimits,
-    /// Сколько сборок Typst помнит рисунки (`comemo::evict`).
+    /// How many Typst builds remember figures (`comemo::evict`).
     pub memo: usize,
-    /// Пакеты Typst сверх белого списка ([`crate::packages`]).
+    /// Typst packages beyond the allowlist ([`crate::packages`]).
     pub packages: Vec<String>,
 }
 
-/// Мегабайт в байтах.
+/// A megabyte in bytes.
 const MB: u64 = 1 << 20;
 
 impl Schema {
-    /// Схема для набора тем (тема — выбор из того, что есть в `theme.typ`) и
-    /// платформы (значения по умолчанию настроек устройства).
+    /// The schema for a set of themes (the theme is a choice of those in
+    /// `theme.typ`) and a platform (defaults of the device settings).
     #[expect(clippy::too_many_lines, reason = "a table of settings, not logic")]
     pub fn new(themes: &[Theme], platform: Platform) -> Self {
         let mut theme_options = vec![choice("auto", "как в системе")];
         theme_options.extend(themes.iter().map(|t| choice(&t.name, &t.title)));
-        let bool_def = |key, label, default: bool| SettingDef {
-            key,
-            label,
-            help: None,
-            kind: Kind::Bool,
-            default: json!(default),
-            apply: None,
-            device: false,
-            shared: false,
-            warning: None,
-            check: None,
+        let choices = |options: &[(&str, &str)]| Kind::Choice {
+            options: options.iter().map(|(value, label)| choice(value, label)).collect(),
         };
-        // Силы графа, % от обычных: страница графа, для всех хранилищ.
+        let flag = |key, label, default: bool| SettingDef::new(key, label, Kind::Bool, json!(default));
+        // Graph forces, % of the usual ones: the graph page, for all vaults.
         let percent = |key, label, help, (min, max): (u32, u32), default: u32| {
-            SettingDef {
-                key,
-                label,
-                help: Some(help),
-                kind: Kind::Number { min: f64::from(min), max: f64::from(max), step: 5.0 },
-                default: json!(default),
-                apply: None,
-                device: false,
-                shared: false,
-                warning: None,
-                check: None,
-            }
-            .shared()
+            let kind = Kind::Number { min: f64::from(min), max: f64::from(max), step: 5.0 };
+            SettingDef::new(key, label, kind, json!(default)).help(help).shared()
         };
-        let number = |key, label, help, (min, max, step): (f64, f64, f64), default: u64| SettingDef {
-            key,
-            label,
-            help: Some(help),
-            kind: Kind::Number { min, max, step },
-            default: json!(default),
-            apply: None,
-            device: true,
-            shared: false,
-            warning: None,
-            check: None,
+        let number = |key, label, help, (min, max, step): (f64, f64, f64), default: u64| {
+            SettingDef::new(key, label, Kind::Number { min, max, step }, json!(default)).help(help).device()
         };
         let p = platform;
 
+        // Labels, help and warnings are client interface text, so they stay
+        // Russian (the user's decision: the interface is Russian).
         Self {
             groups: vec![
                 Group { key: "appearance", label: "Внешний вид" },
@@ -256,135 +267,73 @@ impl Schema {
                 Group { key: "device", label: "Это устройство" },
             ],
             settings: vec![
-                SettingDef {
-                    key: "appearance.theme",
-                    label: "Тема",
-                    help: None,
-                    kind: Kind::Choice { options: theme_options },
-                    default: json!("auto"),
-                    apply: None,
-                    device: false,
-                    shared: false,
-                    warning: None,
-                    check: None,
-                }
-                .shared(),
-                SettingDef {
-                    key: "appearance.font_size",
-                    label: "Кегль текста, px",
-                    help: Some("Рисунки масштабируются вместе с текстом"),
-                    kind: Kind::Number { min: 12.0, max: 32.0, step: 1.0 },
-                    default: json!(19),
-                    apply: None,
-                    device: false,
-                    shared: false,
-                    warning: None,
-                    check: None,
-                }
+                SettingDef::new("appearance.theme", "Тема", Kind::Choice { options: theme_options }, json!("auto"))
+                    .shared(),
+                SettingDef::new(
+                    "appearance.font_size",
+                    "Кегль текста, px",
+                    Kind::Number { min: 12.0, max: 32.0, step: 1.0 },
+                    json!(19),
+                )
+                .help("Рисунки масштабируются вместе с текстом")
                 .var("--k-size", "px")
                 .shared(),
-                SettingDef {
-                    key: "appearance.measure",
-                    label: "Ширина колонки, em",
-                    help: Some("Удобно читать при 35–45 em"),
-                    kind: Kind::Number { min: 25.0, max: 80.0, step: 1.0 },
-                    default: json!(40),
-                    apply: None,
-                    device: false,
-                    shared: false,
-                    warning: None,
-                    check: None,
-                }
+                SettingDef::new(
+                    "appearance.measure",
+                    "Ширина колонки, em",
+                    Kind::Number { min: 25.0, max: 80.0, step: 1.0 },
+                    json!(40),
+                )
+                .help("Удобно читать при 35–45 em")
                 .var("--k-measure", "em"),
-                bool_def("header.title", "Название", true).attr("data-header-title"),
-                bool_def("header.kind", "Надпись над названием («Конспект»)", true).attr("data-header-kind"),
-                bool_def("header.description", "Описание", true).attr("data-header-description"),
-                bool_def("header.byline", "Автор и дата", true).attr("data-header-byline"),
-                bool_def("header.tags", "Теги", true).attr("data-header-tags"),
-                SettingDef {
-                    key: "headings.numbering",
-                    label: "Номера заголовков",
-                    help: Some("Номера рисунков и определений не меняются"),
-                    kind: Kind::Choice {
-                        options: vec![
-                            choice("books", "только в книгах"),
-                            choice("all", "везде"),
-                            choice("none", "нигде"),
-                        ],
-                    },
-                    default: json!("books"),
-                    apply: None,
-                    device: false,
-                    shared: false,
-                    warning: None,
-                    check: None,
-                }
+                flag("header.title", "Название", true).attr("data-header-title"),
+                flag("header.kind", "Надпись над названием («Конспект»)", true).attr("data-header-kind"),
+                flag("header.description", "Описание", true).attr("data-header-description"),
+                flag("header.byline", "Автор и дата", true).attr("data-header-byline"),
+                flag("header.tags", "Теги", true).attr("data-header-tags"),
+                SettingDef::new(
+                    "headings.numbering",
+                    "Номера заголовков",
+                    choices(&[("books", "только в книгах"), ("all", "везде"), ("none", "нигде")]),
+                    json!("books"),
+                )
+                .help("Номера рисунков и определений не меняются")
                 .attr("data-numbering"),
-                SettingDef {
-                    key: "headings.chapters",
-                    label: "Главы книг",
-                    help: None,
-                    kind: Kind::Choice {
-                        options: vec![
-                            choice("decorated", "«Глава N» и крупная цифра"),
-                            choice("plain", "простой заголовок"),
-                        ],
-                    },
-                    default: json!("decorated"),
-                    apply: None,
-                    device: false,
-                    shared: false,
-                    warning: None,
-                    check: None,
-                }
+                SettingDef::new(
+                    "headings.chapters",
+                    "Главы книг",
+                    choices(&[("decorated", "«Глава N» и крупная цифра"), ("plain", "простой заголовок")]),
+                    json!("decorated"),
+                )
                 .attr("data-chapters"),
-                SettingDef {
-                    key: "books.pages",
-                    label: "Показывать книгу",
-                    help: Some("По главам — быстрее открывается; печать браузера видит только открытую главу"),
-                    kind: Kind::Choice {
-                        options: vec![choice("chapters", "по главам"), choice("whole", "целиком")]
-                    },
-                    default: json!("chapters"),
-                    apply: None,
-                    device: false,
-                    shared: false,
-                    warning: None,
-                    check: None,
-                },
-                SettingDef {
-                    key: "figures.precision",
-                    label: "Точность координат",
-                    help: Some("Грубее — страница легче. Вид при 0,01 pt не отличить от точного"),
-                    kind: Kind::Choice {
-                        options: vec![
-                            choice("full", "как в Typst (без округления)"),
-                            choice("3", "0,001 pt"),
-                            choice("2", "0,01 pt"),
-                            choice("1", "0,1 pt — самая лёгкая"),
-                        ],
-                    },
-                    default: json!("2"),
-                    apply: None,
-                    device: false,
-                    shared: false,
-                    warning: None,
-                    check: None,
-                },
-                bool_def("panels.toc", "Оглавление сбоку, если хватает места", true).attr("data-toc"),
-                SettingDef {
-                    key: "panels.toc_depth",
-                    label: "Уровней в оглавлении",
-                    help: Some("1 — только главы книги или разделы заметки"),
-                    kind: Kind::Number { min: 1.0, max: 4.0, step: 1.0 },
-                    default: json!(2),
-                    apply: None,
-                    device: false,
-                    shared: false,
-                    warning: None,
-                    check: None,
-                },
-                bool_def("panels.backlinks", "«Ссылаются сюда» под заметкой", true).attr("data-backlinks"),
+                SettingDef::new(
+                    "books.pages",
+                    "Показывать книгу",
+                    choices(&[("chapters", "по главам"), ("whole", "целиком")]),
+                    json!("chapters"),
+                )
+                .help("По главам — быстрее открывается; печать браузера видит только открытую главу"),
+                SettingDef::new(
+                    "figures.precision",
+                    "Точность координат",
+                    choices(&[
+                        ("full", "как в Typst (без округления)"),
+                        ("3", "0,001 pt"),
+                        ("2", "0,01 pt"),
+                        ("1", "0,1 pt — самая лёгкая"),
+                    ]),
+                    json!("2"),
+                )
+                .help("Грубее — страница легче. Вид при 0,01 pt не отличить от точного"),
+                flag("panels.toc", "Оглавление сбоку, если хватает места", true).attr("data-toc"),
+                SettingDef::new(
+                    "panels.toc_depth",
+                    "Уровней в оглавлении",
+                    Kind::Number { min: 1.0, max: 4.0, step: 1.0 },
+                    json!(2),
+                )
+                .help("1 — только главы книги или разделы заметки"),
+                flag("panels.backlinks", "«Ссылаются сюда» под заметкой", true).attr("data-backlinks"),
                 percent(
                     "graph.clusters",
                     "Папки, %",
@@ -409,38 +358,25 @@ impl Schema {
                     (0, 100),
                     25,
                 ),
-                SettingDef {
-                    key: "refresh.mode",
-                    label: "Показывать изменения заметок",
-                    help: Some("Автоматически — сразу после правки файла и при возврате в окно"),
-                    kind: Kind::Choice {
-                        options: vec![choice("auto", "автоматически"), choice("manual", "только по кнопке «Обновить»")],
-                    },
-                    default: json!("auto"),
-                    apply: None,
-                    device: false,
-                    shared: false,
-                    warning: None,
-                    check: None,
-                },
-                SettingDef {
-                    key: "device.warm",
-                    label: "Собирать заметки заранее",
-                    help: Some("В фоне, чтобы открывались сразу. Открытое — вкладки и недавние"),
-                    kind: Kind::Choice {
-                        options: vec![
-                            choice(WarmMode::All.key(), "всё хранилище"),
-                            choice(WarmMode::Open.key(), "только открытое"),
-                            choice(WarmMode::Off.key(), "нет"),
-                        ],
-                    },
-                    default: json!(p.pick(WarmMode::All, WarmMode::Off).key()),
-                    apply: None,
-                    device: true,
-                    shared: false,
-                    warning: None,
-                    check: None,
-                },
+                SettingDef::new(
+                    "refresh.mode",
+                    "Показывать изменения заметок",
+                    choices(&[("auto", "автоматически"), ("manual", "только по кнопке «Обновить»")]),
+                    json!("auto"),
+                )
+                .help("Автоматически — сразу после правки файла и при возврате в окно"),
+                SettingDef::new(
+                    "device.warm",
+                    "Собирать заметки заранее",
+                    choices(&[
+                        (WarmMode::All.key(), "всё хранилище"),
+                        (WarmMode::Open.key(), "только открытое"),
+                        (WarmMode::Off.key(), "нет"),
+                    ]),
+                    json!(p.pick(WarmMode::All, WarmMode::Off).key()),
+                )
+                .help("В фоне, чтобы открывались сразу. Открытое — вкладки и недавние")
+                .device(),
                 number(
                     "device.builds",
                     "Сборок одновременно",
@@ -463,23 +399,21 @@ impl Schema {
                     p.pick(64, 32),
                 ),
                 number("device.disk", "Кэш на диске, МБ", "Собранные заметки", (64.0, 8192.0, 64.0), p.pick(512, 256)),
-                SettingDef {
-                    key: "device.packages",
-                    label: "Пакеты Typst сверх белого списка",
-                    help: Some(
-                        "Через пробел, с версией: @preview/fletcher:0.5.8. Без списка заметки берут только пакеты белого списка (CeTZ)",
-                    ),
-                    kind: Kind::Text { placeholder: "@preview/имя:версия" },
-                    default: json!(""),
-                    apply: None,
-                    device: true,
-                    shared: false,
-                    warning: Some(
-                        "Пакет — чужой код: он выполняется при каждой сборке заметки и может её повесить или \
-                         подменить содержимое. Добавляйте только пакеты авторов, которым доверяете.",
-                    ),
-                    check: Some(|text| crate::packages::parse_list(text).map(|list| list.join(" "))),
-                },
+                SettingDef::new(
+                    "device.packages",
+                    "Пакеты Typst сверх белого списка",
+                    Kind::Text { placeholder: "@preview/имя:версия" },
+                    json!(""),
+                )
+                .help(
+                    "Через пробел, с версией: @preview/fletcher:0.5.8. Без списка заметки берут только пакеты белого списка (CeTZ)",
+                )
+                .warning(
+                    "Пакет — чужой код: он выполняется при каждой сборке заметки и может её повесить или \
+                     подменить содержимое. Добавляйте только пакеты авторов, которым доверяете.",
+                )
+                .check(|text| crate::packages::parse_list(text).map(|list| list.join(" ")))
+                .device(),
                 number(
                     "device.foreign_days",
                     "Кэш других хранилищ и версий, дней",
@@ -499,44 +433,44 @@ impl Schema {
         self.settings.iter().map(|s| (s.key.to_owned(), s.default.clone())).collect()
     }
 
-    /// Проверяет значение; числа приводятся к шагу и границам не молча —
-    /// выход за границы — ошибка.
+    /// Checks a value; numbers are normalized to the step, and going out of
+    /// bounds is an error rather than silently clamped.
     pub fn validate(&self, key: &str, value: &Value) -> Result<Value> {
-        let def = self.get(key).ok_or_else(|| setting_err(key, "нет такой настройки"))?;
+        let def = self.get(key).ok_or_else(|| setting_err(key, "no such setting"))?;
         match &def.kind {
-            Kind::Bool => value.as_bool().map(Value::Bool).ok_or_else(|| setting_err(key, "ожидалось да/нет")),
+            Kind::Bool => value.as_bool().map(Value::Bool).ok_or_else(|| setting_err(key, "expected true or false")),
             Kind::Number { min, max, .. } => {
-                let n = value.as_f64().ok_or_else(|| setting_err(key, "ожидалось число"))?;
+                let n = value.as_f64().ok_or_else(|| setting_err(key, "expected a number"))?;
                 if n < *min || n > *max {
-                    return Err(setting_err(key, &format!("допустимо от {min} до {max}")));
+                    return Err(setting_err(key, &format!("allowed from {min} to {max}")));
                 }
-                // Целое остаётся целым: 19, а не 19.0.
+                // A whole number stays whole: 19, not 19.0.
                 #[expect(clippy::cast_possible_truncation, reason = "a whole number within the setting's range")]
                 Ok(if n.fract() == 0.0 { json!(n as i64) } else { json!(n) })
             }
             Kind::Text { .. } => {
-                let s = value.as_str().ok_or_else(|| setting_err(key, "ожидалась строка"))?.trim();
+                let s = value.as_str().ok_or_else(|| setting_err(key, "expected a string"))?.trim();
                 match def.check {
                     Some(check) => check(s).map(Value::String).map_err(|e| setting_err(key, &e)),
                     None => Ok(json!(s)),
                 }
             }
             Kind::Choice { options } => {
-                let s = value.as_str().ok_or_else(|| setting_err(key, "ожидалась строка"))?;
+                let s = value.as_str().ok_or_else(|| setting_err(key, "expected a string"))?;
                 if options.iter().any(|o| o.value == s) {
                     Ok(json!(s))
                 } else {
                     let all: Vec<_> = options.iter().map(|o| o.value.as_str()).collect();
-                    Err(setting_err(key, &format!("допустимо: {}", all.join(", "))))
+                    Err(setting_err(key, &format!("allowed: {}", all.join(", "))))
                 }
             }
         }
     }
 }
 
-/// Старые ключи файла настроек — в нынешние: опрос раз в N секунд и
-/// «проверять при возврате в окно» стали одним выбором `refresh.mode`
-/// (0 секунд — «только по кнопке»).
+/// Old keys of the settings file -> current ones: polling every N seconds and
+/// "check on returning to the window" became one choice, `refresh.mode`
+/// (0 seconds means "only on the button").
 fn migrate(mut stored: Map<String, Value>) -> Map<String, Value> {
     let interval = stored.remove("refresh.interval");
     stored.remove("refresh.on_focus");
@@ -553,8 +487,8 @@ fn setting_err(key: &str, reason: &str) -> Error {
     Error::Setting { key: key.to_owned(), reason: reason.to_owned() }
 }
 
-/// Настройки в файле. Потокобезопасно; запись — атомарная (временный файл +
-/// переименование), чтобы сбой посреди записи не портил файл.
+/// Settings in a file. Thread-safe; writes are atomic (a temporary file and a
+/// rename), so a failure halfway does not spoil the file.
 #[derive(Debug)]
 pub struct SettingsStore {
     path: PathBuf,
@@ -562,8 +496,8 @@ pub struct SettingsStore {
     values: RwLock<Map<String, Value>>,
 }
 
-/// Значения из файла `path`, проверенные по схеме: неверные и отвергнутые
-/// `keep` — отброшены с предупреждением; нет файла — пусто.
+/// Values from the file `path`, checked by the schema: invalid ones and those
+/// rejected by `keep` are dropped with a warning; no file means none.
 fn load(
     path: &Path,
     schema: &Schema,
@@ -581,7 +515,7 @@ fn load(
             Ok(v) => {
                 values.insert(key, v);
             }
-            Err(e) => tracing::warn!("{}: {e} — пропускаю", path.display()),
+            Err(e) => tracing::warn!("{}: {e}; skipping", path.display()),
         }
     }
     Ok(values)
@@ -603,12 +537,12 @@ impl SettingsStore {
         self.values.read().clone()
     }
 
-    /// Обработка рисунков по настройкам `figures.*`.
+    /// Figure processing by the `figures.*` settings.
     pub fn figure_options(&self) -> FigureOptions {
         figure_options(&self.values.read())
     }
 
-    /// Настройки устройства для ядра.
+    /// Device settings for the core.
     pub fn device(&self) -> Device {
         let values = self.values.read();
         // Every key below has a number default in the schema (test `device_settings_by_platform`).
@@ -635,7 +569,7 @@ impl SettingsStore {
         }
     }
 
-    /// Меняет несколько настроек разом: либо все верны и записаны, либо ни одна.
+    /// Changes several settings at once: either all are valid and written, or none.
     pub fn update(&self, patch: &Map<String, Value>) -> Result<Map<String, Value>> {
         let mut checked = Vec::with_capacity(patch.len());
         for (key, value) in patch {
@@ -650,7 +584,7 @@ impl SettingsStore {
     }
 }
 
-/// Обработка рисунков по значениям настроек `figures.*`.
+/// Figure processing by the values of the `figures.*` settings.
 pub fn figure_options(values: &Map<String, Value>) -> FigureOptions {
     match values.get("figures.precision").and_then(Value::as_str) {
         Some("full") => FigureOptions { precision: None },
@@ -659,21 +593,17 @@ pub fn figure_options(values: &Map<String, Value>) -> FigureOptions {
     }
 }
 
-/// Настройки одного хранилища — только заданные в нём (поверх общих).
-/// Без файла (`path` = `None`, хранилище в памяти) — только в памяти.
+/// The settings of one vault: only those set in it (on top of the shared ones).
+/// Without a file (`path` = `None`, an in-memory vault) they live in memory only.
 #[derive(Debug)]
 pub struct VaultSettings {
     path: Option<PathBuf>,
     own: RwLock<Map<String, Value>>,
 }
 
-/// Настройки устройства — общие, у хранилища их нет.
+/// Device settings are shared: a vault does not have them.
 fn not_device(key: &str) -> std::result::Result<(), &'static str> {
-    if key.starts_with("device.") {
-        Err("настройка устройства — общая для всех хранилищ")
-    } else {
-        Ok(())
-    }
+    if key.starts_with("device.") { Err("a device setting is shared by all vaults") } else { Ok(()) }
 }
 
 impl VaultSettings {
@@ -688,25 +618,25 @@ impl VaultSettings {
         Self { path: None, own: RwLock::default() }
     }
 
-    /// Заданные в хранилище.
+    /// Those set in the vault.
     pub fn own(&self) -> Map<String, Value> {
         self.own.read().clone()
     }
 
-    /// Значения для хранилища: общие, поверх — свои.
+    /// Values for the vault: the shared ones with its own on top.
     pub fn merged(&self, mut shared: Map<String, Value>) -> Map<String, Value> {
         shared.extend(self.own());
         shared
     }
 
-    /// Задать настройки хранилища (`null` — убрать: снова общая); либо все
-    /// верны и записаны, либо ни одна. Ответ — заданные в хранилище.
+    /// Sets vault settings (`null` removes one: the shared one again); either
+    /// all are valid and written, or none. Returns those set in the vault.
     pub fn update(&self, schema: &Schema, patch: &Map<String, Value>) -> Result<Map<String, Value>> {
         let mut checked = Vec::with_capacity(patch.len());
         for (key, value) in patch {
             not_device(key).map_err(|reason| setting_err(key, reason))?;
             let value = if value.is_null() {
-                schema.get(key).ok_or_else(|| setting_err(key, "нет такой настройки"))?;
+                schema.get(key).ok_or_else(|| setting_err(key, "no such setting"))?;
                 None
             } else {
                 Some(schema.validate(key, value)?)
@@ -756,8 +686,8 @@ mod tests {
         assert_eq!(keys.len(), s.settings.len());
         for d in &s.settings {
             let group = d.key.split('.').next().unwrap();
-            assert!(s.groups.iter().any(|g| g.key == group), "{} без группы", d.key);
-            assert_eq!(s.validate(d.key, &d.default).unwrap(), d.default, "{}: неверное значение по умолчанию", d.key);
+            assert!(s.groups.iter().any(|g| g.key == group), "{} has no group", d.key);
+            assert_eq!(s.validate(d.key, &d.default).unwrap(), d.default, "{}: invalid default", d.key);
         }
     }
 
@@ -769,11 +699,11 @@ mod tests {
             .iter()
             .filter_map(|d| match d.apply {
                 Some(Apply::Attr { name }) => {
-                    assert!(name.starts_with("data-"), "{}: атрибут {name} — не data-…", d.key);
+                    assert!(name.starts_with("data-"), "{}: the attribute {name} is not data-...", d.key);
                     Some(name)
                 }
                 Some(Apply::Var { name, .. }) => {
-                    assert!(name.starts_with("--"), "{}: переменная {name} — не --…", d.key);
+                    assert!(name.starts_with("--"), "{}: the variable {name} is not --...", d.key);
                     Some(name)
                 }
                 None => None,
@@ -782,8 +712,8 @@ mod tests {
         let n = names.len();
         names.sort_unstable();
         names.dedup();
-        assert_eq!(names.len(), n, "два применения на один атрибут");
-        // Так схему видит клиент (appearance.ts).
+        assert_eq!(names.len(), n, "two settings apply to one attribute");
+        // This is how the client sees the schema (appearance.ts).
         let json = serde_json::to_value(s.get("headings.numbering").unwrap()).unwrap();
         assert_eq!(json["apply"], json!({ "to": "attr", "name": "data-numbering" }));
         let json = serde_json::to_value(s.get("appearance.font_size").unwrap()).unwrap();
@@ -810,14 +740,14 @@ mod tests {
         let store = SettingsStore::open(&path, schema()).unwrap();
         let v = store.values();
         assert_eq!(v["header.title"], json!(false));
-        assert_eq!(v["appearance.font_size"], json!(19), "неверное значение → по умолчанию");
+        assert_eq!(v["appearance.font_size"], json!(19), "an invalid value -> the default");
         assert!(!v.contains_key("старое"));
 
         let mut changes = Map::new();
         changes.insert("refresh.mode".into(), json!("manual"));
         changes.insert("header.tags".into(), json!("нет"));
         assert!(store.update(&changes).is_err());
-        assert_eq!(store.values()["refresh.mode"], json!("auto"), "частично не применяется");
+        assert_eq!(store.values()["refresh.mode"], json!("auto"), "nothing is applied partially");
 
         changes.remove("header.tags");
         store.update(&changes).unwrap();
@@ -852,12 +782,17 @@ mod tests {
         let phone = Schema::new(&themes(), Platform::Phone);
         for s in [&desktop, &phone] {
             for d in &s.settings {
-                assert_eq!(d.device, d.key.starts_with("device."), "{}: настройка устройства — в группе device", d.key);
-                assert!(!(d.device && d.shared), "{}: настройка устройства и так общая", d.key);
+                assert_eq!(
+                    d.device,
+                    d.key.starts_with("device."),
+                    "{}: device settings are in the device group",
+                    d.key
+                );
+                assert!(!(d.device && d.shared), "{}: a device setting is shared anyway", d.key);
             }
         }
         assert_eq!(desktop.get("device.warm").unwrap().default, json!("all"));
-        assert_eq!(phone.get("device.warm").unwrap().default, json!("off"), "на телефоне прогрева нет");
+        assert_eq!(phone.get("device.warm").unwrap().default, json!("off"), "no warming on a phone");
         assert_eq!(desktop.get("device.builds").unwrap().default, json!(2));
 
         let dir = tempfile::tempdir().unwrap();
@@ -884,7 +819,7 @@ mod tests {
         let path = dir.path().join(".baluk/settings.json");
         let shared = || SettingsStore::open(dir.path().join("shared.json"), schema()).unwrap().values();
         let vault = VaultSettings::open(Some(path.clone()), &schema()).unwrap();
-        assert!(vault.own().is_empty(), "файла ещё нет");
+        assert!(vault.own().is_empty(), "no file yet");
         assert_eq!(vault.merged(shared())["appearance.font_size"], json!(19));
 
         let set = |pairs: &[(&str, Value)]| pairs.iter().map(|(k, v)| ((*k).to_owned(), v.clone())).collect();
@@ -893,18 +828,18 @@ mod tests {
             .unwrap();
         assert_eq!(vault.merged(shared())["appearance.font_size"], json!(22));
         assert_eq!(figure_options(&vault.merged(shared())), FigureOptions { precision: None });
-        // Настройки устройства — только общие.
+        // Device settings are shared only.
         assert!(vault.update(&schema(), &set(&[("device.builds", json!(4))])).is_err());
         assert!(vault.update(&schema(), &set(&[("appearance.font_size", json!(999))])).is_err());
 
-        // Файл — в папке хранилища; null — снова общая.
+        // The file is in the vault folder; null makes the setting shared again.
         let reopened = VaultSettings::open(Some(path.clone()), &schema()).unwrap();
         assert_eq!(reopened.own().len(), 2);
         reopened.update(&schema(), &set(&[("appearance.font_size", Value::Null)])).unwrap();
         assert_eq!(reopened.merged(shared())["appearance.font_size"], json!(19));
         assert!(reopened.update(&schema(), &set(&[("нет.такой", Value::Null)])).is_err());
 
-        // Руками вписанная настройка устройства — пропускается.
+        // A device setting written by hand is skipped.
         fs::write(&path, r#"{"device.builds": 4, "header.title": false}"#).unwrap();
         let own = VaultSettings::open(Some(path), &schema()).unwrap().own();
         assert_eq!(own.keys().collect::<Vec<_>>(), ["header.title"]);

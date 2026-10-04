@@ -841,12 +841,12 @@ mod tests {
         let data = tempfile::tempdir().unwrap();
         let vaults = Vaults::new(data.path());
         let err = |arg: Option<&VaultArg>| pick_vault(&vaults, arg).unwrap_err().to_string();
-        assert!(err(None).starts_with("хранилищ нет — создайте"), "{}", err(None));
+        assert!(err(None).starts_with("there are no vaults; create one"), "{}", err(None));
         vaults.create(&VaultName::new("Учёба").unwrap()).unwrap();
-        assert_eq!(err(None), "укажите хранилище: --vault \"Имя\"; есть: «Учёба»");
+        assert_eq!(err(None), "name a vault: --vault \"Name\"; there are: \"Учёба\"");
         let (name, path) = pick_vault(&vaults, Some(&VaultArg::parse("Учёба"))).unwrap();
         assert_eq!((name.as_str(), path), ("Учёба", vaults.root().join("Учёба")));
-        assert!(err(Some(&VaultArg::parse("Нет"))).starts_with("нет хранилища «Нет»"));
+        assert!(err(Some(&VaultArg::parse("Нет"))).starts_with("no vault \"Нет\""));
         assert!(!data.path().join("vaults/Нет").exists(), "not created by itself");
     }
 }

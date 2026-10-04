@@ -2,10 +2,10 @@
 import type { NoteId } from "./NoteId";
 
 /**
- * Заметка, в которой перепишутся ссылки.
+ * A note whose links get rewritten.
  */
 export type LinkRewrite = { note: NoteId, 
 /**
- * Сколько ссылок в ней.
+ * How many links it has.
  */
 count: number, };

@@ -3,6 +3,6 @@ import type { NoteId } from "./NoteId";
 import type { NoteKind } from "./NoteKind";
 
 /**
- * Заметка или книга в хранилище.
+ * A note or a book in the vault.
  */
 export type Entry = { id: NoteId, kind: NoteKind, };

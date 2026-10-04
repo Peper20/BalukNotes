@@ -20,7 +20,7 @@ test("хранилища: выбор без адреса, новое пусто�
     // Неверное имя — ошибка сервера, ничего не создано.
     await picker.getByLabel("Новое хранилище").fill("a/b");
     await picker.getByRole("button", { name: "Создать" }).click();
-    await expect(picker.getByRole("alert")).toContainText("недопустимое имя хранилища");
+    await expect(picker.getByRole("alert")).toContainText("invalid vault name");
     await picker.getByLabel("Новое хранилище").fill("Учёба");
     await picker.getByLabel("Новое хранилище").press("Enter");
 

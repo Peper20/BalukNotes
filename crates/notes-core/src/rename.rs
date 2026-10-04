@@ -1,22 +1,23 @@
-//! Переименование заметки, книги или папки из интерфейса (решение
-//! пользователя): меняются и название, и имя файла (папки); ссылки `#see` на
-//! неё в других заметках переписываются — не молча: клиент сначала
-//! показывает план ([`RenamePlan`]: новый путь и какие заметки поправятся),
-//! а применяет по подтверждению.
+//! Renaming a note, a book or a folder from the interface (the user's
+//! decision): both the title and the file (folder) name change; `#see` links
+//! to it in other notes get rewritten, not silently: the client first shows
+//! the plan ([`RenamePlan`]: the new path and which notes get fixed) and
+//! applies it on confirmation.
 //!
-//! - **Название** — в самом файле: у заметки и книги — `title: […]` шаблона
-//!   (`note.with`, `book.with` в `main.typ`); нет `title` — дописывается,
-//!   нет шаблона — название и есть имя файла. У папки — `_folder.toml`
-//!   (создаётся, если имя файла не передаёт название).
-//! - **Имя файла** — из названия, как у `notes new` ([`file_name`]): занятое
-//!   — с номером, само переименовываемое занятым не считается.
-//! - **Ссылки** — буквальные `#see("путь")` во всех `.typ` хранилища (и в
-//!   главах книг, и в самой заметке): путь заметки (у папки — всё, что в
-//!   ней) меняется на новый, якорь и подпись остаются. Вычисляемые пути и
-//!   `#import`/`#include` чужих файлов по абсолютному пути не переписываются.
+//! - **Title**: in the file itself; for a note or a book, `title: [...]` of
+//!   the template (`note.with`, `book.with` in `main.typ`); without `title` it
+//!   is added; without a template the title is the file name. For a folder,
+//!   `_folder.toml` (created if the file name does not carry the title).
+//! - **File name**: from the title, as in `notes new` ([`file_name`]); a taken
+//!   name gets a number; the renamed item itself does not count as taken.
+//! - **Links**: literal `#see("path")` in every `.typ` of the vault (in book
+//!   chapters and in the note itself too): the note path (for a folder,
+//!   everything in it) changes to the new one; the anchor and the label stay.
+//!   Computed paths and `#import`/`#include` of other files by absolute path
+//!   are not rewritten.
 //!
-//! Файлы меняются по одному, не транзакцией: сбой посередине оставит часть
-//! правок (что успело — видно в журнале сервера).
+//! Files change one by one, not in a transaction: a failure halfway leaves
+//! part of the edits (the server log shows what got done).
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -30,69 +31,69 @@ use crate::storage::is_typ;
 use crate::vault::{BOOK_MAIN, NoteId, NoteKind, Vault};
 use crate::{Error, Result};
 
-/// Функция ссылки из `baluk/links.typ`.
+/// The link function from `baluk/links.typ`.
 const LINK_FN: &str = "see";
-/// Шаблоны, у которых название — `title: […]`.
+/// Templates whose title is `title: [...]`.
 const TEMPLATES: &[&str] = &["note", "book"];
 
-/// Что переименовывают.
+/// What is renamed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(rename_all = "lowercase")]
 pub enum RenameKind {
-    /// Заметка или книга (путь — её `id`).
+    /// A note or a book (the path is its `id`).
     Note,
-    /// Папка хранилища.
+    /// A vault folder.
     Folder,
 }
 
-/// Заметка, в которой перепишутся ссылки.
+/// A note whose links get rewritten.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct LinkRewrite {
     pub note: NoteId,
-    /// Сколько ссылок в ней.
+    /// How many links it has.
     pub count: usize,
 }
 
-/// Что сделает переименование (или сделало).
+/// What the rename will do (or did).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct RenamePlan {
     pub kind: RenameKind,
-    /// Прежний путь.
+    /// The old path.
     pub from: String,
-    /// Новый путь: имя — из названия; совпадает с `from` — меняется только название.
+    /// The new path: the name comes from the title; equal to `from` means only the title changes.
     pub to: String,
-    /// Новое название (пробелы схлопнуты).
+    /// The new title (whitespace collapsed).
     pub title: String,
-    /// Другие заметки со ссылками сюда (у папки — на то, что в ней), по алфавиту.
+    /// Other notes with links here (for a folder, to what is in it), in alphabetical order.
     pub links: Vec<LinkRewrite>,
 }
 
-/// Новое содержимое файла (путь — прежний, до переноса).
+/// New contents of a file (the path is the old one, before the move).
 struct Edit {
     path: String,
     text: String,
 }
 
-/// План переименования и правки файлов.
+/// The rename plan and the file edits.
 struct Prepared {
     plan: RenamePlan,
     edits: Vec<Edit>,
-    /// Файл `_folder.toml`, которого ещё нет (путь — прежний).
+    /// A `_folder.toml` that does not exist yet (the path is the old one).
     create: Option<Edit>,
-    /// Что переносится: файл заметки или каталог.
+    /// What moves: the note file or a directory.
     moved: Option<(String, String)>,
 }
 
-/// План переименования: ничего не меняет.
+/// The rename plan: changes nothing.
 pub fn plan(vault: &Vault, kind: RenameKind, from: &NoteId, title: &str) -> Result<RenamePlan> {
     Ok(prepare(vault, kind, from, title)?.plan)
 }
 
-/// Переименовать. Результат — план и изменённые пути (прежние и новые) — для
-/// наблюдателя.
+/// Renames. Returns the plan and the changed paths (old and new) for the
+/// watcher.
 pub fn apply(vault: &Vault, kind: RenameKind, from: &NoteId, title: &str) -> Result<(RenamePlan, Vec<String>)> {
     let prepared = prepare(vault, kind, from, title)?;
     let storage = vault.storage();
@@ -109,7 +110,7 @@ pub fn apply(vault: &Vault, kind: RenameKind, from: &NoteId, title: &str) -> Res
         storage.rename(src, dst).map_err(|e| vault.io_error(src, e))?;
         changed.extend([src.clone(), dst.clone()]);
     }
-    tracing::info!("переименовано: {} -> {} («{}»)", prepared.plan.from, prepared.plan.to, prepared.plan.title);
+    tracing::info!("renamed: {} -> {} (\"{}\")", prepared.plan.from, prepared.plan.to, prepared.plan.title);
     Ok((prepared.plan, changed))
 }
 
@@ -117,11 +118,11 @@ fn prepare(vault: &Vault, kind: RenameKind, from: &NoteId, title: &str) -> Resul
     let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
     let refuse = |reason: &str| Error::Rename { id: from.to_string(), reason: reason.to_owned() };
     if title.is_empty() {
-        return Err(refuse("пустое название"));
+        return Err(refuse("empty title"));
     }
     let storage = vault.storage();
     let parent = from.parent();
-    // Что переносится и где название.
+    // What moves and where the title is.
     let (moved_from, moved_ext, title_file) = match kind {
         RenameKind::Note => {
             let entry = vault.entry(from)?;
@@ -136,7 +137,7 @@ fn prepare(vault: &Vault, kind: RenameKind, from: &NoteId, title: &str) -> Resul
                 return Err(Error::NotFound(from.to_string()));
             }
             if storage.stat(&format!("{from}/{BOOK_MAIN}")).is_ok() {
-                return Err(refuse("это книга: её название — в main.typ"));
+                return Err(refuse("this is a book: its title is in main.typ"));
             }
             (from.to_string(), "", format!("{from}/{FOLDER_FILE}"))
         }
@@ -146,7 +147,7 @@ fn prepare(vault: &Vault, kind: RenameKind, from: &NoteId, title: &str) -> Resul
         Err(reason) => return Err(refuse(&reason)),
     };
 
-    // Ссылки: прежний путь → новый (у папки и книги — и всё, что в ней).
+    // Links: the old path -> the new one (for a folder or a book, everything in it too).
     let retarget = |target: &str| -> Option<String> {
         if target == from.as_str() {
             return Some(to.to_string());
@@ -173,7 +174,7 @@ fn prepare(vault: &Vault, kind: RenameKind, from: &NoteId, title: &str) -> Resul
         texts.insert(file.clone(), new);
     }
 
-    // Название.
+    // The title.
     let mut create = None;
     match kind {
         RenameKind::Note => {
@@ -207,7 +208,7 @@ fn prepare(vault: &Vault, kind: RenameKind, from: &NoteId, title: &str) -> Resul
     Ok(Prepared { plan, edits, create, moved: (moved_from != moved_to).then_some((moved_from, moved_to)) })
 }
 
-/// Файл `.typ` → заметка, которой он принадлежит (у главы — книга).
+/// A `.typ` file -> the note it belongs to (a book for a chapter).
 fn owners(vault: &Vault) -> Result<BTreeMap<String, NoteId>> {
     let mut out = BTreeMap::new();
     for entry in vault.entries()? {
@@ -218,8 +219,8 @@ fn owners(vault: &Vault) -> Result<BTreeMap<String, NoteId>> {
     Ok(out)
 }
 
-/// Переписать пути буквальных `see("путь")`, для которых `retarget` даёт
-/// новый. Результат — текст и сколько ссылок переписано.
+/// Rewrites the paths of literal `see("path")` for which `retarget` gives a
+/// new one. Returns the text and how many links were rewritten.
 fn rewrite_links(text: &str, retarget: &dyn Fn(&str) -> Option<String>) -> (String, usize) {
     let root = typst::syntax::parse(text);
     let mut spans = Vec::new();
@@ -248,8 +249,8 @@ fn collect_links(
     }
 }
 
-/// Новое название в шаблоне (`note.with`/`book.with`): заменить
-/// `title: […]` или дописать первым аргументом. Шаблона нет — `None`.
+/// A new title in the template (`note.with`/`book.with`): replaces
+/// `title: [...]` or adds it as the first argument. `None` without a template.
 fn set_title(text: &str, title: &str) -> Option<String> {
     let root = typst::syntax::parse(text);
     let block = format!("[{}]", markup(title));
@@ -274,7 +275,7 @@ fn find_template(node: &LinkedNode, block: &str, out: &mut Option<(std::ops::Ran
         *out = Some(if let Some(value) = title.and_then(|named| named.children().next_back()) {
             (value.range(), block.to_owned())
         } else {
-            // `note.with(` — дописать сразу после скобки.
+            // `note.with(`: add it right after the parenthesis.
             let at =
                 args.children().find(|c| c.kind() == SyntaxKind::LeftParen).map_or(args.offset(), |p| p.range().end);
             (at..at, format!("title: {block}, "))
@@ -286,7 +287,7 @@ fn find_template(node: &LinkedNode, block: &str, out: &mut Option<(std::ops::Ran
     }
 }
 
-/// Первый потомок вида `kind` (в глубину).
+/// The first descendant of kind `kind` (depth first).
 fn find_kind<'a>(node: &LinkedNode<'a>, kind: SyntaxKind) -> Option<LinkedNode<'a>> {
     for child in node.children() {
         if child.kind() == kind {
@@ -299,7 +300,7 @@ fn find_kind<'a>(node: &LinkedNode<'a>, kind: SyntaxKind) -> Option<LinkedNode<'
     None
 }
 
-/// Заменить куски текста (не пересекаются).
+/// Replaces pieces of text (they do not overlap).
 fn splice(text: &str, mut spans: Vec<(std::ops::Range<usize>, String)>) -> String {
     spans.sort_by_key(|(r, _)| std::cmp::Reverse(r.start));
     let mut out = text.to_owned();
@@ -309,12 +310,12 @@ fn splice(text: &str, mut spans: Vec<(std::ops::Range<usize>, String)>) -> Strin
     out
 }
 
-/// Строка Typst в кавычках.
+/// A quoted Typst string.
 fn typst_string(text: &str) -> String {
     format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
-/// Базовая строка TOML в кавычках.
+/// A quoted TOML basic string.
 fn toml_string(text: &str) -> String {
     let mut out = String::from("\"");
     for c in text.chars() {
@@ -373,7 +374,7 @@ mod tests {
         assert_eq!((plan.to.as_str(), plan.title.as_str()), ("Сеть/SSH основы", "SSH: основы"));
         let notes: Vec<(&str, usize)> = plan.links.iter().map(|l| (l.note.as_str(), l.count)).collect();
         assert_eq!(notes, [("Голая", 1), ("Сеть/UFW", 2)]);
-        assert!(mem.read("Сеть/SSH.typ").is_ok(), "план ничего не меняет");
+        assert!(mem.read("Сеть/SSH.typ").is_ok(), "the plan changes nothing");
 
         apply(&vault, RenameKind::Note, &id("Сеть/SSH"), "SSH: основы").unwrap();
         assert!(mem.read("Сеть/SSH.typ").is_err());
@@ -388,12 +389,12 @@ mod tests {
     fn same_name_only_title_and_case() {
         let (mem, vault) = setup();
         let plan = plan(&vault, RenameKind::Note, &id("Сеть/UFW"), "UFW").unwrap();
-        assert_eq!(plan.to, "Сеть/UFW", "своё имя — не занято");
+        assert_eq!(plan.to, "Сеть/UFW", "its own name is not taken");
         let plan = plan_ok(&vault, "Сеть/UFW", "ufw");
-        assert_eq!(plan.to, "Сеть/ufw", "регистр — тоже переименование");
+        assert_eq!(plan.to, "Сеть/ufw", "a case change is a rename too");
         apply(&vault, RenameKind::Note, &id("Сеть/UFW"), "ufw").unwrap();
         assert!(text(&mem, "Сеть/ufw.typ").contains("title: [ufw],"));
-        // Занято другой — с номером.
+        // Taken by another note: with a number.
         let plan = plan_ok(&vault, "Сеть/ufw", "SSH");
         assert_eq!(plan.to, "Сеть/SSH 2");
     }
@@ -406,7 +407,7 @@ mod tests {
     fn note_without_template_and_title_arg() {
         let (mem, vault) = setup();
         apply(&vault, RenameKind::Note, &id("Голая"), "Одетая").unwrap();
-        assert_eq!(text(&mem, "Одетая.typ"), "Текст без шаблона, #see(\"Сеть/SSH\").", "нет шаблона — только имя");
+        assert_eq!(text(&mem, "Одетая.typ"), "Текст без шаблона, #see(\"Сеть/SSH\").", "no template, only the name");
         mem.write("Без названия.typ", format!("{HEAD}#show: note.with(tags: (\"x\",))\n"));
         apply(&vault, RenameKind::Note, &id("Без названия"), "Есть [1]").unwrap();
         assert!(text(&mem, "Есть [1].typ").contains("note.with(title: [Есть \\[1\\]], tags: (\"x\",))"));
@@ -429,15 +430,15 @@ mod tests {
         let plan = plan(&vault, RenameKind::Folder, &id("Сеть"), "Сети: основы").unwrap();
         assert_eq!(plan.to, "Сети основы");
         let notes: Vec<&str> = plan.links.iter().map(|l| l.note.as_str()).collect();
-        assert_eq!(notes, ["Голая", "Книга"], "ссылки внутри папки — не чужие");
+        assert_eq!(notes, ["Голая", "Книга"], "links inside the folder are not foreign");
         apply(&vault, RenameKind::Folder, &id("Сеть"), "Сети: основы").unwrap();
         assert!(text(&mem, "Сети основы/SSH.typ").contains("#see(\"Сети основы/UFW\")"));
         assert!(text(&mem, "Книга/01.typ").contains("#see(\"Сети основы/UFW\") и #see(\"Сети основы\")"));
         let meta = parse_folder(&text(&mem, "Сети основы/_folder.toml")).unwrap();
-        assert_eq!(meta.title.as_deref(), Some("Сети: основы"), "название — в _folder.toml");
+        assert_eq!(meta.title.as_deref(), Some("Сети: основы"), "the title is in _folder.toml");
         assert!(mem.read("Сеть/SSH.typ").is_err());
 
-        // Имя передаёт название — файл не нужен; уже есть — правится.
+        // A name that carries the title needs no file; an existing one is edited.
         mem.write("Папка/a.typ", "");
         apply(&vault, RenameKind::Folder, &id("Папка"), "Другая").unwrap();
         assert!(mem.read("Другая/_folder.toml").is_err());

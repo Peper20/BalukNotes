@@ -1,14 +1,14 @@
 use std::io;
 use std::path::PathBuf;
 
-/// Ошибки ядра. Ошибки компиляции Typst сюда не входят: это нормальный
-/// результат работы (заметку правят), они приходят как [`crate::diag::Diagnostic`].
+/// Core errors. Typst compile errors are not here: they are a normal result
+/// (the note gets fixed) and come as [`crate::diag::Diagnostic`].
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("заметка не найдена: {0}")]
+    #[error("note not found: {0}")]
     NotFound(String),
 
-    #[error("недопустимый путь заметки «{id}»: {reason}")]
+    #[error("invalid note path \"{id}\": {reason}")]
     InvalidId { id: String, reason: &'static str },
 
     #[error("{path}: {source}")]
@@ -18,29 +18,29 @@ pub enum Error {
         source: io::Error,
     },
 
-    #[error("не создать «{id}»: {reason}")]
+    #[error("cannot create \"{id}\": {reason}")]
     Create { id: String, reason: String },
 
-    #[error("не переименовать «{id}»: {reason}")]
+    #[error("cannot rename \"{id}\": {reason}")]
     Rename { id: String, reason: String },
 
-    #[error("недопустимое имя хранилища «{name}»: {reason}")]
+    #[error("invalid vault name \"{name}\": {reason}")]
     InvalidVault { name: String, reason: &'static str },
 
-    #[error("нет хранилища «{name}»; есть: {}", names(known))]
+    #[error("no vault \"{name}\"; there are: {}", names(known))]
     VaultNotFound { name: String, known: Vec<crate::vaults::VaultName> },
 
-    #[error("хранилище «{0}» уже есть")]
+    #[error("vault \"{0}\" already exists")]
     VaultExists(String),
 
     #[error("{}", vault_required(.0))]
     VaultRequired(Vec<crate::vaults::VaultName>),
 
-    #[error("настройка «{key}»: {reason}")]
+    #[error("setting \"{key}\": {reason}")]
     Setting { key: String, reason: String },
 
-    /// Сломана сама библиотека оформления (например, `css.typ`), а не заметка.
-    #[error("библиотека оформления: {0}")]
+    /// The design library itself is broken (for example `css.typ`), not a note.
+    #[error("design library: {0}")]
     Library(String),
 
     #[error("JSON: {0}")]
@@ -53,20 +53,20 @@ impl Error {
     }
 }
 
-/// Имена хранилищ через запятую (для сообщений).
+/// Vault names separated by commas (for messages).
 fn names(list: &[crate::vaults::VaultName]) -> String {
     if list.is_empty() {
-        return "ни одного".into();
+        return "none".into();
     }
-    list.iter().map(|n| format!("«{n}»")).collect::<Vec<_>>().join(", ")
+    list.iter().map(|n| format!("\"{n}\"")).collect::<Vec<_>>().join(", ")
 }
 
-/// Хранилище не названо: какие есть или как создать первое.
+/// No vault named: which ones exist, or how to create the first one.
 fn vault_required(list: &[crate::vaults::VaultName]) -> String {
     if list.is_empty() {
-        "хранилищ нет — создайте: notes vaults new \"Имя\" (или в приложении)".into()
+        "there are no vaults; create one: notes vaults new \"Name\" (or in the app)".into()
     } else {
-        format!("укажите хранилище: --vault \"Имя\"; есть: {}", names(list))
+        format!("name a vault: --vault \"Name\"; there are: {}", names(list))
     }
 }
 
