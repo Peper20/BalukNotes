@@ -1,17 +1,17 @@
-//! Хранилища пользователя: несколько независимых папок заметок, у каждой —
-//! своё имя (как хранилища Obsidian).
+//! The user's vaults: several independent note folders, each with its own name
+//! (like Obsidian vaults).
 //!
-//! Все хранилища лежат в каталоге данных: `<данные>/vaults/<имя>/`. Имя
-//! хранилища — имя его папки ([`VaultName`]: без `/` и знаков, которые
-//! запрещены в именах файлов Windows, не служебное). Кэш отрисовки у
-//! каждого свой (ключ — путь хранилища, см. [`crate::cache`]).
+//! All vaults live in the data directory: `<data>/vaults/<name>/`. The vault
+//! name is the name of its folder ([`VaultName`]: no `/`, no characters
+//! forbidden in Windows file names, not internal). Each has its own rendering
+//! cache (the key is the vault path, see [`crate::cache`]).
 //!
-//! Хранилища по умолчанию нет (решение пользователя): даже первое создаёт
-//! и называет пользователь, а команды работают в хранилище, названном явно.
+//! There is no default vault (the user's decision): the user creates and names
+//! even the first one, and commands work in an explicitly named vault.
 //!
-//! Настройки хранилища — в нём самом, [`SETTINGS_FILE`] (как `.obsidian/`):
-//! переезжают вместе с папкой ([`crate::settings::VaultSettings`]).
-//! Служебные имена на `.` заметками не бывают ([`crate::storage::is_hidden`]).
+//! Vault settings live in the vault itself, [`SETTINGS_FILE`] (like
+//! `.obsidian/`), and move with the folder ([`crate::settings::VaultSettings`]).
+//! Internal names starting with `.` are never notes ([`crate::storage::is_hidden`]).
 
 use std::fmt;
 use std::fs;
@@ -23,15 +23,15 @@ use serde::{Deserialize, Serialize};
 use crate::storage::is_hidden;
 use crate::{Error, Result};
 
-/// Каталог хранилищ в каталоге данных.
+/// The vaults directory inside the data directory.
 pub const VAULTS_DIR: &str = "vaults";
-/// Настройки хранилища — путь в его папке.
+/// Vault settings: the path inside the vault folder.
 pub const SETTINGS_FILE: &str = ".baluk/settings.json";
-/// Самое длинное имя хранилища, знаков.
+/// The longest vault name, in characters.
 pub const MAX_NAME: usize = 64;
 
-/// Имя хранилища — оно же имя его папки. Проверяется при создании: из него
-/// всегда можно безопасно получить путь в каталоге хранилищ.
+/// A vault name, which is also the name of its folder. It is checked on
+/// creation, so a path in the vaults directory can always be safely derived from it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(try_from = "String", into = "String")]
@@ -42,23 +42,23 @@ impl VaultName {
         let name = name.into();
         let invalid = |reason| Err(Error::InvalidVault { name: name.clone(), reason });
         if name.trim().is_empty() {
-            return invalid("пустое имя");
+            return invalid("empty name");
         }
         if name.trim() != name {
-            return invalid("пробелы в начале или в конце");
+            return invalid("spaces at the start or the end");
         }
         if name.chars().count() > MAX_NAME {
-            return invalid("длиннее 64 знаков");
+            return invalid("longer than 64 characters");
         }
         if is_hidden(&name) {
-            return invalid("имена на _ и . — служебные");
+            return invalid("names starting with _ and . are internal");
         }
-        // Имя папки на любой ОС (Windows запрещает эти знаки и точку в конце).
+        // A folder name on any OS (Windows forbids these characters and a trailing dot).
         if name.chars().any(|c| c.is_control() || r#"/\:*?"<>|"#.contains(c)) {
-            return invalid(r#"без знаков / \ : * ? " < > |"#);
+            return invalid(r#"no characters / \ : * ? " < > |"#);
         }
         if name.ends_with('.') {
-            return invalid("точка в конце");
+            return invalid("a dot at the end");
         }
         Ok(Self(name))
     }
@@ -88,16 +88,16 @@ impl From<VaultName> for String {
     }
 }
 
-/// Хранилища в каталоге данных: список, создание, переименование, удаление
-/// в корзину, путь по имени.
+/// The vaults in the data directory: list, create, rename, move to the trash,
+/// path by name.
 #[derive(Debug, Clone)]
 pub struct Vaults {
-    /// `<данные>/vaults`.
+    /// `<data>/vaults`.
     root: PathBuf,
 }
 
 impl Vaults {
-    /// Хранилища каталога данных `data` (каталог хранилищ может ещё не существовать).
+    /// The vaults of the data directory `data` (the vaults directory may not exist yet).
     pub fn new(data: &Path) -> Self {
         Self { root: data.join(VAULTS_DIR) }
     }
@@ -106,18 +106,18 @@ impl Vaults {
         &self.root
     }
 
-    /// Папка хранилища.
+    /// The vault folder.
     pub fn path(&self, name: &VaultName) -> PathBuf {
         self.root.join(name.as_str())
     }
 
-    /// Есть ли хранилище.
+    /// Whether the vault exists.
     pub fn exists(&self, name: &VaultName) -> bool {
         self.path(name).is_dir()
     }
 
-    /// Хранилище по имени: есть — его имя, нет или имя неверное — ошибка
-    /// со списком имеющихся.
+    /// A vault by name: its name if it exists; if not, or the name is invalid,
+    /// an error listing the existing ones.
     pub fn find(&self, name: &str) -> Result<VaultName> {
         match VaultName::new(name) {
             Ok(name) if self.exists(&name) => Ok(name),
@@ -125,8 +125,8 @@ impl Vaults {
         }
     }
 
-    /// Все хранилища по алфавиту. Папки со служебными и неверными именами
-    /// пропускаются; нет каталога хранилищ — пусто.
+    /// All vaults in alphabetical order. Folders with internal or invalid names
+    /// are skipped; no vaults directory means none.
     pub fn list(&self) -> Result<Vec<VaultName>> {
         let items = match fs::read_dir(&self.root) {
             Ok(items) => items,
@@ -145,23 +145,23 @@ impl Vaults {
         Ok(out)
     }
 
-    /// Переименовать хранилище (папку); хранилище с новым именем уже есть —
-    /// ошибка. Открытое хранилище сначала закрыть ([`crate::Notes::close`]).
+    /// Renames a vault (its folder); an error if a vault with the new name
+    /// exists. Close an open vault first ([`crate::Notes::close`]).
     pub fn rename(&self, from: &VaultName, to: &VaultName) -> Result<()> {
         let (old, new) = (self.path(from), self.path(to));
         if !old.is_dir() {
             return Err(Error::VaultNotFound { name: from.to_string(), known: self.list()? });
         }
-        // Имя другого регистра на нечувствительной к регистру ФС — та же
-        // папка: переименовать можно.
+        // A name in another case on a case-insensitive file system is the same
+        // folder: renaming is allowed.
         if new.exists() && from.as_str().to_lowercase() != to.as_str().to_lowercase() {
             return Err(Error::VaultExists(to.to_string()));
         }
         fs::rename(&old, &new).map_err(|e| Error::io(&old, e))
     }
 
-    /// Хранилище целиком — в корзину системы (`trash` = `None`) или в
-    /// каталог `trash` (тесты). Открытое хранилище сначала закрыть.
+    /// Moves the whole vault to the system trash (`trash` = `None`) or to the
+    /// directory `trash` (tests). Close an open vault first.
     pub fn trash(&self, name: &VaultName, trash: Option<&Path>) -> Result<()> {
         let path = self.path(name);
         if !path.is_dir() {
@@ -170,7 +170,7 @@ impl Vaults {
         crate::storage::move_to_trash(&path, trash).map_err(|e| Error::io(&path, e))
     }
 
-    /// Создать **новое** пустое хранилище; такое уже есть — ошибка.
+    /// Creates a **new** empty vault; an error if it already exists.
     pub fn create(&self, name: &VaultName) -> Result<PathBuf> {
         fs::create_dir_all(&self.root).map_err(|e| Error::io(&self.root, e))?;
         let path = self.path(name);
@@ -200,7 +200,7 @@ mod tests {
         }
         assert!(VaultName::new("я".repeat(MAX_NAME)).is_ok());
         assert!(VaultName::new("я".repeat(MAX_NAME + 1)).is_err());
-        // Из JSON — с той же проверкой.
+        // From JSON with the same check.
         assert!(serde_json::from_str::<VaultName>(r#""a/b""#).is_err());
         assert_eq!(serde_json::from_str::<VaultName>(r#""Учёба""#).unwrap(), name("Учёба"));
     }
@@ -209,16 +209,16 @@ mod tests {
     fn create_list_find() {
         let data = tempfile::tempdir().unwrap();
         let vaults = Vaults::new(data.path());
-        assert!(vaults.list().unwrap().is_empty(), "каталога хранилищ ещё нет");
+        assert!(vaults.list().unwrap().is_empty(), "no vaults directory yet");
         vaults.create(&name("Учёба")).unwrap();
         vaults.create(&name("Работа")).unwrap();
         assert!(matches!(vaults.create(&name("Учёба")), Err(Error::VaultExists(_))));
-        // Файлы и служебные папки — не хранилища.
+        // Files and internal folders are not vaults.
         fs::write(vaults.root().join("файл"), "").unwrap();
         fs::create_dir(vaults.root().join(".trash")).unwrap();
         assert_eq!(vaults.list().unwrap(), [name("Работа"), name("Учёба")]);
         assert_eq!(vaults.find("Учёба").unwrap(), name("Учёба"));
-        let Err(Error::VaultNotFound { known, .. }) = vaults.find("Нет") else { panic!("нет такого") };
+        let Err(Error::VaultNotFound { known, .. }) = vaults.find("Нет") else { panic!("expected VaultNotFound") };
         assert_eq!(known.len(), 2);
         assert!(vaults.find("../x").is_err());
     }
@@ -235,10 +235,10 @@ mod tests {
         assert!(matches!(vaults.rename(&name("Нет"), &name("Другое")), Err(Error::VaultNotFound { .. })));
         vaults.rename(&name("Учёба"), &name("Учёба 2026")).unwrap();
         assert_eq!(vaults.list().unwrap(), [name("Работа"), name("Учёба 2026")]);
-        assert!(vaults.path(&name("Учёба 2026")).join("a.typ").is_file(), "заметки переехали с папкой");
+        assert!(vaults.path(&name("Учёба 2026")).join("a.typ").is_file(), "notes moved with the folder");
         vaults.trash(&name("Работа"), Some(bin.path())).unwrap();
         assert_eq!(vaults.list().unwrap(), [name("Учёба 2026")]);
-        assert!(bin.path().join("Работа").is_dir(), "хранилище — в корзине, его можно вернуть");
+        assert!(bin.path().join("Работа").is_dir(), "the vault is in the trash and can be restored");
         assert!(matches!(vaults.trash(&name("Работа"), Some(bin.path())), Err(Error::VaultNotFound { .. })));
     }
 }

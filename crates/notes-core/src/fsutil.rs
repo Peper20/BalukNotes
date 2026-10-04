@@ -1,12 +1,12 @@
-//! Файловые мелочи, общие для модулей.
+//! Small file helpers shared by modules.
 
 use std::fs;
 use std::path::Path;
 
 use crate::{Error, Result};
 
-/// Запись через временный файл и переименование: сбой посреди записи не
-/// оставит полупустой файл.
+/// Writes through a temporary file and a rename: a failure halfway through
+/// does not leave a half-written file.
 pub(crate) fn write_atomic(path: &Path, data: &[u8]) -> Result<()> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;

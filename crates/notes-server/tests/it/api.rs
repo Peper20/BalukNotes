@@ -453,7 +453,7 @@ async fn vaults_are_separate() {
     assert_eq!(ids(work), ["Отчёт"]);
     let (status, body) = call(app.clone(), "GET", &uri("/api/vaults/Нет/notes"), None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert!(body["error"].as_str().unwrap().contains("«Работа», «Учёба»"), "{body}");
+    assert!(body["error"].as_str().unwrap().contains(r#""Работа", "Учёба""#), "{body}");
     assert_eq!(call(app.clone(), "GET", "/api/vaults/..%2Fx/notes", None).await.0, StatusCode::NOT_FOUND);
 
     let (status, list) = call(app.clone(), "POST", "/api/vaults", Some(r#"{"name": "Новое"}"#)).await;
@@ -465,7 +465,7 @@ async fn vaults_are_separate() {
     assert_eq!(call(app.clone(), "POST", "/api/vaults", Some(r#"{"name": "Новое"}"#)).await.0, StatusCode::CONFLICT);
     let (status, body) = call(app.clone(), "POST", "/api/vaults", Some(r#"{"name": "a/b"}"#)).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(body["error"].as_str().unwrap().contains("недопустимое имя хранилища"));
+    assert!(body["error"].as_str().unwrap().contains("invalid vault name"));
 
     // Themes and fonts are shared, with no vault in the path.
     assert_eq!(call(app, "GET", "/api/themes", None).await.0, StatusCode::OK);

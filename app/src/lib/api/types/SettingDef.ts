@@ -4,29 +4,29 @@ import type { Choice } from "./Choice";
 import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
- * Описание одной настройки.
+ * The description of one setting.
  */
 export type SettingDef = { 
 /**
- * `группа.имя`, например `view.numbering`.
+ * `group.name`, for example `view.numbering`.
  */
 key: string, label: string, help?: string, default: JsonValue, 
 /**
- * Как клиент применяет настройку к странице; `None` — сам, в своём коде
- * (тема, книги, обновление) или она для сервера (рисунки).
+ * How the client applies the setting to the page; `None` means the client
+ * does it in its own code (theme, books, refresh) or it is for the server (figures).
  */
 apply?: Apply, 
 /**
- * Настройка устройства: своя у каждого устройства, не синхронизируется.
+ * A device setting: each device has its own, not synced.
  */
 device?: boolean, 
 /**
- * Изменение из интерфейса по умолчанию — для всех хранилищ (тема, кегль:
- * решение пользователя), а не только для открытого; у хранилища можно
- * задать своё. Остальные — наоборот (см. модуль).
+ * A change from the interface goes to all vaults by default (theme, font
+ * size: the user's decision), not only to the open one; a vault can set
+ * its own. The others are the other way round (see the module).
  */
 shared?: boolean, 
 /**
- * Предупреждение рядом с настройкой: чем она опасна.
+ * A warning next to the setting: why it is dangerous.
  */
 warning?: string, } & ({ "type": "bool" } | { "type": "number", min: number, max: number, step: number, } | { "type": "choice", options: Array<Choice>, } | { "type": "text", placeholder: string, });

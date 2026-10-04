@@ -1,51 +1,51 @@
-//! Папки хранилища: название (а позже и настройки) — файл [`FOLDER_FILE`]
-//! в самой папке. Переносишь папку — название едет с ней.
+//! Vault folders: the title (and later settings) lives in the file
+//! [`FOLDER_FILE`] in the folder itself. Move the folder and the title moves with it.
 //!
 //! ```toml
-//! title = "Сети и протоколы"
+//! title = "Networks and protocols"
 //! ```
 //!
-//! Файла нет — папка называется своим именем. У книги название — в её
-//! `main.typ` (`book.with(title: …)`), `_folder.toml` в книге не читается.
-//! Неизвестные ключи — ошибка (опечатка в `title` не пройдёт молча);
-//! ошибки показывает `notes check`, а папка остаётся со своим именем.
+//! Without the file the folder is called by its name. A book has its title in
+//! its `main.typ` (`book.with(title: ...)`); `_folder.toml` in a book is not
+//! read. Unknown keys are an error (a typo in `title` does not pass silently);
+//! `notes check` shows errors, and the folder keeps its own name.
 
 use serde::Deserialize;
 
-/// Файл папки. Имя на `_` — служебное: в дерево и в заметки не попадает.
+/// The folder file. A name starting with `_` is internal: it is not in the tree or among notes.
 pub const FOLDER_FILE: &str = "_folder.toml";
 
-/// Содержимое [`FOLDER_FILE`].
+/// The contents of [`FOLDER_FILE`].
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FolderMeta {
-    /// Название для показа (пробелы схлопнуты); `None` — имя папки.
+    /// The display title (whitespace collapsed); `None` means the folder name.
     pub title: Option<String>,
 }
 
-/// Разбор [`FOLDER_FILE`]; ошибка — текст для читателя.
+/// Parses [`FOLDER_FILE`]; the error is a text for the reader.
 pub fn parse_folder(text: &str) -> Result<FolderMeta, String> {
     let mut meta: FolderMeta = toml::from_str(text).map_err(|e| e.message().to_owned())?;
     if let Some(title) = &meta.title {
         let title = title.split_whitespace().collect::<Vec<_>>().join(" ");
         if title.is_empty() {
-            return Err("пустое название: title = \"…\" или уберите строку".into());
+            return Err("empty title: title = \"...\" or remove the line".into());
         }
         meta.title = Some(title);
     }
     Ok(meta)
 }
 
-/// Папка, в которой лежат заметки или книги.
+/// A folder that holds notes or books.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Folder {
-    /// Из [`FOLDER_FILE`]; `None` — файла нет или в нём ошибка.
+    /// From [`FOLDER_FILE`]; `None` if there is no file or it has an error.
     pub title: Option<String>,
-    /// Ошибка в [`FOLDER_FILE`] (для `notes check`).
+    /// An error in [`FOLDER_FILE`] (for `notes check`).
     pub error: Option<String>,
 }
 
-/// Все папки на пути к заметке, от корня: `a/b/c` → `a`, `a/b`.
+/// Every folder on the way to a note, from the root: `a/b/c` -> `a`, `a/b`.
 pub fn ancestors(id: &str) -> impl Iterator<Item = &str> {
     id.match_indices('/').map(|(i, _)| &id[..i])
 }
@@ -60,13 +60,13 @@ mod tests {
             parse_folder("title = \"Сети  и\\nпротоколы \"").unwrap().title.as_deref(),
             Some("Сети и протоколы")
         );
-        assert_eq!(parse_folder("").unwrap(), FolderMeta::default(), "пустой файл — без названия");
-        assert_eq!(parse_folder("# только комментарий\n").unwrap().title, None);
-        assert!(parse_folder("title = \"  \"").unwrap_err().contains("пустое название"));
-        assert!(parse_folder("titel = \"x\"").unwrap_err().contains("titel"), "опечатка в ключе — ошибка");
+        assert_eq!(parse_folder("").unwrap(), FolderMeta::default(), "an empty file has no title");
+        assert_eq!(parse_folder("# a comment only\n").unwrap().title, None);
+        assert!(parse_folder("title = \"  \"").unwrap_err().contains("empty title"));
+        assert!(parse_folder("titel = \"x\"").unwrap_err().contains("titel"), "a typo in a key is an error");
         assert!(parse_folder("title = 5").is_err());
-        assert!(parse_folder("title = \"x").is_err(), "незакрытая строка");
-        // Любые знаки, запрещённые в именах файлов, в названии — можно.
+        assert!(parse_folder("title = \"x").is_err(), "an unclosed string");
+        // Any characters forbidden in file names are allowed in a title.
         let odd = r#"title = "@#$@&$*%@#!.:/\\""#;
         assert_eq!(parse_folder(odd).unwrap().title.as_deref(), Some(r"@#$@&$*%@#!.:/\"));
     }

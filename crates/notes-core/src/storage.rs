@@ -1,20 +1,20 @@
-//! Хранилище за интерфейсом: откуда ядро берёт файлы заметок.
+//! The vault behind an interface: where the core gets note files from.
 //!
-//! Весь доступ к файлам хранилища — через [`Storage`]: список файлов, чтение,
-//! сведения о файле (размер, время изменения — из них версия заметки, см.
-//! [`crate::version`]). Сейчас хранилище — каталог на диске ([`DirStorage`]);
-//! позже (M5, синхронизация) рядом встанет база данных, и остальному ядру
-//! меняться не придётся. Тесты слоёв ядра работают на [`MemStorage`] — в
-//! памяти, без диска.
+//! All access to vault files goes through [`Storage`]: the file list, reading,
+//! file info (size and modification time make the note version, see
+//! [`crate::version`]). Today the vault is a directory on disk
+//! ([`DirStorage`]); later (M5, sync) a database will stand next to it, and the
+//! rest of the core will not have to change. Core layer tests run on
+//! [`MemStorage`]: in memory, without a disk.
 //!
-//! Хранилище может сообщать об изменениях файлов ([`Storage::watch`]):
-//! каталог — через наблюдатель ОС (`notify`), и тогда список файлов берётся
-//! из памяти, пока в каталоге ничего не менялось. Кто не умеет — ядро
-//! обходит файлы, как раньше.
+//! A vault may report file changes ([`Storage::watch`]): a directory does it
+//! through the OS watcher (`notify`), and then the file list comes from memory
+//! while nothing changes in the directory. Without that the core walks the
+//! files.
 //!
-//! Пути — относительные, через `/`, без `/` в начале: `Сеть/SSH.typ`.
-//! Библиотека оформления (`/_baluk/`) и пакеты Typst — не хранилище: их
-//! читает компилятор ([`crate::world`]).
+//! Paths are relative, separated by `/`, with no leading `/`: `Network/SSH.typ`.
+//! The design library (`/_baluk/`) and Typst packages are not the vault: the
+//! compiler reads them ([`crate::world`]).
 
 use std::any::Any;
 use std::collections::BTreeMap;
@@ -27,35 +27,35 @@ use std::time::{Duration, SystemTime};
 
 use parking_lot::Mutex;
 
-/// Сведения о файле хранилища.
+/// Info about a vault file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileMeta {
     pub is_dir: bool,
     pub len: u64,
-    /// Время изменения (у каталога и там, где его нет, — `None`).
+    /// Modification time (`None` for a directory and where there is none).
     pub modified: Option<SystemTime>,
 }
 
-/// Куда хранилище сообщает об изменениях: пути изменившихся файлов (как в
-/// [`Storage::list`], но и служебные на `_`) — или `None`: наблюдатель
-/// сломался, изменения могли потеряться (дальше — без него).
+/// Where a vault reports changes: the paths of changed files (as in
+/// [`Storage::list`], but internal `_` ones too), or `None`: the watcher broke
+/// and changes may have been lost (from then on, no watcher).
 pub type ChangeSink = Arc<dyn Fn(Option<Vec<String>>) + Send + Sync>;
 
-/// Наблюдатель работает, пока жив этот объект.
+/// The watcher runs while this object lives.
 pub type WatchGuard = Box<dyn Any + Send + Sync>;
 
-/// Файлы хранилища.
+/// The vault files.
 pub trait Storage: Send + Sync + fmt::Debug {
-    /// Где хранилище — для журнала и ключа кэша на диске (у разных хранилищ
-    /// бывают заметки с одинаковыми путями).
+    /// Where the vault is: for the log and the disk cache key (different vaults
+    /// may have notes with the same paths).
     fn location(&self) -> String;
 
-    /// Все файлы (не каталоги), кроме служебных: путь, в котором есть имя на
-    /// `_` или `.`, в список не входит. Порядок — любой.
+    /// All files (not directories) except internal ones: a path with a name
+    /// starting with `_` or `.` is not listed. Any order.
     fn list(&self) -> io::Result<Vec<String>>;
 
-    /// Все каталоги, кроме служебных (как в [`Self::list`]), и пустые тоже.
-    /// По умолчанию — каталоги, в которых есть файлы. Порядок — любой.
+    /// All directories except internal ones (as in [`Self::list`]), empty ones
+    /// too. By default, the directories that contain files. Any order.
     fn dirs(&self) -> io::Result<Vec<String>> {
         let mut out = std::collections::BTreeSet::new();
         for file in self.list()? {
@@ -64,86 +64,91 @@ pub trait Storage: Send + Sync + fmt::Debug {
         Ok(out.into_iter().collect())
     }
 
-    /// Сведения о файле или каталоге. Нет такого — `NotFound`.
+    /// Info about a file or directory. `NotFound` if there is none.
     fn stat(&self, path: &str) -> io::Result<FileMeta>;
 
-    /// Содержимое файла.
+    /// The file contents.
     fn read(&self, path: &str) -> io::Result<Vec<u8>>;
 
-    /// Путь для сообщений об ошибках: на диске — полный, иначе — как есть.
+    /// A path for error messages: the full one on disk, otherwise as is.
     fn display(&self, path: &str) -> PathBuf {
         PathBuf::from(path)
     }
 
-    /// Создать **новый** файл (каталоги появляются сами); файл уже есть —
-    /// `AlreadyExists`, существующее не перезаписывается. Хранилище только
-    /// для чтения — `Unsupported` (по умолчанию).
+    /// Creates a **new** file (directories appear by themselves); if the file
+    /// exists, `AlreadyExists` - nothing is overwritten. A read-only vault
+    /// gives `Unsupported` (the default).
     fn create(&self, path: &str, data: &[u8]) -> io::Result<()> {
         let _ = (path, data);
-        Err(io::Error::new(io::ErrorKind::Unsupported, "хранилище только для чтения"))
+        Err(read_only())
     }
 
-    /// Новое содержимое **существующего** файла (нет такого — `NotFound`).
-    /// Хранилище только для чтения — `Unsupported` (по умолчанию).
+    /// New contents of an **existing** file (`NotFound` if there is none).
+    /// A read-only vault gives `Unsupported` (the default).
     fn rewrite(&self, path: &str, data: &[u8]) -> io::Result<()> {
         let _ = (path, data);
-        Err(io::Error::new(io::ErrorKind::Unsupported, "хранилище только для чтения"))
+        Err(read_only())
     }
 
-    /// Переименовать (перенести) файл или каталог; `to` уже есть —
-    /// `AlreadyExists`, каталоги на пути к `to` появляются сами. Хранилище
-    /// только для чтения — `Unsupported` (по умолчанию).
+    /// Renames (moves) a file or directory; `AlreadyExists` if `to` exists;
+    /// directories on the way to `to` appear by themselves. A read-only vault
+    /// gives `Unsupported` (the default).
     fn rename(&self, from: &str, to: &str) -> io::Result<()> {
         let _ = (from, to);
-        Err(io::Error::new(io::ErrorKind::Unsupported, "хранилище только для чтения"))
+        Err(read_only())
     }
 
-    /// Убрать файл или каталог (книгу) в корзину — туда, откуда его можно
-    /// вернуть. Нет такого — `NotFound`; хранилище только для чтения —
-    /// `Unsupported` (по умолчанию).
+    /// Moves a file or a directory (a book) to the trash, where it can be
+    /// restored from. `NotFound` if there is none; a read-only vault gives
+    /// `Unsupported` (the default).
     fn trash(&self, path: &str) -> io::Result<()> {
         let _ = path;
-        Err(io::Error::new(io::ErrorKind::Unsupported, "хранилище только для чтения"))
+        Err(read_only())
     }
 
-    /// Сообщать об изменениях файлов в `sink`. `Ok(None)` — хранилище так
-    /// не умеет (по умолчанию).
+    /// Reports file changes to `sink`. `Ok(None)` if the vault cannot (the
+    /// default).
     fn watch(&self, sink: ChangeSink) -> io::Result<Option<WatchGuard>> {
         let _ = sink;
         Ok(None)
     }
 }
 
-/// Исходник Typst (`.typ`).
+/// The error of a write to a read-only vault.
+fn read_only() -> io::Error {
+    io::Error::new(io::ErrorKind::Unsupported, "the vault is read-only")
+}
+
+/// A Typst source (`.typ`).
 pub fn is_typ(path: &str) -> bool {
     Path::new(path).extension().is_some_and(|e| e == "typ")
 }
 
-/// Служебное имя (библиотека `_baluk`, `.git`): в список файлов не входит.
+/// An internal name (the `_baluk` library, `.git`): not in the file list.
 pub fn is_hidden(name: &str) -> bool {
     name.starts_with('_') || name.starts_with('.')
 }
 
-/// Хранилище — каталог на диске.
+/// A vault that is a directory on disk.
 #[derive(Debug, Clone)]
 pub struct DirStorage {
     root: PathBuf,
-    /// Корзина: `None` — системная, каталог — удалённое переносится в него.
+    /// The trash: `None` is the system one; a directory gets the deleted items moved into it.
     trash: Option<PathBuf>,
-    /// Список файлов, пока наблюдатель не сообщил об изменении.
+    /// The file list, until the watcher reports a change.
     listed: Arc<Mutex<Listed>>,
 }
 
 #[derive(Debug, Default)]
 struct Listed {
-    /// Наблюдатель работает — список можно помнить.
+    /// The watcher runs, so the list can be kept.
     watching: bool,
     files: Option<Vec<String>>,
     dirs: Option<Vec<String>>,
 }
 
 impl Listed {
-    /// Файлы или каталоги изменились: списки — заново.
+    /// Files or directories changed: the lists are built again.
     fn forget(&mut self) {
         self.files = None;
         self.dirs = None;
@@ -151,17 +156,17 @@ impl Listed {
 }
 
 impl DirStorage {
-    /// Каталог должен существовать; путь приводится к каноническому.
+    /// The directory must exist; the path is made canonical.
     pub fn open(root: impl AsRef<Path>) -> io::Result<Self> {
         let root = fs::canonicalize(root.as_ref())?;
         if !root.is_dir() {
-            return Err(io::Error::new(io::ErrorKind::NotADirectory, "хранилище — не каталог"));
+            return Err(io::Error::new(io::ErrorKind::NotADirectory, "the vault is not a directory"));
         }
         Ok(Self { root, trash: None, listed: Arc::default() })
     }
 
-    /// Удалённое ([`Storage::trash`]) — в каталог `dir`, а не в корзину
-    /// системы (тесты: не засорять корзину пользователя); `None` — в системную.
+    /// Deleted items ([`Storage::trash`]) go to the directory `dir` instead of
+    /// the system trash (tests: keep the user's trash clean); `None` - the system one.
     #[must_use]
     pub fn with_trash(mut self, dir: Option<PathBuf>) -> Self {
         self.trash = dir;
@@ -172,27 +177,27 @@ impl DirStorage {
         &self.root
     }
 
-    /// Путь на диске; `..`, абсолютные пути и префиксы не допускаются.
+    /// The path on disk; `..`, absolute paths and prefixes are not allowed.
     fn full(&self, path: &str) -> io::Result<PathBuf> {
         let rel = Path::new(path);
         if rel.components().all(|c| matches!(c, Component::Normal(_) | Component::CurDir)) {
             Ok(self.root.join(rel))
         } else {
-            Err(io::Error::new(io::ErrorKind::InvalidInput, format!("путь вне хранилища: {path}")))
+            Err(io::Error::new(io::ErrorKind::InvalidInput, format!("path outside the vault: {path}")))
         }
     }
 
-    /// Файлы в `out`, каталоги — в `dirs`.
+    /// Files go to `out`, directories to `dirs`.
     fn walk(dir: &Path, rel: &str, out: &mut Vec<String>, dirs: &mut Vec<String>) -> io::Result<()> {
         for item in fs::read_dir(dir)? {
             let item = item?;
             let name = item.file_name();
-            let Some(name) = name.to_str() else { continue }; // не UTF-8 — не заметка
+            let Some(name) = name.to_str() else { continue }; // not UTF-8, not a note
             if is_hidden(name) {
                 continue;
             }
             let child = if rel.is_empty() { name.to_owned() } else { format!("{rel}/{name}") };
-            // Тип — из записи каталога, без перехода по ссылке (как раньше в `Vault`).
+            // The type comes from the directory entry, without following links.
             if item.file_type()?.is_dir() {
                 Self::walk(&item.path(), &child, out, dirs)?;
                 dirs.push(child);
@@ -210,8 +215,8 @@ impl Storage for DirStorage {
     }
 
     fn list(&self) -> io::Result<Vec<String>> {
-        // Под замком: изменение во время обхода ждёт его конца и сбросит
-        // запомненный список.
+        // Under the lock: a change during the walk waits for its end and drops
+        // the kept list.
         let mut listed = self.listed.lock();
         if let Some(files) = &listed.files {
             return Ok(files.clone());
@@ -245,19 +250,19 @@ impl Storage for DirStorage {
         let root = self.root.clone();
         let listed = self.listed.clone();
         let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-            // Чтение файлов (компиляция, сам обход) — не изменение.
+            // Reading files (compiling, the walk itself) is not a change.
             if matches!(&event, Ok(e) if e.kind.is_access()) {
                 return;
             }
             let mut state = listed.lock();
-            // Правка содержимого список файлов не меняет.
+            // Editing contents does not change the file list.
             if !matches!(&event, Ok(e) if matches!(e.kind, EventKind::Modify(ModifyKind::Data(_) | ModifyKind::Metadata(_)))) {
                 state.forget();
             }
             match event {
-                // Очередь событий ОС переполнилась (inotify): что поменялось — неизвестно.
+                // The OS event queue overflowed (inotify): what changed is unknown.
                 Ok(event) if event.need_rescan() => {
-                    tracing::warn!("наблюдатель хранилища: события потеряны; дальше — обход файлов");
+                    tracing::warn!("vault watcher: events lost; walking the files from now on");
                     state.watching = false;
                     drop(state);
                     sink(None);
@@ -276,7 +281,7 @@ impl Storage for DirStorage {
                     }
                 }
                 Err(e) => {
-                    tracing::warn!("наблюдатель хранилища: {e}; дальше — обход файлов");
+                    tracing::warn!("vault watcher: {e}; walking the files from now on");
                     state.watching = false;
                     drop(state);
                     sink(None);
@@ -311,7 +316,7 @@ impl Storage for DirStorage {
             fs::create_dir_all(dir)?;
         }
         let mut file = fs::OpenOptions::new().write(true).create_new(true).open(&full)?;
-        // Список файлов — заново, не дожидаясь события наблюдателя.
+        // The file list is built again, without waiting for the watcher event.
         self.listed.lock().forget();
         file.write_all(data)
     }
@@ -327,12 +332,12 @@ impl Storage for DirStorage {
     fn rename(&self, from: &str, to: &str) -> io::Result<()> {
         let (src, dst) = (self.full(from)?, self.full(to)?);
         if src == self.root || dst == self.root {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "корень хранилища не переименовывается"));
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "the vault root cannot be renamed"));
         }
         fs::symlink_metadata(&src)?;
-        // `ssh` → `SSH` в Windows и macOS: `to` «есть» — это он сам.
+        // `ssh` -> `SSH` on Windows and macOS: `to` "exists" because it is the same file.
         if fs::symlink_metadata(&dst).is_ok() && !same_file(&src, &dst) {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("уже есть: {to}")));
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("already exists: {to}")));
         }
         if let Some(dir) = dst.parent() {
             fs::create_dir_all(dir)?;
@@ -345,16 +350,16 @@ impl Storage for DirStorage {
     fn trash(&self, path: &str) -> io::Result<()> {
         let full = self.full(path)?;
         if full == self.root {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "хранилище целиком не удаляется"));
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "the whole vault cannot be deleted"));
         }
         move_to_trash(&full, self.trash.as_deref())?;
-        // Список файлов — заново, не дожидаясь события наблюдателя.
+        // The file list is built again, without waiting for the watcher event.
         self.listed.lock().forget();
         Ok(())
     }
 }
 
-/// Один и тот же файл (другой регистр букв в нечувствительной к нему ФС).
+/// The same file (another letter case on a case-insensitive file system).
 #[cfg(unix)]
 fn same_file(a: &Path, b: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
@@ -364,14 +369,14 @@ fn same_file(a: &Path, b: &Path) -> bool {
     }
 }
 
-/// Один и тот же файл: ФС Windows не различает регистр.
+/// The same file: Windows file systems ignore case.
 #[cfg(not(unix))]
 fn same_file(a: &Path, b: &Path) -> bool {
     a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
 }
 
-/// Файл или каталог — в корзину системы (`dir` = `None`) или в каталог
-/// `dir` (тесты): там его можно восстановить.
+/// Moves a file or directory to the system trash (`dir` = `None`) or to the
+/// directory `dir` (tests), where it can be restored.
 pub(crate) fn move_to_trash(full: &Path, dir: Option<&Path>) -> io::Result<()> {
     fs::symlink_metadata(full)?;
     match dir {
@@ -382,25 +387,25 @@ pub(crate) fn move_to_trash(full: &Path, dir: Option<&Path>) -> io::Result<()> {
             let target = (1..10_000)
                 .map(|n| dir.join(if n == 1 { name.clone() } else { format!("{name} ({n})") }))
                 .find(|p| !p.exists())
-                .ok_or_else(|| io::Error::new(io::ErrorKind::AlreadyExists, "в корзине нет свободного имени"))?;
+                .ok_or_else(|| io::Error::new(io::ErrorKind::AlreadyExists, "no free name in the trash"))?;
             fs::rename(full, target)
         }
     }
 }
 
-/// Корзина системы (freedesktop на Linux, «Корзина» Windows и macOS).
+/// The system trash (freedesktop on Linux, the Windows and macOS trash).
 #[cfg(not(any(target_os = "android", target_os = "ios", target_family = "wasm")))]
 fn system_trash(path: &Path) -> io::Result<()> {
     trash::delete(path).map_err(io::Error::other)
 }
 
-/// Корзины системы нет (телефон, браузер): удалять некуда — пока нельзя.
+/// No system trash (phone, browser): nowhere to delete to, so deletion is not possible yet.
 #[cfg(any(target_os = "android", target_os = "ios", target_family = "wasm"))]
 fn system_trash(_path: &Path) -> io::Result<()> {
-    Err(io::Error::new(io::ErrorKind::Unsupported, "на этом устройстве нет корзины"))
+    Err(io::Error::new(io::ErrorKind::Unsupported, "this device has no trash"))
 }
 
-/// Остановить наблюдатель: список файлов больше не помнить.
+/// Stops the watcher: the file list is not kept any more.
 struct Unwatch {
     _watcher: notify::RecommendedWatcher,
     listed: Arc<Mutex<Listed>>,
@@ -414,8 +419,8 @@ impl Drop for Unwatch {
     }
 }
 
-/// Хранилище в памяти — для тестов. Время изменения — счётчик записей:
-/// каждая запись меняет версию файла. Сообщает о записях ([`Storage::watch`]).
+/// An in-memory vault for tests. The modification time is a write counter:
+/// every write changes the file version. Reports writes ([`Storage::watch`]).
 #[derive(Default)]
 pub struct MemStorage {
     files: Mutex<MemFiles>,
@@ -439,7 +444,7 @@ impl MemStorage {
         Self::default()
     }
 
-    /// Записать файл (каталоги появляются сами).
+    /// Writes a file (directories appear by themselves).
     pub fn write(&self, path: &str, data: impl Into<Vec<u8>>) {
         let mut f = self.files.lock();
         f.clock += 1;
@@ -454,7 +459,7 @@ impl MemStorage {
         self.changed(path);
     }
 
-    /// Наблюдатель сломался: изменения могли потеряться (для тестов).
+    /// The watcher broke: changes may have been lost (for tests).
     pub fn lose_changes(&self) {
         let sink = self.sink.lock().clone();
         if let Some(sink) = sink {
@@ -472,7 +477,7 @@ impl MemStorage {
 
 impl Storage for MemStorage {
     fn location(&self) -> String {
-        format!("память:{:p}", std::ptr::from_ref(self))
+        format!("memory:{:p}", std::ptr::from_ref(self))
     }
 
     fn list(&self) -> io::Result<Vec<String>> {
@@ -490,13 +495,16 @@ impl Storage for MemStorage {
         if path.is_empty() || f.files.keys().any(|p| p.starts_with(&prefix)) {
             return Ok(FileMeta { is_dir: true, len: 0, modified: None });
         }
-        Err(io::Error::new(io::ErrorKind::NotFound, format!("нет файла {path}")))
+        Err(not_found(path))
     }
 
     fn read(&self, path: &str) -> io::Result<Vec<u8>> {
+        if let Some((data, _)) = self.files.lock().files.get(path) {
+            return Ok(data.clone());
+        }
         match self.stat(path)? {
             FileMeta { is_dir: true, .. } => Err(io::Error::new(io::ErrorKind::IsADirectory, path.to_owned())),
-            _ => Ok(self.files.lock().files[path].0.clone()),
+            FileMeta { is_dir: false, .. } => Err(not_found(path)),
         }
     }
 
@@ -510,7 +518,7 @@ impl Storage for MemStorage {
         let mut f = self.files.lock();
         let gone: Vec<String> = f.files.keys().filter(|p| *p == path || p.starts_with(&prefix)).cloned().collect();
         if gone.is_empty() || path.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::NotFound, format!("нет файла {path}")));
+            return Err(not_found(path));
         }
         for p in &gone {
             f.files.remove(p);
@@ -522,7 +530,7 @@ impl Storage for MemStorage {
 
     fn rewrite(&self, path: &str, data: &[u8]) -> io::Result<()> {
         if !self.files.lock().files.contains_key(path) {
-            return Err(io::Error::new(io::ErrorKind::NotFound, format!("нет файла {path}")));
+            return Err(not_found(path));
         }
         self.write(path, data);
         Ok(())
@@ -533,11 +541,11 @@ impl Storage for MemStorage {
         let is_moved = |p: &String| *p == from || p.starts_with(&prefix);
         let mut f = self.files.lock();
         if from.is_empty() || to.is_empty() || !f.files.keys().any(is_moved) {
-            return Err(io::Error::new(io::ErrorKind::NotFound, format!("нет файла {from}")));
+            return Err(not_found(from));
         }
         let to_prefix = format!("{to}/");
         if from != to && f.files.keys().any(|p| p == to || p.starts_with(&to_prefix)) {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("уже есть: {to}")));
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("already exists: {to}")));
         }
         let moved: Vec<_> = f.files.extract_if(.., |p, _| is_moved(p)).collect();
         for (old, data) in moved {
@@ -551,11 +559,16 @@ impl Storage for MemStorage {
 
     fn create(&self, path: &str, data: &[u8]) -> io::Result<()> {
         if self.files.lock().files.contains_key(path) {
-            return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("файл уже есть: {path}")));
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("file already exists: {path}")));
         }
         self.write(path, data);
         Ok(())
     }
+}
+
+/// `NotFound` for a missing in-memory file.
+fn not_found(path: &str) -> io::Error {
+    io::Error::new(io::ErrorKind::NotFound, format!("no file {path}"))
 }
 
 #[cfg(test)]
@@ -572,7 +585,7 @@ mod tests {
         assert!(!meta.is_dir);
         assert_eq!(meta.len, 1);
         assert_eq!(storage.stat("нет.typ").unwrap_err().kind(), io::ErrorKind::NotFound);
-        assert!(storage.read("_baluk/lib.typ").is_ok(), "служебное читается, но не перечисляется");
+        assert!(storage.read("_baluk/lib.typ").is_ok(), "internal files are readable but not listed");
     }
 
     #[test]
@@ -585,7 +598,7 @@ mod tests {
         }
         let disk = DirStorage::open(dir.path()).unwrap();
         check(&disk);
-        assert!(disk.read("../x").is_err(), "за пределы каталога — нельзя");
+        assert!(disk.read("../x").is_err(), "nothing outside the directory");
 
         let mem = MemStorage::new();
         for (f, text) in [("a.typ", "a"), ("Сеть/SSH.typ", "ssh"), ("_baluk/lib.typ", ""), (".git/x", "")] {
@@ -594,7 +607,7 @@ mod tests {
         check(&mem);
     }
 
-    /// `create`: новый файл с каталогами; существующий не перезаписывается.
+    /// `create`: a new file with its directories; an existing one is not overwritten.
     #[test]
     fn create_never_overwrites() {
         let dir = tempfile::tempdir().unwrap();
@@ -603,16 +616,16 @@ mod tests {
         for storage in [&disk as &dyn Storage, &mem] {
             storage.create("Новая/папка/x.typ", b"x").unwrap();
             assert_eq!(storage.read("Новая/папка/x.typ").unwrap(), b"x");
-            assert!(storage.list().unwrap().contains(&"Новая/папка/x.typ".to_owned()), "список — заново");
+            assert!(storage.list().unwrap().contains(&"Новая/папка/x.typ".to_owned()), "the list is rebuilt");
             let again = storage.create("Новая/папка/x.typ", b"y").unwrap_err();
             assert_eq!(again.kind(), io::ErrorKind::AlreadyExists);
             assert_eq!(storage.read("Новая/папка/x.typ").unwrap(), b"x");
         }
-        assert!(disk.create("../x.typ", b"").is_err(), "за пределы каталога — нельзя");
+        assert!(disk.create("../x.typ", b"").is_err(), "nothing outside the directory");
     }
 
-    /// `trash`: файл или каталог целиком; в каталог-корзину — без
-    /// перезаписи одноимённого; корень и чужие пути — нельзя.
+    /// `trash`: a file or a whole directory; into a trash directory without
+    /// overwriting a same-named item; not the root or foreign paths.
     #[test]
     fn trash_moves_away() {
         let dir = tempfile::tempdir().unwrap();
@@ -627,19 +640,19 @@ mod tests {
             storage.trash("Книга").unwrap();
             let mut list = storage.list().unwrap();
             list.sort();
-            assert_eq!(list, ["Книга2/main.typ"], "список — заново");
+            assert_eq!(list, ["Книга2/main.typ"], "the list is rebuilt");
             assert_eq!(storage.trash("a.typ").unwrap_err().kind(), io::ErrorKind::NotFound);
-            assert!(storage.trash("").is_err(), "всё хранилище — нельзя");
+            assert!(storage.trash("").is_err(), "not the whole vault");
         }
-        assert!(disk.trash("../x").is_err(), "за пределы каталога — нельзя");
+        assert!(disk.trash("../x").is_err(), "nothing outside the directory");
         assert!(bin.path().join("Книга/01.typ").is_file());
         disk.create("a.typ", b"y").unwrap();
         disk.trash("a.typ").unwrap();
-        assert_eq!(fs::read(bin.path().join("a.typ")).unwrap(), b"x", "прежнее не перезаписано");
+        assert_eq!(fs::read(bin.path().join("a.typ")).unwrap(), b"x", "the earlier item is not overwritten");
         assert_eq!(fs::read(bin.path().join("a.typ (2)")).unwrap(), b"y");
     }
 
-    /// Ждать, пока `ok()` не станет истиной (события ОС приходят не сразу).
+    /// Waits until `ok()` becomes true (OS events do not come at once).
     fn eventually(ok: impl Fn() -> bool) -> bool {
         (0..200).any(|_| {
             ok() || {
@@ -656,27 +669,31 @@ mod tests {
         let disk = DirStorage::open(dir.path()).unwrap();
         let seen = Arc::new(Mutex::new(Vec::<Option<Vec<String>>>::new()));
         let sink_seen = seen.clone();
-        let guard = disk.watch(Arc::new(move |paths| sink_seen.lock().push(paths))).unwrap().expect("каталог умеет");
+        let guard =
+            disk.watch(Arc::new(move |paths| sink_seen.lock().push(paths))).unwrap().expect("a directory can watch");
         assert_eq!(disk.list().unwrap(), ["a.typ"]);
-        assert!(disk.listed.lock().files.is_some(), "список запомнен");
+        assert!(disk.listed.lock().files.is_some(), "the list is kept");
 
         fs::create_dir(dir.path().join("Сеть")).unwrap();
         fs::write(dir.path().join("Сеть/SSH.typ"), "ssh").unwrap();
         fs::create_dir(dir.path().join(".git")).unwrap();
         fs::write(dir.path().join(".git/x"), "").unwrap();
-        // Файл в только что созданной папке может прийти одним событием папки.
+        // A file in a just created folder may come as one event of the folder.
         assert!(eventually(|| seen.lock().iter().flatten().flatten().any(|p| p.starts_with("Сеть"))));
         fs::write(dir.path().join("a.typ"), "aa").unwrap();
         assert!(eventually(|| seen.lock().iter().flatten().flatten().any(|p| p == "a.typ")));
-        assert!(!seen.lock().iter().flatten().flatten().any(|p| p.starts_with(".git")), "служебное на . — не событие");
+        assert!(
+            !seen.lock().iter().flatten().flatten().any(|p| p.starts_with(".git")),
+            "internal . names are not events"
+        );
         let mut list = disk.list().unwrap();
         list.sort();
-        assert_eq!(list, ["a.typ", "Сеть/SSH.typ"], "изменение сбросило запомненный список");
+        assert_eq!(list, ["a.typ", "Сеть/SSH.typ"], "a change dropped the kept list");
 
         drop(guard);
         assert!(disk.listed.lock().files.is_none());
         disk.list().unwrap();
-        assert!(disk.listed.lock().files.is_none(), "без наблюдателя список не помнится");
+        assert!(disk.listed.lock().files.is_none(), "without a watcher the list is not kept");
     }
 
     #[test]

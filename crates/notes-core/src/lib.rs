@@ -1,32 +1,31 @@
-//! Ядро приложения заметок на Typst.
+//! The core of the Typst notes app.
 //!
-//! Всё, что не зависит от способа показа (браузер, Tauri, CLI):
+//! Everything that does not depend on how notes are shown (browser, Tauri, CLI):
 //!
-//! - [`vault`] — хранилище: какие файлы — заметки, какие — книги;
-//! - [`vaults`] — хранилища пользователя по именам (`<данные>/vaults/`);
-//! - [`folders`] — папки хранилища: название из `_folder.toml`;
-//! - [`world`] — компилятор Typst поверх хранилища (виртуальная библиотека
-//!   `/_baluk/`, шрифты, пакеты);
-//! - [`vault_data`] — данные хранилища для заметок `/_vault/…` (реестр
-//!   поставщиков: граф — [`vault_graph`]);
-//! - [`themes`] — темы оформления из `baluk/theme.typ` → CSS;
-//! - [`render`] — HTML-документы тем → одна страница; обработка —
-//!   цепочка проходов [`passes`] (склейка рисунков, якоря заголовков,
-//!   ссылки между заметками, …);
-//! - [`finish`] — проходы после кэша, под настройки: [`figures`] (рисунки);
-//! - [`book`] — книга по главам: страница одной главы;
-//! - [`storage`] — файлы хранилища за интерфейсом (каталог, в тестах — память);
-//! - [`version`] — версии заметок по файлам, стабильный хэш;
-//! - [`pipeline`] — сборка заметки: компиляция → отрисовка → рисунки;
-//! - [`page_cache`], [`cache`] — кэш страниц: память (LRU) и диск;
-//! - [`pages`] — страница по запросу поверх сборки и кэша;
-//! - [`warm`] — прогрев: всё собирается заранее, на диск;
-//! - [`notes`] — фасад ядра для сервера и CLI;
-//! - [`check`] — проверка хранилища или заметки: ошибки и битые ссылки;
-//! - [`new_note`] — заготовка новой заметки или книги (`notes new`);
-//! - [`settings`] — схема и хранение настроек клиента.
+//! - [`vault`]: the vault - which files are notes and which are books;
+//! - [`vaults`]: the user's vaults by name (`<data>/vaults/`);
+//! - [`folders`]: vault folders - the title from `_folder.toml`;
+//! - [`world`]: the Typst compiler over the vault (the virtual library
+//!   `/_baluk/`, fonts, packages);
+//! - [`vault_data`]: vault data for notes, `/_vault/...` (a registry of
+//!   providers: the graph is [`vault_graph`]);
+//! - [`themes`]: design themes from `baluk/theme.typ` -> CSS;
+//! - [`render`]: theme HTML documents -> one page; processing is a chain of
+//!   [`passes`] (joining figures, heading anchors, links between notes, ...);
+//! - [`finish`]: passes after the cache, by the settings: [`figures`];
+//! - [`book`]: a book by chapters - the page of one chapter;
+//! - [`storage`]: vault files behind an interface (a directory, memory in tests);
+//! - [`version`]: note versions by their files, a stable hash;
+//! - [`pipeline`]: building a note - compiling -> rendering -> figures;
+//! - [`page_cache`], [`cache`]: the page cache - memory (LRU) and disk;
+//! - [`pages`]: a page on request over the build and the cache;
+//! - [`warm`]: warming - everything is built ahead, to disk;
+//! - [`notes`]: the core facade for the server and the CLI;
+//! - [`check`]: checking a vault or a note - errors and broken links;
+//! - [`new_note`]: a template for a new note or book (`notes new`);
+//! - [`settings`]: the schema and storage of client settings.
 //!
-//! Решения и их причины — `docs/architecture.md`.
+//! Decisions and their reasons: `docs/architecture.md`.
 
 pub mod book;
 pub mod cache;
