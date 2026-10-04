@@ -8,15 +8,18 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, Can
  * панель. Телефону отскок и "потянуть - обновить" оставлены. */
 @media (pointer: fine) { :root { overscroll-behavior: none; } }
 
-.app { display: grid; grid-template-columns: 17rem 1fr; min-height: 100vh; }
-.app.sidebar-hidden { grid-template-columns: 0 1fr; }
+/* Боковая и верхняя панели - fixed, а не sticky: в окне (WebKitGTK) прокрутка
+ * идёт в своём потоке, sticky-панели при ней дрожат, fixed - нет. Колонка
+ * боковой панели в сетке - место под неё (--side-w), заметка - в последней. */
+.app { --side-w: 17rem; display: grid; grid-template-columns: var(--side-w) 1fr; min-height: 100vh; }
+.app.sidebar-hidden { --side-w: 0px; }
 .app.sidebar-hidden .sidebar { visibility: hidden; }
 
 /* ── Боковая панель ─────────────────────────────────────────────────── */
 /* Дерево прокручивается, хранилище — всегда внизу (как в Obsidian). */
 .sidebar {
-  position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; box-sizing: border-box;
-  border-right: 1px solid var(--k-line); background: var(--k-surface);
+  position: fixed; top: 0; left: 0; width: 17rem; height: 100vh; display: flex; flex-direction: column;
+  box-sizing: border-box; border-right: 1px solid var(--k-line); background: var(--k-surface);
 }
 .sidebar-foot {
   position: relative; flex: none; display: flex; align-items: center; gap: 0.2rem;
@@ -98,10 +101,10 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, Can
 .offline-chip:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
 
 /* ── Верхняя строка ─────────────────────────────────────────────────── */
-.main { min-width: 0; }
-/* Верхняя строка и вкладки - одна панель: общий фон и прокрутка, без щели. */
+.main { grid-column: -2; min-width: 0; padding-top: var(--chrome-h, 3rem); }
+/* Верхняя строка и вкладки - одна панель: общий фон, без щели. */
 .chrome {
-  position: sticky; top: 0; z-index: 5; border-bottom: 1px solid var(--k-line);
+  position: fixed; top: 0; left: var(--side-w); right: 0; z-index: 5; border-bottom: 1px solid var(--k-line);
   background: color-mix(in srgb, var(--k-bg) 88%, transparent); backdrop-filter: blur(6px);
 }
 .topbar { display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.6rem; }
@@ -394,8 +397,8 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 /* ── Телефон: панель поверх заметки ─────────────────────────────────── */
 .backdrop { display: none; }
 @media (max-width: 800px) {
-  .app, .app.sidebar-hidden { grid-template-columns: 1fr; }
-  .sidebar { position: fixed; z-index: 20; left: 0; top: 0; width: min(20rem, 85vw); transition: transform 0.15s; }
+  .app, .app.sidebar-hidden { --side-w: 0px; grid-template-columns: 1fr; }
+  .sidebar { z-index: 20; width: min(20rem, 85vw); transition: transform 0.15s; }
   .app:not(.sidebar-open) .sidebar { transform: translateX(-100%); }
   .app.sidebar-open .backdrop { display: block; position: fixed; inset: 0; z-index: 15; background: rgb(0 0 0 / 0.4); }
   .status { display: none; }
@@ -510,7 +513,7 @@ kbd {
 
 /* ── Режим чтения: только текст ─────────────────────────────────────── */
 /* Панель скрыта (display: none) — колонка заметки одна: иначе она встала бы в нулевую. */
-.app.reading { grid-template-columns: 1fr; }
+.app.reading { --side-w: 0px; grid-template-columns: 1fr; }
 .app.reading .sidebar, .app.reading .tabbar, .app.reading .toc:not(.open) { display: none !important; }
 .app.reading .chrome { opacity: 0; transition: opacity 0.2s; }
 .app.reading .chrome:hover, .app.reading .chrome:focus-within { opacity: 1; }

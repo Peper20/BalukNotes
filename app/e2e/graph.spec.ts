@@ -124,7 +124,7 @@ test("граф хранилища в заметке: живой поверх к�
   await expect(page).toHaveURL(noteUrl("Сеть/UFW"));
 });
 
-test("граф в заметке: узел тянет соседей и не уходит за рамку рисунка", async ({ page }) => {
+test("граф в заметке: узел тянет соседей, не уходит за рамку рисунка и не выделяет текст за ней", async ({ page }) => {
   await open(page, "Рисунки/Граф хранилища");
   const svg = page.locator(".k-graph .graph-svg").first();
   await expect(svg).toBeVisible();
@@ -148,6 +148,7 @@ test("граф в заметке: узел тянет соседей и не у�
   await page.mouse.move(c.x + 2000, c.y + 1500, { steps: 20 });
   await expect.poll(() => at(neighbour)).not.toBe(before); // сосед потянулся
   await inside();
+  expect(await page.evaluate(() => getSelection()?.toString() ?? "")).toBe(""); // указатель за рамкой
   await page.mouse.up();
   await page.waitForTimeout(1500); // осели
   await inside();

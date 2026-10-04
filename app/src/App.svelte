@@ -39,7 +39,10 @@
   $effect(() => settings.apply(document.documentElement));
 
   // Высота верхней панели (строка + вкладки) - для отступов якорей и оглавления.
-  let chromeHeight = $state(0);
+  // Дробная (borderBoxSize, а не offsetHeight): панель - fixed, под неё отступ
+  // заметки, округление сдвинуло бы заметку на пиксель.
+  let chromeBox: ResizeObserverSize[] | undefined = $state();
+  const chromeHeight = $derived(chromeBox?.[0]?.blockSize ?? 0);
   $effect(() => document.documentElement.style.setProperty("--chrome-h", `${chromeHeight}px`));
 
   // Место чтения — по ходу прокрутки (к «назад» запись истории уже другая).
@@ -111,7 +114,7 @@
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <div class="backdrop" onclick={() => (ui.sidebarOpen = false)}></div>
     <div class="main">
-      <div class="chrome" bind:offsetHeight={chromeHeight}>
+      <div class="chrome" bind:borderBoxSize={chromeBox}>
         <Topbar />
         <TabBar />
       </div>

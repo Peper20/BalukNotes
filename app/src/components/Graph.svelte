@@ -257,6 +257,8 @@
     } catch {
       return; // указателя уже нет — жеста не будет
     }
+    // Жест - графу: мышь, ушедшая за его край, не выделяет текст страницы.
+    if (e.pointerType !== "touch") e.preventDefault();
     let node = null;
     if (id) {
       const [x, y] = pos(id);
