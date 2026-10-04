@@ -2,15 +2,15 @@
 import type { Chapter } from "./Chapter";
 
 /**
- * Какая глава показана и где остальные.
+ * Which chapter is shown and where the others are.
  */
 export type BookView = { 
 /**
- * Номер показанной главы (с нуля).
+ * The number of the shown chapter (from zero).
  */
 chapter: number, chapters: Array<Chapter>, 
 /**
- * Якорь (`id` или `data-k-anchor`) → номер главы. `id` уникальны; из
- * одинаковых `data-k-anchor` («Итоги» в каждой главе) — первый.
+ * Anchor (`id` or `data-k-anchor`) -> chapter number. `id`s are unique; of
+ * equal `data-k-anchor`s ("Summary" in every chapter) the first one wins.
  */
 anchors: { [key in string]: number }, };

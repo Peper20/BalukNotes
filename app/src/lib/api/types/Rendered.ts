@@ -4,10 +4,10 @@ import type { LinkRef } from "./LinkRef";
 
 export type Rendered = { title: string | null, 
 /**
- * `<style>` из `<head>` (стили MathML от Typst).
+ * `<style>` from `<head>` (MathML styles from Typst).
  */
 styles: string, 
 /**
- * Содержимое `<body>`.
+ * The contents of `<body>`.
  */
 body: string, headings: Array<Heading>, links: Array<LinkRef>, tags: Array<string>, };

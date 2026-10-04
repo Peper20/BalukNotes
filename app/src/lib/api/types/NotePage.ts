@@ -6,21 +6,21 @@ import type { NoteKind } from "./NoteKind";
 import type { Rendered } from "./Rendered";
 
 /**
- * Заметка, готовая к показу.
+ * A note ready to be shown.
  */
 export type NotePage = { id: NoteId, kind: NoteKind, 
 /**
- * Версия файлов заметки и настроек отрисовки.
+ * The version of the note files and rendering settings.
  */
 version: string, 
 /**
- * Последняя удачная отрисовка. При ошибке компиляции — предыдущая
- * удачная (если была): читатель видит заметку и ошибку поверх неё.
+ * The last good rendering. On a compile error, the previous good one (if
+ * any): the reader sees the note with the error over it.
  */
 rendered: Rendered | null, errors: Array<Diagnostic>, warnings: Array<Diagnostic>, 
 /**
- * Книга по главам: какая глава в `rendered` и где остальные. Только у
- * ответа на запрос главы ([`crate::book::chapter_page`]); у страницы
- * целиком — `None`.
+ * A book by chapters: which chapter is in `rendered` and where the others
+ * are. Only in the answer to a chapter request ([`crate::book::chapter_page`]);
+ * `None` for a whole page.
  */
 book: BookView | null, };
