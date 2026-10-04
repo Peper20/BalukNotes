@@ -27,11 +27,10 @@ pub async fn forward(socket: &Path, request: Request<Vec<u8>>) -> Response<Vec<u
         Err(e) => {
             tracing::warn!("ядро не ответило: {e}");
             let body = serde_json::json!({ "error": format!("ядро не отвечает: {e}"), "errors": [] });
-            Response::builder()
-                .status(StatusCode::BAD_GATEWAY)
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(body.to_string().into_bytes())
-                .expect("ответ")
+            let mut response = Response::new(body.to_string().into_bytes());
+            *response.status_mut() = StatusCode::BAD_GATEWAY;
+            response.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+            response
         }
     }
 }

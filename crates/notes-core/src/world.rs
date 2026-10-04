@@ -17,8 +17,10 @@
 //! Файлы кэширует [`FileStore`]: при повторной компиляции разбор идёт
 //! инкрементально, а список прочитанных файлов даёт версию заметки.
 
+use std::any::Any;
 use std::collections::HashMap;
 use std::fs;
+use std::panic::AssertUnwindSafe;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -282,12 +284,14 @@ struct StoreGuard<'a> {
 
 impl std::ops::Deref for StoreGuard<'_> {
     type Target = FileStore<Loader>;
+    #[expect(clippy::expect_used, reason = "`store` is `None` only inside `drop`")]
     fn deref(&self) -> &Self::Target {
         self.store.as_ref().expect("до сброса")
     }
 }
 
 impl std::ops::DerefMut for StoreGuard<'_> {
+    #[expect(clippy::expect_used, reason = "`store` is `None` only inside `drop`")]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.store.as_mut().expect("до сброса")
     }
@@ -431,7 +435,7 @@ impl Compiler {
                     themes.iter().map(compile).collect()
                 })],
             };
-            handles.into_iter().flat_map(|h| h.join().expect("компиляция темы не паникует")).collect()
+            handles.into_iter().flat_map(|h| joined(h.join())).collect()
         });
 
         let mut docs = Vec::with_capacity(themes.len());
@@ -480,8 +484,11 @@ impl Compiler {
         let to_diags = |errs: &[typst::diag::SourceDiagnostic]| -> Vec<Diagnostic> {
             errs.iter().map(|e| Diagnostic::from_typst(&world, e)).collect()
         };
-        let doc = typst::compile::<PagedDocument>(&world).output.map_err(|e| to_diags(&e))?;
-        let pdf = typst_pdf::pdf(&doc, &typst_pdf::PdfOptions::default()).map_err(|e| to_diags(&e));
+        let built = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            let doc = typst::compile::<PagedDocument>(&world).output.map_err(|e| to_diags(&e))?;
+            typst_pdf::pdf(&doc, &typst_pdf::PdfOptions::default()).map_err(|e| to_diags(&e))
+        }));
+        let pdf = built.unwrap_or_else(|panic| Err(vec![panic_error(&*panic)]));
         drop(files);
         self.evict();
         pdf
@@ -505,6 +512,7 @@ impl Compiler {
 const COMPILE_STACK: usize = 64 << 20;
 
 /// Поток компиляции (большой стек).
+#[expect(clippy::expect_used, reason = "the OS refuses a thread only when out of resources")]
 fn spawn_compile<'scope, T: Send + 'scope>(
     scope: &'scope std::thread::Scope<'scope, '_>,
     name: String,
@@ -531,6 +539,24 @@ struct ThemeResult {
     theme: String,
     doc: Result<HtmlDocument, Vec<Diagnostic>>,
     warnings: Vec<Diagnostic>,
+}
+
+/// Results of a compile thread; a panic in Typst (a bug in it or in a
+/// package) becomes a build error of the note instead of taking the server down.
+fn joined(results: std::thread::Result<Vec<ThemeResult>>) -> Vec<ThemeResult> {
+    results.unwrap_or_else(|panic| {
+        vec![ThemeResult { theme: String::new(), doc: Err(vec![panic_error(&*panic)]), warnings: Vec::new() }]
+    })
+}
+
+/// The build error for a panic caught during a compilation.
+fn panic_error(panic: &(dyn Any + Send)) -> Diagnostic {
+    let reason = panic
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("no message");
+    Diagnostic::error(format!("Typst crashed while compiling the note: {reason}"))
 }
 
 fn compile_theme(world: &CompileWorld, theme: &str) -> ThemeResult {
@@ -600,5 +626,20 @@ mod tests {
         assert_eq!(vault_relative(&v("/_vault/graph/x.json")).as_deref(), Some("graph/x.json"));
         assert_eq!(vault_relative(&v("/_vault2/x")), None);
         assert_eq!(vault_relative(&v("/Сеть/SSH.typ")), None);
+    }
+
+    #[test]
+    fn panic_is_build_error() {
+        let message = |panic: Box<dyn Any + Send>| {
+            let results = joined(Err(panic));
+            let [ThemeResult { doc: Err(errors), .. }] = results.as_slice() else { panic!("one failed result") };
+            errors.iter().map(|e| e.message.clone()).collect::<Vec<_>>()
+        };
+        assert_eq!(
+            message(Box::new("index out of bounds")),
+            ["Typst crashed while compiling the note: index out of bounds"]
+        );
+        assert_eq!(message(Box::new(String::from("boom"))), ["Typst crashed while compiling the note: boom"]);
+        assert_eq!(message(Box::new(42)), ["Typst crashed while compiling the note: no message"]);
     }
 }

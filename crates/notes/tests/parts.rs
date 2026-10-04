@@ -1,6 +1,7 @@
 //! `notes` вызывает часть из своей папки: копия бинарника во временной папке
 //! и поддельная часть - сценарий оболочки.
 #![cfg(unix)]
+#![allow(clippy::unwrap_used, clippy::expect_used, reason = "test helpers fail the test by panicking")]
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};

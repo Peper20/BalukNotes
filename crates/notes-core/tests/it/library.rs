@@ -416,7 +416,7 @@ fn skill_size_within_budget() {
         recorded.lines().find_map(|l| l.strip_suffix(" всего")).and_then(|n| n.parse().ok()).expect(
             "нет tests/snapshots/skill-size.txt — UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library::",
         );
-    #[allow(clippy::cast_precision_loss, reason = "размер текста — тысячи знаков, точность f64 с запасом")]
+    #[expect(clippy::cast_precision_loss, reason = "the text is thousands of tokens, well within f64 precision")]
     let over = total as f64 > budget as f64 * GROWTH;
     assert!(
         !over,

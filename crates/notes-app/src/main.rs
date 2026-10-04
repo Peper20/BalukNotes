@@ -130,7 +130,13 @@ fn open_pdf(socket: Arc<PathBuf>, url: Url) {
             .and_then(|mut s| s.next_back())
             .map(|s| percent_encoding::percent_decode_str(s).decode_utf8_lossy().into_owned())
             .unwrap_or_default();
-        let request = tauri::http::Request::get(url.as_str()).body(Vec::new()).expect("запрос");
+        let request = match tauri::http::Request::get(url.as_str()).body(Vec::new()) {
+            Ok(request) => request,
+            Err(e) => {
+                tracing::warn!("PDF «{name}»: bad address {url}: {e}");
+                return;
+            }
+        };
         let response = proxy::forward(&socket, request).await;
         if !response.status().is_success() {
             let body = String::from_utf8_lossy(response.body());

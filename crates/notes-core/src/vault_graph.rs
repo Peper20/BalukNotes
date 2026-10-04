@@ -219,7 +219,7 @@ pub struct NodeBox {
 }
 
 /// Ширина подписи — по числу знаков (без замера шрифтом: раскладка одна везде).
-#[allow(clippy::cast_precision_loss, reason = "число знаков подписи — десятки")]
+#[expect(clippy::cast_precision_loss, reason = "a label has tens of characters")]
 pub fn label_width(text: &str, size: f64) -> f64 {
     text.chars().count() as f64 * size * 0.58
 }
@@ -372,7 +372,7 @@ fn layout_forces(
 
 /// Середины групп: `middles[g]` - центр масс узлов группы `g`, радиус
 /// круга площадью [`AREA`] на её узел и число узлов.
-#[allow(clippy::cast_precision_loss, reason = "узлов - тысячи")]
+#[expect(clippy::cast_precision_loss, reason = "thousands of nodes")]
 fn group_middles(pos: &[(f64, f64)], groups: &[usize], middles: &mut Vec<(f64, f64, f64, f64)>) {
     let count = groups.iter().max().map_or(0, |g| g + 1);
     let mut sum = vec![(0.0, 0.0, 0usize); count];
@@ -392,7 +392,7 @@ fn group_middles(pos: &[(f64, f64)], groups: &[usize], middles: &mut Vec<(f64, f
 /// [`AREA`] на узел. Узлы идут по путям (`Graph` упорядочен по имени), а
 /// отрезок кривой — компактное пятно: папки начинают кучками, а не
 /// вперемешку, и шагов нужно немного.
-#[allow(clippy::cast_precision_loss, reason = "узлов — тысячи")]
+#[expect(clippy::cast_precision_loss, reason = "thousands of nodes")]
 fn initial_positions(n: usize) -> Vec<(f64, f64)> {
     let mut side = 1;
     while side * side < n {
@@ -493,7 +493,7 @@ impl QuadTree {
 
     /// Разбить клетку `c` с левым верхним углом `(x0, y0)` и посчитать её
     /// центр масс.
-    #[allow(clippy::cast_precision_loss, reason = "узлов — тысячи")]
+    #[expect(clippy::cast_precision_loss, reason = "thousands of nodes")]
     fn split(&mut self, c: usize, x0: f64, y0: f64, depth: usize) {
         let Cell { size, from, to, .. } = self.cells[c];
         if to - from > 1 && depth < MAX_DEPTH {
@@ -604,7 +604,7 @@ impl Grid {
         grid
     }
 
-    #[allow(clippy::cast_possible_truncation, reason = "координаты раскладки — тысячи единиц")]
+    #[expect(clippy::cast_possible_truncation, reason = "layout coordinates are thousands of units")]
     fn cell(&self, (x, y): (f64, f64)) -> (i64, i64) {
         ((x / self.w).floor() as i64, (y / self.h).floor() as i64)
     }
@@ -724,7 +724,7 @@ pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>, forces:
         .zip(&degree)
         .map(|(n, &d)| {
             let book = n.kind == Some(NoteKind::Book) && n.chapter.is_none();
-            #[allow(clippy::cast_precision_loss, reason = "не больше 8")]
+            #[expect(clippy::cast_precision_loss, reason = "at most 8")]
             let grown = |base: f64| base + d.min(8) as f64 * 0.7;
             // Глава - меньше любой заметки: она часть книги, а не отдельная заметка.
             let r = if n.chapter.is_some() {
@@ -833,8 +833,7 @@ impl Layouts {
         };
         {
             let mut entries = self.entries.lock();
-            if let Some(k) = entries.iter().position(|(h, _)| *h == key) {
-                let hit = entries.remove(k).expect("есть");
+            if let Some(hit) = entries.iter().position(|(h, _)| *h == key).and_then(|k| entries.remove(k)) {
                 entries.push_front(hit.clone());
                 return hit.1;
             }
@@ -905,7 +904,7 @@ mod tests {
         isolated_radius: f64,
     }
 
-    #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap, clippy::cast_precision_loss)]
+    #[expect(clippy::cast_precision_loss, reason = "a synthetic graph of thousands of nodes")]
     fn synthetic_graph(n: usize) -> BenchGraph {
         let groups_count = (n / 120).clamp(4, 40);
         let mut groups = vec![0usize; n];
@@ -971,7 +970,7 @@ mod tests {
         BenchGraph { links, boxes, groups, degree }
     }
 
-    #[allow(clippy::cast_precision_loss, reason = "узлов тысячи, метрики дробные")]
+    #[expect(clippy::cast_precision_loss, reason = "thousands of nodes, fractional metrics")]
     fn quality(pos: &[(f64, f64)], graph: &BenchGraph) -> Quality {
         let edge_len: Vec<f64> =
             graph.links.iter().map(|&(a, b)| (pos[a].0 - pos[b].0).hypot(pos[a].1 - pos[b].1)).collect();

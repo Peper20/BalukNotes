@@ -50,14 +50,15 @@ pub const RESCAN_UNWATCHED: Duration = Duration::from_secs(60);
 
 /// Что прогревать (настройка устройства).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
 pub enum WarmMode {
     /// Всё хранилище (компьютер).
     #[default]
-    All,
+    All = 0,
     /// Только подсказанное клиентом: заметки во вкладках, недавние.
-    Open,
+    Open = 1,
     /// Ничего: заметки собираются, когда их открыли (телефон).
-    Off,
+    Off = 2,
 }
 
 impl WarmMode {
@@ -74,6 +75,11 @@ impl WarmMode {
 
     pub fn from_key(key: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|m| m.key() == key)
+    }
+
+    /// The mode stored in [`Warmer`] as its discriminant; an unknown value is the default.
+    fn from_u8(value: u8) -> Self {
+        Self::ALL.into_iter().find(|m| *m as u8 == value).unwrap_or_default()
     }
 }
 
@@ -93,7 +99,7 @@ pub fn should_release(stats: WarmStats, last: Option<Instant>, now: Instant) -> 
 #[derive(Debug, Default)]
 pub struct Warmer {
     hints: Mutex<Vec<NoteId>>,
-    /// [`WarmMode`] по номеру в [`WarmMode::ALL`].
+    /// [`WarmMode`] as its discriminant.
     mode: AtomicU8,
     /// Растёт с каждой подсказкой: проход начинается заново.
     generation: AtomicU64,
@@ -143,14 +149,13 @@ impl Warmer {
     }
 
     pub fn mode(&self) -> WarmMode {
-        WarmMode::ALL[usize::from(self.mode.load(Ordering::SeqCst))]
+        WarmMode::from_u8(self.mode.load(Ordering::SeqCst))
     }
 
     /// Сменить режим; изменился — пройти заново.
     pub fn set_mode(&self, mode: WarmMode) {
-        let index = WarmMode::ALL.iter().position(|m| *m == mode).expect("режим из списка");
-        let index = u8::try_from(index).expect("режимов немного");
-        if self.mode.swap(index, Ordering::SeqCst) != index {
+        let value = mode as u8;
+        if self.mode.swap(value, Ordering::SeqCst) != value {
             self.poke();
         }
     }

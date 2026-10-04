@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::path::Path;
 use std::sync::Arc;
 
 use notes_core::LibrarySource;
@@ -217,9 +216,4 @@ impl LinkResolver for VaultLinks<'_> {
         let fragment = anchor.map(|a| format!("#{}", encode(&notes_core::render::slug(a)))).unwrap_or_default();
         Some(format!("/n/{}{fragment}", encode(id.as_str())))
     }
-}
-
-#[allow(dead_code)]
-fn _exists(path: &Path) -> bool {
-    path.exists()
 }

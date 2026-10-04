@@ -530,17 +530,17 @@ impl Storage for MemStorage {
 
     fn rename(&self, from: &str, to: &str) -> io::Result<()> {
         let prefix = format!("{from}/");
+        let is_moved = |p: &String| *p == from || p.starts_with(&prefix);
         let mut f = self.files.lock();
-        let moved: Vec<String> = f.files.keys().filter(|p| *p == from || p.starts_with(&prefix)).cloned().collect();
-        if moved.is_empty() || from.is_empty() || to.is_empty() {
+        if from.is_empty() || to.is_empty() || !f.files.keys().any(is_moved) {
             return Err(io::Error::new(io::ErrorKind::NotFound, format!("нет файла {from}")));
         }
         let to_prefix = format!("{to}/");
         if from != to && f.files.keys().any(|p| p == to || p.starts_with(&to_prefix)) {
             return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("уже есть: {to}")));
         }
-        for old in moved {
-            let data = f.files.remove(&old).expect("есть в списке");
+        let moved: Vec<_> = f.files.extract_if(.., |p, _| is_moved(p)).collect();
+        for (old, data) in moved {
             f.files.insert(format!("{to}{}", &old[from.len()..]), data);
         }
         drop(f);

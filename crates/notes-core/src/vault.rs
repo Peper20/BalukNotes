@@ -214,7 +214,9 @@ impl Vault {
         match entry.kind {
             NoteKind::Note => Ok(vec![main]),
             NoteKind::Book => {
-                let dir = main.strip_suffix(BOOK_MAIN).expect("main.typ книги лежит в её папке");
+                // A book's main file is `<id>/main.typ` (see `entry`): its sources are under `<id>/`.
+                let dir = format!("{}/", entry.id);
+                let dir = dir.as_str();
                 let files = self.storage.list().map_err(|e| self.io_error(dir, e))?;
                 let mut out: Vec<String> = files.into_iter().filter(|f| f.starts_with(dir) && is_typ(f)).collect();
                 out.sort_by(|a, b| Path::new(a).cmp(Path::new(b)));

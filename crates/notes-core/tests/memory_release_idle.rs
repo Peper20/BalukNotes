@@ -2,6 +2,8 @@
 //!
 //! Запуск вручную: `cargo test -p notes-core --features measure --test memory_release_idle --release -- --ignored --nocapture`.
 
+#![allow(clippy::unwrap_used, clippy::expect_used, reason = "test helpers fail the test by panicking")]
+
 use std::fs;
 use std::time::Duration;
 
