@@ -44,8 +44,8 @@ scratchpad или `tests/.data/`, не в репозиторий; PNG откры
 ```sh
 tools/test-env.sh [--fresh] &          # сервер на tests/vault, порт 8432
 tools/visual.mjs [--only Книга]         # фикстуры x (светлая, тёмная, узкий) -> tests/.data/visual/index.html
-tools/shot.mjs "http://127.0.0.1:8432/n/демо/компоненты" out.png [--dark] [--size 400x800] [--full]
-tools/shot.mjs URL out.png --print 'scrollY'     # замер в странице
+tools/shot.mjs "http://127.0.0.1:8432/v/vault/n/демо/компоненты" out.png [--dark] [--size 400x800] [--full]
+tools/shot.mjs URL out.png --print 'document.getElementById("page").scrollTop'  # замер в странице (прокручивается колонка #page)
 ```
 
 - `chromium --screenshot` не использовать: он рисует страницу с нуля без

@@ -209,12 +209,12 @@ test("изменение файла подхватывается по ⟳ без
     await ready(page);
     await page.mouse.move(700, 400); // над заметкой, а не над деревом (оно прокручивается само)
     await page.mouse.wheel(0, 800);
-    await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(300);
-    const y = await page.evaluate(() => scrollY);
+    await expect.poll(() => page.evaluate(() => document.getElementById("page")!.scrollTop)).toBeGreaterThan(300);
+    const y = await page.evaluate(() => document.getElementById("page")!.scrollTop);
     writeFileSync(file, text(2));
     await page.locator("#refresh").click();
     await expect(page.locator("#note")).toContainText("Версия 2.");
-    expect(Math.abs((await page.evaluate(() => scrollY)) - y)).toBeLessThan(5);
+    expect(Math.abs((await page.evaluate(() => document.getElementById("page")!.scrollTop)) - y)).toBeLessThan(5);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

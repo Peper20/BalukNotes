@@ -13,6 +13,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 notes.workspace = true
 tauri = { version = "2", features = [] }
+# The window opens maximized or fullscreen if it was so when closed.
+tauri-plugin-window-state = "2"
 tokio = { workspace = true, features = ["net", "fs", "signal", "macros"] }
 hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
@@ -22,6 +24,8 @@ percent-encoding = "2"
 serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+# The window's WebKit process is killed before exit (`main.rs`, `quit`).
+webkit2gtk = "2"
 
 [lints]
 workspace = true

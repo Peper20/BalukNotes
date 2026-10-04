@@ -38,8 +38,9 @@
 
   $effect(() => settings.apply(document.documentElement));
 
-  // Высота верхней панели (строка + вкладки) - для отступов якорей и оглавления.
-  let chromeHeight = $state(0);
+  // Высота верхней панели (строка + вкладки) - для места оглавления под ней.
+  let chromeBox: ResizeObserverSize[] | undefined = $state();
+  const chromeHeight = $derived(chromeBox?.[0]?.blockSize ?? 0);
   $effect(() => document.documentElement.style.setProperty("--chrome-h", `${chromeHeight}px`));
 
   // Место чтения — по ходу прокрутки (к «назад» запись истории уже другая).
@@ -94,7 +95,7 @@
 </script>
 
 <svelte:document onclick={onClick} onauxclick={onClick} />
-<svelte:window onkeydown={onKeydown} onscroll={onScroll} />
+<svelte:window onkeydown={onKeydown} />
 
 {#if fatal}
   <p class="fatal">Не удалось запустить клиент: {fatal}. <a href="/">Выбрать хранилище</a></p>
@@ -111,10 +112,12 @@
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <div class="backdrop" onclick={() => (ui.sidebarOpen = false)}></div>
     <div class="main">
-      <div class="chrome" bind:offsetHeight={chromeHeight}>
+      <div class="chrome" bind:borderBoxSize={chromeBox}>
         <Topbar />
         <TabBar />
       </div>
+      <!-- Прокручивается колонка, а не документ (lib/scroll.ts). -->
+      <div class="page" id="page" tabindex="-1" onscroll={onScroll}>
       {#if router.route.kind === "note"}
         {#if reader.page}<Problems page={reader.page} />{/if}
         <NoteView />
@@ -130,6 +133,7 @@
       {:else if started}
         <Home />
       {/if}
+      </div>
     </div>
   </div>
   <Settings />

@@ -14,7 +14,13 @@ use std::process::ExitCode;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use tauri::webview::NewWindowResponse;
-use tauri::{RunEvent, Url, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+use webkit2gtk::WebViewExt;
+
+/// What the window keeps between launches: maximized or fullscreen, not size
+/// or position.
+const WINDOW_STATE: StateFlags = StateFlags::MAXIMIZED.union(StateFlags::FULLSCREEN);
 
 /// Схема адресов окна.
 const SCHEME: &str = "notes";
@@ -54,9 +60,16 @@ fn main() -> ExitCode {
 fn run(socket: Arc<PathBuf>, core: core::Core) -> tauri::Result<()> {
     let scheme_socket = socket.clone();
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_window_state::Builder::new().with_state_flags(WINDOW_STATE).build())
         .register_asynchronous_uri_scheme_protocol(SCHEME, move |_ctx, request, responder| {
             let socket = scheme_socket.clone();
             tauri::async_runtime::spawn(async move { responder.respond(proxy::forward(&socket, request).await) });
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                quit(window.app_handle());
+            }
         })
         .setup(move |app| {
             // SIGTERM и Ctrl+C - штатный выход (своё ядро останавливается), а не
@@ -64,7 +77,7 @@ fn run(socket: Arc<PathBuf>, core: core::Core) -> tauri::Result<()> {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 stop_signal().await;
-                handle.exit(0);
+                quit(&handle);
             });
             // `NOTES_APP_START=/v/<хранилище>/n/<заметка>` - открыть с неё (проверка, отладка).
             let path = std::env::var("NOTES_APP_START").unwrap_or_default();
@@ -93,6 +106,30 @@ fn run(socket: Arc<PathBuf>, core: core::Core) -> tauri::Result<()> {
         }
     });
     Ok(())
+}
+
+/// Quits the app, killing the window's WebKit process first (WebKit sends it
+/// SIGKILL). Left to exit by itself, that process runs `exit()` while its render
+/// threads are still inside EGL and sometimes crashes in the libEGL destructor
+/// (hybrid graphics with NVIDIA, `docs/tech-debt.md`). The client saves its
+/// state as it goes, so nothing waits for `pagehide`.
+fn quit(app: &AppHandle) {
+    if let Err(e) = app.save_window_state(WINDOW_STATE) {
+        tracing::warn!("window state not saved: {e}");
+    }
+    let Some(window) = app.get_webview_window("main") else {
+        app.exit(0);
+        return;
+    };
+    let handle = app.clone();
+    let queued = window.with_webview(move |webview| {
+        webview.inner().terminate_web_process();
+        handle.exit(0);
+    });
+    if let Err(e) = queued {
+        tracing::warn!("WebKit process not stopped before exit: {e}");
+        app.exit(0);
+    }
 }
 
 async fn stop_signal() {

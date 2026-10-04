@@ -13,6 +13,7 @@
   import { ui } from "../lib/ui.svelte";
   import { inVault } from "../lib/vault";
   import Loading from "./Loading.svelte";
+  import { scroller, scrollToTop } from "../lib/scroll";
 
   let content: HTMLDivElement | undefined = $state();
   let seenAnchorSeq = 0;
@@ -40,7 +41,7 @@
       reader.restore = null;
       const chapter = place?.chapter ?? 0;
       if (ui.book && chapter !== ui.chapter) reader.showChapter(chapter, { mode: "keep", y: place?.y ?? 0, chapter });
-      else scrollTo(0, place?.y ?? 0);
+      else scrollToTop(place?.y ?? 0);
     });
   });
 
@@ -62,9 +63,11 @@
     ui.book = page.book;
     ui.chapter = page.book?.chapter ?? 0;
     reader.chapter = page.book ? page.book.chapter : null;
-    if (intent.mode === "keep") scrollTo(0, intent.y);
+    if (intent.mode === "keep") scrollToTop(intent.y);
     else if (intent.mode === "anchor" && scrollToAnchor(router.anchor)) holdAnchor(page.id);
-    else scrollTo(0, 0);
+    else scrollToTop(0);
+    // Клавиши прокрутки (пробел, PgDn) - колонке заметки, если фокус не в поле ввода.
+    if (!document.activeElement?.closest("input, select, textarea, [contenteditable], dialog")) scroller().focus({ preventScroll: true });
     document.documentElement.dataset.state = "ready";
   }
 

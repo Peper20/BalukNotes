@@ -8,6 +8,7 @@
   import { reader, settings } from "../lib/state";
   import { ui } from "../lib/ui.svelte";
   import BookInfo from "./BookInfo.svelte";
+  import { atBottom, scroller } from "../lib/scroll";
 
   let nav: HTMLElement | undefined = $state();
 
@@ -18,7 +19,7 @@
     const visible = shown.map((h) => document.getElementById(h.id)).filter((el): el is HTMLElement => el?.isConnected ?? false);
     let current: HTMLElement | undefined;
     // Докрутили до конца — последние разделы до верха окна не доедут.
-    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 2) current = visible.at(-1);
+    if (atBottom()) current = visible.at(-1);
     else {
       const top = (document.querySelector(".chrome")?.getBoundingClientRect().bottom ?? 50) + 40;
       for (const el of visible) {
@@ -57,12 +58,13 @@
         markCurrent();
       });
     };
-    addEventListener("scroll", onScroll, { passive: true });
+    const page = scroller();
+    page.addEventListener("scroll", onScroll, { passive: true });
     const main = document.querySelector(".main");
     const ro = new ResizeObserver(layout);
     if (main) ro.observe(main);
     return () => {
-      removeEventListener("scroll", onScroll);
+      page.removeEventListener("scroll", onScroll);
       ro.disconnect();
     };
   });

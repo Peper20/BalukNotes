@@ -5,6 +5,7 @@
 // ждут tools/visual.mjs и e2e-тесты — договорённость для любого клиента.
 
 import { api, ApiError, type NotePage } from "../api";
+import { scrollToTop, scrollTop } from "../scroll";
 import { ChapterCache } from "../chapters";
 import type { Place } from "../places";
 import { chapterSelect, scrollIntent, tocItems, type ScrollIntent } from "../reading";
@@ -88,7 +89,7 @@ class Reader {
       setTimeout(() => {
         if (this.#ctrl !== ctrl || this.page !== old) return;
         this.page = null;
-        scrollTo(0, 0);
+        scrollToTop(0);
       }, STALE_MS);
     }
     this.failure = null;
@@ -113,7 +114,7 @@ class Reader {
       if (this.#ctrl !== ctrl) return;
       const updated = toChapter && shown != null && page.version !== shown;
       this.version = page.version;
-      this.scroll = scrollIntent(scroll, { ...where, y: scrollY });
+      this.scroll = scrollIntent(scroll, { ...where, y: scrollTop() });
       this.page = page;
       this.#chapters.shown(page);
       places.visited(id);
@@ -162,7 +163,7 @@ class Reader {
    */
   remember(): void {
     if (!this.page || this.page.id !== router.currentId) return;
-    const place: Place = { y: Math.round(scrollY), chapter: this.chapter };
+    const place: Place = { y: Math.round(scrollTop()), chapter: this.chapter };
     history.replaceState({ ...(history.state as object | null), ...place }, "");
     places.remember(this.page.id, place);
   }

@@ -202,7 +202,7 @@ test("память места: назад и повторное открытие
       return "";
     });
   await open(page, "демо/компоненты");
-  await page.evaluate(() => scrollTo(0, 1500));
+  await page.evaluate(() => document.getElementById("page")!.scrollTo(0, 1500));
   await page.waitForTimeout(400); // место запоминается по ходу прокрутки
   const before = await topText();
   expect(before).not.toBe("");

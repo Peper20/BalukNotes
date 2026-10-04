@@ -6,16 +6,18 @@
 body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, CanvasText); background: var(--k-bg, Canvas); }
 /* Без отскока страницы на краю (тачпад в WebKitGTK): с ним дрожит боковая
  * панель. Телефону отскок и "потянуть - обновить" оставлены. */
-@media (pointer: fine) { :root { overscroll-behavior: none; } }
+@media (pointer: fine) { :root, .page { overscroll-behavior: none; } }
 
-.app { display: grid; grid-template-columns: 17rem 1fr; min-height: 100vh; }
+/* Документ не прокручивается: окно делят боковая панель и колонка (верхняя
+ * панель + прокручиваемая страница `.page`, lib/scroll.ts). */
+.app { display: grid; grid-template-columns: 17rem 1fr; height: 100vh; overflow: hidden; }
 .app.sidebar-hidden { grid-template-columns: 0 1fr; }
 .app.sidebar-hidden .sidebar { visibility: hidden; }
 
 /* ── Боковая панель ─────────────────────────────────────────────────── */
 /* Дерево прокручивается, хранилище — всегда внизу (как в Obsidian). */
 .sidebar {
-  position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; box-sizing: border-box;
+  height: 100vh; display: flex; flex-direction: column; box-sizing: border-box;
   border-right: 1px solid var(--k-line); background: var(--k-surface);
 }
 .sidebar-foot {
@@ -98,10 +100,12 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, Can
 .offline-chip:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
 
 /* ── Верхняя строка ─────────────────────────────────────────────────── */
-.main { min-width: 0; }
-/* Верхняя строка и вкладки - одна панель: общий фон и прокрутка, без щели. */
+.main { grid-column: -2; min-width: 0; display: flex; flex-direction: column; height: 100vh; }
+.page { flex: 1; min-height: 0; overflow-y: auto; }
+.page:focus { outline: none; }
+/* Верхняя строка и вкладки - одна панель: общий фон, без щели. */
 .chrome {
-  position: sticky; top: 0; z-index: 5; border-bottom: 1px solid var(--k-line);
+  flex: none; position: relative; z-index: 5; border-bottom: 1px solid var(--k-line);
   background: color-mix(in srgb, var(--k-bg) 88%, transparent); backdrop-filter: blur(6px);
 }
 .topbar { display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.6rem; }
@@ -402,7 +406,7 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 }
 
 /* Якорь не прячется под липкой верхней строкой. */
-.k-note [id] { scroll-margin-top: calc(var(--chrome-h, 3rem) + 0.6rem); }
+.k-note [id] { scroll-margin-top: 0.6rem; }
 
 /* ── Палитра: быстрый переход, команды, поиск ───────────────────────── */
 .palette-backdrop { position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / 0.25); }
