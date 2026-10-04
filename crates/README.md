@@ -23,8 +23,8 @@ crates/notes-app/icons/icon.png`.
 Общие правила Rust - навык Claude Code `rust-best-practices`
 (`.claude/skills/`, справочник `apollographql/skills`, MIT, с исправленными
 примерами; навык общий, о проекте в нём ничего нет). Правила этого файла
-важнее навыка. Без загруженного навыка правку `.rs` (Edit, Write и запись из
-Bash) запрещает хук `.claude/hooks/require-rust-skill.py`
+важнее навыка. Без загруженного навыка (после сжатия контекста - загруженного заново)
+правку `.rs` (Edit, Write и запись из Bash) запрещает хук `.claude/hooks/require-rust-skill.py`
 (`.claude/settings.json`).
 
 Где проект расходится с навыком:

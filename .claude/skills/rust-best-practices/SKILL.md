@@ -54,6 +54,8 @@ Read the chapters relevant to the task (all of them for a review), in parallel:
 - If failure is truly impossible and the type system cannot show it, `expect("<the invariant>")` - with
   `#[expect(clippy::expect_used, reason = "...")]` when the project enables that lint (handbook 4.2)
 - Input from users, files, the network or other libraries is never an invariant
+- A panic in a library you cannot fix (a compiler, a parser): catch it at the boundary - `join` of its
+  thread or `std::panic::catch_unwind` - and make it an error of that one operation
 - Use `thiserror` for library errors, `anyhow` for binaries only
 - Prefer `?` operator over match chains for error propagation
 
@@ -75,6 +77,10 @@ Key lints to watch:
 
 Silence a lint only locally, with `#[expect(clippy::lint, reason = "...")]` - not `#[allow(...)]`: `expect`
 warns once the lint no longer fires.
+
+`allow-unwrap-in-tests`/`allow-expect-in-tests` (`clippy.toml`) cover only `#[test]` and `#[cfg(test)]`; helpers
+of integration tests (`tests/`) need `#![allow(clippy::unwrap_used, clippy::expect_used, reason = "...")]` on the
+test crate - a rule for the whole crate, where `expect` would fail once the last `unwrap` is gone.
 
 ### Toolchain
 - Do not use std APIs newer than the project's `rust-version` (e.g. `assert_matches!` needs 1.96).

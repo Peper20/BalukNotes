@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Хук PreToolUse: правка .rs - только после навыка rust-best-practices.
+"""PreToolUse hook: Rust edits only after the rust-best-practices skill.
 
-Правка - Edit/Write/MultiEdit файла .rs или команда Bash, которая пишет в .rs
-(sed -i, perl -i, > файл.rs, tee, запись из python). Навык загружен - в
-журнале сессии (transcript_path) есть вызов Skill с ним или команда
-/rust-best-practices. Нет - правка запрещается с объяснением. Сбой самого
-хука правку не останавливает.
+An edit is Edit/Write/MultiEdit of a .rs file or a Bash command that writes
+to a .rs file (sed -i, perl -i, > file.rs, tee, a write from python). The
+skill counts as loaded when the session transcript (transcript_path) has a
+Skill call with it or the /rust-best-practices command after the last context
+compaction: a compaction summarizes the skill text away, so it is loaded again
+in full. Otherwise the edit is denied with an explanation. A failure of the
+hook itself never blocks the edit.
 """
 
 import json
@@ -14,7 +16,7 @@ import sys
 
 SKILL = "rust-best-practices"
 
-# Признаки записи в файл в команде оболочки (чтение - grep, sed -n, cat - не они).
+# Signs of writing a file in a shell command (reading - grep, sed -n, cat - is not).
 WRITES = re.compile(
     r"sed\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*i"
     r"|perl\s+-[a-zA-Z]*i"
@@ -22,6 +24,9 @@ WRITES = re.compile(
     r"|\btee\b"
     r"|\.write\(|write_text\(|open\([^)]*['\"][wa]"
 )
+
+# A context compaction in the transcript (a system record).
+COMPACTION = '"subtype":"compact_boundary"'
 
 
 def touches_rust(tool: str, data: dict) -> bool:
@@ -33,16 +38,24 @@ def touches_rust(tool: str, data: dict) -> bool:
     return False
 
 
+def loads_skill(line: str) -> bool:
+    if SKILL not in line:
+        return False
+    if '"name":"Skill"' in line and f'"skill":"{SKILL}"' in line:
+        return True
+    return f"<command-name>/{SKILL}</command-name>" in line
+
+
 def skill_loaded(transcript: str) -> bool:
+    """The skill is loaded since the last compaction (or since the start)."""
+    loaded = False
     with open(transcript, encoding="utf-8", errors="replace") as f:
         for line in f:
-            if SKILL not in line:
-                continue
-            if '"name":"Skill"' in line and f'"skill":"{SKILL}"' in line:
-                return True
-            if f"<command-name>/{SKILL}</command-name>" in line:
-                return True
-    return False
+            if COMPACTION in line:
+                loaded = False
+            elif loads_skill(line):
+                loaded = True
+    return loaded
 
 
 def main() -> None:
@@ -59,12 +72,11 @@ def main() -> None:
                     "hookEventName": "PreToolUse",
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
-                        f"Правка Rust - только после навыка {SKILL}: вызовите Skill "
-                        f'"{SKILL}" и прочитайте crates/README.md (правила проекта), затем повторите правку.'
+                        f"Rust edits need the {SKILL} skill loaded (again after a context compaction): "
+                        f'call Skill "{SKILL}" and read crates/README.md (project rules), then retry the edit.'
                     ),
                 }
-            },
-            ensure_ascii=False,
+            }
         )
     )
 
@@ -72,5 +84,5 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception:  # noqa: BLE001 - сбой хука не должен останавливать работу
+    except Exception:  # noqa: BLE001 - a hook failure must not stop the work
         pass
