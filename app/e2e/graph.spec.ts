@@ -258,8 +258,13 @@ test("силы графа: выдвижная панель сбоку, «Пап�
     await expect(panel).toBeHidden();
     await toggle.click();
     await expect.poll(async () => (await panel.boundingBox())?.width).toBeGreaterThan(200); // выехала целиком
-    const [canvas, side] = await Promise.all([page.locator(".graph-canvas").boundingBox(), panel.boundingBox()]);
-    expect(side!.x).toBeGreaterThanOrEqual(canvas!.x + canvas!.width - 1); // сбоку, а не поверх графа
+    // Сбоку, а не поверх графа: холст сжимается вместе с выездом панели - ждать конца.
+    await expect
+      .poll(async () => {
+        const [canvas, side] = await Promise.all([page.locator(".graph-canvas").boundingBox(), panel.boundingBox()]);
+        return side!.x - (canvas!.x + canvas!.width);
+      })
+      .toBeGreaterThanOrEqual(-1);
     const clusters = page.locator('input[data-key="graph.clusters"]');
     await clusters.fill("300");
     await expect.poll(() => nodeAt(page, "Сеть/SSH")).not.toBe(before);
