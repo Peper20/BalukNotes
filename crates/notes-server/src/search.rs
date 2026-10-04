@@ -1,5 +1,5 @@
-//! Поиск по тексту всех заметок (`?q=&limit=`) или одной (`&note=<путь>` —
-//! «в этой заметке» и Ctrl+F: все разделы по порядку текста).
+//! Search in the text of all notes (`?q=&limit=`) or of one (`&note=<path>`:
+//! "in this note" and Ctrl+F, every section in text order).
 
 use axum::extract::{Path, Query, State};
 use axum::routing::get;

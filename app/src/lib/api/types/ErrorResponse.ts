@@ -2,6 +2,6 @@
 import type { Diagnostic } from "./Diagnostic";
 
 /**
- * Тело ошибки. `errors` — ошибки компиляции (у PDF), иначе пусто.
+ * An error body. `errors` are compile errors (for a PDF), otherwise empty.
  */
 export type ErrorResponse = { error: string, errors: Array<Diagnostic>, };

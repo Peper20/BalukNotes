@@ -2,8 +2,8 @@
 import type { Schema } from "./Schema";
 
 /**
- * `GET`/`PUT /api/vaults/{хранилище}/settings`: настройки для хранилища —
- * итог (`values`) и откуда он: общие для всех (`shared`) и заданные только
- * в этом хранилище (`own`).
+ * `GET`/`PUT /api/vaults/{vault}/settings`: settings for the vault - the
+ * result (`values`) and where it comes from: shared by all (`shared`) and set
+ * only in this vault (`own`).
  */
 export type VaultSettingsResponse = { schema: Schema, values: Record<string, number | string | boolean>, shared: Record<string, number | string | boolean>, own: Record<string, number | string | boolean>, };

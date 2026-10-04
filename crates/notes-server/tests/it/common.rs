@@ -1,4 +1,4 @@
-//! Общее сквозных тестов сервера: одно ядро на хранилище-фикстуру `tests/vault`.
+//! Shared by the server end-to-end tests: one core for the `tests/vault` fixture.
 
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};

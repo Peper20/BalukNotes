@@ -24,7 +24,7 @@ async fn shell_has_csp() {
     let res = app.clone().oneshot(Request::get("/").body(Body::empty()).unwrap()).await.unwrap();
     assert!(
         res.status() == axum::http::StatusCode::OK || res.status() == axum::http::StatusCode::SERVICE_UNAVAILABLE,
-        "клиент собран (200) или не собран (503)"
+        "the client is built (200) or not (503)"
     );
     let csp = res.headers().get("content-security-policy").unwrap().to_str().unwrap();
     assert!(csp.contains("script-src 'self'"));

@@ -1,6 +1,6 @@
-//! Настройки (схема и значения) и темы оформления. Общие для всех хранилищ
-//! — `/api/settings`; для одного — `/api/vaults/{хранилище}/settings`: общие
-//! и поверх них заданные в хранилище (`PUT` со значением `null` — снова общая).
+//! Settings (schema and values) and design themes. Shared by all vaults:
+//! `/api/settings`; for one vault: `/api/vaults/{vault}/settings`, the shared
+//! ones with the vault's own on top (`PUT` with `null` makes one shared again).
 
 use axum::extract::{Path, State};
 use axum::routing::get;

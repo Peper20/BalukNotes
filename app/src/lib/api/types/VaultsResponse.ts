@@ -2,16 +2,16 @@
 import type { VaultName } from "./VaultName";
 
 /**
- * `GET /api/vaults`, ответ `POST /api/vaults`. Хранилища по умолчанию нет:
- * какое открыть, решает клиент (открытое последним) или пользователь.
+ * `GET /api/vaults`, the answer to `POST /api/vaults`. There is no default
+ * vault: the client (the last opened one) or the user decides which to open.
  */
 export type VaultsResponse = { 
 /**
- * Все хранилища по алфавиту (может не быть ни одного).
+ * All vaults in alphabetical order (there may be none).
  */
 vaults: Array<VaultName>, 
 /**
- * Можно ли создать новое (нельзя, если сервер открыт на одном
- * хранилище: `notes serve --vault <путь>`).
+ * Whether a new one can be created (not when the server runs on one
+ * vault: `notes serve --vault <path>`).
  */
 can_create: boolean, };

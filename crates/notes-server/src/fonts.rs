@@ -1,6 +1,6 @@
-//! Шрифты оформления для браузера: `@font-face` по частям с `unicode-range`
-//! и сами части (WOFF2). Какие шрифты нужны — шрифты тем, основные и
-//! запасные (`notes_core::themes::ThemeSet::web_fonts`).
+//! Design fonts for the browser: `@font-face` per part with `unicode-range`
+//! and the parts themselves (WOFF2). The fonts needed are the theme fonts,
+//! main and fallback (`notes_core::themes::ThemeSet::web_fonts`).
 
 use axum::Router;
 use axum::extract::{Path, State};
@@ -17,8 +17,8 @@ pub(crate) fn routes() -> Router<AppState> {
     Router::new().route("/api/fonts.css", get(fonts_css)).route("/fonts/{family}/{style}/{file}", get(font))
 }
 
-/// `@font-face` на каждую часть шрифта: браузер качает только части со
-/// знаками страницы (`unicode-range`).
+/// `@font-face` for every font part: the browser downloads only the parts with
+/// characters of the page (`unicode-range`).
 async fn fonts_css(State(s): State<AppState>) -> Response {
     let notes = s.vaults.library().clone();
     let css_text = blocking(move || Ok(notes.fonts().font_faces(notes.themes().web_fonts(), "/fonts/"))).await;

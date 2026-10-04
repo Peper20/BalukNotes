@@ -4,26 +4,26 @@ import type { NoteKind } from "./NoteKind";
 import type { TaggedChapter } from "./TaggedChapter";
 
 /**
- * Элемент `GET /api/vaults/{хранилище}/notes`.
+ * An item of `GET /api/vaults/{vault}/notes`.
  */
 export type NoteListItem = { id: NoteId, kind: NoteKind, 
 /**
- * Последний сегмент пути — имя файла: `SSH` для `Сеть/SSH`.
+ * The last path segment, the file name: `SSH` for `Network/SSH`.
  */
 name: string, 
 /**
- * Папка: `Сеть`; для корня — пустая строка.
+ * The folder: `Network`; an empty string for the root.
  */
 folder: string, 
 /**
- * Название для показа: из шаблона (`title: […]`), иначе — имя файла.
+ * The display title: from the template (`title: [...]`), otherwise the file name.
  */
 title: string, 
 /**
- * Теги заметки; у книги — корня (`main.typ`), их наследуют все главы.
+ * The note tags; for a book, those of its root (`main.typ`), inherited by every chapter.
  */
 tags: Array<string>, 
 /**
- * Главы книги со своими тегами.
+ * The book chapters with their own tags.
  */
 chapters: Array<TaggedChapter>, };

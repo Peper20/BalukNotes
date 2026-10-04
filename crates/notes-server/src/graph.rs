@@ -1,5 +1,5 @@
-//! Граф заметок: весь (узлы и рёбра) и разложенный по фильтру
-//! (`notes_core::vault_graph`).
+//! The note graph: the whole one (nodes and edges) and one laid out by a
+//! filter (`notes_core::vault_graph`).
 
 use axum::extract::{Path, State};
 use axum::routing::{get, post};

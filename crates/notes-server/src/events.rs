@@ -1,13 +1,15 @@
-//! События клиенту (`GET /api/vaults/{хранилище}/events?after=<seq>`): файлы
-//! хранилища изменились - клиент сверяет версию показанной заметки и список
-//! заметок, вместо опроса раз в N секунд.
+//! Events for the client (`GET /api/vaults/{vault}/events?after=<seq>`): vault
+//! files changed, so the client checks the version of the shown note and the
+//! note list, instead of polling every N seconds.
 //!
-//! Долгий опрос: ответ ([`EventsResponse`]) сразу, если после `after` были
-//! изменения, иначе - на первом изменении или через [`WAIT`] пустой; следующий
-//! запрос - с `seq` ответа. Без `after` - сразу: номер и следит ли сервер за
-//! файлами. Не SSE: окно Tauri получает ответ своей схемы адресов только
-//! целиком (docs/research/E7.md). Не следит (наблюдатель сломался, хранилище
-//! в памяти) - ждать нечего, ответ сразу. Остановка сервера отвечает ждущим.
+//! Long polling: the answer ([`EventsResponse`]) comes at once if there were
+//! changes after `after`, otherwise on the first change or empty after
+//! [`WAIT`]; the next request carries the `seq` of the answer. Without `after`
+//! it comes at once: the number and whether the server watches the files. Not
+//! SSE: the Tauri window gets an answer of its URL scheme only as a whole
+//! (docs/research/E7.md). Not watching (the watcher broke, an in-memory vault):
+//! nothing to wait for, the answer comes at once. A server stop answers the
+//! waiting requests.
 
 use std::time::Duration;
 
@@ -19,7 +21,7 @@ use crate::AppState;
 use crate::api::EventsResponse;
 use crate::error::ApiResult;
 
-/// Сколько запрос ждёт изменений: меньше тайм-аутов прокси и браузера.
+/// How long a request waits for changes: less than proxy and browser timeouts.
 pub const WAIT: Duration = Duration::from_secs(25);
 
 pub(crate) fn routes() -> Router<AppState> {

@@ -1,55 +1,55 @@
-//! HTTP API и раздача веб-клиента.
+//! HTTP API and the web client.
 //!
-//! Один и тот же интерфейс для браузера (VPS) и приложения (Tauri поверх
-//! localhost). Компиляция — блокирующая работа, она уходит в
-//! `spawn_blocking`, чтобы не держать поток асинхронного рантайма.
+//! The same interface for the browser (VPS) and the app (Tauri over
+//! localhost). Compiling is blocking work: it goes to `spawn_blocking` so it
+//! does not hold an async runtime thread.
 //!
-//! Ответы сжимаются (brotli или gzip — что примет клиент): HTML заметок с
-//! формулами и рисунками сжимается в 7–13 раз («Матан»: 3,7 МБ → 0,28 МБ
-//! brotli, 0,54 МБ gzip; уровни по умолчанию — быстрее «лучших» при почти том же
-//! размере).
+//! Responses are compressed (brotli or gzip, whichever the client accepts):
+//! note HTML with formulas and figures shrinks 7-13 times (a big book: 3.7 MB ->
+//! 0.28 MB brotli, 0.54 MB gzip; the default levels are faster than the "best"
+//! ones at almost the same size).
 //!
-//! | Путь                         | Что                                          |
+//! | Path                         | What                                         |
 //! |------------------------------|----------------------------------------------|
-//! | `GET /`, `/v/{хранилище}/…` (`n/{*id}`, `f/{*path}`, `tags…`, `graph`) | клиент (одна страница, маршрутизация в JS) |
-//! | `GET /assets/{*path}`        | файлы клиента (сборка `app/dist/assets`)     |
-//! | `GET /api/vaults`            | хранилища и какое открыть по умолчанию       |
-//! | `POST /api/vaults`           | создать хранилище `{ name }`                 |
-//! | `PATCH /api/vaults/{хранилище}` | переименовать `{ name }`                  |
-//! | `DELETE /api/vaults/{хранилище}` | хранилище целиком — в корзину системы    |
-//! | `GET /api/settings`          | схема и значения настроек                    |
-//! | `PUT /api/settings`          | изменить настройки (частично)                |
-//! | `GET /api/themes`            | темы: имя, название, тёмная ли               |
-//! | `GET /api/themes.css`        | CSS-переменные тем                           |
-//! | `GET /api/fonts.css`         | `@font-face` для шрифтов оформления (по частям) |
-//! | `GET /fonts/{family}/{style}/{part}.woff2` | часть шрифта (WOFF2, набор знаков) |
+//! | `GET /`, `/v/{vault}/...` (`n/{*id}`, `f/{*path}`, `tags...`, `graph`) | the client (one page, routing in JS) |
+//! | `GET /assets/{*path}`        | client files (the `app/dist/assets` build)   |
+//! | `GET /api/vaults`            | the vaults and which one to open by default  |
+//! | `POST /api/vaults`           | create a vault `{ name }`                    |
+//! | `PATCH /api/vaults/{vault}`  | rename `{ name }`                            |
+//! | `DELETE /api/vaults/{vault}` | the whole vault to the system trash          |
+//! | `GET /api/settings`          | settings schema and values                   |
+//! | `PUT /api/settings`          | change settings (partially)                  |
+//! | `GET /api/themes`            | themes: name, title, whether dark            |
+//! | `GET /api/themes.css`        | CSS variables of the themes                  |
+//! | `GET /api/fonts.css`         | `@font-face` for the design fonts (in parts) |
+//! | `GET /fonts/{family}/{style}/{part}.woff2` | a font part (WOFF2, a character set) |
 //!
-//! Хранилище — под `/api/vaults/{хранилище}` (дальше — `…`):
+//! A vault lives under `/api/vaults/{vault}` (`...` below):
 //!
-//! | Путь                         | Что                                          |
+//! | Path                         | What                                         |
 //! |------------------------------|----------------------------------------------|
-//! | `GET …/notes`                | список заметок и книг                        |
-//! | `GET …/folders`              | папки с названиями (`_folder.toml`)          |
-//! | `GET …/notes/{*id}`          | заметка: HTML, заголовки, ссылки, ошибки     |
-//! | `…?chapter=N`, `…?anchor=`   | книга — одной главой (N-й или с якорем)      |
-//! | `DELETE …/notes/{*id}`       | заметку (книгу — папкой) в корзину           |
-//! | `GET …/version/{*id}`        | версия заметки — дёшево, без компиляции      |
-//! | `GET …/links/{*id}`          | ссылки заметки и обратные ссылки на неё      |
-//! | `GET …/graph`                | граф заметок: узлы и рёбра                   |
-//! | `POST …/graph/layout`        | граф по фильтру, разложенный (`notes_core::vault_graph`) |
-//! | `GET …/search?q=&limit=`     | поиск по тексту всех заметок                 |
-//! | `GET …/preview/{*id}?anchor=` | превью заметки/раздела (без компиляции)     |
-//! | `GET …/pdf/{*id}?theme=`     | заметка в PDF (по умолчанию — первая тема)   |
-//! | `POST …/warm`                | что собрать заранее первым (см. `notes_core::warm`) |
-//! | `GET …/events?after=`        | изменения файлов (долгий опрос, см. `events`) |
-//! | `GET …/settings`             | настройки хранилища: итог, общие, свои       |
-//! | `PUT …/settings`             | задать свои (`null` — снова общая)           |
+//! | `GET .../notes`              | notes and books                              |
+//! | `GET .../folders`            | folders with titles (`_folder.toml`)         |
+//! | `GET .../notes/{*id}`        | a note: HTML, headings, links, errors        |
+//! | `...?chapter=N`, `...?anchor=` | a book as one chapter (the N-th or the one with the anchor) |
+//! | `DELETE .../notes/{*id}`     | a note (a book as a folder) to the trash     |
+//! | `GET .../version/{*id}`      | the note version: cheap, no compiling        |
+//! | `GET .../links/{*id}`        | links of the note and backlinks to it        |
+//! | `GET .../graph`              | the note graph: nodes and edges              |
+//! | `POST .../graph/layout`      | the graph by a filter, laid out (`notes_core::vault_graph`) |
+//! | `GET .../search?q=&limit=`   | search in the text of all notes              |
+//! | `GET .../preview/{*id}?anchor=` | preview of a note or section (no compiling) |
+//! | `GET .../pdf/{*id}?theme=`   | the note as PDF (the first theme by default) |
+//! | `POST .../warm`              | what to build ahead first (see `notes_core::warm`) |
+//! | `GET .../events?after=`      | file changes (long polling, see `events`)    |
+//! | `GET .../settings`           | vault settings: result, shared, own          |
+//! | `PUT .../settings`           | set own ones (`null` - back to shared)       |
 //!
-//! Модули — по областям: `vaults` (хранилища, открытые сервером), `notes`
-//! (заметки, PDF, прогрев, удаление), `graph`, `search`, `settings` (и
-//! темы), `assets` (клиент), `fonts`, `events` (изменения хранилища);
-//! общее — [`AppState`] и `error`. Со [`AppState::token`] все пути требуют токен
-//! (`auth`: заголовок, `?token=` или cookie).
+//! Modules by area: `vaults` (vaults opened by the server), `notes` (notes,
+//! PDF, warming, deletion), `graph`, `search`, `settings` (and themes),
+//! `assets` (the client), `fonts`, `events` (vault changes); shared -
+//! [`AppState`] and `error`. With [`AppState::token`] every path needs the
+//! token (`auth`: a header, `?token=` or a cookie).
 
 pub mod api;
 mod assets;
@@ -74,28 +74,28 @@ use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Pr
 
 pub use vaults::{OpenVault, VaultSet};
 
-/// Общее состояние обработчиков.
+/// State shared by the handlers.
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub vaults: Arc<VaultSet>,
     pub settings: Arc<SettingsStore>,
-    /// Токен доступа: если задан, без него сервер отвечает 401 (см. `auth`).
+    /// Access token: when set, the server answers 401 without it (see `auth`).
     pub token: Option<Arc<str>>,
-    /// Сервер останавливается: ждущие запросы событий получают ответ.
+    /// The server is stopping: waiting event requests get their answer.
     pub closing: Arc<watch::Sender<bool>>,
 }
 
 impl AppState {
-    /// Состояние без токена. Изменения хранилища приходят в события
-    /// хранилища, когда наблюдатель включён (`Notes::watch`, это делает
-    /// [`serve`]). Настройки устройства сразу применяются к ядру.
+    /// State without a token. Vault changes reach the vault events once the
+    /// watcher is on (`Notes::watch`, done by [`serve`]). Device settings are
+    /// applied to the core right away.
     pub fn new(vaults: VaultSet) -> Self {
         vaults.apply_device();
         let settings = vaults.settings().clone();
         Self { vaults: Arc::new(vaults), settings, token: None, closing: Arc::new(watch::Sender::new(false)) }
     }
 
-    /// Хранилище из адреса; ещё не открыто — открыть (в отдельном потоке).
+    /// The vault from the path; opened (on a blocking thread) if it is not yet.
     pub(crate) async fn vault(&self, name: String) -> error::ApiResult<Arc<OpenVault>> {
         if let Some(open) = self.vaults.opened(&name) {
             open.touch();
@@ -107,7 +107,7 @@ impl AppState {
         Ok(open)
     }
 
-    /// С токеном доступа; пустая строка — как без токена.
+    /// With an access token; an empty string means no token.
     #[must_use]
     pub fn with_token(mut self, token: Option<String>) -> Self {
         self.token = token.filter(|t| !t.is_empty()).map(Into::into);
@@ -128,38 +128,38 @@ pub fn router(state: AppState) -> Router {
     if let Some(token) = state.token.clone() {
         app = app.layer(axum::middleware::from_fn_with_state(token, auth::require_token));
     }
-    // WOFF2 уже сжат brotli — второй раз не жать.
+    // WOFF2 is already brotli-compressed: do not compress it twice.
     app.layer(
         CompressionLayer::new().compress_when(DefaultPredicate::new().and(NotForContentType::const_new("font/woff2"))),
     )
     .with_state(state)
 }
 
-/// Где слушать сервер.
+/// Where the server listens.
 #[derive(Debug)]
 pub enum Listen {
-    /// TCP (`notes serve --addr`): браузер; токен - если задан.
+    /// TCP (`notes serve --addr`): the browser; the token, if set.
     Tcp(tokio::net::TcpListener),
-    /// Сокет Unix (`notes serve --socket`): окно `notes-app`. Права на сокет -
-    /// только у пользователя, поэтому без токена.
+    /// A Unix socket (`notes serve --socket`): the `notes-app` window. Only the
+    /// user has access to the socket, so no token.
     #[cfg(unix)]
     Unix(tokio::net::UnixListener),
 }
 
-/// Запускает сервер на готовых сокетах до сигнала `shutdown`.
+/// Runs the server on the given sockets until `shutdown` resolves.
 pub async fn serve(
     listeners: Vec<Listen>,
     state: AppState,
     shutdown: impl Future<Output = ()> + Send + 'static,
 ) -> std::io::Result<()> {
-    // Шрифты для браузера сжимаются в фоне заранее: иначе первая страница
-    // ждала бы сжатия (математический шрифт — ~2 с). Шрифты и темы у всех
-    // хранилищ общие (библиотека одна).
+    // Browser fonts are compressed ahead in the background: otherwise the first
+    // page would wait for it (the math font takes ~2 s). Fonts and themes are
+    // shared by all vaults (one library).
     let library = state.vaults.library().clone();
     std::thread::spawn(move || library.warm_fonts());
-    // Прогрев и наблюдатель файлов — у каждого открытого хранилища.
+    // Warming and the file watcher run for every open vault.
     state.vaults.start_background();
-    // Неактивные хранилища без запросов и ждущих событий закрываются по таймауту.
+    // Inactive vaults without requests or waiting events close after a timeout.
     let vaults = state.vaults.clone();
     let closing = state.closing.clone();
     std::thread::spawn(move || vaults.close_idle_forever(&closing));
