@@ -1,7 +1,7 @@
 <!--
   Низ боковой панели (как в Obsidian): хранилище и меню хранилищ — перейти в
   другое (с перезагрузкой: вкладки и места чтения у каждого свои), создать
-  новое, переименовать или удалить открытое. Рядом — главная хранилища.
+  новое, переименовать или удалить открытое. Рядом — главная и граф хранилища.
 -->
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";
@@ -11,8 +11,10 @@
   import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import { Icon } from "@lucide/svelte";
   import { api, type VaultsResponse } from "../lib/api";
-  import { homeHref } from "../lib/ids";
+  import { graphHref, homeHref } from "../lib/ids";
+  import { graphIcon } from "../lib/icons";
   import { ui } from "../lib/ui.svelte";
   import { vault, vaultHome } from "../lib/vault";
 
@@ -69,6 +71,7 @@
     <ChevronsUpDown {...icon} />
   </button>
   <a href={homeHref()} class="icon vault-home" title="Главная хранилища «{vault()}»" aria-label="Главная хранилища"><House {...icon} /></a>
+  <a href={graphHref()} class="icon vault-home" id="open-graph" title="Граф хранилища «{vault()}» (G)" aria-label="Граф хранилища"><Icon iconNode={graphIcon} {...icon} /></a>
   {#if open}
     <div class="vault-menu" id="vault-menu" role="menu" aria-label="Хранилища">
       {#if failed}<p class="vault-menu-note">Сервер не ответил</p>{/if}

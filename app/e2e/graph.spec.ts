@@ -12,6 +12,13 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => localStorage.removeItem("k-graph@vault"));
 });
 
+test("граф: значок внизу боковой панели открывает граф хранилища", async ({ page }) => {
+  await open(page, "демо/компоненты");
+  await page.locator("#open-graph").click();
+  await expect(page).toHaveURL(vaultUrl("/graph"));
+  await expect(page.locator(".graph-node")).not.toHaveCount(0);
+});
+
 test("граф: кнопки и колесо масштабируют, узел переставляется, щелчок открывает заметку, Ctrl+щелчок - в фоне", async ({ page }) => {
   await page.goto(vaultUrl("/graph"));
   await ready(page);
