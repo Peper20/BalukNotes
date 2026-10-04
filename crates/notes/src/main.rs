@@ -1,9 +1,10 @@
-//! `notes` - тонкая команда: передаёт аргументы части приложения из своей
-//! папки (`notes app` -> `notes-app`, остальное -> `notes-typst`) и сама
-//! ничего не собирает (architecture §1). Справка - справка `notes-typst` и
-//! список частей; `notes --version` - версии частей.
+//! `notes`: a thin command that hands its arguments to an app part in its own
+//! directory (`notes app` -> `notes-app`, the rest -> `notes-typst`) and builds
+//! nothing itself (architecture §1). Help is the help of `notes-typst` plus
+//! the list of parts; `notes --version` lists the parts' versions.
 
 use std::ffi::OsString;
+use std::io::Write;
 use std::path::Path;
 use std::process::{Command, ExitCode};
 
@@ -15,13 +16,13 @@ fn main() -> ExitCode {
     let dir = match notes::parts_dir() {
         Ok(dir) => dir,
         Err(e) => {
-            eprintln!("ошибка: папка notes: {e}");
+            eprintln!("error: notes directory: {e}");
             return ExitCode::FAILURE;
         }
     };
     let command = notes::command(&text);
     if command.is_none() && text.iter().any(|a| a == "-V" || a == "--version") {
-        println!("notes {VERSION}");
+        let _ = writeln!(std::io::stdout(), "notes {VERSION}");
         print_parts(&dir);
         return ExitCode::SUCCESS;
     }
@@ -30,12 +31,12 @@ fn main() -> ExitCode {
     let path = part.path(&dir);
     if !path.is_file() {
         if help {
-            println!("notes {VERSION}: заметки на Typst");
+            let _ = writeln!(std::io::stdout(), "notes {VERSION}: notes in Typst");
             print_parts(&dir);
             return ExitCode::SUCCESS;
         }
         eprintln!(
-            "ошибка: «notes {}» - из части {} ({}), она не установлена: нет {}",
+            "error: \"notes {}\" belongs to the part {} ({}), which is not installed: no {}",
             command.unwrap_or_default(),
             part.bin,
             part.about,
@@ -46,20 +47,23 @@ fn main() -> ExitCode {
     let mut child = Command::new(&path);
     child.args(&args).env(VERSION_ENV, VERSION);
     if help {
-        // Справка части, затем - какие части стоят.
+        // The part's help, then which parts are installed.
         let code = run(&mut child);
-        println!();
+        let _ = writeln!(std::io::stdout());
         print_parts(&dir);
         return code;
     }
     exec(child, &path)
 }
 
+/// Lists the parts. Write errors are ignored: `notes --help | head` closes
+/// the pipe early, and `println!` would panic.
 fn print_parts(dir: &Path) {
-    println!("Части (в {}):", dir.display());
+    let mut out = std::io::stdout().lock();
+    let _ = writeln!(out, "Parts (in {}):", dir.display());
     for part in PARTS {
-        let state = if part.path(dir).is_file() { "есть" } else { "нет " };
-        println!("  {state}  {:<12} {}", part.bin, part.about);
+        let state = if part.path(dir).is_file() { "yes" } else { "no " };
+        let _ = writeln!(out, "  {state}  {:<12} {}", part.bin, part.about);
     }
 }
 
@@ -67,18 +71,18 @@ fn run(child: &mut Command) -> ExitCode {
     match child.status() {
         Ok(status) => exit_code(status.code()),
         Err(e) => {
-            eprintln!("ошибка: запуск {}: {e}", child.get_program().display());
+            eprintln!("error: starting {}: {e}", child.get_program().display());
             ExitCode::FAILURE
         }
     }
 }
 
-/// Unix: процесс становится частью (сигналы, ввод и код выхода - её).
+/// Unix: this process becomes the part (signals, input and exit code are its own).
 #[cfg(unix)]
 fn exec(mut child: Command, path: &Path) -> ExitCode {
     use std::os::unix::process::CommandExt;
     let e = child.exec();
-    eprintln!("ошибка: запуск {}: {e}", path.display());
+    eprintln!("error: starting {}: {e}", path.display());
     ExitCode::FAILURE
 }
 

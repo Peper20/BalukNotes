@@ -42,7 +42,7 @@ Work only in the chosen vault; never touch other vaults. In it, create or change
 ## Process
 
 1. **Vault.** `notes vaults` lists vault names, one per line. If the command is missing, tell the user to install BalukNotes (`tools/install.sh` in its repo) and stop. If there are no vaults, tell the user to create one (in the app or `notes vaults new "Name"`) and stop: choosing and naming vaults is the user's decision. Use the vault the user named; otherwise ask, even if there is only one, since a note in the wrong vault is easy to lose. If the named vault is not in the list, show the list and ask again. Every `notes` command except `vaults` needs `--vault "Name"` right after the subcommand (`notes list --vault "Name"`); there is no default vault. The vault folder on disk is the first line of `notes info --vault "Name"`.
-2. **Survey.** `notes list --vault "Name"` prints notes (path, `[книга]` for books, title, tags; under a book, `глава «...»` lines for chapters with own tags); `notes tags --vault "Name"` prints tags. Use them to pick the folder, tags and link targets.
+2. **Survey.** `notes list --vault "Name"` prints notes (path, `[book]` for books, title, tags; under a book, `chapter "..."` lines for chapters with own tags); `notes tags --vault "Name"` prints tags. Use them to pick the folder, tags and link targets.
 3. **Sources.** `ls` the current folder and the folders the user named; read what relates to the topic (lectures, problems, old exams). Sources are read-only: create nothing in their folders.
 4. **Decide title, folder, tags** (see "Title and path"). Decide the obvious yourself. If the place, or note vs book, is genuinely unclear, ask one question with your default first.
 5. **Create** (A and B):
@@ -75,7 +75,7 @@ Work only in the chosen vault; never touch other vaults. In it, create or change
 notes rename --vault "Name" "Path" "New title" --dry-run   # prints the new path and the notes whose links will change; changes nothing
 notes rename --vault "Name" "Path" "New title"             # does it
 ```
-The first output line is the new path; the next one names the notes with rewritten links (`ссылки поправлены: ...`) or says there are none (`ссылок сюда в других заметках нет`). Those link edits are part of the rename the user asked for: list them in the report. To change only the title and keep the file name, edit `title: [...]` by hand (a book: `main.typ`; a folder: `_folder.toml`, sample `examples/_folder.toml`).
+The first output line is the new path; the next one names the notes with rewritten links (`links fixed: ...`) or says there are none (`no links to it in other notes`). Those link edits are part of the rename the user asked for: list them in the report. To change only the title and keep the file name, edit `title: [...]` by hand (a book: `main.typ`; a folder: `_folder.toml`, sample `examples/_folder.toml`).
 
 Check with `notes check --vault "Name"` without a path, since folder errors appear only in the full check.
 
@@ -157,7 +157,7 @@ Typst is neither LaTeX nor Markdown: `\frac`, `\begin`, `**bold**`, `# Heading` 
 - warning `запятая между цифрами`: `dc("0,5")` instead of `0,5` in math.
 - warning about `;` after a call: `\;`.
 - warning `нет слов оформления`: the note language is neither ru nor en, so block words fall back to English; set own words with `words:` (keys in `reference.md`).
-- `битая ссылка` (broken link): the `#see("...")` path is not in `notes list`, or the anchor does not match a heading text. Either write the target note or drop the link.
+- `broken link`: the `#see("...")` path is not in `notes list`, or the anchor does not match a heading text. Either write the target note or drop the link.
 - `_folder.toml: unknown field`: only `title = "Title"` is allowed.
 - `пакет ... не из белого списка`: notes may import only whitelisted Typst packages (the library already brings CeTZ). Draw with the library instead; if a package is really needed, ask the user - only they can allow it in the device settings.
 - Other Russian messages come from the library and say what to change.

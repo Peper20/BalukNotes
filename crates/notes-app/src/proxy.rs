@@ -1,6 +1,7 @@
-//! Запрос страницы окна (схема `notes://`) - ядру через сокет Unix, ответ -
-//! целиком (схема Tauri потоков не умеет, docs/research/E7.md). Ядро не
-//! отвечает - 502 с ошибкой, как у сервера: интерфейс покажет "нет связи".
+//! A request of the window's page (`notes://` scheme) goes to the core over a
+//! Unix socket; the response comes back whole (a Tauri scheme cannot stream,
+//! docs/research/E7.md). If the core does not answer: 502 with an error, as
+//! from the server, and the client shows "no connection".
 
 use std::path::Path;
 
@@ -17,7 +18,7 @@ pub async fn forward(socket: &Path, request: Request<Vec<u8>>) -> Response<Vec<u
     match send(socket, request).await {
         Ok(response) => {
             tracing::debug!(
-                "{method} {uri} {} {} Б {:?}",
+                "{method} {uri} {} {} B {:?}",
                 response.status().as_u16(),
                 response.body().len(),
                 started.elapsed()
@@ -25,8 +26,8 @@ pub async fn forward(socket: &Path, request: Request<Vec<u8>>) -> Response<Vec<u
             response
         }
         Err(e) => {
-            tracing::warn!("ядро не ответило: {e}");
-            let body = serde_json::json!({ "error": format!("ядро не отвечает: {e}"), "errors": [] });
+            tracing::warn!("core did not answer: {e}");
+            let body = serde_json::json!({ "error": format!("core is not answering: {e}"), "errors": [] });
             let mut response = Response::new(body.to_string().into_bytes());
             *response.status_mut() = StatusCode::BAD_GATEWAY;
             response.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
@@ -40,10 +41,10 @@ async fn send(socket: &Path, request: Request<Vec<u8>>) -> Result<Response<Vec<u
     let (mut sender, connection) = hyper::client::conn::http1::handshake(TokioIo::new(stream)).await?;
     tokio::spawn(connection);
     let (mut parts, body) = request.into_parts();
-    // Ядру - только путь: `notes://localhost/x?y` -> `/x?y`.
+    // The core gets only the path: `notes://localhost/x?y` -> `/x?y`.
     parts.uri = parts.uri.path_and_query().map_or("/", http::uri::PathAndQuery::as_str).parse()?;
     parts.headers.insert(header::HOST, HeaderValue::from_static("localhost"));
-    // Сжатый ответ схема отдала бы как есть; внутри машины сжатие не нужно.
+    // The scheme would pass a compressed response through as is; no compression is needed on one machine.
     parts.headers.remove(header::ACCEPT_ENCODING);
     let response = sender.send_request(Request::from_parts(parts, Full::new(Bytes::from(body)))).await?;
     let (parts, body) = response.into_parts();

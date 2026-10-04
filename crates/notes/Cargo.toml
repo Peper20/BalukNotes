@@ -1,6 +1,6 @@
 [package]
 name = "notes"
-description = "Команда notes: вызывает части приложения (notes-typst, notes-app)"
+description = "The notes command: calls the app parts (notes-typst, notes-app)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

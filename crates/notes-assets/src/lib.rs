@@ -1,9 +1,9 @@
-//! Сборка клиента `app/` (`npm run build` → `app/dist`): страница-оболочка
-//! и файлы `assets/` для сервера (`notes-server`).
+//! The built client of `app/` (`npm run build` -> `app/dist`): the shell page
+//! and the `assets/` files for the server (`notes-server`).
 //!
-//! В отладочной сборке файлы читаются с диска (пересобрали клиент —
-//! перезагрузите страницу), в релизной — встроены в бинарник (без
-//! `app/dist` её не собрать, см. `build.rs`).
+//! A debug build reads the files from disk (rebuild the client, reload the
+//! page); a release build embeds them (it cannot be built without `app/dist`,
+//! see `build.rs`).
 
 use std::borrow::Cow;
 
@@ -14,11 +14,11 @@ use rust_embed::RustEmbed;
 #[allow_missing = true]
 struct Dist;
 
-/// Файл сборки клиента.
+/// A file of the built client.
 #[derive(Debug, Clone)]
 pub struct File {
     pub data: Cow<'static, [u8]>,
-    /// MIME-тип по расширению.
+    /// MIME type by extension.
     pub mime: String,
 }
 
@@ -26,12 +26,12 @@ fn get(path: &str) -> Option<File> {
     Dist::get(path).map(|f| File { mime: f.metadata.mimetype().to_owned(), data: f.data })
 }
 
-/// Страница-оболочка клиента (`index.html`); `None` — клиент не собран.
+/// The client's shell page (`index.html`); `None` if the client is not built.
 pub fn index_html() -> Option<File> {
     get("index.html")
 }
 
-/// Файл `assets/{path}` (`baluk.css`, `index-XXXXXXXX.js`, …).
+/// The file `assets/{path}` (`baluk.css`, `index-XXXXXXXX.js`, ...).
 pub fn asset(path: &str) -> Option<File> {
     get(&format!("assets/{path}"))
 }

@@ -1,6 +1,6 @@
 [package]
 name = "notes-typst"
-description = "Часть notes со сборкой Typst: serve | new | list | check | pdf | …"
+description = "The notes part that builds with Typst: serve | new | list | check | pdf | ..."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
