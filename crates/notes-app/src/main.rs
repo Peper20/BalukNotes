@@ -15,7 +15,12 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use tauri::webview::NewWindowResponse;
 use tauri::{AppHandle, Manager, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 use webkit2gtk::WebViewExt;
+
+/// What the window keeps between launches: maximized or fullscreen, not size
+/// or position.
+const WINDOW_STATE: StateFlags = StateFlags::MAXIMIZED.union(StateFlags::FULLSCREEN);
 
 /// Схема адресов окна.
 const SCHEME: &str = "notes";
@@ -55,6 +60,7 @@ fn main() -> ExitCode {
 fn run(socket: Arc<PathBuf>, core: core::Core) -> tauri::Result<()> {
     let scheme_socket = socket.clone();
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_window_state::Builder::new().with_state_flags(WINDOW_STATE).build())
         .register_asynchronous_uri_scheme_protocol(SCHEME, move |_ctx, request, responder| {
             let socket = scheme_socket.clone();
             tauri::async_runtime::spawn(async move { responder.respond(proxy::forward(&socket, request).await) });
@@ -108,6 +114,9 @@ fn run(socket: Arc<PathBuf>, core: core::Core) -> tauri::Result<()> {
 /// (hybrid graphics with NVIDIA, `docs/tech-debt.md`). The client saves its
 /// state as it goes, so nothing waits for `pagehide`.
 fn quit(app: &AppHandle) {
+    if let Err(e) = app.save_window_state(WINDOW_STATE) {
+        tracing::warn!("window state not saved: {e}");
+    }
     let Some(window) = app.get_webview_window("main") else {
         app.exit(0);
         return;

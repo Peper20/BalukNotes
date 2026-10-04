@@ -22,6 +22,7 @@
   import Graph from "./Graph.svelte";
   import GraphForces from "./GraphForces.svelte";
   import GraphLegend from "./GraphLegend.svelte";
+  import { scroller } from "../lib/scroll";
 
   let { route }: { route: { around: string | null; depth: number; folder: string | null } } = $props();
 
@@ -110,11 +111,14 @@
     if (e.key === "Escape") query = "";
   }
 
-  // Страница — во всю высоту окна под верхними панелями.
+  // Страница — во всю высоту колонки под верхними панелями.
   let page: HTMLElement | undefined = $state();
   let top = $state(0);
   $effect(() => {
-    const measure = () => (top = page ? page.getBoundingClientRect().top + scrollY : 0);
+    const measure = () => {
+      const s = scroller();
+      top = page ? page.getBoundingClientRect().top - s.getBoundingClientRect().top + s.scrollTop : 0;
+    };
     measure();
     addEventListener("resize", measure);
     return () => removeEventListener("resize", measure);
@@ -124,7 +128,7 @@
 
 <svelte:window {onkeydown} />
 
-<main class="graph-page" id="note" bind:this={page} style:height="calc(100dvh - {top}px)">
+<main class="graph-page" id="note" bind:this={page} style:height="calc(100% - {top}px)">
   <div class="graph-bar">
     {#if route.around}
       <span class="graph-title">

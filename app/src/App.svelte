@@ -38,9 +38,7 @@
 
   $effect(() => settings.apply(document.documentElement));
 
-  // Высота верхней панели (строка + вкладки) - для отступов якорей и оглавления.
-  // Дробная (borderBoxSize, а не offsetHeight): панель - fixed, под неё отступ
-  // заметки, округление сдвинуло бы заметку на пиксель.
+  // Высота верхней панели (строка + вкладки) - для места оглавления под ней.
   let chromeBox: ResizeObserverSize[] | undefined = $state();
   const chromeHeight = $derived(chromeBox?.[0]?.blockSize ?? 0);
   $effect(() => document.documentElement.style.setProperty("--chrome-h", `${chromeHeight}px`));
@@ -97,7 +95,7 @@
 </script>
 
 <svelte:document onclick={onClick} onauxclick={onClick} />
-<svelte:window onkeydown={onKeydown} onscroll={onScroll} />
+<svelte:window onkeydown={onKeydown} />
 
 {#if fatal}
   <p class="fatal">Не удалось запустить клиент: {fatal}. <a href="/">Выбрать хранилище</a></p>
@@ -118,6 +116,8 @@
         <Topbar />
         <TabBar />
       </div>
+      <!-- Прокручивается колонка, а не документ (lib/scroll.ts). -->
+      <div class="page" id="page" tabindex="-1" onscroll={onScroll}>
       {#if router.route.kind === "note"}
         {#if reader.page}<Problems page={reader.page} />{/if}
         <NoteView />
@@ -133,6 +133,7 @@
       {:else if started}
         <Home />
       {/if}
+      </div>
     </div>
   </div>
   <Settings />

@@ -13,6 +13,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 notes.workspace = true
 tauri = { version = "2", features = [] }
+# The window opens maximized or fullscreen if it was so when closed.
+tauri-plugin-window-state = "2"
 tokio = { workspace = true, features = ["net", "fs", "signal", "macros"] }
 hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio"] }

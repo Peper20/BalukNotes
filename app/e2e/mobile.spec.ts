@@ -9,7 +9,9 @@ async function noSideScroll(page: Page) {
   // Ширина формул — после загрузки шрифтов.
   const overflow = await page.evaluate(async () => {
     await document.fonts.ready;
-    return document.documentElement.scrollWidth - innerWidth;
+    const column = document.getElementById("page"); // прокручивается она, а не документ
+    const inner = column ? column.scrollWidth - column.clientWidth : 0;
+    return Math.max(document.documentElement.scrollWidth - innerWidth, inner);
   });
   expect(overflow).toBeLessThanOrEqual(0);
 }
@@ -93,19 +95,20 @@ test("телефон: 3D — свайп вверх прокручивает ст
   const frame = () => canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL());
   let first = "";
   await expect.poll(async () => first === (first = await frame())).toBe(true);
-  const box = (await canvas.boundingBox())!;
-  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
   const cdp = await page.context().newCDPSession(page);
+  // От середины рисунка там, где он сейчас (прокрутка его сдвигает).
   const swipe = async (dx: number, dy: number) => {
+    const box = (await canvas.boundingBox())!;
+    const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
     const point = (k: number) => [{ x: x + dx * k, y: y + dy * k }];
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: point(0) });
     for (let k = 1; k <= 8; k++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: point(k / 8) });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   };
 
-  const top = await page.evaluate(() => scrollY);
+  const top = await page.evaluate(() => document.getElementById("page")!.scrollTop);
   await swipe(0, -120);
-  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(top + 40);
+  await expect.poll(() => page.evaluate(() => document.getElementById("page")!.scrollTop)).toBeGreaterThan(top + 40);
   expect(await frame()).toBe(first);
 
   await canvas.scrollIntoViewIfNeeded();
