@@ -1,8 +1,8 @@
-//! Замер регрессии: потеря memo при релизе по простою.
+//! Measures a regression: losing memo on the idle release.
 //!
-//! Меряем времена пересборок второй и третьей правки одной и той же большой
-//! заметки без релиза (правки подряд) и с релизом (пауза ≥ idle между
-//! правками). Числа печатаются; тест по умолчанию игнорируется. Запуск вручную:
+//! We measure the rebuild times of the second and third edits of the same big
+//! note without a release (edits in a row) and with one (a pause >= idle
+//! between edits). The numbers are printed; the test is ignored by default. Run by hand:
 //! `cargo test -p notes-core --features measure --test memo_regression --release -- --ignored --nocapture`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test helpers fail the test by panicking")]
@@ -29,7 +29,7 @@ fn largest_note_id(vault: &std::path::Path) -> NoteId {
     let mut files = Vec::new();
     walk(vault, &mut files);
     files.sort_by_key(|(_, len)| *len);
-    let (path, _) = files.into_iter().rev().find(|(p, _)| !p.ends_with("main.typ")).expect("есть заметки");
+    let (path, _) = files.into_iter().rev().find(|(p, _)| !p.ends_with("main.typ")).expect("there are notes");
     let rel = path.strip_prefix(vault).unwrap().to_string_lossy().replace('\\', "/");
     let id = rel.strip_suffix(".typ").unwrap();
     NoteId::new(id).unwrap()
@@ -51,9 +51,9 @@ fn load_vault_to_mem(mem: &notes_core::storage::MemStorage, dir: &std::path::Pat
 }
 
 #[test]
-#[ignore = "тяжёлый замер пересборок"]
+#[ignore = "a heavy rebuild measurement"]
 fn rebuild_times_with_and_without_idle_release() {
-    // Хранилище — в памяти: правки не трогают репозиторий.
+    // The vault is in memory: edits do not touch the repository.
     let vault_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/vault");
     let mem = std::sync::Arc::new(notes_core::storage::MemStorage::new());
     load_vault_to_mem(&mem, &vault_dir, std::path::Path::new(""));
@@ -66,13 +66,13 @@ fn rebuild_times_with_and_without_idle_release() {
         trash: None,
     };
     let notes = Notes::with_storage(mem.clone(), &cfg).unwrap();
-    // Настройки по умолчанию (memo=10).
+    // Default settings (memo=10).
     let id = largest_note_id(&vault_dir);
 
-    // Первая сборка (заполняет кэш на диск и memo typst).
+    // The first build (fills the disk cache and Typst memo).
     let _ = notes.page(&id, notes_core::figures::FigureOptions::default()).unwrap();
 
-    // Без релиза: 2-я и 3-я правка подряд.
+    // Without a release: the 2nd and 3rd edits in a row.
     let path = format!("{id}.typ");
     mem.write(&path, "= Тест\nправка 1");
     let t2 = Instant::now();
@@ -83,7 +83,7 @@ fn rebuild_times_with_and_without_idle_release() {
     let _ = notes.page(&id, notes_core::figures::FigureOptions::default()).unwrap();
     let ms3_norel = t3.elapsed().as_millis();
 
-    // С релизом: пауза > idle (5 с) между правками.
+    // With a release: a pause > idle (5 s) between edits.
     mem.write(&path, "= Тест\nправка 3");
     std::thread::sleep(Duration::from_millis(5600));
     let t2r = Instant::now();

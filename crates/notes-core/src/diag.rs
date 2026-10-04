@@ -1,4 +1,4 @@
-//! Диагностика компиляции в виде, удобном клиенту и терминалу.
+//! Compile diagnostics in a form handy for the client and the terminal.
 
 use std::fmt;
 
@@ -7,7 +7,7 @@ use typst::diag::{Severity, SourceDiagnostic};
 use typst::syntax::VirtualRoot;
 use typst::{World, WorldExt};
 
-/// Шум, который приходит при каждой HTML-компиляции и ничего не сообщает.
+/// Noise that comes with every HTML compile and says nothing.
 const NOISE: &[&str] = &["html export is under active development"];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -15,9 +15,9 @@ const NOISE: &[&str] = &["html export is under active development"];
 pub struct Diagnostic {
     pub severity: DiagSeverity,
     pub message: String,
-    /// Файл от корня хранилища (`/Сеть/SSH.typ`) или пакета (`@preview/cetz:0.4.2/…`).
+    /// The file from the vault root (`/Network/SSH.typ`) or a package (`@preview/cetz:0.4.2/...`).
     pub file: Option<String>,
-    /// Строка и столбец с единицы.
+    /// Line and column, starting at one.
     pub line: Option<usize>,
     pub column: Option<usize>,
     pub hints: Vec<String>,
@@ -32,7 +32,7 @@ pub enum DiagSeverity {
 }
 
 impl Diagnostic {
-    /// Ошибка без места в файле (например, «заметка не найдена»).
+    /// An error without a place in a file (for example "note not found").
     pub fn error(message: impl Into<String>) -> Self {
         Self {
             severity: DiagSeverity::Error,
@@ -44,7 +44,7 @@ impl Diagnostic {
         }
     }
 
-    /// Предупреждение приложения (не Typst) о месте в файле хранилища.
+    /// An app warning (not from Typst) about a place in a vault file.
     pub(crate) fn warning_at(message: &str, file: String, line: usize, column: usize, hint: &str) -> Self {
         Self {
             severity: DiagSeverity::Warning,
@@ -92,8 +92,8 @@ impl Diagnostic {
 impl fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let kind = match self.severity {
-            DiagSeverity::Error => "ошибка",
-            DiagSeverity::Warning => "предупреждение",
+            DiagSeverity::Error => "error",
+            DiagSeverity::Warning => "warning",
         };
         match (&self.file, self.line, self.column) {
             (Some(file), Some(line), Some(col)) => write!(f, "{file}:{line}:{col}: ")?,
@@ -102,7 +102,7 @@ impl fmt::Display for Diagnostic {
         }
         write!(f, "{kind}: {}", self.message)?;
         for hint in &self.hints {
-            write!(f, "\n  подсказка: {hint}")?;
+            write!(f, "\n  hint: {hint}")?;
         }
         Ok(())
     }

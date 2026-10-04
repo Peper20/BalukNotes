@@ -1,12 +1,12 @@
-//! Цвета кода. В HTML подсветка идёт опорными цветами (см.
-//! `baluk/code.typ`), здесь они становятся CSS-переменными темы.
+//! Code colors. In HTML, code highlighting uses marker colors (see
+//! `baluk/code.typ`); here they become theme CSS variables.
 
 use super::TextPass;
 use crate::render::Rendered;
 
-pub const PASS: TextPass = TextPass { name: "цвета кода", run };
+pub const PASS: TextPass = TextPass { name: "code colors", run };
 
-/// Опорные цвета подсветки кода (`baluk/code.typ`) → переменные CSS.
+/// Marker colors of code highlighting (`baluk/code.typ`) -> CSS variables.
 const CODE_COLORS: [(&str, &str); 8] = [
     ("#010100", "text"),
     ("#010101", "key"),
@@ -25,8 +25,8 @@ fn run(page: &mut Rendered) {
 fn replace_code_colors(html: &str) -> String {
     let mut out = html.to_owned();
     for (hex, name) in CODE_COLORS {
-        // Только в CSS-свойствах (style="color: …"): в SVG опорных цветов нет,
-        // но и случайное совпадение в тексте не трогаем.
+        // Only in CSS properties (style="color: ..."): SVG has no marker colors,
+        // and an accidental match in text is left alone.
         out = out.replace(&format!("color: {hex}"), &format!("color: var(--k-code-{name})"));
     }
     out

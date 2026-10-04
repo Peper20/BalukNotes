@@ -1,16 +1,16 @@
-//! Кэш страниц: память и диск за одним интерфейсом.
+//! The page cache: memory and disk behind one interface.
 //!
-//! - **Записи** ([`Record`]: версия и файлы, ошибки, время сборки) — в памяти
-//!   для каждой заметки, о которой что-то известно (маленькие); при промахе
-//!   берутся с диска. По ним — «собрана ли заметка» и её версия (`stat`
-//!   файлов, без компиляции).
-//! - **Страницы** — в памяти, в LRU с пределом по байтам: одна
-//!   обработанная копия (под текущие настройки рисунков). Сырая отрисовка
-//!   лежит на диске и читается, только когда поменялись настройки или
-//!   страница вытеснена. Без кэша на диске сырая держится в памяти (иначе
-//!   её негде взять), в том же пределе.
-//! - Прогрев пишет только на диск ([`PageCache::store`] без страницы): в
-//!   памяти остаются лишь открытые заметки.
+//! - **Records** ([`Record`]: version and files, errors, build time) are kept
+//!   in memory for every note anything is known about (they are small); on a
+//!   miss they come from disk. They answer "is the note built" and give its
+//!   version (by `stat` of the files, without compiling).
+//! - **Pages** are kept in memory in an LRU with a byte limit: one processed
+//!   copy (for the current figure settings). The raw rendering lies on disk and
+//!   is read only when the settings changed or the page was evicted. Without a
+//!   disk cache the raw rendering is kept in memory (there is nowhere else to
+//!   get it), within the same limit.
+//! - Warming writes only to disk ([`PageCache::store`] without a page): only
+//!   open notes stay in memory.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -25,29 +25,30 @@ use crate::render::{LinkRef, Rendered};
 use crate::vault::{Entry, NoteId};
 use crate::version::Versions;
 
-/// Предел страниц в памяти по умолчанию (компьютер; меняется настройкой
-/// устройства — [`PageCache::set_limits`]).
+/// The default limit of pages in memory (a computer; a device setting changes
+/// it: [`PageCache::set_limits`]).
 pub const MEMORY_BUDGET: usize = 64 << 20;
 
-/// Метка сырой отрисовки в памяти, когда кэша на диске нет.
-const IN_MEMORY: &str = "память";
+/// The raw rendering tag in memory when there is no disk cache.
+const IN_MEMORY: &str = "memory";
 
-/// Сырая отрисовка для [`PageCache::store`].
+/// The raw rendering for [`PageCache::store`].
 #[derive(Debug)]
 pub enum Raw {
-    /// Новая отрисовка.
+    /// A new rendering.
     New(Arc<Rendered>),
-    /// Прежняя удачная (сборка с ошибкой) — та, что уже в кэше.
+    /// The earlier good one (a build with an error), already in the cache.
     Previous(Arc<Rendered>),
-    /// Отрисовки нет.
+    /// No rendering.
     None,
 }
 
+/// The cache of built pages of one vault (see the module).
 #[derive(Debug)]
 pub struct PageCache {
     versions: Versions,
     disk: Option<DiskCache>,
-    /// Предел страниц в памяти, байт.
+    /// The limit of pages in memory, in bytes.
     budget: AtomicUsize,
     disk_limits: Mutex<DiskLimits>,
     state: Mutex<State>,
@@ -57,17 +58,17 @@ pub struct PageCache {
 struct State {
     records: HashMap<NoteId, Record>,
     held: HashMap<NoteId, Held>,
-    /// Часы LRU.
+    /// The LRU clock.
     clock: u64,
     bytes: usize,
 }
 
-/// Что держится в памяти для заметки.
+/// What is kept in memory for a note.
 #[derive(Debug)]
 struct Held {
-    /// Сырая отрисовка — только без кэша на диске.
+    /// The raw rendering: only without a disk cache.
     raw: Option<Arc<Rendered>>,
-    /// Обработанная страница и настройки, под которые она обработана.
+    /// The processed page and the settings it was processed for.
     page: Option<(Arc<NotePage>, FigureOptions)>,
     used: u64,
     bytes: usize,
@@ -81,12 +82,12 @@ impl Held {
     }
 }
 
-/// Примерный вес отрисовки в памяти.
+/// The rough weight of a rendering in memory.
 fn size_of_rendered(r: &Rendered) -> usize {
     r.body.len() + r.styles.len()
 }
 
-/// Версия страницы: файлы + настройки обработки рисунков.
+/// The page version: the files + the figure processing settings.
 pub fn page_version(files: &str, opts: FigureOptions) -> String {
     format!("{files}-{}", opts.key())
 }
@@ -102,13 +103,13 @@ impl PageCache {
         }
     }
 
-    /// Пределы кэша на диске (настройки устройства).
+    /// Disk cache limits (device settings).
     pub fn disk_limits(&self) -> DiskLimits {
         *self.disk_limits.lock()
     }
 
-    /// Пределы из настроек устройства: память — сразу (лишнее вытеснится
-    /// при следующей записи), диск — при следующей чистке.
+    /// Limits from the device settings: memory at once (the excess is evicted
+    /// on the next write), disk on the next cleanup.
     pub fn set_limits(&self, memory: usize, disk: DiskLimits) {
         self.budget.store(memory, Ordering::Relaxed);
         *self.disk_limits.lock() = disk;
@@ -118,7 +119,7 @@ impl PageCache {
         self.disk.is_some()
     }
 
-    /// Запись заметки (из памяти или с диска).
+    /// The note record (from memory or disk).
     fn record(&self, id: &NoteId) -> Option<Record> {
         if let Some(r) = self.state.lock().records.get(id) {
             return Some(r.clone());
@@ -128,34 +129,34 @@ impl PageCache {
         Some(record)
     }
 
-    /// Годна ли запись для текущих файлов.
+    /// Whether the record is good for the current files.
     fn is_current(&self, record: &Record) -> bool {
         self.versions.current(&record.deps) == record.files
     }
 
-    /// Собрана ли заметка для текущих файлов (в памяти или на диске).
+    /// Whether the note is built for the current files (in memory or on disk).
     pub fn is_fresh(&self, id: &NoteId) -> bool {
         self.record(id).is_some_and(|r| self.is_current(&r))
     }
 
-    /// Текущая версия страницы по известному списку файлов (без сборки).
+    /// The current page version by the known file list (without building).
     pub fn version(&self, id: &NoteId, opts: FigureOptions) -> Option<String> {
         let record = self.record(id)?;
         Some(page_version(&self.versions.current(&record.deps), opts))
     }
 
-    /// Ссылки последней удачной сборки (в памяти или на диске).
+    /// Links of the last good build (in memory or on disk).
     pub fn links(&self, id: &NoteId) -> Option<Vec<LinkRef>> {
         self.record(id).map(|r| r.links)
     }
 
-    /// Сколько длилась прошлая сборка, мс.
+    /// How long the last build took, in ms.
     pub fn build_ms(&self, id: &NoteId) -> Option<u64> {
         self.record(id).map(|r| r.build_ms)
     }
 
-    /// Страница, если файлы заметки не менялись. `memory_only` — только
-    /// готовая страница в памяти (без чтения диска и обработки рисунков).
+    /// The page, if the note files did not change. `memory_only`: only a finished
+    /// page in memory (no disk reads, no figure processing).
     pub fn page(
         &self,
         entry: &Entry,
@@ -178,7 +179,7 @@ impl PageCache {
             None => None,
             Some(_) => Some(self.raw(id, &record)?),
         };
-        tracing::debug!(%id, memory = self.state.lock().held.contains_key(id), "страница из кэша");
+        tracing::debug!(%id, memory = self.state.lock().held.contains_key(id), "page from cache");
         let page = Arc::new(NotePage {
             id: id.clone(),
             kind: entry.kind,
@@ -192,7 +193,7 @@ impl PageCache {
         Some(page)
     }
 
-    /// Готовая страница в памяти под эти настройки.
+    /// A finished page in memory for these settings.
     fn held_page(&self, id: &NoteId, opts: FigureOptions) -> Option<Arc<NotePage>> {
         let mut state = self.state.lock();
         state.clock += 1;
@@ -202,30 +203,30 @@ impl PageCache {
         held.page.as_ref().filter(|(_, o)| *o == opts).map(|(p, _)| p.clone())
     }
 
-    /// Сырая отрисовка по записи: из памяти или с диска.
+    /// The raw rendering for a record: from memory or disk.
     fn raw(&self, id: &NoteId, record: &Record) -> Option<Arc<Rendered>> {
         if let Some(raw) = self.state.lock().held.get(id).and_then(|h| h.raw.clone()) {
             return Some(raw);
         }
         let raw = self.disk.as_ref()?.raw(id, record)?;
-        tracing::debug!(%id, "отрисовка с диска");
+        tracing::debug!(%id, "rendering from disk");
         Some(Arc::new(raw))
     }
 
-    /// Последняя удачная отрисовка (годная или нет) — показать под ошибкой.
+    /// The last good rendering (current or not), to show under an error.
     pub fn last_good(&self, id: &NoteId) -> Option<Arc<Rendered>> {
         let record = self.record(id)?;
         record.raw.as_ref()?;
         self.raw(id, &record)
     }
 
-    /// Запомнить сборку: запись — в память и на диск, отрисовку — на диск
-    /// (без диска — в память), страницу `page` — в память (прогрев её не
-    /// передаёт).
+    /// Remembers a build: the record to memory and disk, the rendering to disk
+    /// (without a disk, to memory), the page `page` to memory (warming does not
+    /// pass one).
     pub fn store(&self, id: &NoteId, mut record: Record, raw: Raw, page: Option<(Arc<NotePage>, FigureOptions)>) {
         let previous_tag = self.state.lock().records.get(id).and_then(|r| r.raw.clone());
         let (fresh, kept) = match raw {
-            // Прежняя отрисовка уже лежит под своей меткой; нет метки — пишем заново.
+            // The earlier rendering already lies under its tag; no tag - write it again.
             Raw::Previous(r) if previous_tag.is_some() && self.disk.is_some() => (None, Some(r)),
             Raw::New(r) | Raw::Previous(r) => (Some(r), None),
             Raw::None => (None, None),
@@ -241,7 +242,7 @@ impl PageCache {
         }
         self.state.lock().records.insert(id.clone(), record);
         let raw_in_memory = if self.disk.is_none() { fresh.or(kept) } else { None };
-        // Прежняя страница устарела вместе с записью.
+        // The earlier page is stale together with the record.
         self.forget(id);
         if raw_in_memory.is_some() || page.is_some() {
             self.hold(id, raw_in_memory, page);
@@ -255,8 +256,8 @@ impl PageCache {
         }
     }
 
-    /// Положить в память (сырая — `None`: оставить прежнюю) и вытеснить
-    /// давно не нужные страницы сверх предела.
+    /// Puts into memory (a `None` raw keeps the earlier one) and evicts pages
+    /// not needed for long beyond the limit.
     fn hold(&self, id: &NoteId, raw: Option<Arc<Rendered>>, page: Option<(Arc<NotePage>, FigureOptions)>) {
         let mut state = self.state.lock();
         state.clock += 1;
@@ -275,17 +276,17 @@ impl PageCache {
                 break;
             };
             state.bytes -= h.bytes;
-            tracing::debug!(id = %victim, bytes = h.bytes, "вытеснена из памяти");
+            tracing::debug!(id = %victim, bytes = h.bytes, "evicted from memory");
         }
     }
 
-    /// Сколько страниц и байт в памяти.
+    /// How many pages and bytes are in memory.
     pub fn memory(&self) -> (usize, usize) {
         let state = self.state.lock();
         (state.held.len(), state.bytes)
     }
 
-    /// Чистка кэша на диске (см. [`DiskCache::prune`]).
+    /// Disk cache cleanup (see [`DiskCache::prune`]).
     pub fn prune(&self, alive: &dyn Fn(&str) -> bool) -> Option<Pruned> {
         let limits = *self.disk_limits.lock();
         Some(self.disk.as_ref()?.prune(alive, limits))
@@ -313,7 +314,7 @@ mod tests {
         }
     }
 
-    /// Обработка рисунков в тестах: помечает тело настройками.
+    /// Figure processing in tests: marks the body with the settings.
     fn finish(r: &Rendered, opts: FigureOptions) -> Rendered {
         Rendered { body: format!("{}|{}", r.body, opts.key()), ..rendered("") }
     }
@@ -380,19 +381,19 @@ mod tests {
         let cache = f.cache(true, MEMORY_BUDGET);
         let a = entry("A");
         cache.store(&a.id, f.record("A.typ"), Raw::New(Arc::new(rendered("a"))), None);
-        assert_eq!(cache.memory(), (0, 0), "прогрев не держит страницу в памяти");
+        assert_eq!(cache.memory(), (0, 0), "warming does not keep the page in memory");
         assert!(cache.is_fresh(&a.id));
-        assert!(cache.page(&a, P2, &finish, true).is_none(), "в памяти её нет");
+        assert!(cache.page(&a, P2, &finish, true).is_none(), "it is not in memory");
 
         let got = cache.page(&a, P2, &finish, false).unwrap();
         assert_eq!(got.rendered.as_ref().unwrap().body, "a|p2");
         assert_eq!(cache.memory().0, 1);
-        assert!(Arc::ptr_eq(&got, &cache.page(&a, P2, &finish, true).unwrap()), "дальше — из памяти");
-        // Другие настройки — сырая с диска, одна обработанная копия в памяти.
+        assert!(Arc::ptr_eq(&got, &cache.page(&a, P2, &finish, true).unwrap()), "from memory from then on");
+        // Other settings: the raw one from disk, one processed copy in memory.
         assert_eq!(cache.page(&a, FULL, &finish, false).unwrap().rendered.as_ref().unwrap().body, "a|full");
         assert!(cache.page(&a, P2, &finish, true).is_none());
 
-        // После перезапуска — с диска.
+        // After a restart: from disk.
         let restarted = f.cache(true, MEMORY_BUDGET);
         assert!(restarted.is_fresh(&a.id));
         assert_eq!(restarted.build_ms(&a.id), Some(5));
@@ -410,7 +411,7 @@ mod tests {
         assert!(!cache.is_fresh(&a.id));
         assert_ne!(cache.version(&a.id, P2).unwrap(), before);
         assert!(cache.page(&a, P2, &finish, false).is_none());
-        assert_eq!(cache.last_good(&a.id).unwrap().body, "a", "прежняя отрисовка — показать под ошибкой");
+        assert_eq!(cache.last_good(&a.id).unwrap().body, "a", "the earlier rendering, to show under an error");
     }
 
     #[test]
@@ -425,17 +426,17 @@ mod tests {
         cache.store(&a.id, failed, Raw::Previous(previous), None);
 
         let restarted = f.cache(true, MEMORY_BUDGET);
-        assert!(restarted.is_fresh(&a.id), "ошибка тоже в кэше: не собирать заново");
+        assert!(restarted.is_fresh(&a.id), "an error is cached too: do not build again");
         let got = restarted.page(&a, P2, &finish, false).unwrap();
         assert_eq!(got.errors.len(), 1);
-        assert_eq!(got.rendered.as_ref().unwrap().body, "a|p2", "под ошибкой — прежняя отрисовка");
+        assert_eq!(got.rendered.as_ref().unwrap().body, "a|p2", "under an error: the earlier rendering");
     }
 
     #[test]
     fn memory_is_bounded_lru() {
         let f = fixture();
         let big = "x".repeat(100);
-        // Предел — на две страницы.
+        // The limit fits two pages.
         let cache = f.cache(true, 2 * (big.len() + 3));
         let (a, b) = (entry("A"), entry("B"));
         f.mem.write("C.typ", "c");
@@ -444,12 +445,12 @@ mod tests {
             let file = format!("{}.typ", e.id);
             cache.store(&e.id, f.record(&file), Raw::New(Arc::new(rendered(&big))), Some(page(e, &big, P2)));
         }
-        cache.page(&a, P2, &finish, true).unwrap(); // A — недавняя
+        cache.page(&a, P2, &finish, true).unwrap(); // A is recent
         cache.store(&c.id, f.record("C.typ"), Raw::New(Arc::new(rendered(&big))), Some(page(&c, &big, P2)));
         assert_eq!(cache.memory().0, 2);
-        assert!(cache.page(&b, P2, &finish, true).is_none(), "B вытеснена");
+        assert!(cache.page(&b, P2, &finish, true).is_none(), "B is evicted");
         assert!(cache.page(&a, P2, &finish, true).is_some());
-        assert!(cache.page(&b, P2, &finish, false).is_some(), "но есть на диске");
+        assert!(cache.page(&b, P2, &finish, false).is_some(), "but it is on disk");
     }
 
     #[test]
@@ -458,7 +459,7 @@ mod tests {
         let cache = f.cache(false, MEMORY_BUDGET);
         let a = entry("A");
         cache.store(&a.id, f.record("A.typ"), Raw::New(Arc::new(rendered("a"))), None);
-        assert_eq!(cache.memory().0, 1, "без диска прогретое держится в памяти");
+        assert_eq!(cache.memory().0, 1, "without a disk the warmed page stays in memory");
         assert_eq!(cache.page(&a, FULL, &finish, false).unwrap().rendered.as_ref().unwrap().body, "a|full");
         assert!(f.cache(false, MEMORY_BUDGET).record(&a.id).is_none());
     }

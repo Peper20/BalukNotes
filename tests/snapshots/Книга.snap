@@ -16,7 +16,7 @@ headings:
 links:
   Книга / Продолжение
   Книга / особый
-styles: 0 байт, fnv cbf29ce484222325
+styles: 0 bytes, fnv cbf29ce484222325
 ---
 <article class="k-doc" data-doc="book" lang="ru">
 <header class="k-title">
@@ -56,7 +56,7 @@ styles: 0 байт, fnv cbf29ce484222325
 <h2 class="k-h k-h1" data-num="3" id="Приложение" data-k-anchor="Приложение"><span class="k-num" data-word="Глава">3</span>Приложение</h2>
 <h3 class="k-h k-h2" id="Картинка-из-файла" data-k-anchor="Картинка-из-файла"><span class="k-num">3.1</span>Картинка из файла</h3>
 <figure>
-<img src="data:image/svg+xml;634 байт, fnv fd7c9b0246d5b06c" width="200" height="80" style="display: block; width: 60%">
+<img src="data:image/svg+xml;634 bytes, fnv fd7c9b0246d5b06c" width="200" height="80" style="display: block; width: 60%">
 <figcaption><span class="k-fig-num">Рис. 3.1.</span> SVG-картинка из папки книги</figcaption></figure>
 <h3 class="k-h k-h2" id="Итоги-3" data-k-anchor="Итоги"><span class="k-num">3.2</span>Итоги</h3>
 <p>Итоги третьей главы.</p></article>

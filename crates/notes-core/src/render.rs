@@ -1,10 +1,11 @@
-//! HTML-документы заметки (по одному на тему) → одна сырая страница.
+//! HTML documents of a note (one per theme) -> one raw page.
 //!
-//! Работаем с деревом `typst-html` до сериализации, а не с текстом HTML.
-//! Сама обработка — цепочка проходов [`crate::passes`]: склейка тем, якоря
-//! заголовков, ссылки между заметками, скобки в формулах, теги (по дереву),
-//! затем цвета кода (по тексту). Здесь — типы страницы, проверка, что
-//! рисунков во всех темах поровну, сериализация и общие помощники проходов.
+//! The work is on the `typst-html` tree before serializing, not on HTML text.
+//! The processing itself is a chain of [`crate::passes`]: joining themes,
+//! heading anchors, links between notes, brackets in formulas, tags (on the
+//! tree), then code colors (on the text). Here: the page types, the check that
+//! every theme has the same number of figures, serializing and helpers shared
+//! by the passes.
 
 use std::collections::HashSet;
 use std::sync::LazyLock;
@@ -15,32 +16,32 @@ use typst_html::{HtmlAttr, HtmlDocument, HtmlElement, HtmlFrame, HtmlNode, HtmlO
 
 use crate::passes::{self, Context};
 
-// Константой (HtmlAttr::constant) интернируются только имена до 12 символов.
+// Only names up to 12 characters are interned as a constant (HtmlAttr::constant).
 pub(crate) static DATA_TARGET: LazyLock<HtmlAttr> = LazyLock::new(|| attr_name("data-k-target"));
 pub(crate) static DATA_ANCHOR: LazyLock<HtmlAttr> = LazyLock::new(|| attr_name("data-k-anchor"));
 
 #[expect(clippy::expect_used, reason = "names are literals in this crate, checked by its tests")]
 pub(crate) fn attr_name(name: &str) -> HtmlAttr {
-    HtmlAttr::intern(name).expect("имя атрибута задано в коде и верно")
+    HtmlAttr::intern(name).expect("attribute names are set in code and valid")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Heading {
-    /// Уровень оформления: 1 — глава книги, 2 — раздел, …
+    /// The design level: 1 is a book chapter, 2 a section, ...
     pub level: u8,
     pub id: String,
-    /// Слаг текста заголовка — по нему ссылка находит раздел.
+    /// The slug of the heading text: a link finds the section by it.
     pub anchor: String,
     pub text: String,
-    /// HTML заголовка для оглавления (формулы, выделение) — без номера и
-    /// ссылок; `None` — заголовок из одного текста (`passes::heading_html`).
+    /// Heading HTML for the contents (formulas, emphasis) without the number
+    /// and links; `None` for a plain-text heading (`passes::heading_html`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[cfg_attr(feature = "ts", ts(optional))]
     pub html: Option<String>,
 }
 
-/// Ссылка из заметки, как она написана в `#see(…)`.
+/// A link from a note as written in `#see(...)`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct LinkRef {
@@ -52,9 +53,9 @@ pub struct LinkRef {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Rendered {
     pub title: Option<String>,
-    /// `<style>` из `<head>` (стили MathML от Typst).
+    /// `<style>` from `<head>` (MathML styles from Typst).
     pub styles: String,
-    /// Содержимое `<body>`.
+    /// The contents of `<body>`.
     pub body: String,
     pub headings: Vec<Heading>,
     pub links: Vec<LinkRef>,
@@ -64,15 +65,24 @@ pub struct Rendered {
     pub sanitizer: Option<(usize, usize, usize)>,
 }
 
-/// Адрес ссылки на заметку. `None` — такой заметки нет.
+/// The URL of a link to a note. `None` if there is no such note.
 pub trait LinkResolver {
     fn href(&self, target: &str, anchor: Option<&str>) -> Option<String>;
 }
 
-/// Склеивает документы тем (первый — базовый) в страницу.
+/// Joins the theme documents (the first is the base) into a page.
 pub fn render(docs: Vec<(String, HtmlDocument)>, links: &dyn LinkResolver) -> Result<Rendered, String> {
+    render_with(docs, links, passes::TREE)
+}
+
+/// [`render`] with the given tree passes (tests compare pages with and without one).
+pub fn render_with(
+    docs: Vec<(String, HtmlDocument)>,
+    links: &dyn LinkResolver,
+    tree: &[passes::TreePass],
+) -> Result<Rendered, String> {
     let mut docs = docs.into_iter();
-    let (base_theme, mut base) = docs.next().ok_or("нет ни одного документа")?;
+    let (base_theme, mut base) = docs.next().ok_or("no documents")?;
 
     let mut themes = vec![base_theme];
     let mut frames: Vec<Vec<HtmlFrame>> = Vec::new();
@@ -83,7 +93,7 @@ pub fn render(docs: Vec<(String, HtmlDocument)>, links: &dyn LinkResolver) -> Re
     let base_count = count_frames(base.root());
     if let Some((i, f)) = frames.iter().enumerate().find(|(_, f)| f.len() != base_count) {
         return Err(format!(
-            "в теме «{}» рисунков {}, а в «{}» — {base_count}: рисунок зависит от темы не только цветом",
+            "theme \"{}\" has {} figures and \"{}\" has {base_count}: a figure depends on the theme by more than color",
             themes[i + 1],
             f.len(),
             themes[0],
@@ -98,11 +108,11 @@ pub fn render(docs: Vec<(String, HtmlDocument)>, links: &dyn LinkResolver) -> Re
     });
 
     let mut ctx = Context::new(&themes, frames, ids, links);
-    passes::run_tree(base.root_mut(), &mut ctx, passes::TREE);
+    passes::run_tree(base.root_mut(), &mut ctx, tree);
     let Context { headings, out_links, tags, removed_tags, removed_attrs, removed_urls, .. } = ctx;
 
     let title = base.info().title.as_ref().map(ToString::to_string);
-    let html = passes::timed("сериализация", || typst_html::html(&base, &HtmlOptions::default()))
+    let html = passes::timed("serialize", || typst_html::html(&base, &HtmlOptions::default()))
         .map_err(|errs| errs.iter().map(|e| e.message.to_string()).collect::<Vec<_>>().join("; "))?;
     let (styles, body) = split_html(&html);
     let sanitizer =
@@ -112,15 +122,16 @@ pub fn render(docs: Vec<(String, HtmlDocument)>, links: &dyn LinkResolver) -> Re
     Ok(page)
 }
 
-/// Обычная пунктуация — разделитель слов в слаге, как пробел. Остальные
-/// знаки (`+ # % & @ = * → <` …) различают заголовки («C» и «C++», «a=b» и
-/// «a b») и остаются в слаге как есть; в адресе их кодирует
-/// [`crate::pipeline::encode`] и `encodeURIComponent` клиента.
+/// Ordinary punctuation separates words in a slug, like a space. Other
+/// characters (`+ # % & @ = * → <` ...) tell headings apart ("C" and "C++",
+/// "a=b" and "a b") and stay in the slug as is; in a URL they are encoded by
+/// [`crate::pipeline::encode`] and the client's `encodeURIComponent`.
 const SEPARATORS: &str = ".,;:!?'\"`«»„“”‘’()[]{}/\\|—–…·";
 
-/// Слаг для якоря: буквы и цифры (любого алфавита), `-`, `_` и знаки
-/// (`C++` → `C++`, `C#` → `C#`); пробелы и [`SEPARATORS`] — разделители,
-/// схлопываются в один `-`. Регистр сохраняется.
+/// A slug for an anchor: letters and digits (of any alphabet), `-`, `_` and
+/// symbols (`C++` -> `C++`, `C#` -> `C#`); spaces and [`SEPARATORS`] separate
+/// words and collapse into one `-`. Case is kept. Nothing left gives "раздел"
+/// ("section"): it is part of note URLs, so it stays as is.
 pub fn slug(text: &str) -> String {
     let mut out = String::new();
     let mut sep = false;
@@ -208,7 +219,7 @@ fn collect_frames(root: &HtmlElement) -> Vec<HtmlFrame> {
     out
 }
 
-/// Из полного HTML — стили `<head>` и содержимое `<body>`.
+/// Styles of `<head>` and the contents of `<body>` from a whole HTML page.
 fn split_html(html: &str) -> (String, String) {
     let between = |open: &str, close: &str| {
         let start = html.find(open).map(|i| i + open.len())?;

@@ -1,17 +1,17 @@
-//! Страницы по запросу: сборка ([`Pipeline`]) поверх кэша ([`PageCache`]).
+//! Pages on request: the build ([`Pipeline`]) over the cache ([`PageCache`]).
 //!
-//! Заметка собирается, когда её запросили (или заранее — прогрев,
-//! [`crate::warm`]). Сборки **разных** заметок идут параллельно (у каждой
-//! свой кэш файлов компилятора, [`crate::world`]): открыть заметку, пока
-//! собирается книга, можно сразу. Сборка одной заметки — одна (замок
-//! заметки в `building`): второй запрос той же заметки, пришедший во время
-//! её сборки, ждёт первую и берёт результат из кэша, а не собирает заново.
-//! Ждущий запрос пользователя — сигнал прогреву не начинать новую сборку
-//! ([`Pages::wait_for_users`]): процессор — сначала читателю.
+//! A note is built when it is requested (or ahead: warming, [`crate::warm`]).
+//! Builds of **different** notes run in parallel (each has its own compiler
+//! file cache, [`crate::world`]): a note opens at once while a book builds. A
+//! note builds once at a time (the note lock in `building`): a second request
+//! for the same note during its build waits for the first and takes the result
+//! from the cache instead of building again. A waiting user request tells
+//! warming not to start a new build ([`Pages::wait_for_users`]): the reader
+//! gets the CPU first.
 //!
-//! Ошибка компиляции показывается поверх последней удачной отрисовки.
-//! Версия страницы — версия файлов + настройки обработки рисунков: смена
-//! настроек не перекомпилирует заметку, а клиент перезапросит страницу сам.
+//! A compile error is shown over the last good rendering. The page version is
+//! the file version + the figure processing settings: changing the settings
+//! does not recompile the note, and the client requests the page again itself.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -30,48 +30,49 @@ use crate::pipeline::{Build, Pipeline, Priority};
 use crate::render::Rendered;
 use crate::vault::{Entry, NoteId, NoteKind, Vault};
 
-/// Заметка, готовая к показу.
+/// A note ready to be shown.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct NotePage {
     pub id: NoteId,
     pub kind: NoteKind,
-    /// Версия файлов заметки и настроек отрисовки.
+    /// The version of the note files and rendering settings.
     pub version: String,
-    /// Последняя удачная отрисовка. При ошибке компиляции — предыдущая
-    /// удачная (если была): читатель видит заметку и ошибку поверх неё.
+    /// The last good rendering. On a compile error, the previous good one (if
+    /// any): the reader sees the note with the error over it.
     pub rendered: Option<Arc<Rendered>>,
     pub errors: Vec<Diagnostic>,
     pub warnings: Vec<Diagnostic>,
-    /// Книга по главам: какая глава в `rendered` и где остальные. Только у
-    /// ответа на запрос главы ([`crate::book::chapter_page`]); у страницы
-    /// целиком — `None`.
+    /// A book by chapters: which chapter is in `rendered` and where the others
+    /// are. Only in the answer to a chapter request ([`crate::book::chapter_page`]);
+    /// `None` for a whole page.
     pub book: Option<crate::book::BookView>,
 }
 
+/// Pages of one vault: builds on request over the page cache (see the module).
 #[derive(Debug)]
 pub struct Pages {
     vault: Vault,
     pipeline: Arc<dyn Pipeline>,
     cache: Arc<PageCache>,
-    /// Замки заметок: держится на время сборки этой заметки.
+    /// Note locks: held for the time of the note's build.
     building: Mutex<HashMap<NoteId, Arc<Mutex<()>>>>,
-    /// Сколько запросов страниц сейчас ждут: прогрев им уступает.
+    /// How many page requests wait now: warming yields to them.
     waiting: AtomicUsize,
-    /// Состояние релиза памяти после серии сборок.
+    /// The state of releasing memory after a series of builds.
     releaser: Arc<Mutex<ReleaserState>>,
 }
 
-/// E5: релиз даёт около +3 мс к следующей пересборке; 5 с - компромисс,
-/// который заметно снижает idle RSS и срабатывает в обычной работе.
+/// E5: a release adds about 3 ms to the next rebuild; 5 s is a compromise that
+/// noticeably lowers idle RSS and still fires in normal work.
 const IDLE_RELEASE_DELAY: Duration = Duration::from_secs(5);
 const RELEASE_POLL_DELAY: Duration = Duration::from_millis(200);
 
 #[derive(Debug, Default)]
 struct ReleaserState {
-    /// Была ли сборка после последнего релиза.
+    /// Whether there was a build after the last release.
     pending_release: bool,
-    /// Последняя запись сборки в кэш.
+    /// The last build written to the cache.
     last_build: Option<Instant>,
 }
 
@@ -85,7 +86,7 @@ impl Pages {
             waiting: AtomicUsize::new(0),
             releaser: Arc::new(Mutex::default()),
         };
-        // Один дебаунсер на Pages: релиз памяти по простоям.
+        // One debouncer per Pages: releasing memory when idle.
         pages.spawn_releaser();
         pages
     }
@@ -98,9 +99,9 @@ impl Pages {
         &self.cache
     }
 
-    /// Страница заметки: из кэша, если её файлы не менялись.
+    /// The note page: from the cache if its files did not change.
     pub fn page(&self, id: &NoteId, opts: FigureOptions) -> Result<Arc<NotePage>> {
-        /// Запрос ждёт страницу — прогрев не начнёт новую сборку.
+        /// A request waits for a page: warming does not start a new build.
         struct Waiting<'a>(&'a AtomicUsize);
         impl Drop for Waiting<'_> {
             fn drop(&mut self) {
@@ -124,8 +125,8 @@ impl Pages {
         Ok(self.store_page(&entry, built, opts))
     }
 
-    /// Текущая версия заметки. Для известной — только `stat` её файлов,
-    /// без компиляции; для новой — собирает.
+    /// The current note version. For a known note only `stat` of its files,
+    /// without compiling; a new one gets built.
     pub fn version(&self, id: &NoteId, opts: FigureOptions) -> Result<String> {
         if let Some(version) = self.cache.version(id, opts) {
             return Ok(version);
@@ -133,26 +134,26 @@ impl Pages {
         Ok(self.page(id, opts)?.version.clone())
     }
 
-    /// Есть ли у заметки годная сборка — в памяти или на диске.
+    /// Whether the note has a good build, in memory or on disk.
     pub fn is_built(&self, id: &NoteId) -> bool {
         self.cache.is_fresh(id)
     }
 
-    /// Сколько длилась прошлая сборка заметки.
+    /// How long the last build of the note took.
     pub fn last_build(&self, id: &NoteId) -> Option<Duration> {
         self.cache.build_ms(id).map(Duration::from_millis)
     }
 
-    /// Подождать, пока запросы пользователя получат свои страницы.
+    /// Waits until user requests get their pages.
     pub fn wait_for_users(&self) {
         while self.waiting.load(Ordering::SeqCst) > 0 {
             std::thread::sleep(Duration::from_millis(50));
         }
     }
 
-    /// Собрать заметку заранее (прогрев): в кэш на диске, без обработки
-    /// рисунков и без страницы в памяти. Уже собранная — пропускается.
-    /// `true` — собрана сейчас.
+    /// Builds a note ahead (warming): to the disk cache, without figure
+    /// processing and without a page in memory. An already built note is
+    /// skipped. `true` means it was built now.
     pub fn prebuild(&self, id: &NoteId) -> Result<bool> {
         let entry = self.vault.entry(id)?;
         let lock = self.note_lock(id);
@@ -165,22 +166,21 @@ impl Pages {
         Ok(true)
     }
 
-    /// Освободить память сборок (после прохода прогрева).
+    /// Frees the memory of builds (after a warming round).
     pub fn release_memory(&self) {
         self.pipeline.release_memory();
     }
 
-    /// Замок сборки заметки. Замки несобираемых заметок убираются, чтобы
-    /// карта не росла.
+    /// The build lock of a note. Locks of notes not being built are dropped so
+    /// the map does not grow.
     fn note_lock(&self, id: &NoteId) -> Arc<Mutex<()>> {
         let mut locks = self.building.lock();
         locks.retain(|_, l| Arc::strong_count(l) > 1);
         locks.entry(id.clone()).or_default().clone()
     }
 
-    /// Запомнить сборку. Ошибка — под ней прежняя удачная отрисовка.
-    /// С настройками `opts` — страница (она же остаётся в памяти).
-    /// Stores a build without a page (warm-up).
+    /// Stores a build without a page (warming). On an error the earlier good
+    /// rendering stays under it.
     fn store(&self, entry: &Entry, built: Build) {
         let (record, raw, _) = self.record(entry, built);
         self.cache.store(&entry.id, record, raw, None);
@@ -217,7 +217,7 @@ impl Pages {
                 None => (Raw::None, None),
             },
         };
-        // Ссылки показанной отрисовки — для индекса ссылок (вычисляемые пути).
+        // Links of the shown rendering, for the link index (computed paths).
         let links = shown.as_ref().map(|r| r.links.clone()).unwrap_or_default();
         let record = Record {
             files: built.files,
@@ -231,14 +231,14 @@ impl Pages {
         (record, raw, shown)
     }
 
-    /// Отложенный выпуск памяти: отметить сборку (дебаунсер увидит простой).
+    /// Delayed memory release: marks a build (the debouncer will see the idle time).
     fn note_built(&self) {
         let mut state = self.releaser.lock();
         state.pending_release = true;
         state.last_build = Some(Instant::now());
     }
 
-    /// Один рабочий поток на `Pages`, проверяет простой и вызывает релиз.
+    /// One worker thread per `Pages`: watches for idle time and calls the release.
     fn spawn_releaser(&self) {
         let pipeline = Arc::downgrade(&self.pipeline);
         let releaser = Arc::downgrade(&self.releaser);
@@ -276,14 +276,14 @@ pub(crate) mod tests {
     use crate::storage::MemStorage;
     use crate::version::{Dep, Versions};
 
-    /// Сборка без Typst: отрисовка — текст главного файла, `ошибка` в
-    /// тексте — ошибка компиляции.
+    /// A build without Typst: the rendering is the text of the main file, and
+    /// `ошибка` ("error") in the text means a compile error.
     #[derive(Debug)]
     pub(crate) struct FakePipeline {
         pub vault: Vault,
         pub versions: Versions,
         pub builds: AtomicUsize,
-        /// Задержка сборки (проверка одновременных запросов).
+        /// A build delay (to test concurrent requests).
         pub delay: Duration,
     }
 
@@ -317,7 +317,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// «Время сборки» в тестах — длина пути, чтобы порядок был предсказуем.
+    /// The "build time" in tests is the path length, so the order is predictable.
     fn text_len(main: &str) -> u64 {
         main.chars().count() as u64
     }
@@ -336,8 +336,8 @@ pub(crate) mod tests {
             Self { mem, dir: tempfile::tempdir().unwrap() }
         }
 
-        /// Страницы поверх хранилища; `disk` — с кэшем на диске (общим для
-        /// всех «запусков» этой настройки).
+        /// Pages over a vault; `disk` adds a disk cache (shared by all "runs"
+        /// with this setup).
         pub(crate) fn pages(&self, disk: bool, delay: Duration) -> (Pages, Arc<FakePipeline>) {
             let vault = Vault::new(self.mem.clone());
             let versions = Versions::new(self.mem.clone());
@@ -374,7 +374,7 @@ pub(crate) mod tests {
         assert_eq!(pipeline.builds.load(Ordering::SeqCst), 1);
 
         s.mem.write("A.typ", "два");
-        assert_ne!(pages.version(&id("A"), OPTS).unwrap(), first.version, "версия — без сборки");
+        assert_ne!(pages.version(&id("A"), OPTS).unwrap(), first.version, "the version without a build");
         assert_eq!(pipeline.builds.load(Ordering::SeqCst), 1);
         assert_eq!(body(&pages.page(&id("A"), OPTS).unwrap()), "два|p2");
         assert_eq!(pipeline.builds.load(Ordering::SeqCst), 2);
@@ -390,11 +390,11 @@ pub(crate) mod tests {
         assert_eq!(page.errors.len(), 1);
         assert_eq!(body(&page), "раз|p2");
 
-        // После перезапуска — та же картина, без сборки.
+        // After a restart: the same picture, without a build.
         let (restarted, pipeline) = s.pages(true, Duration::ZERO);
         let page = restarted.page(&id("A"), OPTS).unwrap();
         assert_eq!((page.errors.len(), body(&page)), (1, "раз|p2"));
-        assert_eq!(pipeline.builds.load(Ordering::SeqCst), 0, "ошибка тоже в кэше");
+        assert_eq!(pipeline.builds.load(Ordering::SeqCst), 0, "an error is cached too");
     }
 
     #[test]
@@ -412,7 +412,7 @@ pub(crate) mod tests {
         let p2 = pages.page(&id("A"), OPTS).unwrap();
         let full = pages.page(&id("A"), FigureOptions { precision: None }).unwrap();
         assert_eq!(body(&full), "раз|full");
-        assert_ne!(p2.version, full.version, "клиент перезапросит страницу");
+        assert_ne!(p2.version, full.version, "the client will request the page again");
         assert_eq!(pipeline.builds.load(Ordering::SeqCst), 1);
     }
 
@@ -421,8 +421,8 @@ pub(crate) mod tests {
         let s = Setup::new(&[("A.typ", "раз")]);
         let (pages, pipeline) = s.pages(true, Duration::ZERO);
         assert!(pages.prebuild(&id("A")).unwrap());
-        assert!(!pages.prebuild(&id("A")).unwrap(), "собранное не собирается");
-        assert_eq!(pages.cache().memory().0, 0, "прогрев — только на диск");
+        assert!(!pages.prebuild(&id("A")).unwrap(), "a built note is not built again");
+        assert_eq!(pages.cache().memory().0, 0, "warming goes to disk only");
         assert!(pages.is_built(&id("A")));
         assert_eq!(body(&pages.page(&id("A"), OPTS).unwrap()), "раз|p2");
         assert_eq!(pipeline.builds.load(Ordering::SeqCst), 1);
@@ -438,7 +438,7 @@ pub(crate) mod tests {
             let b = scope.spawn(|| pages.page(&id("A"), OPTS).unwrap());
             (a.join().unwrap(), b.join().unwrap())
         });
-        assert!(Arc::ptr_eq(&a, &b), "второй запрос дождался первой сборки");
+        assert!(Arc::ptr_eq(&a, &b), "the second request waited for the first build");
         assert_eq!(pipeline.builds.load(Ordering::SeqCst), 1);
     }
 
@@ -451,7 +451,7 @@ pub(crate) mod tests {
             scope.spawn(|| pages.page(&id("A"), OPTS).unwrap());
             scope.spawn(|| pages.page(&id("B"), OPTS).unwrap());
         });
-        assert!(started.elapsed() < Duration::from_millis(550), "не по очереди: {:?}", started.elapsed());
+        assert!(started.elapsed() < Duration::from_millis(550), "not one by one: {:?}", started.elapsed());
         assert_eq!(pipeline.builds.load(Ordering::SeqCst), 2);
         assert!(pages.building.lock().len() <= 2);
     }
@@ -478,6 +478,6 @@ pub(crate) mod tests {
         drop(pipeline);
         drop(pages);
         std::thread::sleep(Duration::from_millis(250));
-        assert!(weak.upgrade().is_none(), "поток релиза не должен держать pipeline");
+        assert!(weak.upgrade().is_none(), "the release thread must not hold the pipeline");
     }
 }

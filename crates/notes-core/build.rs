@@ -1,37 +1,37 @@
-//! Метка кода отрисовки для кэша на диске (`NOTES_RENDER_HASH`, см.
-//! `src/cache.rs`): хэш исходников ядра, от которых зависит сырая
-//! отрисовка, встроенных шрифтов `fonts/` и версий крейтов Typst из
-//! `Cargo.lock`. Пересборка, не тронувшая их (сервер, клиент, CLI), кэш не
-//! сбрасывает.
+//! A label of the rendering code for the disk cache (`NOTES_RENDER_HASH`, see
+//! `src/cache.rs`): a hash of the core sources the raw rendering depends on,
+//! of the embedded fonts in `fonts/` and of the Typst crate versions in
+//! `Cargo.lock`. A rebuild that does not touch them (server, client, CLI) keeps
+//! the cache.
 //!
-//! Модули ядра, которые **не** влияют на сырую отрисовку, перечислены в
-//! [`AFTER_CACHE`]: их правка кэш не сбрасывает. Всё остальное в `src/`
-//! (и новые файлы) входит в метку — забыть файл безопасно, лишний прогрев
-//! и только.
+//! Core modules that do **not** affect the raw rendering are listed in
+//! [`AFTER_CACHE`]: editing them keeps the cache. Everything else in `src/`
+//! (new files too) is part of the label: forgetting a file is safe, it only
+//! costs an extra warm-up.
 
 use std::error::Error;
 use std::hash::Hasher as _;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-/// Модули, работающие после кэша или вне сборки (пути от `src/`).
+/// Modules that work after the cache or outside the build (paths from `src/`).
 const AFTER_CACHE: &[&str] = &[
-    "book.rs",    // нарезка готовой страницы на главы
-    "cache.rs",   // сам кэш
-    "check.rs",   // проверка хранилища
-    "figures.rs", // обработка рисунков — после кэша, по настройкам
-    "finish.rs",  // проходы после кэша
-    "folders.rs", // названия папок — для списка, не для сборки
-    "frames.rs",  // общие части кадров — после рисунков
-    "notes.rs",   // фасад
+    "book.rs",    // cutting a finished page into chapters
+    "cache.rs",   // the cache itself
+    "check.rs",   // vault check
+    "figures.rs", // figure processing: after the cache, by the settings
+    "finish.rs",  // passes after the cache
+    "folders.rs", // folder titles: for the list, not for the build
+    "frames.rs",  // shared parts of frames: after figures
+    "notes.rs",   // the facade
     "page_cache.rs",
     "pages.rs",
     "search.rs",
     "settings.rs",
-    "vaults.rs", // хранилища по именам — вне сборки
+    "vaults.rs", // vaults by name: outside the build
     "warm.rs",
-    "watch.rs",    // наблюдатель файлов
-    "webfonts.rs", // шрифты для браузера
+    "watch.rs",    // the file watcher
+    "webfonts.rs", // fonts for the browser
 ];
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             add(&name, &fs::read(&file)?);
         }
     }
-    // Версии Typst: блоки `[[package]]` крейтов typst*.
+    // Typst versions: the `[[package]]` blocks of the typst* crates.
     let lock = fs::read_to_string(repo.join("Cargo.lock")).unwrap_or_default();
     for block in lock.split("[[package]]") {
         if block.trim_start().starts_with("name = \"typst") {
@@ -75,7 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Все файлы каталога, по порядку путей.
+/// All files of a directory, sorted by path.
 fn files(dir: &Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let Ok(read) = fs::read_dir(dir) else { return out };

@@ -1,8 +1,8 @@
-//! Скобки в формулах. Typst помечает парные скобки растягиваемыми, а
-//! Chrome рисует растягиваемую скобку с широкими полями: `f ( x )`. Если
-//! внутри нет высокого (дробей, корней, пределов, матриц — [`TALL`]),
-//! растягивать нечего — ставим `stretchy="false"`, и скобки плотные, как в
-//! PDF.
+//! Brackets in formulas. Typst marks paired brackets as stretchy, and Chrome
+//! draws a stretchy bracket with wide margins: `f ( x )`. If there is nothing
+//! tall inside (fractions, roots, limits, matrices: [`TALL`]), there is nothing
+//! to stretch, so we set `stretchy="false"` and the brackets sit tight, as in
+//! the PDF.
 
 use typst_html::tag::mathml;
 use typst_html::{HtmlAttr, HtmlElement, HtmlNode, HtmlTag};
@@ -10,18 +10,18 @@ use typst_html::{HtmlAttr, HtmlElement, HtmlNode, HtmlTag};
 use super::{Context, TreePass};
 use crate::render::{text_of, walk};
 
-pub const PASS: TreePass = TreePass { name: "скобки", visit };
+pub const PASS: TreePass = TreePass { name: "fences", visit };
 
 const STRETCHY: HtmlAttr = HtmlAttr::constant("stretchy");
 
-/// Скобки, которые Typst растягивает по содержимому.
+/// Brackets that Typst stretches to the content.
 const FENCES: &[&str] = &["(", ")", "[", "]", "{", "}", "|", "‖", "⟨", "⟩", "⌊", "⌋", "⌈", "⌉"];
 
-/// Элементы MathML, ради которых скобку стоит растягивать.
+/// MathML elements worth stretching a bracket for.
 const TALL: [HtmlTag; 7] =
     [mathml::mfrac, mathml::mtable, mathml::msqrt, mathml::mroot, mathml::munderover, mathml::munder, mathml::mover];
 
-/// `mrow` вида `( … )` без высокого внутри → скобки не растягиваются.
+/// An `mrow` like `( ... )` with nothing tall inside -> the brackets do not stretch.
 fn visit(_: &mut Context<'_>, row: &mut HtmlElement) {
     if row.tag != mathml::mrow {
         return;
@@ -86,6 +86,6 @@ mod tests {
         let frac = el(mathml::mfrac, &[], vec![node(el(mathml::mn, &[], vec![text("1")]))]);
         let mut tall = row(el(mathml::mrow, &[], vec![node(frac)]));
         visit(&mut c, &mut tall);
-        assert_eq!(stretchy(&tall), [None, None], "дробь внутри — скобки растягиваются");
+        assert_eq!(stretchy(&tall), [None, None], "a fraction inside: the brackets stretch");
     }
 }

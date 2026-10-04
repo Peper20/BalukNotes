@@ -84,7 +84,7 @@ crates/notes-app/icons/icon.png`.
   typst-html и по тексту) -> кэш -> `finish.rs` (под настройки: `figures.rs`,
   `frames.rs`). Новый проход - модуль и строка в списке (`passes::TREE`/`TEXT`,
   `finish::FINISH`; после кэша - ещё `AFTER_CACHE`). Глава книги - `book.rs`.
-  Время проходов и вес - `RUST_LOG=notes_core=debug` ("проход", "рисунки").
+  Время проходов и вес - `RUST_LOG=notes_core=debug` ("pass", "figures").
 - Данные хранилища для заметок `/_vault/<префикс>/...` - поставщик в реестре
   `vault_data.rs`.
 - Шрифты оформления встроены (`fonts/README.md`); браузеру - шрифты тем

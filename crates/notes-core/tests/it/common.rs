@@ -1,5 +1,5 @@
-//! Общее сквозных тестов ядра: корень репозитория, одно ядро на хранилище-
-//! фикстуру `tests/vault` и сборка заметки из одного файла.
+//! Shared by the core end-to-end tests: the repository root, one core for the
+//! `tests/vault` fixture, and building a note from one file.
 
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
@@ -11,8 +11,8 @@ pub fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// Одно ядро на все тесты бинарника: шрифты, темы и сборки заметок фикстуры
-/// (снимки, проверки хранилища) — один раз.
+/// One core for all tests of the binary: fonts, themes and the fixture's note
+/// builds (snapshots, vault checks) happen once.
 pub static NOTES: LazyLock<Notes> = LazyLock::new(|| {
     Notes::open(&NotesConfig {
         trash: None,
@@ -21,10 +21,10 @@ pub static NOTES: LazyLock<Notes> = LazyLock::new(|| {
         font_dirs: vec![],
         cache: None,
     })
-    .expect("тестовое хранилище открывается")
+    .expect("the test vault opens")
 });
 
-/// Собирает заметку из одного файла с библиотекой репозитория.
+/// Builds a note from one file with the repository library.
 pub fn compile(source: &str) -> Arc<NotePage> {
     let vault = tempfile::tempdir().unwrap();
     std::fs::write(vault.path().join("t.typ"), source).unwrap();

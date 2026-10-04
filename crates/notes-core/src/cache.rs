@@ -1,26 +1,27 @@
-//! Кэш сборок на диске: после перезапуска заметка, файлы которой не
-//! менялись, не компилируется заново (у книги это секунды).
+//! The disk cache of builds: after a restart, a note whose files did not
+//! change is not compiled again (for a book that is seconds).
 //!
-//! На заметку — два файла в каталоге хранилища (`<кэш>/<хэш хранилища>/`):
-//! - `<хэш пути>.json` — **запись** ([`Record`]): версия и список файлов,
-//!   ошибки и предупреждения, время сборки (порядок прогрева), метка
-//!   отрисовки; маленький — его читают проверка «собрано ли» и прогрев;
-//! - `<хэш пути>.raw.json` — сырая отрисовка (до обработки рисунков: она
-//!   зависит от настроек). Метка в записи и в файле отрисовки совпадает —
-//!   сбой между записью двух файлов даёт промах, а не чужую страницу.
+//! Two files per note in the vault's directory (`<cache>/<vault hash>/`):
+//! - `<path hash>.json`, the **record** ([`Record`]): the version and the file
+//!   list, errors and warnings, the build time (warming order), the rendering
+//!   tag; it is small, read by the "is it built" check and by warming;
+//! - `<path hash>.raw.json`, the raw rendering (before figure processing,
+//!   which depends on the settings). The record and the rendering file carry
+//!   the same tag, so a failure between writing the two files gives a miss,
+//!   not someone else's page.
 //!
-//! Ошибки сборки тоже записываются (с прежней удачной отрисовкой, если она
-//! была): заметка с ошибкой не собирается заново в каждом запуске.
+//! Build errors are recorded too (with the earlier good rendering, if there
+//! was one): a note with an error is not rebuilt on every start.
 //!
-//! Запись годна, если её сделал **тот же код отрисовки** — метка
-//! [`stamp`]: версия формата, хэш исходников отрисовки (`build.rs`),
-//! встроенная библиотека и набор шрифтов, — и версия файлов заметки
-//! совпадает с текущей. Пересборка сервера или клиента кэш не сбрасывает.
+//! A record is good if **the same rendering code** made it - the [`stamp`]:
+//! the format version, the hash of the rendering sources (`build.rs`), the
+//! embedded library and the font set - and the version of the note files
+//! matches the current one. Rebuilding the server or the client keeps the cache.
 //!
-//! Кэш — не источник правды: любая ошибка чтения или записи — просто
-//! промах (с предупреждением в журнал), удалить каталог можно в любой
-//! момент. Чистка — [`DiskCache::prune`] (удалённые заметки, старые чужие
-//! записи, предел размера).
+//! The cache is not the source of truth: any read or write error is just a
+//! miss (with a warning in the log), and the directory can be deleted at any
+//! time. Cleanup: [`DiskCache::prune`] (deleted notes, old foreign records,
+//! the size limit).
 
 use std::collections::HashMap;
 use std::fs;
@@ -35,18 +36,18 @@ use crate::render::{LinkRef, Rendered};
 use crate::vault::NoteId;
 use crate::version::{Dep, StableHasher};
 
-/// Версия формата записей: менять при любом изменении [`Record`] или
+/// The record format version: change it on any change of [`Record`] or
 /// [`Rendered`].
 pub const FORMAT: u32 = 4;
 
-/// Пределы кэша на диске — настройки устройства
-/// ([`crate::settings::Device`]); по умолчанию — компьютера.
+/// Disk cache limits, device settings ([`crate::settings::Device`]); the
+/// defaults are those of a computer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DiskLimits {
-    /// Предел размера (все хранилища вместе).
+    /// The size limit (all vaults together).
     pub size: u64,
-    /// Чужие записи (другое хранилище, другая сборка приложения), не
-    /// обновлявшиеся столько, удаляются при чистке.
+    /// Foreign records (another vault, another app build) not updated for this
+    /// long are removed on cleanup.
     pub foreign_ttl: Duration,
 }
 
@@ -56,26 +57,26 @@ impl Default for DiskLimits {
     }
 }
 
-/// Что известно о сборке заметки.
+/// What is known about a note build.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Record {
-    /// Версия файлов заметки на момент чтения ([`crate::version::combine`]).
+    /// The version of the note files at the time of reading ([`crate::version::combine`]).
     pub files: String,
     pub deps: Vec<Dep>,
     pub errors: Vec<Diagnostic>,
     pub warnings: Vec<Diagnostic>,
-    /// Сколько длилась сборка, мс.
+    /// How long the build took, in ms.
     pub build_ms: u64,
-    /// Метка сырой отрисовки: `None` — отрисовки нет (ошибка, и удачной
-    /// сборки не было).
+    /// The tag of the raw rendering: `None` means there is no rendering (an
+    /// error, and no good build before it).
     pub raw: Option<String>,
-    /// Ссылки из последней удачной отрисовки (`Rendered.links`) — и
-    /// вычисляемые: ими индекс ссылок дополняет разбор исходников.
+    /// Links from the last good rendering (`Rendered.links`), computed ones
+    /// too: the link index adds them to what it parses from the sources.
     #[serde(default)]
     pub links: Vec<LinkRef>,
 }
 
-/// Файл записи.
+/// The record file.
 #[derive(Serialize, Deserialize)]
 struct RecordFile {
     stamp: String,
@@ -84,35 +85,36 @@ struct RecordFile {
     record: Record,
 }
 
-/// Файл отрисовки.
+/// The rendering file.
 #[derive(Serialize, Deserialize)]
 struct RawFile {
     tag: String,
     raw: Rendered,
 }
 
+/// The disk cache of one vault.
 #[derive(Debug)]
 pub struct DiskCache {
-    /// Корень кэша (все хранилища).
+    /// The cache root (all vaults).
     root: PathBuf,
-    /// Каталог этого хранилища.
+    /// This vault's directory.
     dir: PathBuf,
-    /// Метка кода отрисовки.
+    /// The tag of the rendering code.
     stamp: String,
 }
 
-/// Итог чистки.
+/// The result of a cleanup.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Pruned {
-    /// Сколько файлов удалено.
+    /// How many files were removed.
     pub removed: usize,
-    /// Сколько байт осталось.
+    /// How many bytes are left.
     pub bytes: u64,
 }
 
 impl DiskCache {
-    /// `vault` — где хранилище ([`crate::storage::Storage::location`]):
-    /// у разных хранилищ бывают заметки с одинаковыми путями.
+    /// `vault` is where the vault is ([`crate::storage::Storage::location`]):
+    /// different vaults may have notes with the same paths.
     pub fn new(root: impl Into<PathBuf>, vault: &str, stamp: String) -> Self {
         let root = root.into();
         let dir = root.join(StableHasher::new().str(vault).hex());
@@ -120,7 +122,7 @@ impl DiskCache {
     }
 
     fn base(&self, id: &NoteId) -> PathBuf {
-        // Имя файла — хэш пути: в пути заметки бывают любые символы.
+        // The file name is a hash of the path: note paths may have any characters.
         self.dir.join(StableHasher::new().str(id.as_str()).hex())
     }
 
@@ -132,22 +134,22 @@ impl DiskCache {
         self.base(id).with_extension("raw.json")
     }
 
-    /// Запись заметки, если её сделал тот же код отрисовки. Годна ли она
-    /// для текущих файлов — решает вызывающий (по `files` и `deps`).
+    /// The note record, if the same rendering code made it. Whether it is good
+    /// for the current files is the caller's call (by `files` and `deps`).
     pub fn record(&self, id: &NoteId) -> Option<Record> {
         let file: RecordFile = read_json(&self.record_path(id))?;
         (file.stamp == self.stamp && file.id == id.as_str()).then_some(file.record)
     }
 
-    /// Сырая отрисовка к записи (метки должны совпасть).
+    /// The raw rendering for a record (the tags must match).
     pub fn raw(&self, id: &NoteId, record: &Record) -> Option<Rendered> {
         let tag = record.raw.as_ref()?;
         let file: RawFile = read_json(&self.raw_path(id))?;
         (&file.tag == tag).then_some(file.raw)
     }
 
-    /// Записать сборку. `raw` — новая отрисовка (её метка — `record.raw`);
-    /// `None` — отрисовка не менялась (на диске лежит та, что в метке).
+    /// Writes a build. `raw` is a new rendering (its tag is `record.raw`);
+    /// `None` means the rendering did not change (disk has the one in the tag).
     pub fn store(&self, id: &NoteId, record: &Record, raw: Option<&Rendered>) {
         #[derive(Serialize)]
         struct RawRef<'a> {
@@ -162,7 +164,7 @@ impl DiskCache {
             record: &'a Record,
         }
         let result = (|| {
-            // Сначала отрисовка, потом запись: сбой между ними — промах.
+            // The rendering first, then the record: a failure between them is a miss.
             if let (Some(raw), Some(tag)) = (raw, &record.raw) {
                 write_atomic(&self.raw_path(id), &serde_json::to_vec(&RawRef { tag, raw })?)?;
             }
@@ -170,14 +172,14 @@ impl DiskCache {
             write_atomic(&self.record_path(id), &serde_json::to_vec(&file)?)
         })();
         if let Err(e) = result {
-            tracing::warn!("кэш для {id} не записан: {e}");
+            tracing::warn!("cache for {id} not written: {e}");
         }
     }
 
-    /// Чистка: записи удалённых заметок (`alive` — есть ли заметка),
-    /// сироты и мусор, чужие записи старше `limits.foreign_ttl`, файлы
-    /// старого формата; затем, если кэш больше `limits.size`, — самые давние
-    /// записи.
+    /// Cleanup: records of deleted notes (`alive` says whether a note exists),
+    /// orphans and junk, foreign records older than `limits.foreign_ttl`, files
+    /// of the old format; then, if the cache is bigger than `limits.size`, the
+    /// oldest records.
     pub fn prune(&self, alive: &dyn Fn(&str) -> bool, limits: DiskLimits) -> Pruned {
         let limit = limits.size;
         let now = SystemTime::now();
@@ -187,10 +189,10 @@ impl DiskCache {
             let result = if path.is_dir() { fs::remove_dir_all(path) } else { fs::remove_file(path) };
             match result {
                 Ok(()) => pruned.removed += 1,
-                Err(e) => tracing::warn!("кэш {}: не удалён: {e}", path.display()),
+                Err(e) => tracing::warn!("cache {}: not removed: {e}", path.display()),
             }
         };
-        // Группы, которые можно удалить целиком: (время, размер, файлы).
+        // Groups that can be removed whole: (time, size, files).
         let mut groups: Vec<(SystemTime, u64, Vec<PathBuf>)> = Vec::new();
         for item in list(&self.root) {
             if item.path == self.dir {
@@ -205,10 +207,10 @@ impl DiskCache {
                     groups.push((newest, files.iter().map(|f| f.len).sum(), vec![item.path]));
                 }
             } else {
-                remove(&item.path, &mut pruned); // старый формат: файлы прямо в корне
+                remove(&item.path, &mut pruned); // the old format: files right in the root
             }
         }
-        // Своё хранилище: запись + отрисовка по имени.
+        // Our own vault: a record + a rendering by name.
         let mut own: HashMap<String, (Option<Item>, Option<Item>)> = HashMap::new();
         for item in list(&self.dir) {
             let name = item.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -217,7 +219,7 @@ impl DiskCache {
             } else if let Some(base) = name.strip_suffix(".json") {
                 own.entry(base.to_owned()).or_default().0 = Some(item);
             } else {
-                remove(&item.path, &mut pruned); // `.tmp` после сбоя и прочее
+                remove(&item.path, &mut pruned); // `.tmp` after a failure and the like
             }
         }
         for (record, raw) in own.into_values() {
@@ -227,7 +229,7 @@ impl DiskCache {
                     let ours = h.stamp == self.stamp;
                     alive(&h.id) && (ours || !old(r.mtime)) && (h.raw.is_some() == raw.is_some() || !ours)
                 }
-                _ => false, // сирота или испорченная запись
+                _ => false, // an orphan or a broken record
             };
             let paths: Vec<PathBuf> = record.iter().chain(raw.iter()).map(|i| i.path.clone()).collect();
             if keep {
@@ -239,7 +241,7 @@ impl DiskCache {
                 }
             }
         }
-        // Предел размера: сначала самые давние.
+        // The size limit: the oldest first.
         groups.sort_by_key(|g| g.0);
         let mut total: u64 = groups.iter().map(|g| g.1).sum();
         for (_, bytes, paths) in &groups {
@@ -256,7 +258,7 @@ impl DiskCache {
     }
 }
 
-/// Заголовок записи для чистки.
+/// The head of a record, for cleanup.
 #[derive(Deserialize)]
 struct RecordHead {
     stamp: String,
@@ -288,22 +290,22 @@ fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Option<T> {
         Ok(data) => data,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
         Err(e) => {
-            tracing::warn!("кэш {}: {e}", path.display());
+            tracing::warn!("cache {}: {e}", path.display());
             return None;
         }
     };
     match serde_json::from_slice(&data) {
         Ok(v) => Some(v),
         Err(e) => {
-            tracing::warn!("кэш {}: {e} — пересоберу", path.display());
+            tracing::warn!("cache {}: {e}; will rebuild", path.display());
             None
         }
     }
 }
 
-/// Метка кода отрисовки: версия формата, версия приложения, хэш исходников
-/// отрисовки, шрифтов и Typst (`build.rs`), `extra` — встроенная библиотека
-/// и набор шрифтов (их считает вызывающий).
+/// The tag of the rendering code: the format version, the app version, the hash
+/// of the rendering sources, fonts and Typst (`build.rs`); `extra` is the
+/// embedded library and the font set (the caller computes them).
 pub fn stamp(extra: &[u64]) -> String {
     let mut h = StableHasher::new();
     h.u64(u64::from(FORMAT)).str(env!("CARGO_PKG_VERSION")).str(env!("NOTES_RENDER_HASH"));
@@ -313,14 +315,14 @@ pub fn stamp(extra: &[u64]) -> String {
     format!("{FORMAT}-{}", h.hex())
 }
 
-/// Новая метка отрисовки для записи.
+/// A new rendering tag for a record.
 pub fn new_tag(files: &str) -> String {
     let nanos = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
     StableHasher::new().str(files).bytes(&nanos.to_le_bytes()).hex()
 }
 
-/// Каталог кэша внутри каталога данных (`<данные>/cache`; отрисовка — в
-/// `pages/`, шрифты — в `fonts/`).
+/// The cache directory inside the data directory (`<data>/cache`; rendering in
+/// `pages/`, fonts in `fonts/`).
 pub fn default_dir(data: &Path) -> PathBuf {
     data.join("cache")
 }
@@ -365,17 +367,17 @@ mod tests {
         assert_eq!(cache.record(&id).as_ref(), Some(&rec));
         assert_eq!(cache.raw(&id, &rec).unwrap().body, "<p>x</p>");
 
-        // Ошибка: запись новая, отрисовка — прежняя (метка та же).
+        // An error: the record is new, the rendering is the earlier one (same tag).
         let failed = Record { errors: vec![Diagnostic::error("сломано")], ..record("v2", Some("t1")) };
         cache.store(&id, &failed, None);
         assert_eq!(cache.record(&id).unwrap().errors.len(), 1);
         assert_eq!(cache.raw(&id, &failed).unwrap().body, "<p>x</p>");
-        assert!(cache.raw(&id, &record("v2", Some("чужая"))).is_none(), "метки не совпали — промах");
+        assert!(cache.raw(&id, &record("v2", Some("чужая"))).is_none(), "tags do not match: a miss");
 
         let other_build = DiskCache::new(dir.path(), "/хранилище", "м2".into());
-        assert!(other_build.record(&id).is_none(), "другой код отрисовки");
+        assert!(other_build.record(&id).is_none(), "another rendering code");
         let other_vault = DiskCache::new(dir.path(), "/другое", "м1".into());
-        assert!(other_vault.record(&id).is_none(), "другое хранилище");
+        assert!(other_vault.record(&id).is_none(), "another vault");
 
         fs::write(cache.record_path(&id), "испорчено").unwrap();
         assert!(cache.record(&id).is_none());
@@ -389,20 +391,20 @@ mod tests {
         for name in ["Живая", "Удалённая"] {
             cache.store(&id(name), &record("v", Some("t")), Some(&rendered("x")));
         }
-        fs::write(dir.path().join("0123456789abcdef.json"), "{}").unwrap(); // старый формат
+        fs::write(dir.path().join("0123456789abcdef.json"), "{}").unwrap(); // the old format
         let orphan = cache.raw_path(&id("Сирота"));
         fs::write(&orphan, "{}").unwrap();
         let fresh_foreign = DiskCache::new(dir.path(), "/другое", "м1".into());
         fresh_foreign.store(&id("Чужая"), &record("v", None), None);
 
         let pruned = cache.prune(&|id| id == "Живая", DiskLimits::default());
-        assert_eq!(pruned.removed, 4, "удалённая (2 файла), сирота, старый формат");
+        assert_eq!(pruned.removed, 4, "the deleted one (2 files), an orphan, the old format");
         assert!(cache.record(&id("Живая")).is_some());
         assert!(cache.record(&id("Удалённая")).is_none());
         assert!(!orphan.exists());
-        assert!(fresh_foreign.record(&id("Чужая")).is_some(), "свежую чужую запись не трогаем");
+        assert!(fresh_foreign.record(&id("Чужая")).is_some(), "a fresh foreign record is left alone");
 
-        // Предел размера: остаётся не больше предела, давнее — первым.
+        // The size limit: no more than the limit stays, the oldest goes first.
         let pruned = cache.prune(&|_| true, DiskLimits { size: 0, ..DiskLimits::default() });
         assert_eq!(pruned.bytes, 0);
         assert!(cache.record(&id("Живая")).is_none());

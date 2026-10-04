@@ -1,23 +1,23 @@
-//! Рисунки на странице: меньше байт при том же виде.
+//! Figures on a page: fewer bytes with the same look.
 //!
-//! Работает с готовым HTML (после [`crate::render`]): SVG рисунков существует
-//! только как текст, который пишет `typst-svg`. Разметка у него простая и
-//! предсказуемая — тег за тегом, значения атрибутов в `"…"`, `<` и `>`
-//! внутри значений экранированы, — поэтому хватает разбора по тегам.
+//! Works on the finished HTML (after [`crate::render`]): figure SVG exists only
+//! as the text `typst-svg` writes. Its markup is simple and predictable - tag
+//! after tag, attribute values in `"..."`, `<` and `>` escaped inside values -
+//! so parsing by tags is enough.
 //!
-//! 1. **Общие глифы.** Каждый SVG несёт в `<defs>` копии глифов своих
-//!    подписей; их id — хэш глифа, одинаковый во всех рисунках. Глифы
-//!    переезжают в один скрытый `<svg class="k-glyphs">` в начале страницы.
-//! 2. **Один SVG на все темы.** Варианты рисунка по темам (`div.k-frame-v`)
-//!    обычно различаются только цветами. Тогда остаётся один SVG, а каждый
-//!    различающийся цвет становится переменной: `style="fill: var(--kf3)"`,
-//!    значения по темам — в `<style>` страницы. Если варианты различаются
-//!    чем-то ещё (другая геометрия, градиенты) — остаются варианты.
-//! 3. **Точность.** Typst пишет координаты с 9 знаками после запятой
-//!    (в пунктах). Округление до сотых — ошибка 0,005 pt, глазу не видна.
-//!    Координаты путей в SVG относительные, поэтому округляются абсолютные
-//!    точки, а разности считаются из округлённых: ошибка не копится вдоль
-//!    кривой.
+//! 1. **Shared glyphs.** Each SVG carries copies of the glyphs of its labels in
+//!    `<defs>`; their id is the glyph hash, the same in every figure. The glyphs
+//!    move to one hidden `<svg class="k-glyphs">` at the start of the page.
+//! 2. **One SVG for all themes.** The theme variants of a figure
+//!    (`div.k-frame-v`) usually differ only in colors. Then one SVG stays, and
+//!    every differing color becomes a variable: `style="fill: var(--kf3)"`,
+//!    with the values per theme in a page `<style>`. If the variants differ in
+//!    something else (geometry, gradients), the variants stay.
+//! 3. **Precision.** Typst writes coordinates with 9 decimal places (in
+//!    points). Rounding to hundredths is an error of 0.005 pt, invisible to the
+//!    eye. Path coordinates in SVG are relative, so the absolute points are
+//!    rounded and the differences computed from the rounded ones: the error
+//!    does not accumulate along a curve.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -27,10 +27,10 @@ use serde::Serialize;
 
 use crate::version::StableHasher;
 
-/// Настройки обработки рисунков.
+/// Figure processing settings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 pub struct FigureOptions {
-    /// Знаков после запятой в координатах; `None` — как написал Typst.
+    /// Decimal places in coordinates; `None` means as Typst wrote them.
     pub precision: Option<u8>,
 }
 
@@ -41,20 +41,20 @@ impl Default for FigureOptions {
 }
 
 impl FigureOptions {
-    /// Короткая метка для версии страницы: `p2`, `full`.
+    /// A short label for the page version: `p2`, `full`.
     pub fn key(&self) -> String {
         self.precision.map_or_else(|| "full".into(), |p| format!("p{p}"))
     }
 }
 
-/// Атрибут тега (по номеру) и его значения по темам.
+/// A tag attribute (by index) and its values per theme.
 type ColorDiff = (usize, Vec<String>);
 
-/// Результат обработки страницы.
+/// The result of processing a page.
 #[derive(Debug)]
 pub struct Optimized {
     pub body: String,
-    /// `<style>` со значениями цветовых переменных по темам (или пусто).
+    /// `<style>` with the values of the color variables per theme (or empty).
     pub styles: String,
     pub stats: Stats,
 }
@@ -62,17 +62,17 @@ pub struct Optimized {
 #[derive(Debug, Default, Clone, Copy, Serialize)]
 pub struct Stats {
     pub figures: usize,
-    /// Рисунков, у которых темы слились в один SVG.
+    /// Figures whose themes merged into one SVG.
     pub merged: usize,
     pub glyphs: usize,
     pub colors: usize,
 }
 
-/// Атрибуты с цветом: только они могут различаться между темами.
+/// Attributes with a color: only they may differ between themes.
 const COLOR_ATTRS: &[&str] = &["fill", "stroke", "stop-color"];
 
-/// Атрибуты с координатами и размерами, которые округляются. Цвета
-/// (`oklab(95.1% -0.003 …)`), `offset` градиентов и id не трогаем.
+/// Attributes with coordinates and sizes that get rounded. Colors
+/// (`oklab(95.1% -0.003 ...)`), gradient `offset` and ids are left alone.
 const ROUND_ATTRS: &[&str] = &[
     "x",
     "y",
@@ -93,17 +93,16 @@ const ROUND_ATTRS: &[&str] = &[
     "stroke-dashoffset",
 ];
 
-/// Коэффициенты поворота и масштаба в `matrix(…)`/`scale(…)` округляются не
-/// грубее: ошибка в них умножается на размер рисунка.
+/// Rotation and scale coefficients in `matrix(...)`/`scale(...)` are rounded no
+/// coarser than this: their error is multiplied by the figure size.
 const SCALE_DIGITS: u8 = 4;
-/// Глифы — мелкие фигуры, им нужно не меньше сотых.
+/// Glyphs are small shapes: they need at least hundredths.
 const GLYPH_DIGITS: u8 = 2;
 
 const VARIANT_OPEN: &str = r#"<div class="k-frame-v" data-theme=""#;
 
-/// Обрабатывает рисунки в `<body>` страницы. `themes` — темы в порядке
-/// вариантов (первая — базовая), `scope` — значение `data-k-figs`, под
-/// которым живут цветовые переменные этой страницы.
+/// Processes the figures in the page `<body>`. `themes` are the themes in the
+/// order of the variants (the first is the base one).
 pub fn optimize(body: &str, themes: &[String], opts: FigureOptions) -> Optimized {
     let mut page = Page { opts, glyphs: Vec::new(), glyph_ids: HashMap::new(), colors: HashMap::new() };
     let mut stats = Stats::default();
@@ -113,7 +112,7 @@ pub fn optimize(body: &str, themes: &[String], opts: FigureOptions) -> Optimized
         out.push_str(&rest[..start]);
         let (variants, len) = read_variants(&rest[start..]);
         if len == 0 {
-            // Вариант без `</svg></div>` (пустой рисунок) — не наш, оставляем как есть.
+            // A variant without `</svg></div>` (an empty figure) is not ours: keep it as is.
             out.push_str(VARIANT_OPEN);
             rest = &rest[start + VARIANT_OPEN.len()..];
             continue;
@@ -123,7 +122,7 @@ pub fn optimize(body: &str, themes: &[String], opts: FigureOptions) -> Optimized
         stats.figures += 1;
         let names: Vec<&str> = variants.iter().map(|v| v.0).collect();
         if names != themes.iter().map(String::as_str).collect::<Vec<_>>() {
-            // Не та раскладка тем — не трогаем.
+            // Not the theme layout we expect: leave it alone.
             out.push_str(group);
             continue;
         }
@@ -161,7 +160,7 @@ pub fn optimize(body: &str, themes: &[String], opts: FigureOptions) -> Optimized
     Optimized { body, styles, stats }
 }
 
-/// Варианты одного рисунка, идущие подряд: `[(тема, svg)]` и их общая длина.
+/// Consecutive variants of one figure: `[(theme, svg)]` and their total length.
 fn read_variants(s: &str) -> (Vec<(&str, &str)>, usize) {
     let mut out = Vec::new();
     let mut pos = 0;
@@ -177,7 +176,7 @@ fn read_variants(s: &str) -> (Vec<(&str, &str)>, usize) {
     (out, pos)
 }
 
-/// SVG → теги и текст между ними.
+/// SVG -> tags and the text between them.
 pub(crate) fn tokens(svg: &str) -> Vec<&str> {
     let mut out = Vec::new();
     let mut rest = svg;
@@ -195,17 +194,17 @@ pub(crate) fn tokens(svg: &str) -> Vec<&str> {
 
 struct Page {
     opts: FigureOptions,
-    /// Глифы по порядку появления (уже округлённые).
+    /// Glyphs in order of appearance (already rounded).
     glyphs: Vec<String>,
-    /// id глифа → исходный текст `<symbol>…</symbol>`.
+    /// Glyph id -> the original text `<symbol>...</symbol>`.
     glyph_ids: HashMap<String, String>,
-    /// Значения цвета по темам → номер переменной.
+    /// Color values per theme -> the variable number.
     colors: HashMap<Vec<String>, usize>,
 }
 
 impl Page {
-    /// Забирает глифы из `<defs>` в общий набор. `<defs>`, где есть что-то
-    /// кроме глифов, или глиф с тем же id, но другим содержимым — остаются.
+    /// Moves glyphs from `<defs>` to the shared set. A `<defs>` with anything
+    /// besides glyphs, or a glyph with a known id but other contents, stays.
     fn hoist_glyphs<'a>(&mut self, toks: Vec<&'a str>) -> Vec<&'a str> {
         let Some(open) = toks.iter().position(|t| *t == "<defs>") else { return toks };
         let Some(len) = toks[open..].iter().position(|t| *t == "</defs>") else { return toks };
@@ -237,14 +236,14 @@ impl Page {
         out
     }
 
-    /// Один SVG вместо вариантов, если они различаются только цветами.
+    /// One SVG instead of the variants, if they differ only in colors.
     fn merge(&mut self, svgs: &[Vec<&str>]) -> Option<String> {
         let base = &svgs[0];
         if svgs.iter().any(|s| s.len() != base.len()) {
             return None;
         }
-        // Сначала — проверить весь рисунок, и только потом заводить
-        // переменные: отвергнутый рисунок не должен оставить их в таблице.
+        // First check the whole figure, and only then create variables: a
+        // rejected figure must not leave any in the table.
         let mut plan: Vec<Option<(Tag, Vec<ColorDiff>)>> = Vec::with_capacity(base.len());
         for (i, tok) in base.iter().enumerate() {
             if svgs.iter().all(|s| s[i] == *tok) {
@@ -305,7 +304,7 @@ impl Page {
         Some(out)
     }
 
-    /// Текст SVG варианта (без слияния), с округлением.
+    /// The SVG text of a variant (not merged), rounded.
     fn emit(&self, svg: &[&str]) -> String {
         let digits = self.opts.precision;
         svg.iter().enumerate().map(|(i, t)| if i == 0 { Cow::Borrowed(*t) } else { round_tag(t, digits) }).collect()
@@ -316,8 +315,8 @@ impl Page {
         *self.colors.entry(values).or_insert(next)
     }
 
-    /// Метка страницы для переменных: хэш таблицы цветов (стабильный —
-    /// одинаков в любой сборке и на любой машине).
+    /// The page label for the variables: a hash of the color table (stable,
+    /// the same in any build and on any machine).
     fn scope(&self) -> String {
         let mut table: Vec<_> = self.colors.iter().collect();
         table.sort_by_key(|(_, n)| **n);
@@ -347,8 +346,8 @@ impl Page {
     }
 }
 
-/// Помечает страницу меткой переменных: на `<article class="k-doc">`
-/// (шаблон baluk) или обёрткой вокруг всего.
+/// Marks the page with the variables label: on `<article class="k-doc">`
+/// (the baluk template) or with a wrapper around everything.
 fn scoped(body: &str, scope: &str) -> String {
     const ARTICLE: &str = r#"<article class="k-doc""#;
     if let Some(i) = body.find(ARTICLE) {
@@ -359,7 +358,7 @@ fn scoped(body: &str, scope: &str) -> String {
     }
 }
 
-/// Открывающий тег с атрибутами.
+/// An opening tag with attributes.
 #[derive(Debug)]
 struct Tag<'a> {
     name: &'a str,
@@ -368,7 +367,7 @@ struct Tag<'a> {
 }
 
 impl<'a> Tag<'a> {
-    /// `<name a="…" b="…">` или `<name …/>`; закрывающие теги и прочее — `None`.
+    /// `<name a="..." b="...">` or `<name .../>`; closing tags and the rest give `None`.
     fn parse(raw: &'a str) -> Option<Self> {
         let inner = raw.strip_prefix('<')?.strip_suffix('>')?;
         if inner.starts_with(['/', '!', '?']) {
@@ -419,12 +418,12 @@ impl std::fmt::Display for Tag<'_> {
     }
 }
 
-/// Значение атрибута из сырого тега.
+/// An attribute value from a raw tag.
 fn attr<'a>(raw: &'a str, name: &str) -> Option<Cow<'a, str>> {
     Tag::parse(raw)?.attrs.into_iter().find(|(k, _)| *k == name).map(|(_, v)| v)
 }
 
-/// Округляет координаты в теге; не тег или нечего округлять — как есть.
+/// Rounds the coordinates in a tag; not a tag or nothing to round - as is.
 fn round_tag(raw: &str, digits: Option<u8>) -> Cow<'_, str> {
     if digits.is_none() || !raw.starts_with('<') || raw.starts_with("</") {
         return Cow::Borrowed(raw);
@@ -438,14 +437,14 @@ fn round_tag(raw: &str, digits: Option<u8>) -> Cow<'_, str> {
     }
 }
 
-/// Число в целых долях `10^-p`.
+/// A number in whole units of `10^-p`.
 fn to_grid(v: f64, p: u8) -> i64 {
     #[expect(clippy::cast_possible_truncation, reason = "coordinates of a figure are far below i64::MAX in grid units")]
     let n = (v * 10f64.powi(i32::from(p))).round() as i64;
     n
 }
 
-/// `1234`, p = 2 → `12.34`; лишние нули и точка отбрасываются.
+/// `1234`, p = 2 -> `12.34`; trailing zeros and the point are dropped.
 fn fmt_grid(n: i64, p: u8) -> String {
     if p == 0 {
         return n.to_string();
@@ -465,7 +464,7 @@ fn round_num(v: f64, p: u8) -> String {
     fmt_grid(to_grid(v, p), p)
 }
 
-/// Разбивает строку на числа и всё остальное.
+/// Splits a string into numbers and everything else.
 fn split_numbers(s: &str) -> Vec<Result<f64, &str>> {
     let bytes = s.as_bytes();
     let mut out = Vec::new();
@@ -509,7 +508,7 @@ fn split_numbers(s: &str) -> Vec<Result<f64, &str>> {
     out
 }
 
-/// Все числа строки — до `p` знаков.
+/// Every number of a string, to `p` places.
 fn round_numbers(s: &str, p: u8) -> Option<String> {
     let parts = split_numbers(s);
     parts.iter().any(Result::is_ok).then(|| {
@@ -523,8 +522,8 @@ fn round_numbers(s: &str, p: u8) -> Option<String> {
     })
 }
 
-/// `matrix(a b c d e f)`: поворот и масштаб (a–d) — не грубее
-/// [`SCALE_DIGITS`], сдвиг — до `p`. `scale(…)` — не грубее [`SCALE_DIGITS`].
+/// `matrix(a b c d e f)`: rotation and scale (a-d) no coarser than
+/// [`SCALE_DIGITS`], the shift to `p`. `scale(...)` no coarser than [`SCALE_DIGITS`].
 fn round_transform(s: &str, p: u8) -> Option<String> {
     let mut out = String::new();
     let mut rest = s;
@@ -555,10 +554,10 @@ fn round_transform(s: &str, p: u8) -> Option<String> {
     Some(out)
 }
 
-/// Путь `typst-svg`: `M 0 0` и дальше относительные `m l h v c q a Z`.
-/// Точки округляются в абсолютных координатах, разности — между
-/// округлёнными, поэтому ошибка не больше полушага сетки в любой точке.
-/// Незнакомая команда или неожиданное число аргументов — `None`.
+/// A `typst-svg` path: `M 0 0`, then relative `m l h v c q a Z`. Points are
+/// rounded in absolute coordinates and the differences taken between the
+/// rounded ones, so the error is at most half a grid step at any point. An
+/// unknown command or an unexpected number of arguments gives `None`.
 fn round_path(d: &str, p: u8) -> Option<String> {
     let mut toks = Vec::new();
     for part in split_numbers(d) {
@@ -592,7 +591,7 @@ enum PathTok {
     Num(f64),
 }
 
-/// Перо: точная позиция, округлённая (в долях сетки) и начало подпути.
+/// The pen: the exact position, the rounded one (in grid units) and the start of the subpath.
 #[derive(Debug, Default)]
 struct Pen {
     p: u8,
@@ -665,8 +664,8 @@ impl Pen {
         Some(())
     }
 
-    /// Точка относительно текущей: пишет разность округлённых; `advance` —
-    /// перо переходит в неё (конец отрезка, а не опорная точка кривой).
+    /// A point relative to the current one: writes the difference of the rounded
+    /// points; with `advance` the pen moves to it (a segment end, not a curve control point).
     fn point(&mut self, dx: f64, dy: f64, advance: bool) {
         let (ax, ay) = (to_grid(self.x + dx, self.p), to_grid(self.y + dy, self.p));
         let _ = write!(self.out, " {} {}", fmt_grid(ax - self.gx, self.p), fmt_grid(ay - self.gy, self.p));
@@ -708,17 +707,17 @@ mod tests {
 
     #[test]
     fn path_rounding_does_not_drift() {
-        // Сто шагов по 0.004: по отдельности каждый округлился бы в 0.
+        // A hundred steps of 0.004: each one alone would round to 0.
         let d = format!("M 0 0{}", "h 0.004".repeat(100));
         let r = round_path(&d, 2).unwrap();
         let sum: f64 = split_numbers(&r).into_iter().filter_map(Result::ok).sum();
         assert!((sum - 0.4).abs() < 0.006, "{r}");
         assert_eq!(
             round_path("M 0 0m 1.123456 2.5c 0.1 0.2 0.333 0.444 1 1Z m 0.004 0v -1.999999", 2).unwrap(),
-            // 1.123456 + 0.333 = 1.456 → 1.46 − 1.12 = 0.34 (разность округлённых точек)
+            // 1.123456 + 0.333 = 1.456 -> 1.46 - 1.12 = 0.34 (the difference of rounded points)
             "M 0 0 m 1.12 2.5 c 0.1 0.2 0.34 0.44 1 1Z m 0.01 0 v -2"
         );
-        assert_eq!(round_path("M 0 0 X 1 2", 2), None, "незнакомая команда");
+        assert_eq!(round_path("M 0 0 X 1 2", 2), None, "an unknown command");
     }
 
     #[test]
@@ -737,14 +736,14 @@ mod tests {
         let html = format!(r#"<article class="k-doc"><figure>{}</figure></article>"#, variants([a, b]));
         let o = optimize(&html, &themes(), FigureOptions::default());
         assert_eq!(o.stats.merged, 1);
-        assert_eq!(o.stats.colors, 1, "одна пара цветов — одна переменная");
+        assert_eq!(o.stats.colors, 1, "one pair of colors, one variable");
         assert!(!o.body.contains("k-frame-v"));
         assert!(
             o.body.contains(r##"<path stroke="#222222" d="M 0 0 h 1.23" style="fill: var(--kf0)"/>"##),
             "{}",
             o.body
         );
-        assert!(o.body.contains(r#"<svg style="width: 1.123456em">"#), "корневой тег не трогаем");
+        assert!(o.body.contains(r#"<svg style="width: 1.123456em">"#), "the root tag is left alone");
         assert!(o.styles.contains(r#":root[data-theme="night"] [data-k-figs="#));
         assert!(o.styles.contains("--kf0: #eeeeee;"));
         assert!(o.body.starts_with(r#"<article class="k-doc" data-k-figs=""#));
@@ -757,7 +756,7 @@ mod tests {
         let o = optimize(&variants([a, b]), &themes(), FigureOptions { precision: None });
         assert_eq!(o.stats.merged, 0);
         assert_eq!(o.body, variants([a, b]));
-        assert_eq!(o.stats.colors, 0, "отвергнутый рисунок не заводит переменных");
+        assert_eq!(o.stats.colors, 0, "a rejected figure creates no variables");
     }
 
     #[test]
@@ -781,7 +780,7 @@ mod tests {
 
     #[test]
     fn variant_without_svg_is_kept() {
-        // пустой рисунок: раньше цикл не сдвигался и зависал
+        // An empty figure: the loop used to stop moving and hang.
         let body = format!(r#"{VARIANT_OPEN}classic"></div>{VARIANT_OPEN}night"></div>"#);
         let o = optimize(&body, &themes(), FigureOptions::default());
         assert_eq!(o.body, body);

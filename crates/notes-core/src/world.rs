@@ -1,21 +1,24 @@
-//! Компилятор Typst поверх хранилища.
+//! The Typst compiler over a vault.
 //!
-//! - Корень проекта Typst — корень хранилища.
-//! - `/_baluk/…` — **виртуальный** каталог: файлы берутся из библиотеки
-//!   оформления приложения, копии в хранилище нет. Библиотека — каталог на
-//!   диске (разработка: правки видны сразу и меняют версии заметок) или
-//!   встроенная в бинарник копия `baluk/` (релиз: бинарник самодостаточен).
-//! - `/_vault/…` — **данные хранилища** для заметок (граф: `/_vault/graph/…`),
-//!   их на лету отдают поставщики реестра [`crate::vault_data::VaultData`]; в версию заметки
-//!   такой файл входит отпечатком поставщика (см. [`crate::vault_data`]).
-//! - Файлы хранилища читаются через [`Storage`]; при чтении запоминается
-//!   отпечаток файла ([`Versions::token`]) — из них версия заметки.
-//! - Пакеты (`@preview/cetz`) — из кэша Typst, при отсутствии скачиваются.
-//! - Тема передаётся входом `тема` (`sys.inputs.тема`): на каждую тему — своя
-//!   стандартная библиотека Typst, созданная один раз.
+//! - The Typst project root is the vault root.
+//! - `/_baluk/...` is a **virtual** directory: the files come from the app's
+//!   design library, there is no copy in the vault. The library is a directory
+//!   on disk (development: edits show at once and change note versions) or a
+//!   copy of `baluk/` embedded in the binary (release: the binary is
+//!   self-contained).
+//! - `/_vault/...` is **vault data** for notes (the graph: `/_vault/graph/...`),
+//!   served on the fly by the providers of [`crate::vault_data::VaultData`];
+//!   such a file enters the note version as the provider's fingerprint (see
+//!   [`crate::vault_data`]).
+//! - Vault files are read through [`Storage`]; reading records the file's
+//!   fingerprint ([`Versions::token`]), and the note version comes from them.
+//! - Packages (`@preview/cetz`) come from the Typst cache and are downloaded
+//!   if missing.
+//! - The theme is passed as the input `theme` (`sys.inputs.theme`): each theme
+//!   has its own Typst standard library, created once.
 //!
-//! Файлы кэширует [`FileStore`]: при повторной компиляции разбор идёт
-//! инкрементально, а список прочитанных файлов даёт версию заметки.
+//! [`FileStore`] caches files: a repeated compile parses incrementally, and the
+//! list of files read gives the note version.
 
 use std::any::Any;
 use std::collections::HashMap;
@@ -39,42 +42,41 @@ use typst_kit::datetime::Time;
 use typst_kit::downloader::SystemDownloader;
 use typst_kit::files::{FileLoader, FileStore};
 use typst_kit::packages::SystemPackages;
-
-use crate::packages::PackagePolicy;
 use typst_layout::PagedDocument;
 
 use crate::diag::Diagnostic;
 use crate::fonts::Fonts;
+use crate::packages::PackagePolicy;
 use crate::storage::Storage;
 use crate::version::{Dep, StableHasher, Token, Versions};
 
-/// Имя виртуального каталога библиотеки оформления в хранилище.
+/// The name of the virtual directory of the design library in the vault.
 pub const LIB_DIR: &str = "_baluk";
 
-/// Имя виртуального каталога данных хранилища (граф) для заметок.
+/// The name of the virtual directory of vault data (the graph) for notes.
 pub const VAULT_DIR: &str = "_vault";
 
-/// Имя входа Typst, через который передаётся тема.
+/// The name of the Typst input that carries the theme.
 pub const THEME_INPUT: &str = "theme";
 
-/// Библиотека оформления `baluk/`, встроенная в бинарник. В отладочной
-/// сборке rust-embed читает её с диска.
+/// The design library `baluk/` embedded in the binary. In a debug build
+/// rust-embed reads it from disk.
 #[derive(RustEmbed)]
 #[folder = "../../baluk/"]
 #[include = "*.typ"]
 struct EmbeddedLibrary;
 
-/// Откуда берётся библиотека оформления.
+/// Where the design library comes from.
 #[derive(Debug, Clone)]
 pub enum LibrarySource {
-    /// Каталог на диске: файлы библиотеки входят в версии заметок.
+    /// A directory on disk: library files are part of note versions.
     Dir(PathBuf),
-    /// Встроенная копия: меняется только с бинарником.
+    /// The embedded copy: it changes only with the binary.
     Embedded,
 }
 
 impl LibrarySource {
-    /// Есть ли в библиотеке точка входа `lib.typ`.
+    /// Whether the library has the entry point `lib.typ`.
     pub fn is_valid(&self) -> bool {
         match self {
             Self::Dir(dir) => dir.join("lib.typ").is_file(),
@@ -82,9 +84,9 @@ impl LibrarySource {
         }
     }
 
-    /// Отпечаток для метки кэша на диске: встроенная библиотека — хэш
-    /// всех её файлов (в версии заметок она не входит); каталог — 0 (его
-    /// файлы входят в версии заметок).
+    /// The fingerprint for the disk cache label: the embedded library is a hash
+    /// of all its files (it is not part of note versions); a directory is 0
+    /// (its files are part of note versions).
     pub fn fingerprint(&self) -> u64 {
         match self {
             Self::Dir(_) => 0,
@@ -102,34 +104,34 @@ impl LibrarySource {
     }
 }
 
-/// Откуда берутся файлы проекта, библиотеки и пакетов.
+/// Where project, library and package files come from.
 #[derive(Debug)]
 struct Loader {
     storage: Arc<dyn Storage>,
-    /// Отпечатки файлов; в них же — данные хранилища `/_vault/…`.
+    /// File fingerprints; vault data `/_vault/...` is there too.
     versions: Versions,
     lib: LibrarySource,
     packages: Arc<SystemPackages>,
-    /// Какие пакеты можно брать ([`crate::packages`]).
+    /// Which packages may be used ([`crate::packages`]).
     policy: Arc<PackagePolicy>,
-    /// Отпечатки прочитанных файлов на момент чтения (с последнего сброса).
+    /// Fingerprints of the files read, at the time of reading (since the last reset).
     read: Mutex<HashMap<FileId, Token>>,
 }
 
-/// Где лежит файл.
+/// Where a file is.
 enum Location {
-    /// Файл хранилища, путь от корня без `/` в начале.
+    /// A vault file, the path from the root without a leading `/`.
     Vault(String),
-    /// Файл на диске (библиотека каталогом, пакет).
+    /// A file on disk (the library as a directory, a package).
     Disk(PathBuf),
-    /// Путь внутри встроенной библиотеки, без `/` в начале.
+    /// A path inside the embedded library, without a leading `/`.
     Embedded(String),
-    /// Файл данных хранилища (`/_vault/…`), путь без `_vault/`.
+    /// A vault data file (`/_vault/...`), the path without `_vault/`.
     Data(String),
 }
 
 impl Loader {
-    /// Где файл. Для пакетов — после скачивания, если нужно.
+    /// Where the file is. For packages, after downloading if needed.
     fn locate(&self, id: FileId) -> FileResult<Location> {
         let vpath = id.vpath();
         if matches!(id.root(), VirtualRoot::Project)
@@ -146,7 +148,7 @@ impl Loader {
                 (None, _) => return Ok(Location::Vault(vpath.get_without_slash().to_owned())),
             },
             VirtualRoot::Package(spec) => {
-                // Не из списка — ошибка сборки, и пакет даже не скачивается.
+                // Not on the list: a build error, and the package is not even downloaded.
                 self.policy.check(spec).map_err(|e| FileError::Other(Some(e.into())))?;
                 (self.packages.obtain(spec)?.path().to_path_buf(), vpath.clone())
             }
@@ -154,8 +156,8 @@ impl Loader {
         vpath.realize(&root).map(Location::Disk).map_err(Into::into)
     }
 
-    /// Файл хранилища или библиотеки на диске — для версий; у пакета —
-    /// список разрешённых пакетов (сами пакеты по версии неизменны).
+    /// A vault file or a library file on disk, for versions; for a package, the
+    /// list of allowed packages (a package itself never changes within a version).
     fn dep(&self, id: FileId) -> Option<Dep> {
         if matches!(id.root(), VirtualRoot::Package(_)) {
             return Some(Dep::Data(crate::packages::POLICY_FILE.to_owned()));
@@ -195,19 +197,19 @@ impl Loader {
     }
 }
 
-/// `/_baluk/lib.typ` → `Some(/lib.typ)`; остальное → `None`.
+/// `/_baluk/lib.typ` -> `Some(/lib.typ)`; anything else -> `None`.
 fn lib_relative(vpath: &VirtualPath) -> FileResult<Option<VirtualPath>> {
     let path = vpath.get_without_slash();
     let Some(rest) = path.strip_prefix(LIB_DIR) else { return Ok(None) };
     if !(rest.is_empty() || rest.starts_with('/')) {
-        return Ok(None); // «_baluk2/…» — обычный файл хранилища
+        return Ok(None); // "_baluk2/..." is an ordinary vault file
     }
     VirtualPath::new(if rest.is_empty() { "/" } else { rest })
         .map(Some)
         .map_err(|e| FileError::Other(Some(eco_format!("{e}"))))
 }
 
-/// `/_vault/graph/x.json` → `Some("graph/x.json")`; остальное → `None`.
+/// `/_vault/graph/x.json` -> `Some("graph/x.json")`; anything else -> `None`.
 fn vault_relative(vpath: &VirtualPath) -> Option<String> {
     let rest = vpath.get_without_slash().strip_prefix(VAULT_DIR)?.strip_prefix('/')?;
     Some(rest.to_owned())
@@ -215,7 +217,7 @@ fn vault_relative(vpath: &VirtualPath) -> Option<String> {
 
 impl FileLoader for Loader {
     fn load(&self, id: FileId) -> FileResult<Bytes> {
-        // Отпечаток — до чтения: правка после него сделает сборку устаревшей.
+        // The fingerprint comes before reading: an edit after it makes the build stale.
         if let Some(dep) = self.dep(id) {
             self.read.lock().insert(id, self.versions.token(&dep));
         }
@@ -223,23 +225,22 @@ impl FileLoader for Loader {
     }
 }
 
-/// Результат компиляции одного файла во всех темах.
+/// The result of compiling one file in every theme.
 #[derive(Debug)]
 pub struct Compilation {
-    /// По документу на тему (в порядке запроса) или ошибки.
+    /// One document per theme (in the requested order), or the errors.
     pub docs: Result<Vec<(String, HtmlDocument)>, Vec<Diagnostic>>,
-    /// Предупреждения без повторов (в каждой теме они одни и те же).
+    /// Warnings without repeats (they are the same in every theme).
     pub warnings: Vec<Diagnostic>,
-    /// Файлы хранилища и библиотеки, которые прочитала компиляция, с
-    /// отпечатками на момент чтения (по порядку, без повторов).
+    /// Vault and library files the compile read, with their fingerprints at
+    /// the time of reading (in order, without repeats).
     pub deps: Vec<(Dep, Token)>,
 }
 
-/// Кэши файлов для одновременных сборок: каждая сборка берёт свой
-/// `FileStore` (он сбрасывается перед сборкой, чтобы увидеть изменения
-/// файлов и собрать список зависимостей именно этой заметки) и возвращает
-/// его после. Одновременно — не больше `max` сборок (настройка
-/// устройства), остальные ждут.
+/// File caches for concurrent builds: each build takes its own `FileStore`
+/// (reset before the build to see file changes and to collect the
+/// dependencies of exactly this note) and returns it after. At most `max`
+/// builds run at once (a device setting); the others wait.
 struct Stores {
     storage: Arc<dyn Storage>,
     versions: Versions,
@@ -247,13 +248,13 @@ struct Stores {
     packages: Arc<SystemPackages>,
     policy: Arc<PackagePolicy>,
     max: AtomicUsize,
-    /// Свободные кэши и сколько сейчас занято.
+    /// Free caches and how many are taken now.
     state: Mutex<(Vec<FileStore<Loader>>, usize)>,
     freed: Condvar,
 }
 
 impl Stores {
-    /// Взять кэш файлов (подождать, если заняты все `max`).
+    /// Takes a file cache (waits if all `max` are taken).
     fn take(&self) -> StoreGuard<'_> {
         let mut state = self.state.lock();
         while state.1 >= self.max.load(Ordering::Relaxed) {
@@ -276,7 +277,7 @@ impl Stores {
     }
 }
 
-/// Взятый кэш файлов; при сбросе возвращается в пул.
+/// A taken file cache; it goes back to the pool on drop.
 struct StoreGuard<'a> {
     stores: &'a Stores,
     store: Option<FileStore<Loader>>,
@@ -286,14 +287,14 @@ impl std::ops::Deref for StoreGuard<'_> {
     type Target = FileStore<Loader>;
     #[expect(clippy::expect_used, reason = "`store` is `None` only inside `drop`")]
     fn deref(&self) -> &Self::Target {
-        self.store.as_ref().expect("до сброса")
+        self.store.as_ref().expect("before drop")
     }
 }
 
 impl std::ops::DerefMut for StoreGuard<'_> {
     #[expect(clippy::expect_used, reason = "`store` is `None` only inside `drop`")]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.store.as_mut().expect("до сброса")
+        self.store.as_mut().expect("before drop")
     }
 }
 
@@ -309,33 +310,35 @@ impl Drop for StoreGuard<'_> {
     }
 }
 
-/// Сколько сборок разных заметок идёт одновременно, пока не пришла
-/// настройка устройства ([`Compiler::set_parallel`]): две — открыть
-/// заметку, пока собирается книга. Темы одной заметки — ещё и параллельно
-/// между собой (кроме сборок прогрева).
+/// How many builds of different notes run at once until the device setting
+/// arrives ([`Compiler::set_parallel`]): two, to open a note while a book
+/// builds. The themes of one note also build in parallel (except warming
+/// builds).
 pub const PARALLEL: usize = 2;
 
-/// Сколько сборок помнить рисунки (`comemo::evict`), пока не пришла
-/// настройка устройства ([`Compiler::set_memo`]).
+/// How many builds remember figures (`comemo::evict`) until the device setting
+/// arrives ([`Compiler::set_memo`]).
 pub const MEMO: usize = 10;
 
-/// Кто ждёт сборку.
+/// Who waits for the build.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Priority {
-    /// Пользователь: темы — параллельно.
+    /// The user: themes in parallel.
     User,
-    /// Прогрев: темы по очереди в одном потоке с пониженным приоритетом —
-    /// сборка в фоне не мешает работать на компьютере.
+    /// Warming: themes one by one in one thread with a lower priority, so a
+    /// background build does not get in the way of work on the computer.
     Background,
 }
 
+/// The Typst compiler of one vault: file caches, fonts and a standard library
+/// per theme, shared by every build.
 pub struct Compiler {
-    /// Кэши файлов: сборки разных заметок идут параллельно, каждая со своим.
+    /// File caches: builds of different notes run in parallel, each with its own.
     stores: Stores,
-    /// Сколько сборок помнить рисунки: после сборки `comemo::evict(memo)`.
+    /// How many builds remember figures: `comemo::evict(memo)` after a build.
     memo: AtomicUsize,
     fonts: Arc<Fonts>,
-    /// Стандартная библиотека Typst на каждую тему ("" — без темы).
+    /// The Typst standard library per theme ("" - no theme).
     libraries: RwLock<HashMap<String, Arc<LazyHash<Library>>>>,
 }
 
@@ -346,7 +349,7 @@ impl std::fmt::Debug for Compiler {
 }
 
 impl Compiler {
-    /// Хранилище и данные `/_vault/…` — из `versions` ([`Versions::with_data`]).
+    /// The vault and the data `/_vault/...` come from `versions` ([`Versions::with_data`]).
     pub fn new(versions: Versions, lib: LibrarySource, fonts: Arc<Fonts>) -> Self {
         let downloader = SystemDownloader::new(concat!("baluk-notes/", env!("CARGO_PKG_VERSION")));
         let stores = Stores {
@@ -362,35 +365,35 @@ impl Compiler {
         Self { stores, memo: AtomicUsize::new(MEMO), fonts, libraries: RwLock::default() }
     }
 
-    /// Сколько сборок разных заметок идёт одновременно (не меньше одной).
+    /// How many builds of different notes run at once (at least one).
     pub fn set_parallel(&self, n: usize) {
         self.stores.max.store(n.max(1), Ordering::Relaxed);
-        // Под замком: ждущий в `take` не пропустит пробуждение.
+        // Under the lock: a waiter in `take` does not miss the wakeup.
         drop(self.stores.state.lock());
         self.stores.freed.notify_all();
     }
 
-    /// Сколько сборок помнить рисунки Typst: больше — быстрее пересборка
-    /// после правки, но больше памяти.
-    /// Пакеты по этому списку (общему с поставщиком `/_vault/packages/…`);
-    /// по умолчанию — только белый список. До первой сборки.
+    /// Packages by this list (shared with the provider `/_vault/packages/...`);
+    /// by default only the allowlist. Before the first build.
     #[must_use]
     pub fn with_packages(mut self, policy: Arc<PackagePolicy>) -> Self {
         self.stores.policy = policy;
         self
     }
 
+    /// How many builds Typst remembers figures for: more means faster rebuilds
+    /// after an edit, but more memory.
     pub fn set_memo(&self, n: usize) {
         self.memo.store(n, Ordering::Relaxed);
     }
 
-    /// Забыть всё, что помнит Typst (после прохода прогрева).
+    /// Forgets everything Typst remembers (after a warming round).
     pub fn release_memory(&self) {
         comemo::evict(0);
     }
 
     fn evict(&self) {
-        // Кэш comemo растёт с каждой компиляцией; typst-cli чистит его так же.
+        // The comemo cache grows with every compile; typst-cli trims it the same way.
         comemo::evict(self.memo.load(Ordering::Relaxed));
     }
 
@@ -398,8 +401,8 @@ impl Compiler {
         &self.fonts
     }
 
-    /// Компилирует `main` (путь от корня хранилища) в HTML по разу на тему.
-    /// Пустой список тем — одна компиляция без входа `тема`.
+    /// Compiles `main` (a path from the vault root) to HTML once per theme.
+    /// An empty theme list means one compile without the `theme` input.
     pub fn compile_html(&self, main: &Path, themes: &[String], priority: Priority) -> Compilation {
         let no_theme = [String::new()];
         let themes = if themes.is_empty() { &no_theme[..] } else { themes };
@@ -414,10 +417,10 @@ impl Compiler {
         files.reset();
         files.loader().read.lock().clear();
         let time = Time::system();
-        // Темы собираются параллельно: у каждой свой мир, кэш файлов общий.
-        // Typst и сам распараллеливает вёрстку, но рисунки CeTZ считаются
-        // в основном в одном потоке — две темы параллельно почти вдвое быстрее.
-        // Прогрев — по очереди, в одном потоке с пониженным приоритетом.
+        // Themes build in parallel: each has its own world, the file cache is
+        // shared. Typst parallelizes layout itself, but CeTZ figures are
+        // computed mostly in one thread, so two themes in parallel are almost
+        // twice as fast. Warming goes one by one, in one thread with a lower priority.
         let store = &*files;
         let compile = |theme: &String| {
             let library = self.library(theme);
@@ -430,7 +433,7 @@ impl Compiler {
                     .iter()
                     .map(|theme| spawn_compile(scope, format!("typst-{theme}"), move || vec![compile(theme)]))
                     .collect(),
-                Priority::Background => vec![spawn_compile(scope, "typst-прогрев".into(), move || {
+                Priority::Background => vec![spawn_compile(scope, "typst-warm".into(), move || {
                     lower_priority();
                     themes.iter().map(compile).collect()
                 })],
@@ -449,7 +452,7 @@ impl Compiler {
             }
             match r.doc {
                 Ok(doc) => docs.push((r.theme, doc)),
-                // В других темах ошибка та же — показываем первую.
+                // The error is the same in the other themes: show the first one.
                 Err(errs) => {
                     errors.get_or_insert(errs);
                 }
@@ -473,7 +476,7 @@ impl Compiler {
         Compilation { docs: errors.map_or(Ok(docs), Err), warnings, deps }
     }
 
-    /// Компилирует `main` в PDF в одной теме (пустая — без входа `тема`).
+    /// Compiles `main` to PDF in one theme (empty: without the `theme` input).
     pub fn compile_pdf(&self, main: &Path, theme: &str) -> Result<Vec<u8>, Vec<Diagnostic>> {
         let main = main_id(main).map_err(|m| vec![Diagnostic::error(m)])?;
         let mut files = self.stores.take();
@@ -508,10 +511,10 @@ impl Compiler {
     }
 }
 
-/// Стек потока компиляции: глубокая вложенность разметки рекурсивна.
+/// The stack of a compile thread: deeply nested markup is recursive.
 const COMPILE_STACK: usize = 64 << 20;
 
-/// Поток компиляции (большой стек).
+/// A compile thread (with a big stack).
 #[expect(clippy::expect_used, reason = "the OS refuses a thread only when out of resources")]
 fn spawn_compile<'scope, T: Send + 'scope>(
     scope: &'scope std::thread::Scope<'scope, '_>,
@@ -522,16 +525,16 @@ fn spawn_compile<'scope, T: Send + 'scope>(
         .name(name)
         .stack_size(COMPILE_STACK)
         .spawn_scoped(scope, job)
-        .expect("поток компиляции запускается")
+        .expect("a compile thread starts")
 }
 
-/// Понизить приоритет текущего потока (сборка прогрева): `nice` 10. В Linux
-/// (и Android) приоритет — у потока, а не у процесса. Потоки вёрстки самого
-/// Typst (общий пул) остаются как были.
+/// Lowers the priority of the current thread (a warming build): `nice` 10. On
+/// Linux (and Android) priority belongs to a thread, not a process. Typst's own
+/// layout threads (a shared pool) stay as they were.
 fn lower_priority() {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     if let Err(e) = rustix::process::setpriority_process(Some(rustix::thread::gettid()), 10) {
-        tracing::debug!("приоритет потока прогрева не понижен: {e}");
+        tracing::debug!("warming thread priority not lowered: {e}");
     }
 }
 
@@ -568,12 +571,12 @@ fn compile_theme(world: &CompileWorld, theme: &str) -> ThemeResult {
 }
 
 fn main_id(main: &Path) -> Result<FileId, String> {
-    let path = main.to_str().ok_or_else(|| format!("путь не в UTF-8: {}", main.display()))?;
+    let path = main.to_str().ok_or_else(|| format!("the path is not UTF-8: {}", main.display()))?;
     let vpath = VirtualPath::new(path.replace('\\', "/")).map_err(|e| format!("{path}: {e}"))?;
     Ok(RootedPath::new(VirtualRoot::Project, vpath).intern())
 }
 
-/// Мир одной компиляции: общий кэш файлов + библиотека темы + главный файл.
+/// The world of one compile: the shared file cache + the theme library + the main file.
 struct CompileWorld<'a> {
     files: &'a FileStore<Loader>,
     fonts: &'a Fonts,
