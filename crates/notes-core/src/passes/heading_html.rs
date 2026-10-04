@@ -1,18 +1,19 @@
-//! HTML заголовков для оглавления: формулы (MathML), выделение, код — как
-//! в самом заголовке, а не плоским текстом (`ℝ𝑛` вместо $RR^n$).
+//! Heading HTML for the contents: formulas (MathML), emphasis, code as in the
+//! heading itself, not as plain text (`ℝ𝑛` instead of $RR^n$).
 //!
-//! По тексту готовой страницы (после цветов кода): у каждого заголовка из
-//! [`Rendered::headings`] берётся содержимое `<hN id="…">…</hN>` без номера
-//! (`span.k-num`), ссылок (оглавление само — ссылка) и `id` (они уже есть в
-//! странице). Заголовок из одного текста — без `html`: хватает `text`. С
-//! рисунком (SVG) — тоже без `html`: рисунку в строке оглавления не место.
+//! On the text of the finished page (after code colors): for each heading of
+//! [`Rendered::headings`] it takes the contents of `<hN id="...">...</hN>`
+//! without the number (`span.k-num`), links (the contents entry is a link
+//! itself) and `id`s (the page already has them). A plain-text heading gets no
+//! `html`: `text` is enough. Neither does one with a figure (SVG): a figure has
+//! no place in a contents line.
 
 use std::collections::HashMap;
 
 use super::TextPass;
 use crate::render::Rendered;
 
-pub const PASS: TextPass = TextPass { name: "заголовки для оглавления", run };
+pub const PASS: TextPass = TextPass { name: "contents headings", run };
 
 fn run(page: &mut Rendered) {
     if page.headings.is_empty() {
@@ -24,7 +25,7 @@ fn run(page: &mut Rendered) {
     }
 }
 
-/// `id` заголовка → его содержимое (HTML между открывающим и закрывающим тегом).
+/// A heading `id` -> its contents (the HTML between the opening and closing tags).
 fn heading_inners(body: &str) -> HashMap<String, &str> {
     let mut out = HashMap::new();
     let mut rest = body;
@@ -51,7 +52,7 @@ fn heading_inners(body: &str) -> HashMap<String, &str> {
     out
 }
 
-/// Значение атрибута `name="…"` в тексте открывающего тега.
+/// The value of the attribute `name="..."` in the text of an opening tag.
 fn attr_value<'a>(open: &'a str, name: &str) -> Option<&'a str> {
     let key = format!(" {name}=\"");
     let at = open.find(&key)? + key.len();
@@ -63,7 +64,7 @@ fn unescape(s: &str) -> String {
     s.replace("&quot;", "\"").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
 }
 
-/// Содержимое заголовка → HTML строки оглавления; `None` — хватает текста.
+/// Heading contents -> the HTML of a contents line; `None` if the text is enough.
 fn toc_html(inner: &str) -> Option<String> {
     if inner.contains("<svg") {
         return None;
@@ -80,13 +81,13 @@ fn toc_html(inner: &str) -> Option<String> {
         let tag = &rest[at..=at + len];
         rest = &rest[at + len + 1..];
         if tag.starts_with("<span") && attr_value(tag, "class").is_some_and(|c| c.split(' ').any(|c| c == "k-num")) {
-            // Номер: `span.k-num` без вложенных span — до его `</span>`.
+            // The number: `span.k-num` without nested spans, up to its `</span>`.
             match rest.find("</span>") {
                 Some(end) => rest = &rest[end + "</span>".len()..],
                 None => rest = "",
             }
         } else if tag == "</a>" || tag.starts_with("<a ") || tag == "<a>" {
-            // Ссылка в заголовке — её текст (строка оглавления сама ссылка).
+            // A link in a heading: its text (the contents line is a link itself).
         } else {
             out.push_str(&drop_id(tag));
         }
@@ -96,7 +97,7 @@ fn toc_html(inner: &str) -> Option<String> {
     out.contains('<').then(|| out.to_owned())
 }
 
-/// Тег без атрибута `id` (в странице он уже есть — повтор был бы ошибкой).
+/// A tag without the `id` attribute (the page already has it, a repeat would be an error).
 fn drop_id(tag: &str) -> String {
     let Some(at) = tag.find(" id=\"") else { return tag.to_owned() };
     let Some(len) = tag[at + 5..].find('"') else { return tag.to_owned() };

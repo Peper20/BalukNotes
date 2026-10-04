@@ -1,11 +1,11 @@
-//! Сборка заметки — чистая функция от файлов: исходник → компиляция по
-//! темам ([`crate::world`]) → отрисовка ([`crate::render`], проходы
-//! [`crate::passes`]) → сырая страница, и проходы под настройки
-//! ([`crate::finish`]: рисунки).
+//! Building a note is a pure function of files: the source -> compiling by
+//! theme ([`crate::world`]) -> rendering ([`crate::render`], the passes
+//! [`crate::passes`]) -> a raw page, then the passes for the settings
+//! ([`crate::finish`]: figures).
 //!
-//! Ни кэша, ни блокировок: их добавляют слои выше ([`crate::pages`],
-//! [`crate::page_cache`]). Интерфейс [`Pipeline`] — чтобы проверять эти слои
-//! без компиляции Typst (подменой сборки).
+//! No cache and no locks: the layers above add them ([`crate::pages`],
+//! [`crate::page_cache`]). The [`Pipeline`] interface lets those layers be
+//! tested without compiling Typst (by a fake build).
 
 use std::fmt;
 use std::path::Path;
@@ -23,33 +23,33 @@ use crate::version::{Dep, combine};
 use crate::world::Compiler;
 pub use crate::world::Priority;
 
-/// Результат сборки.
+/// The result of a build.
 #[derive(Debug)]
 pub struct Build {
-    /// Отрисовка до обработки рисунков; `None` — ошибка.
+    /// Rendering before figure processing; `None` on an error.
     pub raw: Option<Rendered>,
     pub errors: Vec<Diagnostic>,
     pub warnings: Vec<Diagnostic>,
-    /// Прочитанные файлы.
+    /// The files read.
     pub deps: Vec<Dep>,
-    /// Версия файлов на момент чтения ([`crate::version`]).
+    /// The version of the files when they were read ([`crate::version`]).
     pub files: String,
     pub took: Duration,
 }
 
-/// Сборка заметки.
+/// Building a note.
 pub trait Pipeline: Send + Sync + fmt::Debug {
-    /// Собрать заметку (без обработки рисунков).
+    /// Builds a note (without figure processing).
     fn build(&self, entry: &Entry, priority: Priority) -> Build;
 
-    /// Обработать рисунки под настройки.
+    /// Processes figures for the settings.
     fn finish(&self, raw: &Rendered, opts: FigureOptions) -> Rendered;
 
-    /// Освободить память сборок (после прохода прогрева).
+    /// Frees the memory of builds (after a warming round).
     fn release_memory(&self) {}
 }
 
-/// Сборка компилятором Typst.
+/// A build by the Typst compiler.
 #[derive(Debug)]
 pub struct TypstPipeline {
     vault: Vault,
@@ -78,8 +78,8 @@ impl TypstPipeline {
         &self.compiler
     }
 
-    /// Предупреждения [`lint`](crate::lint) для файлов хранилища, из которых
-    /// собрана заметка (библиотеку и пакеты не проверяем).
+    /// [`lint`](crate::lint) warnings for the vault files the note is built
+    /// from (the library and packages are not checked).
     fn lint(&self, deps: &[Dep]) -> Vec<Diagnostic> {
         let mut out = Vec::new();
         for dep in deps {
@@ -100,7 +100,7 @@ impl TypstPipeline {
 impl Pipeline for TypstPipeline {
     fn build(&self, entry: &Entry, priority: Priority) -> Build {
         let started = Instant::now();
-        let _span = tracing::debug_span!("сборка", id = %entry.id).entered();
+        let _span = tracing::debug_span!("build", id = %entry.id).entered();
         let compilation = self.compiler.compile_html(&entry.main, &self.themes.names(), priority);
         let links = VaultLinks { vault: &self.vault };
         let (raw, errors) = match compilation.docs {
@@ -111,14 +111,14 @@ impl Pipeline for TypstPipeline {
             Err(errors) => (None, errors),
         };
         let took = started.elapsed();
-        tracing::debug!(id = %entry.id, ms = took.as_millis(), errors = errors.len(), "собрана");
+        tracing::debug!(id = %entry.id, ms = took.as_millis(), errors = errors.len(), "built");
         let files = combine(&compilation.deps);
         let deps: Vec<Dep> = compilation.deps.into_iter().map(|(d, _)| d).collect();
         let mut warnings = compilation.warnings;
         if let Some((tags, attrs, urls)) = raw.as_ref().and_then(|r| r.sanitizer) {
             warnings.push(Diagnostic {
                 severity: crate::diag::DiagSeverity::Warning,
-                message: format!("очищено HTML: удалено тегов {tags}, атрибутов {attrs}, опасных URL {urls}"),
+                message: format!("HTML sanitized: removed {tags} tags, {attrs} attributes, {urls} dangerous URLs"),
                 file: None,
                 line: None,
                 column: None,
@@ -129,7 +129,7 @@ impl Pipeline for TypstPipeline {
         Build { raw, errors, warnings, deps, files, took }
     }
 
-    /// Проходы после кэша ([`crate::finish`]): рисунки под настройки.
+    /// Passes after the cache ([`crate::finish`]): figures for the settings.
     fn finish(&self, raw: &Rendered, opts: FigureOptions) -> Rendered {
         let themes = self.themes.names();
         finish::finish(raw, &finish::Settings { themes: &themes, opts }, finish::FINISH)
@@ -140,8 +140,8 @@ impl Pipeline for TypstPipeline {
     }
 }
 
-/// Адреса ссылок `#see(…)`: существует ли цель, и куда вести
-/// (`/n/Сеть/SSH#якорь` — адрес клиента).
+/// Addresses of `#see(...)` links: whether the target exists and where to go
+/// (`/n/Network/SSH#anchor`, a client URL).
 struct VaultLinks<'a> {
     vault: &'a Vault,
 }
@@ -155,8 +155,8 @@ impl LinkResolver for VaultLinks<'_> {
     }
 }
 
-/// Кодирует то, что в адресе иначе поменяет смысл. Кириллица остаётся как
-/// есть: браузеры её понимают, а адрес читается.
+/// Encodes what would otherwise change the meaning of a URL. Cyrillic stays as
+/// is: browsers understand it, and the URL stays readable.
 pub fn encode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {

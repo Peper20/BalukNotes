@@ -6,7 +6,7 @@ headings:
   1 #Blocks [Blocks] Blocks
   1 #Code-and-figures [Code-and-figures] Code and figures
 links:
-styles: 1668 байт, fnv a3239957b0f37a05
+styles: 1668 bytes, fnv a3239957b0f37a05
 ---
 <article class="k-doc" data-k-figs="e4b5a6a1" data-doc="book" lang="en">
 <header class="k-title">
@@ -55,17 +55,17 @@ styles: 1668 байт, fnv a3239957b0f37a05
 <div class="k-listing-cx">Complexity: <math><mi>𝑂</mi><mrow><mo stretchy="false">(</mo><mi>𝑛</mi><mo stretchy="false">)</mo></mrow></math></div></div>
 <figure>
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 2.576950608em; height: 2.576950608em; display: block" viewBox="0 0 28.346456693 28.346456693" width="28.346456693pt" height="28.346456693pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…305 байт, fnv 813e181682791c58…</svg></div>
+<svg style="overflow: visible; width: 2.576950608em; height: 2.576950608em; display: block" viewBox="0 0 28.346456693 28.346456693" width="28.346456693pt" height="28.346456693pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…305 bytes, fnv 813e181682791c58…</svg></div>
 <figcaption><span class="k-fig-num">Fig. 2.1.</span> A circle</figcaption></figure>
 <figure>
 <div class="k-frames" data-k-frames="{&quot;name&quot;:&quot;k&quot;,&quot;count&quot;:2,&quot;default&quot;:0,&quot;fps&quot;:2,&quot;loop&quot;:false}">
 <div class="k-frames-stack">
 <div class="k-frames-item" data-k-frame-default>
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 1.546170365em; height: 1.546170365em; display: block" viewBox="0 0 17.007874016 17.007874016" width="17.007874016pt" height="17.007874016pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…283 байт, fnv f049532ca82c2e1e…</svg></div>
+<svg style="overflow: visible; width: 1.546170365em; height: 1.546170365em; display: block" viewBox="0 0 17.007874016 17.007874016" width="17.007874016pt" height="17.007874016pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…283 bytes, fnv f049532ca82c2e1e…</svg></div>
 <div class="k-frames-label">frame 1 of 2</div></div>
 <div class="k-frames-item">
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 3.09234073em; height: 3.09234073em; display: block" viewBox="0 0 34.015748031 34.015748031" width="34.015748031pt" height="34.015748031pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…305 байт, fnv 4989118c3f106158…</svg></div>
+<svg style="overflow: visible; width: 3.09234073em; height: 3.09234073em; display: block" viewBox="0 0 34.015748031 34.015748031" width="34.015748031pt" height="34.015748031pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…305 bytes, fnv 4989118c3f106158…</svg></div>
 <div class="k-frames-label">frame 2 of 2</div></div></div></div>
 <figcaption><span class="k-fig-num">Fig. 2.2.</span> Frames without a numeric parameter</figcaption></figure></article>

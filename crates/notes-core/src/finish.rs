@@ -1,39 +1,39 @@
-//! Проходы после кэша: сырая страница → страница под настройки читателя.
+//! Passes after the cache: a raw page -> a page for the reader's settings.
 //!
-//! Сырая отрисовка ([`crate::render`], проходы [`crate::passes`]) лежит в
-//! кэше; эти проходы зависят от настроек ([`FigureOptions`]) и выполняются
-//! при выдаче страницы — смена настроек не перекомпилирует заметку. Модуль
-//! (и его проходы) — в `AFTER_CACHE` (`build.rs`): их правка кэш на диске
-//! не сбрасывает.
+//! The raw rendering ([`crate::render`], the passes [`crate::passes`]) lies in
+//! the cache; these passes depend on the settings ([`FigureOptions`]) and run
+//! when a page is served, so changing settings does not recompile the note.
+//! The module (and its passes) is in `AFTER_CACHE` (`build.rs`): editing them
+//! keeps the disk cache.
 //!
-//! Проходы: рисунки ([`crate::figures`]), общие части кадров
-//! ([`crate::frames`]). Новый проход — одна строка в [`FINISH`]; время — в
-//! логе («проход»).
+//! Passes: figures ([`crate::figures`]), shared parts of frames
+//! ([`crate::frames`]). A new pass is one line in [`FINISH`]; the time is in
+//! the log ("pass").
 
 use crate::figures::{self, FigureOptions};
 use crate::frames;
 use crate::passes::timed;
 use crate::render::Rendered;
 
-/// Проходы по порядку.
+/// The passes in order.
 pub const FINISH: &[FinishPass] =
-    &[FinishPass { name: "рисунки", run: figures_pass }, FinishPass { name: "кадры", run: frames_pass }];
+    &[FinishPass { name: "figures", run: figures_pass }, FinishPass { name: "frames", run: frames_pass }];
 
-/// Проход по готовой странице.
+/// A pass over a finished page.
 #[derive(Debug, Clone, Copy)]
 pub struct FinishPass {
     pub name: &'static str,
     pub run: fn(&mut Rendered, &Settings<'_>),
 }
 
-/// Что знают проходы: темы (порядок вариантов рисунков) и настройки.
+/// What the passes know: the themes (the order of figure variants) and the settings.
 #[derive(Debug, Clone, Copy)]
 pub struct Settings<'a> {
     pub themes: &'a [String],
     pub opts: FigureOptions,
 }
 
-/// Страница под настройки: копия сырой после всех проходов.
+/// The page for the settings: a copy of the raw one after all passes.
 pub fn finish(raw: &Rendered, settings: &Settings<'_>, passes: &[FinishPass]) -> Rendered {
     let mut page = raw.clone();
     for pass in passes {
@@ -42,7 +42,7 @@ pub fn finish(raw: &Rendered, settings: &Settings<'_>, passes: &[FinishPass]) ->
     page
 }
 
-/// Рисунки: общие глифы, один SVG на темы, округление ([`crate::figures`]).
+/// Figures: shared glyphs, one SVG for all themes, rounding ([`crate::figures`]).
 fn figures_pass(page: &mut Rendered, s: &Settings<'_>) {
     let o = figures::optimize(&page.body, s.themes, s.opts);
     tracing::debug!(
@@ -52,14 +52,14 @@ fn figures_pass(page: &mut Rendered, s: &Settings<'_>) {
         merged = o.stats.merged,
         glyphs = o.stats.glyphs,
         colors = o.stats.colors,
-        "рисунки"
+        "figures"
     );
     page.body = o.body;
     page.styles.push_str(&o.styles);
 }
 
-/// Кадры: общие части в `<defs>` ([`crate::frames`]). После рисунков:
-/// темы уже склеены и координаты округлены.
+/// Frames: shared parts in `<defs>` ([`crate::frames`]). After figures: the
+/// themes are already joined and the coordinates rounded.
 fn frames_pass(page: &mut Rendered, _: &Settings<'_>) {
     let (body, stats) = frames::share(&page.body);
     if stats.groups > 0 {
@@ -68,7 +68,7 @@ fn frames_pass(page: &mut Rendered, _: &Settings<'_>) {
             shared = stats.shared,
             before = stats.before,
             after = stats.after,
-            "кадры"
+            "frames"
         );
     }
     page.body = body;
@@ -95,10 +95,10 @@ mod tests {
         };
         let themes = vec!["classic".to_owned()];
         let settings = Settings { themes: &themes, opts: FigureOptions::default() };
-        let passes = [FinishPass { name: "верх", run: upper }, FinishPass { name: "рисунки", run: figures_pass }];
+        let passes = [FinishPass { name: "upper", run: upper }, FinishPass { name: "figures", run: figures_pass }];
         let page = finish(&raw, &settings, &passes);
         assert_eq!(page.body, "<P>X</P>|p2");
-        assert_eq!(page.styles, raw.styles, "без рисунков стилей не добавилось");
-        assert_eq!(raw.body, "<p>x</p>", "сырая не тронута");
+        assert_eq!(page.styles, raw.styles, "no figures, no styles added");
+        assert_eq!(raw.body, "<p>x</p>", "the raw page is untouched");
     }
 }

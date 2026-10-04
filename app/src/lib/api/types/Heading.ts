@@ -2,15 +2,15 @@
 
 export type Heading = { 
 /**
- * Уровень оформления: 1 — глава книги, 2 — раздел, …
+ * The design level: 1 is a book chapter, 2 a section, ...
  */
 level: number, id: string, 
 /**
- * Слаг текста заголовка — по нему ссылка находит раздел.
+ * The slug of the heading text: a link finds the section by it.
  */
 anchor: string, text: string, 
 /**
- * HTML заголовка для оглавления (формулы, выделение) — без номера и
- * ссылок; `None` — заголовок из одного текста (`passes::heading_html`).
+ * Heading HTML for the contents (formulas, emphasis) without the number
+ * and links; `None` for a plain-text heading (`passes::heading_html`).
  */
 html?: string, };

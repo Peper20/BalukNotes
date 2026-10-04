@@ -6,7 +6,7 @@ headings:
   2 #Заметка-без-шаблона [Заметка-без-шаблона] Заметка без шаблона
   3 #Список [Список] Список
 links:
-styles: 1509 байт, fnv 6df1eccb54ca6374
+styles: 1509 bytes, fnv 6df1eccb54ca6374
 ---
 <h2 id="Заметка-без-шаблона" data-k-anchor="Заметка-без-шаблона">Заметка без шаблона</h2>
 <p>Обычный абзац с <strong>жирным</strong>, <em>курсивом</em> и формулой <math><msup><mi>𝑒</mi><mrow><mi>𝑖</mi><mi>𝜋</mi></mrow></msup><mo>+</mo><mn>1</mn><mo>=</mo><mn>0</mn></math>.</p>

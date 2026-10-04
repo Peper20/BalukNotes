@@ -3,10 +3,10 @@ import type { DiagSeverity } from "./DiagSeverity";
 
 export type Diagnostic = { severity: DiagSeverity, message: string, 
 /**
- * Файл от корня хранилища (`/Сеть/SSH.typ`) или пакета (`@preview/cetz:0.4.2/…`).
+ * The file from the vault root (`/Network/SSH.typ`) or a package (`@preview/cetz:0.4.2/...`).
  */
 file: string | null, 
 /**
- * Строка и столбец с единицы.
+ * Line and column, starting at one.
  */
 line: number | null, column: number | null, hints: Array<string>, };

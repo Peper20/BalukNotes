@@ -1,5 +1,5 @@
-//! Пакеты Typst: не из белого списка — ошибка сборки; список разрешённых
-//! меняется — пересобираются только заметки, читавшие пакеты.
+//! Typst packages: one outside the allowlist is a build error; when the list
+//! of allowed ones changes, only notes that read packages are rebuilt.
 
 use notes_core::figures::FigureOptions;
 use notes_core::settings::{Platform, Schema, SettingsStore};
@@ -12,7 +12,7 @@ fn package_outside_whitelist_is_an_error_and_policy_versions_only_its_users() {
     let dir = tempfile::tempdir().unwrap();
     let head = "#import \"/_baluk/lib.typ\": *\n#show: note.with(title: [x])\n";
     std::fs::write(dir.path().join("Чужой.typ"), format!("#import \"@preview/fletcher:0.5.8\": *\n{head}")).unwrap();
-    // Без библиотеки: она сама берёт CeTZ, то есть тоже читает пакеты.
+    // Without the library: the library itself takes CeTZ, so it reads packages too.
     std::fs::write(dir.path().join("Свой.typ"), "= Просто текст\n").unwrap();
     let notes = Notes::open(&NotesConfig {
         trash: None,
@@ -29,14 +29,14 @@ fn package_outside_whitelist_is_an_error_and_policy_versions_only_its_users() {
     assert!(errors.iter().any(|e| e.contains("пакет @preview/fletcher:0.5.8 не из белого списка")), "{errors:?}");
     let before = (notes.version(&foreign, opts).unwrap(), notes.version(&own, opts).unwrap());
 
-    // Разрешили другой пакет (сеть не нужна): заметка с пакетами устарела, без них — нет.
+    // Another package allowed (no network needed): the note with packages is stale, the one without is not.
     let settings = tempfile::tempdir().unwrap();
     let schema = Schema::new(notes.themes().themes(), Platform::Desktop);
     let store = SettingsStore::open(settings.path().join("settings.json"), schema).unwrap();
     let mut device = store.device();
     device.packages = vec!["@preview/tablem:0.2.0".into()];
     notes.apply_device(&device);
-    assert_ne!(notes.version(&foreign, opts).unwrap(), before.0, "заметка с пакетом пересобирается");
-    assert_eq!(notes.version(&own, opts).unwrap(), before.1, "без пакетов — та же версия");
-    assert!(!notes.page(&foreign, opts).unwrap().errors.is_empty(), "fletcher всё ещё не разрешён");
+    assert_ne!(notes.version(&foreign, opts).unwrap(), before.0, "the note with a package is rebuilt");
+    assert_eq!(notes.version(&own, opts).unwrap(), before.1, "without packages, the same version");
+    assert!(!notes.page(&foreign, opts).unwrap().errors.is_empty(), "fletcher is still not allowed");
 }

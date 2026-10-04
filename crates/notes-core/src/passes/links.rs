@@ -1,14 +1,14 @@
-//! Ссылки между заметками: `a.k-link` из `#see` получают адрес от
-//! [`LinkResolver`](crate::render::LinkResolver); ссылки на несуществующие
-//! заметки помечаются `k-link-broken`. Ссылки копятся в
-//! [`Context::out_links`] без повторов.
+//! Links between notes: `a.k-link` from `#see` gets its address from
+//! [`LinkResolver`](crate::render::LinkResolver); links to missing notes are
+//! marked `k-link-broken` with a tooltip (interface text, Russian). Links
+//! collect in [`Context::out_links`] without repeats.
 
 use typst_html::{HtmlElement, attr, tag};
 
 use super::{Context, TreePass};
 use crate::render::{DATA_ANCHOR, DATA_TARGET, LinkRef, has_class};
 
-pub const PASS: TreePass = TreePass { name: "ссылки", visit };
+pub const PASS: TreePass = TreePass { name: "links", visit };
 
 fn visit(ctx: &mut Context<'_>, el: &mut HtmlElement) {
     if !(el.tag == tag::a && has_class(el, "k-link")) {
@@ -52,6 +52,6 @@ mod tests {
         assert_eq!(broken.attrs.get(attr::class).unwrap(), "k-link k-link-broken");
         assert_eq!(broken.attrs.get(attr::title).unwrap(), "нет заметки «Нет»");
         let targets: Vec<_> = c.out_links.iter().map(|l| l.target.as_str()).collect();
-        assert_eq!(targets, ["A", "Нет"], "без повторов");
+        assert_eq!(targets, ["A", "Нет"], "no repeats");
     }
 }

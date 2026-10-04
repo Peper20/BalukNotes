@@ -9,4 +9,4 @@
 5466 examples/figures.typ
 2683 examples/interactive.typ
 14295 reference.md
-59454 всего
+59454 total

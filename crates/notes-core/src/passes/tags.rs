@@ -1,13 +1,13 @@
-//! Теги заметки: элементы `ul.k-tags` шаблона → [`Context::tags`]. Свои
-//! теги глав книги (`ul.k-chapter-tags`) — не теги книги: их знает индекс
-//! исходников ([`crate::outline::Section::tags`]).
+//! Note tags: `ul.k-tags` elements of the template -> [`Context::tags`]. The
+//! own tags of book chapters (`ul.k-chapter-tags`) are not the book's tags:
+//! the source index knows them ([`crate::outline::Section::tags`]).
 
 use typst_html::{HtmlElement, HtmlNode, tag};
 
 use super::{Context, TreePass};
 use crate::render::{has_class, text_of};
 
-pub const PASS: TreePass = TreePass { name: "теги", visit };
+pub const PASS: TreePass = TreePass { name: "tags", visit };
 
 fn visit(ctx: &mut Context<'_>, el: &mut HtmlElement) {
     if !(el.tag == tag::ul && has_class(el, "k-tags")) || has_class(el, "k-chapter-tags") {

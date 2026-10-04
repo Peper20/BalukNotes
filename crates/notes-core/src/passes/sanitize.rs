@@ -1,9 +1,17 @@
+//! Sanitizing the page HTML before serializing (`docs/architecture.md`, HTML
+//! security): only an allowlist of HTML, MathML and SVG tags and attributes seen in
+//! the real output of the library, the passes and Typst stays. Scripts, frames,
+//! forms, `on*` attributes, dangerous URLs and CSS (`javascript:`,
+//! `expression(`, non-image `data:`), external `<use>` and SVG animations of
+//! links are removed; `meta` stays only in the real `<head>` of Typst. The
+//! counts of what was removed become a build warning ([`crate::pipeline`]).
+
 use ecow::EcoVec;
 use typst_html::{HtmlElement, HtmlNode, attr};
 
 use super::{Context, TreePass};
 
-pub const PASS: TreePass = TreePass { name: "санитизация", visit };
+pub const PASS: TreePass = TreePass { name: "sanitize", visit };
 
 const DROP_TAGS: &[&str] = &[
     "script",
@@ -713,14 +721,14 @@ mod tests {
 
         assert!(
             root.children.iter().all(|n| !matches!(n, HtmlNode::Element(e) if tag_name(e) == "script")),
-            "script удалён"
+            "script is removed"
         );
         let img = root.children.iter().find_map(|n| match n {
             HtmlNode::Element(e) if e.tag == tag::img => Some(e),
             _ => None,
         });
-        assert!(img.is_some(), "img остаётся");
-        assert!(img.unwrap().attrs.get(attr("onerror")).is_none(), "event-атрибут удалён");
+        assert!(img.is_some(), "img stays");
+        assert!(img.unwrap().attrs.get(attr("onerror")).is_none(), "the event attribute is removed");
         assert_eq!(context.removed_tags, 1);
         assert_eq!(context.removed_attrs, 1);
     }
@@ -771,8 +779,8 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert!(imgs[0].attrs.get(attr::src).is_none(), "не-image data: удаляется");
-        assert!(imgs[1].attrs.get(attr::src).is_some(), "image data: остаётся");
+        assert!(imgs[0].attrs.get(attr::src).is_none(), "non-image data: is removed");
+        assert!(imgs[1].attrs.get(attr::src).is_some(), "image data: stays");
         assert!(context.removed_urls >= 8);
     }
 
@@ -822,7 +830,7 @@ mod tests {
         run_tree(&mut root, &mut context, &[PASS]);
 
         let [HtmlNode::Element(head), HtmlNode::Element(body)] = &root.children[..] else {
-            panic!("ожидали html(head, body)");
+            panic!("expected html(head, body)");
         };
         let real_head_meta: Vec<&HtmlElement> = head
             .children
@@ -832,7 +840,7 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(real_head_meta.len(), 2, "реальный head должен остаться неизменным");
+        assert_eq!(real_head_meta.len(), 2, "the real head must stay unchanged");
         assert_eq!(real_head_meta[0].attrs.get(attr("charset")).unwrap(), "utf-8");
         assert_eq!(real_head_meta[1].attrs.get(attr("name")).unwrap(), "viewport");
 
@@ -840,14 +848,14 @@ mod tests {
             HtmlNode::Element(el) if el.tag == tag::head => Some(el),
             _ => None,
         });
-        assert!(fake_head.is_some(), "сам fake <head> остаётся");
+        assert!(fake_head.is_some(), "the fake <head> itself stays");
         let fake_head = fake_head.unwrap();
         assert!(
             fake_head
                 .children
                 .iter()
                 .all(|child| { !matches!(child, HtmlNode::Element(el) if el.tag == tag::meta || el.tag == tag::link) }),
-            "meta/link внутри fake head удаляются"
+            "meta/link inside a fake head are removed"
         );
     }
 
@@ -875,8 +883,8 @@ mod tests {
                 names.push(tag_name(e));
             }
         }
-        assert!(names.contains(&"use".to_string()), "локальный use остаётся");
-        assert_eq!(names.iter().filter(|n| n.as_str() == "use").count(), 1, "внешний use удалён");
+        assert!(names.contains(&"use".to_string()), "a local use stays");
+        assert_eq!(names.iter().filter(|n| n.as_str() == "use").count(), 1, "an external use is removed");
         assert!(!names.iter().any(|n| n == "foreignobject"));
         assert!(!names.iter().any(|n| n == "animate" || n == "set"));
         assert!(context.removed_tags >= 4);
@@ -911,11 +919,11 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert!(spans[0].attrs.get(attr::style).is_none(), "опасный style удалён");
+        assert!(spans[0].attrs.get(attr::style).is_none(), "a dangerous style is removed");
         assert_eq!(spans[1].attrs.get(attr::style).unwrap(), "color:var(--k-fg)");
         assert!(
             root.children.iter().all(|n| !matches!(n, HtmlNode::Element(e) if tag_name(e) == "style")),
-            "опасный <style> удалён"
+            "a dangerous <style> is removed"
         );
     }
 

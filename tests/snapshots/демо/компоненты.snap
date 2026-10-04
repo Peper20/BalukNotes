@@ -11,9 +11,9 @@ headings:
   2 #3D-и-2D [3D-и-2D] 3D и 2D
   2 #Таблицы-и-итоги [Таблицы-и-итоги] Таблицы и итоги
 links:
-styles: 18879 байт, fnv 8798aabb71fc75d8
+styles: 18879 bytes, fnv 8798aabb71fc75d8
 ---
-<svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…60799 байт, fnv fbe547b33d998037…</svg>
+<svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…60799 bytes, fnv fbe547b33d998037…</svg>
 <article class="k-doc" data-k-figs="8ef56181" data-doc="book" lang="ru">
 <header class="k-title">
 <div class="k-title-kind">Конспект</div>
@@ -78,11 +78,11 @@ styles: 18879 байт, fnv 8798aabb71fc75d8
 <p>Поиск пары с суммой <math><mn>14</mn></math> в массиве двумя указателями: каждая строка — один шаг.</p>
 <figure>
 <div class="k-frame k-layout">
-<svg style="overflow: visible; width: 41.746599857em; height: 20.769789406em; display: block" viewBox="0 0 459.212598425 228.467683465" width="459.212598425pt" height="228.467683465pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…38672 байт, fnv 8c264c9c105a8878…</svg></div>
+<svg style="overflow: visible; width: 41.746599857em; height: 20.769789406em; display: block" viewBox="0 0 459.212598425 228.467683465" width="459.212598425pt" height="228.467683465pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…38672 bytes, fnv 8c264c9c105a8878…</svg></div>
 <figcaption><span class="k-fig-num">Рис. 1.1.</span> Кадры работы двух указателей: указатель двигается в сторону, которая приближает сумму к цели; пар, которые мы пропускаем, ответ содержать не может</figcaption></figure>
 <figure>
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 12.781675018em; height: 5.90256801em; display: block" viewBox="0 0 140.598425197 64.928248115" width="140.598425197pt" height="64.928248115pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…9395 байт, fnv c12b225c3e23dfae…</svg></div>
+<svg style="overflow: visible; width: 12.781675018em; height: 5.90256801em; display: block" viewBox="0 0 140.598425197 64.928248115" width="140.598425197pt" height="64.928248115pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…9395 bytes, fnv c12b225c3e23dfae…</svg></div>
 <figcaption><span class="k-fig-num">Рис. 1.2.</span> Массив с отрезком и указателем: окно <math><mrow><mo stretchy="false">[</mo><mrow><mn>2</mn><mo>,</mo><mn>5</mn></mrow><mo stretchy="false">]</mo></mrow></math> и его правый конец</figcaption></figure>
 <h3 class="k-h k-h2" id="Таблица-ДП-и-графы" data-k-anchor="Таблица-ДП-и-графы"><span class="k-num">1.4</span>Таблица ДП и графы</h3>
 <div class="k-side" style="--k-side-w: 42%">
@@ -90,24 +90,24 @@ styles: 18879 байт, fnv 8798aabb71fc75d8
 <div class="k-side-fig">
 <figure>
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 7.227498529em; height: 5.978847139em; display: block" viewBox="0 0 79.502483821 65.767318529" width="79.502483821pt" height="65.767318529pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…13743 байт, fnv cae5dbfd8112c162…</svg></div>
+<svg style="overflow: visible; width: 7.227498529em; height: 5.978847139em; display: block" viewBox="0 0 79.502483821 65.767318529" width="79.502483821pt" height="65.767318529pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…13743 bytes, fnv cae5dbfd8112c162…</svg></div>
 <figcaption><span class="k-fig-num">Рис. 1.3.</span> Переход в клетку <math><mrow><mo stretchy="false">(</mo><mrow><mn>4</mn><mo>,</mo><mn>5</mn></mrow><mo stretchy="false">)</mo></mrow></math></figcaption></figure></div></div>
 <figure>
 <div class="k-row">
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 10.900108757em; height: 7.090173121em; display: block" viewBox="0 0 119.901196325 77.991904331" width="119.901196325pt" height="77.991904331pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…8113 байт, fnv 6b0b6cfd7cd156c9…</svg></div>
+<svg style="overflow: visible; width: 10.900108757em; height: 7.090173121em; display: block" viewBox="0 0 119.901196325 77.991904331" width="119.901196325pt" height="77.991904331pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…8113 bytes, fnv 6b0b6cfd7cd156c9…</svg></div>
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 7.060844667em; height: 7.060844667em; display: block" viewBox="0 0 77.669291339 77.669291339" width="77.669291339pt" height="77.669291339pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…7511 байт, fnv 3a5bd9125b193c00…</svg></div></div>
+<svg style="overflow: visible; width: 7.060844667em; height: 7.060844667em; display: block" viewBox="0 0 77.669291339 77.669291339" width="77.669291339pt" height="77.669291339pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…7511 bytes, fnv 3a5bd9125b193c00…</svg></div></div>
 <figcaption><span class="k-fig-num">Рис. 1.4.</span> Слева — дерево обхода в ширину (раскладка по уровням) и рёбра вне дерева пунктиром. Справа — ориентированный цикл с весами; встречные рёбра <math><mi>𝑎</mi><mo stretchy="false">→</mo><mi>𝑏</mi></math> и <math><mi>𝑏</mi><mo stretchy="false">→</mo><mi>𝑎</mi></math> разведены</figcaption></figure>
 <h3 class="k-h k-h2" id="3D-и-2D" data-k-anchor="3D-и-2D"><span class="k-num">1.5</span>3D и 2D</h3>
 <figure>
 <div class="k-row">
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 14.412638511em; height: 8.144813457em; display: block" viewBox="0 0 158.539023622 89.592948031" width="158.539023622pt" height="89.592948031pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…55280 байт, fnv a91414cbfa8eb9f3…</svg></div>
+<svg style="overflow: visible; width: 14.412638511em; height: 8.144813457em; display: block" viewBox="0 0 158.539023622 89.592948031" width="158.539023622pt" height="89.592948031pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…55280 bytes, fnv a91414cbfa8eb9f3…</svg></div>
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 14.412638511em; height: 8.144813457em; display: block" viewBox="0 0 158.539023622 89.592948031" width="158.539023622pt" height="89.592948031pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…14913 байт, fnv 2fe79cfedee17370…</svg></div>
+<svg style="overflow: visible; width: 14.412638511em; height: 8.144813457em; display: block" viewBox="0 0 158.539023622 89.592948031" width="158.539023622pt" height="89.592948031pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…14913 bytes, fnv 2fe79cfedee17370…</svg></div>
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 8.220472441em; height: 7.653543307em; display: block" viewBox="0 0 90.42519685 84.188976378" width="90.42519685pt" height="84.188976378pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…5832 байт, fnv 94c9caa454bdb347…</svg></div></div>
+<svg style="overflow: visible; width: 8.220472441em; height: 7.653543307em; display: block" viewBox="0 0 90.42519685 84.188976378" width="90.42519685pt" height="84.188976378pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…5832 bytes, fnv 94c9caa454bdb347…</svg></div></div>
 <figcaption><span class="k-fig-num">Рис. 1.5.</span> Седло <math><mi>𝑧</mi><mo>=</mo><msup><mi>𝑥</mi><mn>2</mn></msup><mo>−</mo><msup><mi>𝑦</mi><mn>2</mn></msup></math> (сдвинутое): светотень и прозрачный каркас; справа — круг, окружность радиуса <math><mi>𝑟</mi></math> и горизонтальная спица</figcaption></figure>
 <h3 class="k-h k-h2" id="Таблицы-и-итоги" data-k-anchor="Таблицы-и-итоги"><span class="k-num">1.6</span>Таблицы и итоги</h3>
 <table>

@@ -1,18 +1,19 @@
-//! Книга по главам: страница одной главы из страницы всей книги.
+//! A book by chapters: the page of one chapter from the page of the whole book.
 //!
-//! Книга собирается целиком (счётчики, ссылки между главами), но показывать
-//! её лучше по главе: вёрстка всей книги — сотни миллисекунд на ПК и секунды
-//! на телефоне. Главы — прямые потомки `<article class="k-doc"
-//! data-doc="book">` от одного `h2.k-h1` до следующего; всё до первой главы
-//! (титул) идёт с первой.
+//! A book is built whole (counters, links between chapters), but it is better
+//! shown one chapter at a time: laying out a whole book takes hundreds of
+//! milliseconds on a PC and seconds on a phone. Chapters are direct children of
+//! `<article class="k-doc" data-doc="book">` from one `h2.k-h1` to the next;
+//! everything before the first chapter (the title page) goes with the first.
 //!
-//! Работает с готовым HTML (после [`crate::figures`]): режет текст по
-//! границам прямых потомков статьи. Разметку пишет `typst-html` — теги
-//! закрыты, `<` в тексте экранирован, — поэтому хватает разбора по тегам.
-//! Из общего набора глифов (`svg.k-glyphs`) глава получает только свои.
+//! Works on the finished HTML (after [`crate::figures`]): cuts the text at the
+//! boundaries of the article's direct children. The markup comes from
+//! `typst-html`: tags are closed and `<` in text is escaped, so parsing by
+//! tags is enough.
+//! From the shared glyph set (`svg.k-glyphs`) a chapter gets only its own.
 //!
-//! Нарезка стоит один проход по тексту («Матан», ~1,5 МБ, — миллисекунды),
-//! поэтому не кэшируется.
+//! Cutting costs one pass over the text (a big book of ~1.5 MB takes
+//! milliseconds), so it is not cached.
 
 use std::collections::{BTreeMap, HashSet};
 use std::ops::Range;
@@ -23,40 +24,40 @@ use serde::Serialize;
 use crate::notes::NotePage;
 use crate::render::Rendered;
 
-/// Глава в списке глав.
+/// A chapter in the chapter list.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Chapter {
-    /// Номер главы (`data-num`) или пусто.
+    /// The chapter number (`data-num`) or empty.
     pub num: String,
-    /// Название без номера.
+    /// The title without the number.
     pub title: String,
-    /// `id` заголовка главы.
+    /// The `id` of the chapter heading.
     pub id: String,
 }
 
-/// Какая глава показана и где остальные.
+/// Which chapter is shown and where the others are.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct BookView {
-    /// Номер показанной главы (с нуля).
+    /// The number of the shown chapter (from zero).
     pub chapter: u32,
     pub chapters: Vec<Chapter>,
-    /// Якорь (`id` или `data-k-anchor`) → номер главы. `id` уникальны; из
-    /// одинаковых `data-k-anchor` («Итоги» в каждой главе) — первый.
+    /// Anchor (`id` or `data-k-anchor`) -> chapter number. `id`s are unique; of
+    /// equal `data-k-anchor`s ("Summary" in every chapter) the first one wins.
     pub anchors: BTreeMap<String, u32>,
 }
 
-/// Какую главу показать.
+/// Which chapter to show.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Select<'a> {
     pub chapter: Option<usize>,
-    /// Якорь — глава, где он есть (если `chapter` не задан).
+    /// An anchor: the chapter that has it (if `chapter` is not set).
     pub anchor: Option<&'a str>,
 }
 
-/// Страница одной главы книги. Не книга или в ней меньше двух глав — `None`
-/// (показывать целиком). Номер главы за концом — последняя глава.
+/// The page of one book chapter. Not a book, or fewer than two chapters: `None`
+/// (show it whole). A chapter number past the end gives the last chapter.
 pub fn chapter_page(page: &NotePage, select: Select<'_>) -> Option<NotePage> {
     let rendered = page.rendered.as_deref()?;
     let layout = Layout::parse(&rendered.body)?;
@@ -78,12 +79,12 @@ pub fn chapter_page(page: &NotePage, select: Select<'_>) -> Option<NotePage> {
     })
 }
 
-/// Границы частей книги в тексте страницы.
+/// The boundaries of the book parts in the page text.
 #[derive(Debug, PartialEq, Eq)]
 struct Layout {
-    /// Скрытый `<svg class="k-glyphs">` в начале страницы (или пусто).
+    /// The hidden `<svg class="k-glyphs">` at the start of the page (or empty).
     sprite: Range<usize>,
-    /// Содержимое статьи до первой главы (титул).
+    /// The article contents before the first chapter (the title page).
     intro: Range<usize>,
     chapters: Vec<ChapterPart>,
 }
@@ -91,18 +92,18 @@ struct Layout {
 #[derive(Debug, PartialEq, Eq)]
 struct ChapterPart {
     range: Range<usize>,
-    /// Открывающий тег заголовка главы и весь заголовок.
+    /// The opening tag of the chapter heading, and the whole heading.
     heading_tag: Range<usize>,
     heading: Range<usize>,
 }
 
 const SPRITE_OPEN: &str = r#"<svg class="k-glyphs""#;
 
-/// Элементы без закрывающего тега.
+/// Elements without a closing tag.
 const VOID: &[&str] =
     &["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"];
 
-/// Элементы, внутри которых текст — не разметка.
+/// Elements whose text is not markup.
 const RAW_TEXT: &[&str] = &["script", "style", "textarea", "title"];
 
 impl Layout {
@@ -140,7 +141,7 @@ impl Layout {
                         });
                     }
                     if RAW_TEXT.contains(&name) {
-                        // Вместе с закрывающим тегом: глубина не меняется.
+                        // Together with the closing tag: the depth does not change.
                         let close = body[pos..].find(&format!("</{name}"))? + pos;
                         pos = body[close..].find('>')? + close + 1;
                     } else if !self_closing && !VOID.contains(&name) {
@@ -160,10 +161,10 @@ impl Layout {
         Some(Self { sprite, intro, chapters })
     }
 
-    /// Список глав и карта якорей.
+    /// The chapter list and the anchor map.
     fn view(&self, rendered: &Rendered) -> BookView {
-        // Название — из заголовков страницы (там оно уже текстом), номер —
-        // из `data-num` заголовка.
+        // The title comes from the page headings (it is already text there), the
+        // number from `data-num` of the heading.
         let body = &rendered.body;
         let chapters = self
             .chapters
@@ -194,7 +195,7 @@ impl Layout {
         BookView { chapter: 0, chapters, anchors }
     }
 
-    /// Текст страницы с одной главой `k` (у первой — ещё и титул).
+    /// The page text with one chapter `k` (the first one also gets the title page).
     fn chapter_body(&self, body: &str, k: usize) -> String {
         let part = &self.chapters[k];
         let content = if k == 0 { self.intro.start..part.range.end } else { part.range.clone() };
@@ -209,7 +210,7 @@ impl Layout {
     }
 }
 
-/// Конец открывающего тега статьи-книги (начало её содержимого).
+/// The end of the opening tag of the book article (the start of its contents).
 fn find_book_article(body: &str) -> Option<usize> {
     let mut from = 0;
     while let Some(i) = body[from..].find("<article ") {
@@ -231,7 +232,7 @@ enum TagKind<'a> {
         self_closing: bool,
     },
     Close,
-    /// Комментарий, `<!doctype>`.
+    /// A comment, `<!doctype>`.
     Other,
 }
 
@@ -242,7 +243,7 @@ struct Tag<'a> {
     kind: TagKind<'a>,
 }
 
-/// Следующий тег, начиная с `from`: `>` внутри кавычек тег не закрывает.
+/// The next tag from `from`: `>` inside quotes does not close the tag.
 fn next_tag(s: &str, from: usize) -> Option<Tag<'_>> {
     let start = from + s[from..].find('<')?;
     let rest = &s[start..];
@@ -277,7 +278,7 @@ fn next_tag(s: &str, from: usize) -> Option<Tag<'_>> {
     Some(Tag { start, end, kind })
 }
 
-/// Атрибуты открывающего тега (значения — без экранирования).
+/// The attributes of an opening tag (values unescaped).
 fn attrs(raw: &str) -> Vec<(&str, String)> {
     let mut out = Vec::new();
     let inner = raw.trim_start_matches('<').trim_end_matches('>').trim_end_matches('/');
@@ -322,7 +323,7 @@ fn has_class(raw: &str, class: &str) -> bool {
     attr(raw, "class").is_some_and(|c| c.split_ascii_whitespace().any(|c| c == class))
 }
 
-/// `id` и `data-k-anchor` элементов (не внутри SVG: там id служебные).
+/// `id` and `data-k-anchor` of elements (not inside SVG: ids there are internal).
 fn anchor_attrs(html: &str) -> Vec<(&'static str, String)> {
     let mut out = Vec::new();
     let mut svg = 0usize;
@@ -357,7 +358,7 @@ fn anchor_attrs(html: &str) -> Vec<(&'static str, String)> {
     out
 }
 
-/// Набор глифов только с теми, на которые ссылается `html`.
+/// The glyph set with only those `html` refers to.
 fn used_glyphs(sprite: &str, html: &str) -> String {
     if sprite.is_empty() {
         return String::new();
@@ -394,11 +395,11 @@ fn used_glyphs(sprite: &str, html: &str) -> String {
     out
 }
 
-/// Текст без тегов (запасной путь для названия главы).
+/// Text without tags (the fallback for a chapter title).
 fn strip_tags(html: &str) -> String {
     let mut out = String::new();
     let mut rest = html;
-    // Номер главы — не часть названия.
+    // The chapter number is not part of the title.
     if let Some(i) = rest.find(r#"<span class="k-num">"#)
         && let Some(j) = rest[i..].find("</span>")
     {
@@ -500,7 +501,7 @@ mod tests {
             (a("гл-1"), a("Первая"), a("Итоги"), a("Итоги-2"), a("Вторая")),
             (Some(0), Some(0), Some(0), Some(1), Some(1))
         );
-        assert_eq!(a("c1"), None, "id внутри SVG — не якоря");
+        assert_eq!(a("c1"), None, "ids inside SVG are not anchors");
 
         let b = body(&first);
         assert!(b.contains("<header") && b.contains("гл-1") && b.contains("<style>h2 { } </h2></style>"));
@@ -536,6 +537,6 @@ mod tests {
         let one = BOOK.split("<h2 class=\"k-h k-h1\" data-num=\"2\"").next().unwrap().to_owned() + "</article>";
         let r = Arc::get_mut(p.rendered.as_mut().unwrap()).unwrap();
         r.body = one;
-        assert!(chapter_page(&p, Select::default()).is_none(), "одна глава — целиком");
+        assert!(chapter_page(&p, Select::default()).is_none(), "one chapter: shown whole");
     }
 }

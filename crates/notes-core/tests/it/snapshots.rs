@@ -1,13 +1,13 @@
-//! Эталонные снимки отрисовки: каждая заметка `tests/vault` → текстовый файл
-//! в `tests/snapshots/`. Любое изменение библиотеки, ядра или Typst, которое
-//! меняет HTML, видно в диффе снимка.
+//! Reference snapshots of rendering: every note of `tests/vault` -> a text file
+//! in `tests/snapshots/`. Any change of the library, the core or Typst that
+//! changes the HTML shows in the snapshot diff.
 //!
-//!   cargo test -p notes-core --test it snapshots::                       # сравнить
-//!   UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it snapshots::    # обновить
+//!   cargo test -p notes-core --test it snapshots::                       # compare
+//!   UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it snapshots::    # update
 //!
-//! Содержимое SVG (пути, глифы) и data-адресов заменено размером и хэшем:
-//! иначе снимки весили бы мегабайты, а дифф был бы нечитаем. Изменение
-//! рисунка всё равно заметно — по хэшу.
+//! The contents of SVG (paths, glyphs) and data URLs are replaced by size and
+//! hash: otherwise snapshots would weigh megabytes and the diff would be
+//! unreadable. A change of a figure still shows, by the hash.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -43,25 +43,25 @@ fn rendering_matches_snapshots() {
         }
     }
 
-    // Снимки заметок, которых больше нет.
+    // Snapshots of notes that no longer exist.
     let stale: Vec<_> = walk(&dir).into_iter().filter(|p| !expected.contains(p)).collect();
     if update {
         for p in &stale {
             std::fs::remove_file(p).unwrap();
         }
     } else if !stale.is_empty() {
-        failed.push(format!("лишние снимки: {stale:?}"));
+        failed.push(format!("stale snapshots: {stale:?}"));
     }
 
     assert!(
         failed.is_empty(),
-        "отрисовка изменилась — проверьте дифф и обновите снимки: \
+        "rendering changed: check the diff and update the snapshots: \
          UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it snapshots::\n{}",
         failed.join("\n")
     );
 }
 
-/// Текст снимка: сведения о заметке, затем тело страницы.
+/// The snapshot text: note info, then the page body.
 fn snapshot(page: &NotePage) -> String {
     let mut s = String::new();
     let _ = writeln!(s, "id: {}\nkind: {:?}", page.id, page.kind);
@@ -70,7 +70,7 @@ fn snapshot(page: &NotePage) -> String {
         let _ = writeln!(s, "{:?}: {at}{}", d.severity, d.message);
     }
     let Some(r) = &page.rendered else {
-        s.push_str("(нет отрисовки)\n");
+        s.push_str("(no rendering)\n");
         return s;
     };
     let _ = writeln!(s, "title: {}", r.title.as_deref().unwrap_or("—"));
@@ -95,8 +95,8 @@ fn snapshot(page: &NotePage) -> String {
     s
 }
 
-/// Блочный элемент — с новой строки, чтобы дифф показывал изменённый абзац,
-/// а не всю страницу одной строкой.
+/// A block element starts a new line, so the diff shows the changed paragraph,
+/// not the whole page as one line.
 fn break_blocks(html: &str) -> String {
     const BLOCKS: &str = "article header section nav aside div p h1 h2 h3 h4 h5 h6 ul ol li figure figcaption \
                           table thead tbody tr pre blockquote details svg img";
@@ -116,7 +116,7 @@ fn break_blocks(html: &str) -> String {
     out
 }
 
-/// Заменяет содержимое `<svg>…</svg>` и `data:`-адреса на размер и хэш.
+/// Replaces the contents of `<svg>...</svg>` and `data:` URLs with size and hash.
 fn collapse(body: &str) -> String {
     let mut out = String::with_capacity(body.len() / 4);
     let mut rest = body;
@@ -148,24 +148,24 @@ fn collapse_data_urls(s: &str) -> String {
     out
 }
 
-/// `12345 байт, fnv 0123abcd…`: стабильный между версиями Rust хэш.
+/// `12345 bytes, fnv 0123abcd...`: a hash stable across Rust versions.
 fn summary(s: &str) -> String {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in s.bytes() {
         h ^= u64::from(b);
         h = h.wrapping_mul(0x0100_0000_01b3);
     }
-    format!("{} байт, fnv {h:016x}", s.len())
+    format!("{} bytes, fnv {h:016x}", s.len())
 }
 
 fn first_difference(old: &str, new: &str) -> String {
     if old.is_empty() {
-        return "снимка нет".into();
+        return "no snapshot".into();
     }
     let line =
         old.lines().zip(new.lines()).position(|(a, b)| a != b).unwrap_or(old.lines().count().min(new.lines().count()));
     format!(
-        "строка {}: было «{}», стало «{}»",
+        "line {}: was \"{}\", now \"{}\"",
         line + 1,
         old.lines().nth(line).unwrap_or("").chars().take(120).collect::<String>(),
         new.lines().nth(line).unwrap_or("").chars().take(120).collect::<String>()

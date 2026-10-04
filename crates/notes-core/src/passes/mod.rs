@@ -1,21 +1,21 @@
-//! Обработка HTML заметки — явная цепочка проходов.
+//! Processing the note HTML: an explicit chain of passes.
 //!
-//! Сырая отрисовка ([`crate::render::render`]) — два этапа до кэша:
+//! The raw rendering ([`crate::render::render`]) has two stages before the cache:
 //!
-//! 1. [`TREE`] — по дереву `typst-html` до сериализации. Каждый проход —
-//!    посетитель элементов ([`TreePass`]) с общим [`Context`]: темы и их
-//!    рисунки, занятые `id`, адреса ссылок; итоги (заголовки, ссылки, теги)
-//!    копятся там же.
-//! 2. [`TEXT`] — по тексту сырой страницы ([`TextPass`]).
+//! 1. [`TREE`]: on the `typst-html` tree before serializing. Each pass is an
+//!    element visitor ([`TreePass`]) with a shared [`Context`]: the themes and
+//!    their figures, taken `id`s, link addresses; the results (headings,
+//!    links, tags) collect there too.
+//! 2. [`TEXT`]: on the text of the raw page ([`TextPass`]).
 //!
-//! После кэша, под настройки читателя, — [`crate::finish`] (рисунки).
-//! Глава книги ([`crate::book`]) — не проход, а вид готовой страницы по
-//! запросу.
+//! After the cache, for the reader's settings: [`crate::finish`] (figures).
+//! A book chapter ([`crate::book`]) is not a pass but a view of the finished
+//! page on request.
 //!
-//! Новый проход — модуль здесь и одна строка в списке. Время каждого
-//! прохода — в логе (`RUST_LOG=notes_core=debug`, строка «проход»). Файлы
-//! этого каталога входят в метку кэша на диске (`build.rs`): правка прохода
-//! пересобирает заметки.
+//! A new pass is a module here and one line in the list. Each pass's time is
+//! in the log (`RUST_LOG=notes_core=debug`, the "pass" line). The files of
+//! this directory are part of the disk cache label (`build.rs`): editing a
+//! pass rebuilds the notes.
 
 mod anchors;
 mod code_colors;
@@ -33,44 +33,44 @@ use typst_html::{HtmlElement, HtmlFrame};
 
 use crate::render::{Heading, LinkRef, LinkResolver, Rendered, walk_mut};
 
-/// Проходы по дереву — по порядку.
-// Санитизация — первой: удаляет опасные элементы и атрибуты до сериализации.
+/// Tree passes, in order.
+// Sanitizing comes first: it removes dangerous elements and attributes before serializing.
 pub const TREE: &[TreePass] = &[sanitize::PASS, themes::PASS, anchors::PASS, links::PASS, fences::PASS, tags::PASS];
 
-/// Проходы по тексту сырой страницы — по порядку.
+/// Passes over the text of the raw page, in order.
 pub const TEXT: &[TextPass] = &[code_colors::PASS, heading_html::PASS];
 
-/// Проход по дереву: `visit` вызывается для каждого элемента (сначала
-/// родитель, потом дети — уже после его правки).
+/// A tree pass: `visit` is called for every element (the parent first, then
+/// the children, after the parent was edited).
 #[derive(Debug, Clone, Copy)]
 pub struct TreePass {
     pub name: &'static str,
     pub visit: fn(&mut Context<'_>, &mut HtmlElement),
 }
 
-/// Проход по тексту сырой страницы.
+/// A pass over the text of the raw page.
 #[derive(Debug, Clone, Copy)]
 pub struct TextPass {
     pub name: &'static str,
     pub run: fn(&mut Rendered),
 }
 
-/// Общий контекст проходов одной страницы.
+/// The context shared by the passes of one page.
 pub struct Context<'a> {
-    /// Темы по порядку; первая — базовый документ.
+    /// The themes in order; the first is the base document.
     pub themes: &'a [String],
-    /// Рисунки небазовых тем, по порядку появления.
+    /// Figures of the non-base themes, in order of appearance.
     pub frames: Vec<Vec<HtmlFrame>>,
-    /// Сколько рисунков базового документа уже склеено.
+    /// How many figures of the base document are already joined.
     pub frame: usize,
-    /// Занятые `id` страницы.
+    /// Taken `id`s of the page.
     pub ids: HashSet<String>,
     pub links: &'a dyn LinkResolver,
-    /// Итоги: заголовки, ссылки (без повторов), теги.
+    /// Results: headings, links (no repeats), tags.
     pub headings: Vec<Heading>,
     pub out_links: Vec<LinkRef>,
     pub tags: Vec<String>,
-    /// Санитизация: сколько удалено.
+    /// Sanitizing: how much was removed.
     pub removed_tags: usize,
     pub removed_attrs: usize,
     pub removed_urls: usize,
@@ -105,25 +105,25 @@ impl<'a> Context<'a> {
     }
 }
 
-/// Выполнить проходы по дереву.
+/// Runs the tree passes.
 pub fn run_tree(root: &mut HtmlElement, ctx: &mut Context<'_>, passes: &[TreePass]) {
     for pass in passes {
         timed(pass.name, || walk_mut(root, &mut |el| (pass.visit)(ctx, el)));
     }
 }
 
-/// Выполнить проходы по тексту.
+/// Runs the text passes.
 pub fn run_text(page: &mut Rendered, passes: &[TextPass]) {
     for pass in passes {
         timed(pass.name, || (pass.run)(page));
     }
 }
 
-/// Выполнить и записать время в лог.
+/// Runs `f` and logs its time.
 pub fn timed<T>(name: &str, f: impl FnOnce() -> T) -> T {
     let started = Instant::now();
     let out = f();
-    tracing::debug!(pass = name, us = started.elapsed().as_micros(), "проход");
+    tracing::debug!(pass = name, us = started.elapsed().as_micros(), "pass");
     out
 }
 
@@ -136,7 +136,7 @@ pub(crate) mod test_util {
     use super::Context;
     use crate::render::LinkResolver;
 
-    /// Ссылки: существуют заметки `A` и `B`.
+    /// Links: notes `A` and `B` exist.
     pub struct Links;
 
     impl LinkResolver for Links {

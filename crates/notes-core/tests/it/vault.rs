@@ -1,7 +1,7 @@
-//! Сквозная проверка на тестовом хранилище `tests/vault` (каталог случаев —
-//! `tests/vault/README.md`): настоящая
-//! компиляция Typst с библиотекой `baluk/`. Нужен пакет cetz 0.4.2 в
-//! кэше Typst (или сеть — он скачается).
+//! End-to-end check on the test vault `tests/vault` (the catalogue of cases:
+//! `tests/vault/README.md`): real Typst compiling with the `baluk/` library.
+//! Needs the package cetz 0.4.2 in the Typst cache (or the network: it gets
+//! downloaded).
 
 use std::path::PathBuf;
 
@@ -24,7 +24,7 @@ fn themes_come_from_library() {
     assert_eq!(names, ["classic", "night"]);
     assert!(NOTES.themes().themes()[1].dark);
     assert!(NOTES.themes().css().contains("--k-box-def:"));
-    // Браузеру — шрифты тем, основные и запасные (все списки `font`).
+    // The browser gets the theme fonts, main and fallback (every `font` list).
     let fonts: Vec<_> = NOTES.themes().web_fonts().iter().map(|f| (f.name.as_str(), f.math)).collect();
     assert_eq!(
         fonts,
@@ -56,8 +56,8 @@ fn note_renders_with_anchors_links_and_tags() {
             (2, "Смена порта", "Смена-порта")
         ]
     );
-    assert!(r.body.contains(r#"href="/n/Сеть/UFW""#), "ссылка на существующую заметку");
-    assert!(r.body.contains(r#"href="/n/Сеть/SSH#Вход-по-ключу""#), "ссылка с якорем");
+    assert!(r.body.contains(r#"href="/n/Сеть/UFW""#), "a link to an existing note");
+    assert!(r.body.contains(r#"href="/n/Сеть/SSH#Вход-по-ключу""#), "a link with an anchor");
 }
 
 #[test]
@@ -65,7 +65,7 @@ fn figures_share_one_svg_across_themes() {
     let page = NOTES.page(&id("Сеть/SSH"), OPTS).unwrap();
     let r = page.rendered.as_ref().unwrap();
     assert_eq!(r.body.matches(r#"class="k-frame k-fig""#).count(), 1);
-    assert!(!r.body.contains("k-frame-v"), "темы различаются только цветами — один SVG");
+    assert!(!r.body.contains("k-frame-v"), "the themes differ only in colors: one SVG");
     assert!(r.body.contains("var(--kf"));
     assert!(r.styles.contains(r#":root[data-theme="night"] [data-k-figs=""#));
 }
@@ -74,7 +74,7 @@ fn figures_share_one_svg_across_themes() {
 fn figure_precision_changes_version_not_content() {
     let rounded = NOTES.page(&id("демо/визуализация"), OPTS).unwrap();
     let exact = NOTES.page(&id("демо/визуализация"), FigureOptions { precision: None }).unwrap();
-    assert_ne!(rounded.version, exact.version, "клиент должен перезапросить страницу");
+    assert_ne!(rounded.version, exact.version, "the client must request the page again");
     let (rounded, exact) = (rounded.rendered.as_ref().unwrap(), exact.rendered.as_ref().unwrap());
     assert!(rounded.body.len() < exact.body.len());
     assert_eq!(rounded.headings, exact.headings);
@@ -86,14 +86,14 @@ fn code_uses_theme_variables() {
     assert!(page.errors.is_empty(), "{:?}", page.errors);
     let body = &page.rendered.as_ref().unwrap().body;
     assert!(body.contains("var(--k-code-key)"));
-    assert!(!body.contains("color: #0101"), "опорные цвета не остаются в HTML");
+    assert!(!body.contains("color: #0101"), "marker colors do not stay in the HTML");
 }
 
 #[test]
 fn simple_parentheses_do_not_stretch() {
     let page = NOTES.page(&id("демо/компоненты"), OPTS).unwrap();
     let body = &page.rendered.as_ref().unwrap().body;
-    // O(n^2): внутри нет высокого — скобки обычные, плотные.
+    // O(n^2): nothing tall inside, so the brackets are plain and tight.
     assert!(body.contains(r#"<mo stretchy="false">(</mo>"#));
 }
 
@@ -120,7 +120,7 @@ fn check_finds_exactly_the_planted_problems() {
             ("Особые случаи/Ссылки", "Сеть/SSH", Some("Нет такого раздела")),
             ("Сеть/UFW", "Сеть/Nginx", None),
         ],
-        "якорь по метке («особый»), имена с + # % и глубокая вложенность — не битые"
+        "an anchor by label (\"особый\"), names with + # % and deep nesting are not broken"
     );
     let failing: Vec<_> = report.notes.iter().filter(|n| !n.errors.is_empty()).map(|n| n.id.as_str()).collect();
     assert_eq!(failing, ["Особые случаи/Ошибка компиляции"]);
@@ -128,14 +128,14 @@ fn check_finds_exactly_the_planted_problems() {
     assert_eq!(warned, ["Особые случаи/Предупреждение"]);
     let folders: Vec<_> = report.folders.iter().map(|f| f.file.as_str()).collect();
     assert_eq!(folders, ["Глубоко/а/б/_folder.toml"]);
-    assert_eq!(report.summary(), expected_summary(), "итог в tests/vault/README.md");
+    assert_eq!(report.summary(), expected_summary(), "the summary in tests/vault/README.md");
 }
 
-/// Ожидаемый итог `notes check` — строка «Итог: `…`» в `tests/vault/README.md`
-/// (её же сверяет `tools/check.sh`).
+/// The expected `notes check` summary: the line "Итог: `...`" in
+/// `tests/vault/README.md` (`tools/check.sh` checks it too).
 fn expected_summary() -> String {
     let readme = std::fs::read_to_string(repo().join("tests/vault/README.md")).unwrap();
-    let line = readme.lines().find_map(|l| l.strip_prefix("Итог: `")).expect("строка «Итог: `…`» в README");
+    let line = readme.lines().find_map(|l| l.strip_prefix("Итог: `")).expect("the line \"Итог: `...`\" in the README");
     line.trim_end_matches('`').to_owned()
 }
 
@@ -153,11 +153,11 @@ fn book_headings_are_unique_and_labels_are_ids() {
     assert_eq!(page.kind, NoteKind::Book);
     let r = page.rendered.as_ref().unwrap();
     let ids: Vec<_> = r.headings.iter().filter(|h| h.anchor == "Итоги").map(|h| h.id.as_str()).collect();
-    assert_eq!(ids, ["Итоги", "Итоги-2", "Итоги-3"], "одинаковые заголовки в главах");
+    assert_eq!(ids, ["Итоги", "Итоги-2", "Итоги-3"], "equal headings in chapters");
     let labelled = r.headings.iter().find(|h| h.text == "Особый раздел").unwrap();
-    assert_eq!(labelled.id, "особый", "метка <особый> становится id");
-    assert_eq!(labelled.anchor, "Особый-раздел", "и по тексту тоже находится");
-    assert!(r.body.contains("<img src=\"data:image/svg+xml"), "картинка из файла");
+    assert_eq!(labelled.id, "особый", "the label <особый> becomes the id");
+    assert_eq!(labelled.anchor, "Особый-раздел", "and it is found by text too");
+    assert!(r.body.contains("<img src=\"data:image/svg+xml"), "an image from a file");
 }
 
 #[test]
@@ -171,10 +171,9 @@ fn swallowed_semicolon_is_a_warning() {
 #[test]
 fn lang_without_dictionary_is_a_warning() {
     let page = NOTES.page(&id("Особые случаи/Предупреждение"), OPTS).unwrap();
-    let lint =
-        page.warnings.iter().find(|w| w.message.contains("нет слов оформления")).expect("предупреждение о языке");
-    assert_eq!((lint.line, lint.column), (Some(3), Some(18)), "место — аргумент lang:");
-    // Свои слова — не предупреждение.
+    let lint = page.warnings.iter().find(|w| w.message.contains("нет слов оформления")).expect("the language warning");
+    assert_eq!((lint.line, lint.column), (Some(3), Some(18)), "the place is the lang: argument");
+    // Own words are not a warning.
     let own = NOTES.page(&id("Особые случаи/Свои слова"), OPTS).unwrap();
     assert!(own.warnings.is_empty(), "{:?}", own.warnings);
     assert!(own.rendered.as_ref().unwrap().body.contains("Abb. 1."));
@@ -185,8 +184,8 @@ fn theme_dependent_figure_keeps_variants() {
     let page = NOTES.page(&id("Рисунки/Темы и градиент"), OPTS).unwrap();
     assert!(page.errors.is_empty(), "{:?}", page.errors);
     let body = &page.rendered.as_ref().unwrap().body;
-    assert!(body.contains("k-frame-v"), "форма зависит от темы — по варианту на тему");
-    assert!(body.contains("var(--kf"), "обычный рисунок рядом всё равно склеен");
+    assert!(body.contains("k-frame-v"), "the shape depends on the theme: one variant per theme");
+    assert!(body.contains("var(--kf"), "an ordinary figure next to it is still merged");
 }
 
 #[test]
@@ -218,13 +217,13 @@ fn disk_cache_survives_restart() {
     };
     let first = open().page(&id("Сеть/UFW"), OPTS).unwrap();
     let files = walkdir(dir.path());
-    assert_eq!(files.len(), 2, "страница записана в кэш: запись и отрисовка — {files:?}");
+    assert_eq!(files.len(), 2, "the page is written to the cache: the record and the rendering, {files:?}");
     let second = open().page(&id("Сеть/UFW"), OPTS).unwrap();
     assert_eq!(first.version, second.version);
     assert_eq!(first.rendered.as_ref().unwrap().body, second.rendered.as_ref().unwrap().body);
 }
 
-/// Все файлы каталога (рекурсивно).
+/// All files of a directory (recursively).
 fn walkdir(dir: &std::path::Path) -> Vec<PathBuf> {
     let mut out = Vec::new();
     for e in std::fs::read_dir(dir).unwrap().flatten() {
@@ -254,14 +253,14 @@ fn warm_builds_everything_once_across_restarts() {
     let all = first.entries().unwrap().len();
     first.hint_warm(vec![id("Книга")]);
     let stats = first.warm_pass();
-    assert_eq!((stats.built, stats.skipped), (all, 0), "первый проход собирает всё");
-    assert_eq!(first.memory().0, 0, "прогрев — только на диск");
-    assert_eq!(first.warm_pass().built, 0, "второй — ничего");
+    assert_eq!((stats.built, stats.skipped), (all, 0), "the first round builds everything");
+    assert_eq!(first.memory().0, 0, "warming goes to disk only");
+    assert_eq!(first.warm_pass().built, 0, "the second builds nothing");
 
-    // Новый запуск: собранное (и заметки с ошибкой) лежит на диске.
+    // A new start: what was built (and notes with errors) lies on disk.
     let failed =
         first.entries().unwrap().iter().filter(|e| !first.page(&e.id, OPTS).unwrap().errors.is_empty()).count();
-    assert!(failed > 0, "в tests/vault есть заметка с ошибкой");
+    assert!(failed > 0, "tests/vault has a note with an error");
     let stats = open().warm_pass();
     assert_eq!((stats.built, stats.skipped), (0, all));
 }
@@ -284,18 +283,18 @@ fn vault_graph_follows_the_vault() {
     let page = notes.page(&id("Граф"), OPTS).unwrap();
     assert!(page.errors.is_empty(), "{:?}", page.errors);
     let body = &page.rendered.as_ref().unwrap().body;
-    assert!(body.contains(r#"class="k-graph""#) && body.contains("data-k-graph"), "разметка для клиента");
+    assert!(body.contains(r#"class="k-graph""#) && body.contains("data-k-graph"), "markup for the client");
     assert!(body.contains("&quot;id&quot;:&quot;A&quot;") && !body.contains("&quot;id&quot;:&quot;C&quot;"));
 
-    // Правка, не меняющая граф (текст, новая заметка без связей в той же
-    // папке, — вне соседей B), заметку с графом не трогает.
+    // An edit that does not change the graph (text, a new note without links in
+    // the same folder, outside the neighbours of B) leaves the graph note alone.
     std::fs::write(dir.path().join("A.typ"), format!("{head}Текст. #see(\"B\")\n")).unwrap();
     std::fs::write(dir.path().join("D.typ"), head).unwrap();
-    assert_eq!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "версия — по ответу графа");
+    assert_eq!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "the version follows the graph answer");
 
-    // Новая заметка ссылается на B — граф заметки устарел и пересобирается.
+    // A new note links to B: the note's graph is stale and gets rebuilt.
     std::fs::write(dir.path().join("C.typ"), format!("{head}#see(\"B\")\n")).unwrap();
-    assert_ne!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "граф изменился");
+    assert_ne!(notes.version(&id("Граф"), OPTS).unwrap(), page.version, "the graph changed");
     let body = notes.page(&id("Граф"), OPTS).unwrap().rendered.clone().unwrap().body.clone();
     assert!(body.contains("&quot;id&quot;:&quot;C&quot;"));
 }
@@ -315,7 +314,7 @@ fn concurrent_requests_share_one_build() {
         let b = s.spawn(|| notes.page(&id("демо/визуализация"), OPTS).unwrap());
         (a.join().unwrap(), b.join().unwrap())
     });
-    assert!(std::sync::Arc::ptr_eq(&a, &b), "второй запрос дождался первой сборки, а не собрал заново");
+    assert!(std::sync::Arc::ptr_eq(&a, &b), "the second request waited for the first build instead of building again");
 }
 
 #[test]
@@ -324,13 +323,13 @@ fn search_finds_sections_with_exact_anchors() {
     let first = &hits[0];
     assert_eq!(first.id.as_str(), "Книга");
     assert_eq!(first.heading.as_deref(), Some("Итоги"));
-    assert_eq!(first.anchor.as_deref(), Some("Итоги-2"), "повтор заголовка — id как у отрисовки");
+    assert_eq!(first.anchor.as_deref(), Some("Итоги-2"), "a repeated heading: the id as in the rendering");
 
     let hits = NOTES.search("ОСОБЫЙ раздел", 10).unwrap();
-    assert_eq!(hits[0].anchor.as_deref(), Some("особый"), "метка заголовка — его id");
+    assert_eq!(hits[0].anchor.as_deref(), Some("особый"), "a heading label is its id");
 
     let hits = NOTES.search("ssh-keygen", 10).unwrap();
-    assert!(hits.iter().any(|h| h.id.as_str() == "Сеть/SSH"), "код в тексте ищется");
+    assert!(hits.iter().any(|h| h.id.as_str() == "Сеть/SSH"), "code in text is searched");
     assert!(hits[0].snippet.iter().any(|f| f.hit && f.text == "ssh-keygen"));
 
     assert!(NOTES.search("нетакогословавхранилище", 10).unwrap().is_empty());
@@ -342,12 +341,12 @@ fn search_in_book_lists_all_sections_in_text_order() {
     let book = id("Книга");
     let all = NOTES.search("итоги", 50).unwrap();
     let inside = NOTES.search_in(&book, "итоги", 50).unwrap();
-    assert!(inside.iter().all(|h| h.id == book), "только эта книга");
-    assert!(inside.len() >= all.iter().filter(|h| h.id == book).count(), "не меньше, чем в общем поиске");
+    assert!(inside.iter().all(|h| h.id == book), "only this book");
+    assert!(inside.len() >= all.iter().filter(|h| h.id == book).count(), "no fewer than in the general search");
     let anchors: Vec<_> = inside.iter().filter_map(|h| h.anchor.as_deref()).collect();
     let first = anchors.iter().position(|a| *a == "Итоги").unwrap();
     let second = anchors.iter().position(|a| *a == "Итоги-2").unwrap();
-    assert!(first < second, "по порядку текста: {anchors:?}");
+    assert!(first < second, "in text order: {anchors:?}");
     assert!(NOTES.search_in(&id("Нет такой"), "итоги", 5).is_err());
 }
 
@@ -365,9 +364,9 @@ fn computed_links_come_from_built_pages() {
     let from = |notes: &Notes| -> Vec<String> {
         notes.index().unwrap().backlinks(&target).into_iter().map(|b| b.from.to_string()).collect()
     };
-    assert!(!from(&notes).contains(&"Особые случаи/Ссылки".to_owned()), "в исходнике путь вычисляемый");
+    assert!(!from(&notes).contains(&"Особые случаи/Ссылки".to_owned()), "the path in the source is computed");
     notes.page(&id("Особые случаи/Ссылки"), OPTS).unwrap();
-    assert!(from(&notes).contains(&"Особые случаи/Ссылки".to_owned()), "после сборки — из её ссылок");
+    assert!(from(&notes).contains(&"Особые случаи/Ссылки".to_owned()), "after the build: from its links");
 }
 
 #[test]
@@ -386,7 +385,7 @@ fn preview_of_note_and_section() {
     assert_eq!(p.title, "SSH");
     assert_eq!(p.heading, None);
     assert!(p.text.starts_with("SSH — протокол"), "{}", p.text);
-    // Якорь — как в ссылке: текст заголовка, его слаг или метка.
+    // The anchor as in a link: the heading text, its slug or its label.
     for anchor in ["Смена порта", "Смена-порта"] {
         let p = NOTES.preview(&id("Сеть/SSH"), Some(anchor)).unwrap();
         assert_eq!(p.heading.as_deref(), Some("Смена порта"), "{anchor}");
@@ -403,7 +402,7 @@ fn decoration_words_follow_note_language() {
     let page = NOTES.page(&id("Особые случаи/English"), OPTS).unwrap();
     assert!(page.errors.is_empty(), "{:?}", page.errors);
     let body = &page.rendered.as_ref().unwrap().body;
-    assert!(body.contains(r#"data-doc="book" lang="en""#), "язык — атрибутом <article>");
+    assert!(body.contains(r#"data-doc="book" lang="en""#), "the language is an <article> attribute");
     for word in [
         r#"<div class="k-title-kind">Notes</div>"#,
         r#"data-word="Chapter""#,
@@ -423,11 +422,11 @@ fn decoration_words_follow_note_language() {
         "Fig. 2.1.",
         "frame 1 of 2",
     ] {
-        assert!(body.contains(word), "нет «{word}»");
+        assert!(body.contains(word), "no \"{word}\"");
     }
     for word in ["Определение", "Теорема", "Шаг", "Ответ", "Рис.", "Глава", "Сложность", "кадр"]
     {
-        assert!(!body.contains(word), "русское «{word}» в английской заметке");
+        assert!(!body.contains(word), "the Russian \"{word}\" in an English note");
     }
 }
 
@@ -449,14 +448,14 @@ fn storage_in_memory_compiles_and_follows_edits() {
     assert!(page.errors.is_empty(), "{:?}", page.errors);
     assert!(page.rendered.as_ref().unwrap().body.contains("первая часть"));
 
-    // Правка включённого файла — новая версия и новый текст.
+    // Editing an included file: a new version and new text.
     mem.write("часть.typ", "вторая часть");
     assert_ne!(notes.version(&id("A"), OPTS).unwrap(), page.version);
     assert!(notes.page(&id("A"), OPTS).unwrap().rendered.as_ref().unwrap().body.contains("вторая часть"));
 }
 
-/// Удаление: заметка — файл, книга — папка целиком; список и ссылки
-/// обновляются сразу (и с наблюдателем, который помнит обход).
+/// Deletion: a note is a file, a book is a whole folder; the list and links
+/// update at once (with a watcher that keeps the walk too).
 #[test]
 fn delete_note_and_book() {
     let mem = std::sync::Arc::new(notes_core::storage::MemStorage::new());
@@ -478,13 +477,13 @@ fn delete_note_and_book() {
 
     notes.delete(&id("Сеть/B")).unwrap();
     let index = notes.index().unwrap();
-    assert!(!index.exists("Сеть/B"), "список — сразу, без ожидания наблюдателя");
+    assert!(!index.exists("Сеть/B"), "the list updates at once, without waiting for the watcher");
     assert!(index.exists("A"));
 
     notes.delete(&id("Книга")).unwrap();
     assert!(
         notes_core::storage::Storage::list(&*mem).unwrap().iter().all(|f| !f.starts_with("Книга/")),
-        "книга — папкой целиком"
+        "a book goes as a whole folder"
     );
     let ids: Vec<String> = notes.entries().unwrap().into_iter().map(|e| e.id.to_string()).collect();
     assert_eq!(ids, ["A"]);
@@ -494,20 +493,24 @@ fn delete_note_and_book() {
     mem.write("Папка/Вложенная/Заметка.typ", "= З");
     mem.write("Папка/Другая.typ", "= Д");
     assert!(notes.index().unwrap().exists("Папка/Вложенная/Заметка"));
-    assert!(matches!(notes.delete_folder(&id("Папка/Другая")), Err(notes_core::Error::NotFound(_))), "файл — не папка");
+    assert!(
+        matches!(notes.delete_folder(&id("Папка/Другая")), Err(notes_core::Error::NotFound(_))),
+        "a file is not a folder"
+    );
     notes.delete_folder(&id("Папка")).unwrap();
     let ids: Vec<String> = notes.entries().unwrap().into_iter().map(|e| e.id.to_string()).collect();
-    assert_eq!(ids, ["A"], "папка — целиком, со вложенными");
+    assert_eq!(ids, ["A"], "the folder goes whole, with nested ones");
     assert!(matches!(notes.delete_folder(&id("Папка")), Err(notes_core::Error::NotFound(_))));
 }
 
-/// Граф с главами: книга — корень и главы вокруг; ссылка в раздел книги — к
-/// главе этого раздела, ссылка главы — от главы; фильтр по тегу — и по тегам глав.
+/// The graph with chapters: a book is the root with chapters around it; a link
+/// into a book section goes to that section's chapter, a chapter's link goes
+/// from the chapter; a tag filter covers chapter tags too.
 #[test]
 fn book_chapters_on_graph() {
     let index = NOTES.index().unwrap();
     let plain = index.graph();
-    assert!(plain.nodes.iter().all(|n| n.chapter.is_none()), "без глав — как раньше");
+    assert!(plain.nodes.iter().all(|n| n.chapter.is_none()), "without chapters: as before");
     let g = index.graph_of(true);
     let chapters: Vec<_> = g
         .nodes
@@ -525,13 +528,13 @@ fn book_chapters_on_graph() {
     );
     let edge = |from: &str, to: &str| g.edges.iter().find(|e| e.from == from && e.to == to);
     for c in ["Книга/.1", "Книга/.2", "Книга/.3"] {
-        assert!(edge("Книга", c).is_some_and(|e| e.chapter), "книга - {c}");
+        assert!(edge("Книга", c).is_some_and(|e| e.chapter), "book - {c}");
     }
-    // Внутри книги: первая глава ссылается на вторую (по тексту и по метке).
+    // Inside the book: the first chapter links to the second (by text and by label).
     assert_eq!(edge("Книга/.1", "Книга/.2").map(|e| (e.count, e.chapter)), Some((2, false)));
-    // Снаружи: «Ссылки» — в раздел второй главы.
+    // Outside: "Ссылки" links into a section of the second chapter.
     assert!(edge("Особые случаи/Ссылки", "Книга/.2").is_some());
-    assert!(edge("Особые случаи/Ссылки", "Книга").is_none(), "ссылка с якорем — к главе");
+    assert!(edge("Особые случаи/Ссылки", "Книга").is_none(), "a link with an anchor goes to the chapter");
 
     let shown = |tag: &str| {
         let filter = GraphFilter { tag: Some(tag.into()), chapters: true, ..GraphFilter::default() };
@@ -539,10 +542,10 @@ fn book_chapters_on_graph() {
         ids.retain(|id| id.starts_with("Книга"));
         ids
     };
-    // Тег корня — у всех глав; тег главы — только у неё (и у книги, как раньше).
+    // The root's tag is on every chapter; a chapter's tag only on it (and on the book, as before).
     assert_eq!(shown("книга"), ["Книга", "Книга/.1", "Книга/.2", "Книга/.3"]);
     assert_eq!(shown("код"), ["Книга", "Книга/.2"]);
     let layout = index.graph_layout(&GraphFilter { chapters: true, ..GraphFilter::default() });
     let group = |id: &str| layout.nodes.iter().find(|n| n.id == id).map(|n| n.group.clone());
-    assert_eq!(group("Книга/.1"), group("Книга"), "глава — цвета своей книги");
+    assert_eq!(group("Книга/.1"), group("Книга"), "a chapter has its book's colors");
 }

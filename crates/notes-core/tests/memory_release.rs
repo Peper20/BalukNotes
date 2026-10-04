@@ -1,7 +1,7 @@
-//! Измерение памяти и времени повторного открытия после сборок.
+//! Measures memory and the time of reopening after builds.
 //!
-//! Тест игнорируется по умолчанию: он тяжёлый и зависит от /proc.
-//! Запуск вручную: `cargo test -p notes-core --features measure --test memory_release -- --ignored`.
+//! The test is ignored by default: it is heavy and depends on /proc.
+//! Run by hand: `cargo test -p notes-core --features measure --test memory_release -- --ignored`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test helpers fail the test by panicking")]
 
@@ -12,7 +12,7 @@ use notes_core::world::LibrarySource;
 use notes_core::{NoteId, Notes, NotesConfig};
 
 fn rss_hwm_kib() -> (u64, u64) {
-    // /proc/self/status: строки VmRSS и VmHWM в КиБ.
+    // /proc/self/status: the VmRSS and VmHWM lines, in KiB.
     let status = fs::read_to_string("/proc/self/status").unwrap();
     let mut rss = 0u64;
     let mut hwm = 0u64;
@@ -28,15 +28,15 @@ fn rss_hwm_kib() -> (u64, u64) {
 
 fn reopen_time_ms(notes: &Notes, id: &NoteId) -> u128 {
     let start = Instant::now();
-    // Повторное открытие (страница уже в кэше на диске).
+    // Reopening (the page is already in the disk cache).
     let _ = notes.page(id, notes_core::figures::FigureOptions::default()).unwrap();
     start.elapsed().as_millis()
 }
 
 #[test]
-#[ignore = "тяжёлое измерение памяти"]
+#[ignore = "a heavy memory measurement"]
 fn measure_memory_and_reopen_time() {
-    // Папка данных: временная, пустой кэш.
+    // The data directory: temporary, an empty cache.
     let cache_dir = tempfile::tempdir().unwrap();
     let vault_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/vault");
     let config = NotesConfig {
@@ -47,7 +47,7 @@ fn measure_memory_and_reopen_time() {
         trash: None,
     };
     let notes = Notes::open(&config).unwrap();
-    // Ограничить память кэша страниц (меньше шума измерений): применим напрямую.
+    // Limit the page cache memory (less noise in measurements): applied directly.
     let device = notes_core::settings::Device {
         warm: notes_core::warm::WarmMode::All,
         builds: 2,
@@ -58,37 +58,37 @@ fn measure_memory_and_reopen_time() {
     };
     notes.apply_device(&device);
 
-    // Базовая точка: до сборок.
+    // The baseline: before builds.
     let (rss0, hwm0) = rss_hwm_kib();
 
-    // Полный проход прогрева.
+    // A full warming round.
     let stats = notes.warm_pass();
     assert!(stats.built > 0);
-    // Подождать, пока фоновая запись на диск наверняка завершится.
+    // Wait until background disk writes surely finish.
     std::thread::sleep(Duration::from_millis(200));
     let (rss1, hwm1) = rss_hwm_kib();
 
-    // Имитация обычной пересборки: правка одной заметки.
-    // Копия в tmp: правки в репозитории не делаем.
+    // Imitate an ordinary rebuild: an edit of one note.
+    // A copy in tmp: no edits in the repository.
     let tmp_vault = tempfile::tempdir().unwrap();
     fs::create_dir_all(tmp_vault.path()).unwrap();
     let ssh_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/vault/Сеть/SSH.typ");
     fs::copy(ssh_path, tmp_vault.path().join("Сеть-SSH.typ")).unwrap();
-    // Сборка новой заметки из временной папки.
+    // Building a new note from the temporary folder.
     let cfg2 = NotesConfig { vault: tmp_vault.path().to_path_buf(), ..config.clone() };
     let notes2 = Notes::open(&cfg2).unwrap();
     notes2.apply_device(&device);
-    // Создать простую заметку и собрать её (обычная правка одной страницы).
+    // Create a simple note and build it (an ordinary edit of one page).
     fs::write(tmp_vault.path().join("Новая.typ"), "= Новая\nтекст").unwrap();
     let id_new = NoteId::new("Новая").unwrap();
     let _ = notes2.page(&id_new, notes_core::figures::FigureOptions::default()).unwrap();
     let (rss2, hwm2) = rss_hwm_kib();
 
-    // Время повторного открытия (попадание в кэш на диске).
+    // The time of reopening (a hit in the disk cache).
     let id = NoteId::new("Сеть/SSH").unwrap();
     let reopen_ms = reopen_time_ms(&notes, &id);
 
-    // Печать результата: его собираем в docs/research/E5.md вручную.
+    // Print the result: it goes into docs/research/E5.md by hand.
     println!(
         "baseline_rss_kib={rss0} baseline_hwm_kib={hwm0} after_warm_rss_kib={rss1} after_warm_hwm_kib={hwm1} after_edit_rss_kib={rss2} after_edit_hwm_kib={hwm2} reopen_ms={reopen_ms} built={}",
         stats.built

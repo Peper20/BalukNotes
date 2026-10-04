@@ -1,6 +1,6 @@
-//! Измерение idle RSS после прогрева с коротким простоем (релиз по простою).
+//! Measures idle RSS after warming with a short idle time (release on idle).
 //!
-//! Запуск вручную: `cargo test -p notes-core --features measure --test memory_release_idle --release -- --ignored --nocapture`.
+//! Run by hand: `cargo test -p notes-core --features measure --test memory_release_idle --release -- --ignored --nocapture`.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test helpers fail the test by panicking")]
 
@@ -11,7 +11,7 @@ use notes_core::world::LibrarySource;
 use notes_core::{NoteId, Notes, NotesConfig};
 
 fn rss_hwm_kib() -> (u64, u64) {
-    // /proc/self/status: строки VmRSS и VmHWM в КиБ.
+    // /proc/self/status: the VmRSS and VmHWM lines, in KiB.
     let status = fs::read_to_string("/proc/self/status").unwrap();
     let mut rss = 0u64;
     let mut hwm = 0u64;
@@ -26,9 +26,9 @@ fn rss_hwm_kib() -> (u64, u64) {
 }
 
 #[test]
-#[ignore = "тяжёлое измерение памяти"]
+#[ignore = "a heavy memory measurement"]
 fn measure_idle_after_warm_release() {
-    // Папка данных: временная, пустой кэш.
+    // The data directory: temporary, an empty cache.
     let cache_dir = tempfile::tempdir().unwrap();
     let vault_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/vault");
     let config = NotesConfig {
@@ -39,7 +39,7 @@ fn measure_idle_after_warm_release() {
         trash: None,
     };
     let notes = Notes::open(&config).unwrap();
-    // Уменьшить шум: небольшой бюджет памяти страниц и ограничение memo.
+    // Less noise: a small page memory budget and a memo limit.
     let device = notes_core::settings::Device {
         warm: notes_core::warm::WarmMode::All,
         builds: 2,
@@ -52,15 +52,15 @@ fn measure_idle_after_warm_release() {
 
     let (rss0, _hwm0) = rss_hwm_kib();
 
-    // Полный проход прогрева: store() каждой сборки ставит таймер релиза.
+    // A full warming round: store() of every build sets the release timer.
     let stats = notes.warm_pass();
     assert!(stats.built > 0);
-    // Дать простой больше порога (IDLE_RELEASE_DELAY = 5 с).
+    // Idle for longer than the threshold (IDLE_RELEASE_DELAY = 5 s).
     std::thread::sleep(Duration::from_millis(5600));
     let (rss1, hwm1) = rss_hwm_kib();
     let (warm_pages, warm_bytes) = notes.memory();
 
-    // Имитация одиночной пересборки: правка одной заметки.
+    // Imitate a single rebuild: an edit of one note.
     let tmp_vault = tempfile::tempdir().unwrap();
     fs::create_dir_all(tmp_vault.path()).unwrap();
     fs::write(tmp_vault.path().join("Новая.typ"), "= Новая\nтекст").unwrap();
@@ -69,7 +69,7 @@ fn measure_idle_after_warm_release() {
     notes2.apply_device(&device);
     let id_new = NoteId::new("Новая").unwrap();
     let _ = notes2.page(&id_new, notes_core::figures::FigureOptions::default()).unwrap();
-    // Ещё простой больше порога для релиза после пересборки.
+    // Idle longer than the threshold again, for a release after the rebuild.
     std::thread::sleep(Duration::from_millis(5600));
     let (rss2, hwm2) = rss_hwm_kib();
     let (edit_pages, edit_bytes) = notes2.memory();

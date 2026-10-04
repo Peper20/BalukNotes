@@ -1,16 +1,17 @@
-//! Версии: из каких файлов собрана заметка и изменились ли они.
+//! Versions: which files a note is built from and whether they changed.
 //!
-//! Компиляция запоминает прочитанные файлы — [`Dep`] — и **отпечаток**
-//! каждого в момент чтения ([`Versions::token`]: размер и время изменения,
-//! дешёвый `stat`). Версия заметки — хэш пар «файл → отпечаток»
-//! ([`combine`]). Годна ли сборка — сравнить с тем же хэшем по текущим
-//! отпечаткам ([`Versions::current`]). Файл поменяли во время компиляции —
-//! его отпечаток уже другой, версия не совпадёт, и заметка соберётся заново
-//! (раньше версия считалась после компиляции, и правка терялась).
+//! Compiling remembers the files it read ([`Dep`]) and a **fingerprint** of
+//! each at the time of reading ([`Versions::token`]: size and modification
+//! time, a cheap `stat`). The note version is a hash of "file -> fingerprint"
+//! pairs ([`combine`]). Whether a build is still good: compare it with the same
+//! hash over the current fingerprints ([`Versions::current`]). A file changed
+//! during compiling already has another fingerprint, so the version does not
+//! match and the note gets rebuilt (computing the version after compiling
+//! would lose the edit).
 //!
-//! Хэш — [`StableHasher`] (SipHash-1-3 с нулевым ключом, байты подаются
-//! явно): одинаков в любой версии Rust и на любой машине — годится для кэша
-//! на диске и позже для синхронизации.
+//! The hash is [`StableHasher`] (SipHash-1-3 with a zero key, bytes fed
+//! explicitly): the same in any Rust version and on any machine, so it suits
+//! the disk cache and later sync.
 
 use std::hash::Hasher as _;
 use std::path::PathBuf;
@@ -22,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use crate::storage::{FileMeta, Storage};
 use crate::vault_data::VaultData;
 
-/// Стабильный хэш: алгоритм и порядок байтов закреплены.
+/// A stable hash: the algorithm and the byte order are fixed.
 #[derive(Debug, Default, Clone)]
 pub struct StableHasher(siphasher::sip::SipHasher13);
 
@@ -50,30 +51,30 @@ impl StableHasher {
         self.0.finish()
     }
 
-    /// 16 шестнадцатеричных знаков.
+    /// 16 hex digits.
     pub fn hex(&self) -> String {
         format!("{:016x}", self.finish())
     }
 }
 
-/// Файл, прочитанный компиляцией.
+/// A file read by compiling.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Dep {
-    /// Файл хранилища (путь от корня, через `/`).
+    /// A vault file (the path from the root, with `/`).
     Vault(String),
-    /// Данные хранилища для заметок: `/_vault/<путь>` (граф). Отпечаток
-    /// даёт поставщик ([`crate::vault_data`]).
+    /// Vault data for notes: `/_vault/<path>` (the graph). The provider gives
+    /// the fingerprint ([`crate::vault_data`]).
     Data(String),
-    /// Файл библиотеки оформления на диске (`--library` каталогом).
-    /// Встроенная библиотека в зависимости не входит — она входит в метку
-    /// кэша ([`crate::cache`]).
+    /// A file of the design library on disk (`--library` as a directory). The
+    /// embedded library is not a dependency: it is part of the cache label
+    /// ([`crate::cache`]).
     Library(PathBuf),
 }
 
-/// Отпечаток файла на момент чтения.
+/// The fingerprint of a file at the time of reading.
 pub type Token = u64;
 
-/// Отпечатки файлов по хранилищу и его данным.
+/// File fingerprints of the vault and its data.
 #[derive(Debug, Clone)]
 pub struct Versions {
     storage: Arc<dyn Storage>,
@@ -81,12 +82,12 @@ pub struct Versions {
 }
 
 impl Versions {
-    /// Без данных хранилища (`/_vault/…` — нет таких файлов).
+    /// Without vault data (`/_vault/...` has no such files).
     pub fn new(storage: Arc<dyn Storage>) -> Self {
         Self { storage, data: VaultData::default() }
     }
 
-    /// С данными хранилища `/_vault/…`.
+    /// With vault data, `/_vault/...`.
     #[must_use]
     pub fn with_data(mut self, data: VaultData) -> Self {
         self.data = data;
@@ -101,7 +102,7 @@ impl Versions {
         &self.data
     }
 
-    /// Текущий отпечаток файла. Пропавший файл — тоже отпечаток (другой).
+    /// The current fingerprint of a file. A missing file has a fingerprint too (another one).
     pub fn token(&self, dep: &Dep) -> Token {
         match dep {
             Dep::Vault(path) => meta_token(self.storage.stat(path).ok()),
@@ -117,18 +118,18 @@ impl Versions {
         }
     }
 
-    /// Версия по текущим отпечаткам — сравнивается с [`combine`] сборки.
+    /// The version by current fingerprints, compared with the build's [`combine`].
     pub fn current(&self, deps: &[Dep]) -> String {
         let tokens: Vec<_> = deps.iter().map(|d| (d.clone(), self.token(d))).collect();
         combine(&tokens)
     }
 }
 
-/// Отпечаток по сведениям о файле (`None` — файла нет).
+/// A fingerprint from file info (`None` means there is no file).
 fn meta_token(meta: Option<FileMeta>) -> Token {
     let mut h = StableHasher::new();
     match meta {
-        None => h.str("нет"),
+        None => h.str("missing"),
         Some(m) => {
             let nanos = m.modified.and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok()).map(|d| d.as_nanos());
             h.u64(m.len).bytes(&nanos.unwrap_or(0).to_le_bytes()).u64(u64::from(nanos.is_some()))
@@ -137,7 +138,7 @@ fn meta_token(meta: Option<FileMeta>) -> Token {
     h.finish()
 }
 
-/// Версия файлов: хэш пар «файл → отпечаток» (в порядке списка).
+/// The version of files: a hash of "file -> fingerprint" pairs (in list order).
 pub fn combine(deps: &[(Dep, Token)]) -> String {
     let mut h = StableHasher::new();
     for (dep, token) in deps {
@@ -158,7 +159,7 @@ mod tests {
 
     #[test]
     fn stable_hash_is_fixed() {
-        // Закреплено: хэш меняться не должен (кэш на диске, синхронизация).
+        // Fixed: the hash must not change (disk cache, sync).
         assert_eq!(StableHasher::new().str("baluk").hex(), "86cf48582e8b8aa0");
         assert_eq!(StableHasher::new().hex(), "d1fba762150c532c");
         assert_ne!(StableHasher::new().str("ab").str("c").hex(), StableHasher::new().str("a").str("bc").hex());
@@ -176,7 +177,7 @@ mod tests {
         let v2 = versions.current(&deps);
         assert_ne!(v1, v2);
         mem.remove("a.typ");
-        assert_ne!(v2, versions.current(&deps), "пропавший файл тоже меняет версию");
+        assert_ne!(v2, versions.current(&deps), "a missing file changes the version too");
     }
 
     #[test]
@@ -185,11 +186,11 @@ mod tests {
         mem.write("a.typ", "1");
         let versions = Versions::new(mem.clone());
         let dep = Dep::Vault("a.typ".into());
-        // Компиляция прочитала файл…
+        // Compiling read the file...
         let read = combine(&[(dep.clone(), versions.token(&dep))]);
-        // …и пока она шла, файл поменяли.
+        // ...and while it ran, the file changed.
         mem.write("a.typ", "2");
-        assert_ne!(read, versions.current(&[dep]), "сборка устарела сразу");
+        assert_ne!(read, versions.current(&[dep]), "the build is stale at once");
     }
 
     #[test]
@@ -206,6 +207,6 @@ mod tests {
         let v1 = versions.current(&deps);
         assert_eq!(v1, versions.current(&deps));
         *answer.lock() = "2";
-        assert_ne!(v1, versions.current(&deps), "ответ поставщика изменился — версия тоже");
+        assert_ne!(v1, versions.current(&deps), "the provider's answer changed, so did the version");
     }
 }

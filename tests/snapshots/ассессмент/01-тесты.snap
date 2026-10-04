@@ -12,9 +12,9 @@ headings:
   2 #Тестирование-переходов-состояний [Тестирование-переходов-состояний] Тестирование переходов состояний
   2 #Повторные-запросы-и-идемпотентность [Повторные-запросы-и-идемпотентность] Повторные запросы и идемпотентность
 links:
-styles: 1932 байт, fnv 98fad5807fc38a23
+styles: 1932 bytes, fnv 98fad5807fc38a23
 ---
-<svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…63003 байт, fnv 38161e05139f248b…</svg>
+<svg class="k-glyphs" aria-hidden="true" width="0" height="0" style="position: absolute" xmlns="http://www.w3.org/2000/svg">…63003 bytes, fnv 38161e05139f248b…</svg>
 <article class="k-doc" data-k-figs="6ef38656" data-doc="book" lang="ru">
 <header class="k-title">
 <div class="k-title-kind">Конспект</div>
@@ -37,7 +37,7 @@ styles: 1932 байт, fnv 98fad5807fc38a23
 <p>Как искать классы: каждый диапазон, каждый вариант перечисления и каждое «если» в требовании дают свой класс, а всё, что требование запрещает, — классы недопустимые. У <code>price</code> шесть классов (рис. <a href="#рис-классы">1.1</a>, верхняя строка): четыре допустимых и два недопустимых, «меньше нуля» и «больше 120». Значит, хватит шести тестов, например <math><mo>−</mo><mn>5</mn><mo>,</mo><mn>3</mn><mo>,</mo><mn>12</mn><mo>,</mo><mn>40</mn><mo>,</mo><mn>90</mn><mo>,</mo><mn>200</mn></math>.</p>
 <figure id="рис-классы">
 <div class="k-frame k-layout">
-<svg style="overflow: visible; width: 41.746599857em; height: 7.367485712em; display: block" viewBox="0 0 459.212598425 81.042342827" width="459.212598425pt" height="81.042342827pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…26261 байт, fnv 1f52a2524e1133ee…</svg></div>
+<svg style="overflow: visible; width: 41.746599857em; height: 7.367485712em; display: block" viewBox="0 0 459.212598425 81.042342827" width="459.212598425pt" height="81.042342827pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…26261 bytes, fnv 1f52a2524e1133ee…</svg></div>
 <figcaption><span class="k-fig-num">Рис. 1.1.</span> Сверху: шесть классов, по одному тесту на класс. Снизу: на каждой из пяти границ проверяем два соседних значения — последнее значение одного класса и первое следующего, всего 10 тестов</figcaption></figure>
 <h3 class="k-h k-h2" id="Граничные-значения" data-k-anchor="Граничные-значения"><span class="k-num">1.2</span>Граничные значения</h3>
 <p>Классы говорят, <em>сколько</em> тестов нужно, но не говорят, <em>какие</em> значения брать. Ошибки программистов сосредоточены на границах: <code>&lt;</code> вместо <code>&lt;=</code>, цикл на одну итерацию длиннее, <code>size()</code> вместо <code>size() - 1</code>.</p>
@@ -113,7 +113,7 @@ styles: 1932 байт, fnv 98fad5807fc38a23
 <p>Многие объекты ведут себя по-разному в зависимости от истории вызовов: у заказа, соединения, документа есть <strong>состояния</strong>, а операции (<strong>события</strong>) переводят объект из одного состояния в другое. Входные данные здесь — это <em>последовательность</em> событий, и тестировать нужно диаграмму переходов (рис. <a href="#рис-заказ">1.2</a>).</p>
 <figure id="рис-заказ">
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 32.727272727em; height: 6.652825027em; display: block" viewBox="0 0 360 73.181075295" width="360pt" height="73.181075295pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…16019 байт, fnv ae783791e18a8a33…</svg></div>
+<svg style="overflow: visible; width: 32.727272727em; height: 6.652825027em; display: block" viewBox="0 0 360 73.181075295" width="360pt" height="73.181075295pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…16019 bytes, fnv ae783791e18a8a33…</svg></div>
 <figcaption><span class="k-fig-num">Рис. 1.2.</span> Жизненный цикл заказа: пять допустимых переходов. Три цепочки событий (оплатить–отправить–вручить; отменить; оплатить–отменить) проходят каждый переход хотя бы раз</figcaption></figure>
 <p>Тесты строят по уровням строгости:</p>
 <ul>
@@ -136,9 +136,9 @@ styles: 1932 байт, fnv 98fad5807fc38a23
 <figure id="рис-повтор">
 <div class="k-row">
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 19.848011084em; height: 10.277982675em; display: block" viewBox="0 0 218.328121924 113.057809424" width="218.328121924pt" height="113.057809424pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…13599 байт, fnv d188d011df70aa8c…</svg></div>
+<svg style="overflow: visible; width: 19.848011084em; height: 10.277982675em; display: block" viewBox="0 0 218.328121924 113.057809424" width="218.328121924pt" height="113.057809424pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…13599 bytes, fnv d188d011df70aa8c…</svg></div>
 <div class="k-frame k-fig">
-<svg style="overflow: visible; width: 18.109852151em; height: 10.277982675em; display: block" viewBox="0 0 199.20837366 113.057809424" width="199.20837366pt" height="113.057809424pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…14157 байт, fnv d3ccdbd7e667aa95…</svg></div></div>
+<svg style="overflow: visible; width: 18.109852151em; height: 10.277982675em; display: block" viewBox="0 0 199.20837366 113.057809424" width="199.20837366pt" height="113.057809424pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:h5="http://www.w3.org/1999/xhtml">…14157 bytes, fnv d3ccdbd7e667aa95…</svg></div></div>
 <figcaption><span class="k-fig-num">Рис. 1.3.</span> Ответ на первый запрос потерян, клиент повторяет. Слева операция не идемпотентна, и деньги списаны дважды. Справа сервер узнаёт ключ k1 и возвращает сохранённый ответ вместо второго списания</figcaption></figure>
 <p>Неидемпотентную операцию делают идемпотентной <strong>ключом идемпотентности</strong> (рис. <a href="#рис-повтор">1.3</a>): клиент генерирует уникальный идентификатор операции и повторяет запрос с тем же ключом, а сервер запоминает, какие ключи уже выполнил.</p>
 <div class="k-listing k-numbered">

@@ -1,32 +1,32 @@
-//! Публичный интерфейс библиотеки `baluk`: имена, которые видит заметка
-//! после `#import "/_baluk/lib.typ": *`. Случайное переименование или
-//! пропавший реэкспорт при перекройке модулей библиотеки ловит снимок
+//! The public interface of the `baluk` library: the names a note sees after
+//! `#import "/_baluk/lib.typ": *`. An accidental rename or a lost re-export
+//! when the library modules are reshuffled is caught by the snapshot
 //! `tests/snapshots/baluk-api.txt`:
 //!
-//!   cargo test -p notes-core --test it library::                       # сравнить
-//!   UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library::    # обновить
+//!   cargo test -p notes-core --test it library::                       # compare
+//!   UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library::    # update
 //!
-//! Имя добавлено или убрано намеренно — обновить снимок и README библиотеки
-//! (второй тест проверяет, что каждое имя там упомянуто). Так же обновляется
-//! размер текстов навыка `tests/snapshots/skill-size.txt`.
+//! A name added or removed on purpose: update the snapshot and the library
+//! README (the second test checks that every name is mentioned there). The
+//! size of the skill texts, `tests/snapshots/skill-size.txt`, is updated the same way.
 
 use std::fmt::Write as _;
 use std::path::Path;
 
 use crate::common::{compile, repo};
 
-/// Имена модуля `lib.typ` по алфавиту — так, как их видит заметка.
+/// The names of the `lib.typ` module in alphabetical order, as a note sees them.
 fn public_names() -> Vec<String> {
     let page = compile("#import \"/_baluk/lib.typ\" as baluk\n#dictionary(baluk).keys().sorted().join(\" \")\n");
-    assert!(page.errors.is_empty(), "lib.typ не собрался: {:?}", page.errors);
-    let rendered = page.rendered.as_ref().expect("нет отрисовки");
+    assert!(page.errors.is_empty(), "lib.typ did not build: {:?}", page.errors);
+    let rendered = page.rendered.as_ref().expect("no rendering");
     let body = &rendered.body;
     let text = body.trim().trim_start_matches("<p>").trim_end_matches("</p>");
-    assert!(!text.contains('<'), "неожиданная разметка: {body}");
+    assert!(!text.contains('<'), "unexpected markup: {body}");
     text.split_whitespace().map(str::to_owned).collect()
 }
 
-/// Без `_` в начале: служебные имена (`_color`, `_num`) — не интерфейс.
+/// No `_` at the start: internal names (`_color`, `_num`) are not the interface.
 fn is_public(name: &str) -> bool {
     !name.starts_with('_')
 }
@@ -48,26 +48,26 @@ fn public_api_matches_snapshot() {
     let gone: Vec<&str> = old.iter().copied().filter(|n| !names.iter().any(|m| m == n)).collect();
     let new: Vec<&str> = names.iter().map(String::as_str).filter(|n| !old.contains(n)).collect();
     panic!(
-        "публичные имена baluk изменились — пропали: {gone:?}, появились: {new:?}.\n\
-         Если так задумано: UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library:: \
-         и поправьте baluk/README.md"
+        "the public baluk names changed - gone: {gone:?}, new: {new:?}.\n\
+         If that is intended: UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library:: \
+         and fix baluk/README.md"
     );
 }
 
-/// Каждое публичное имя упомянуто в README библиотеки — в коде (`…` или
-/// блоке ```): новая функция без описания не проходит.
+/// Every public name is mentioned in the library README, in code (`...` or a
+/// ``` block): a new function without a description does not pass.
 #[test]
 fn every_public_name_is_documented() {
     let readme = std::fs::read_to_string(repo().join("baluk/README.md")).unwrap();
     let code = code_spans(&readme);
     let missing: Vec<String> =
         public_names().into_iter().filter(|n| is_public(n) && !code.iter().any(|c| has_word(c, n))).collect();
-    assert!(missing.is_empty(), "не описаны в baluk/README.md: {missing:?}");
+    assert!(missing.is_empty(), "not described in baluk/README.md: {missing:?}");
 }
 
-/// Правила написания заметок (`docs/writing.md`) и навык `/baluk-note`
-/// (`skills/baluk-note/SKILL.md`) не устарели: каждый вызов `#имя` из них —
-/// публичное имя библиотеки (кроме ключевых слов Typst).
+/// The writing rules (`docs/writing.md`) and the `/baluk-note` skill
+/// (`skills/baluk-note/SKILL.md`) are not stale: every `#name` call in them is a
+/// public library name (except Typst keywords).
 #[test]
 fn writing_guide_uses_public_names() {
     const KEYWORDS: [&str; 5] = ["import", "include", "show", "set", "let"];
@@ -84,34 +84,35 @@ fn writing_guide_uses_public_names() {
             .filter(|name| !name.is_empty() && !KEYWORDS.contains(name) && !names.iter().any(|n| n == name))
             .collect();
         unknown.dedup();
-        assert!(unknown.is_empty(), "{file}: нет в библиотеке {unknown:?} — поправьте правила");
+        assert!(unknown.is_empty(), "{file}: not in the library {unknown:?}; fix the rules");
     }
 }
 
-/// Оболочки (Claude Code, opencode) подставляют в текст навыка аргументы
-/// вызова: `$ARGUMENTS` — просьба пользователя (без неё модель не знает
-/// задачи), `$0`, `$1`… — отдельные слова. Поэтому `$ARGUMENTS` в навыке
-/// есть — в начале и в конце, в тегах `<request>` (модель отделяет задачу от
-/// инструкций), а `$` с цифрой (формула `$0$`) — нет: её испортит подстановка.
+/// Shells (Claude Code, opencode) substitute call arguments into the skill
+/// text: `$ARGUMENTS` is the user's request (without it the model does not know
+/// the task), `$0`, `$1`... are single words. So `$ARGUMENTS` is in the skill,
+/// at the start and at the end, in `<request>` tags (the model tells the task
+/// from the instructions), and `$` with a digit (a formula `$0$`) is not: the
+/// substitution would break it.
 #[test]
 fn skill_gets_arguments_and_has_no_positional_placeholders() {
     let skill = std::fs::read_to_string(repo().join("skills/baluk-note/SKILL.md")).unwrap();
     assert_eq!(
         skill.matches("<request>\n$ARGUMENTS\n</request>").count(),
         2,
-        "SKILL.md: просьба пользователя — `<request>`, `$ARGUMENTS`, `</request>` отдельными строками, в начале и в конце"
+        "SKILL.md: the user's request - `<request>`, `$ARGUMENTS`, `</request>` on separate lines, at the start and at the end"
     );
     let bad: Vec<&str> =
         skill.lines().filter(|l| l.split('$').skip(1).any(|r| r.starts_with(|c: char| c.is_ascii_digit()))).collect();
-    assert!(bad.is_empty(), "SKILL.md: «$цифра» заменится аргументом вызова: {bad:?}");
+    assert!(bad.is_empty(), "SKILL.md: \"$digit\" gets replaced by a call argument: {bad:?}");
 }
 
-/// Примеры навыка `/baluk-note` (`skills/baluk-note/examples/`) показывают
-/// каждое публичное имя: слабая модель пишет по образцу, а не по описанию.
-/// Что они собираются без ошибок — шаг `baluk-note` в `tools/check.sh`.
+/// The examples of the `/baluk-note` skill (`skills/baluk-note/examples/`) show
+/// every public name: a weak model writes by example, not by description.
+/// That they build without errors is the `baluk-note` step in `tools/check.sh`.
 #[test]
 fn skill_examples_use_every_public_name() {
-    // Своя тема — правка библиотеки, а не заметки: в примерах её нет.
+    // A custom theme is a library edit, not a note: the examples do not have one.
     const NOT_FOR_NOTES: [&str; 2] = ["customize", "themes"];
     let mut code = String::new();
     let mut dirs = vec![repo().join("skills/baluk-note/examples")];
@@ -129,13 +130,13 @@ fn skill_examples_use_every_public_name() {
         .into_iter()
         .filter(|n| is_public(n) && !NOT_FOR_NOTES.contains(&n.as_str()) && !has_word(&code, n))
         .collect();
-    assert!(missing.is_empty(), "нет в примерах навыка skills/baluk-note/examples: {missing:?}");
+    assert!(missing.is_empty(), "not in the skill examples skills/baluk-note/examples: {missing:?}");
 }
 
-/// Справочник навыка (`skills/baluk-note/reference.md`) — полный: у каждой
-/// публичной функции строка-сигнатура в блоке кода, её именованные
-/// параметры и значения по умолчанию — как в исходнике библиотеки.
-/// Лишний параметр допустим, только если функция принимает `..rest`.
+/// The skill reference (`skills/baluk-note/reference.md`) is complete: every
+/// public function has a signature line in a code block, and its named
+/// parameters and defaults are as in the library source. An extra parameter is
+/// allowed only if the function takes `..rest`.
 #[test]
 fn skill_reference_matches_library() {
     const NOT_FOR_NOTES: [&str; 3] = ["customize", "themes", "cetz"];
@@ -145,7 +146,7 @@ fn skill_reference_matches_library() {
     let mut problems = Vec::new();
     for name in public_names().into_iter().filter(|n| is_public(n)) {
         if !has_word(&reference, &name) {
-            problems.push(format!("{name}: нет в справочнике"));
+            problems.push(format!("{name}: not in the reference"));
             continue;
         }
         let Some(source) = find_signature(&sources, &name) else { continue };
@@ -156,30 +157,30 @@ fn skill_reference_matches_library() {
             let line = line.trim_start();
             line.starts_with(&format!("{name}(")).then(|| signature(line, name.len()))
         }) else {
-            problems.push(format!("{name}: нет строки «{name}(…)» в блоке кода"));
+            problems.push(format!("{name}: no \"{name}(...)\" line in a code block"));
             continue;
         };
         let (real, real_rest) = named_params(source);
         let (doc, _) = named_params(documented);
         for (param, default) in &real {
             match doc.iter().find(|(p, _)| p == param) {
-                None => problems.push(format!("{name}: не описан параметр {param}")),
+                None => problems.push(format!("{name}: parameter {param} not described")),
                 Some((_, d)) if d != default && !default.starts_with('_') => {
-                    problems.push(format!("{name}: {param} по умолчанию {default}, в справочнике {d}"));
+                    problems.push(format!("{name}: {param} defaults to {default}, the reference says {d}"));
                 }
                 Some(_) => {}
             }
         }
         if !real_rest {
             for (param, _) in doc.iter().filter(|(p, _)| !real.iter().any(|(r, _)| r == p)) {
-                problems.push(format!("{name}: параметра {param} нет в библиотеке"));
+                problems.push(format!("{name}: the library has no parameter {param}"));
             }
         }
     }
-    assert!(problems.is_empty(), "skills/baluk-note/reference.md расходится с библиотекой:\n{}", problems.join("\n"));
+    assert!(problems.is_empty(), "skills/baluk-note/reference.md differs from the library:\n{}", problems.join("\n"));
 }
 
-/// Исходники библиотеки `baluk/` (все `.typ`).
+/// The library sources `baluk/` (every `.typ`).
 fn library_sources() -> Vec<String> {
     let mut out = Vec::new();
     let mut dirs = vec![repo().join("baluk")];
@@ -196,16 +197,16 @@ fn library_sources() -> Vec<String> {
     out
 }
 
-/// Параметры функции `#let name(…)` из исходников; `None` — не функция.
+/// The parameters of a function `#let name(...)` from the sources; `None` if it is not a function.
 fn find_signature<'a>(sources: &'a [String], name: &str) -> Option<&'a str> {
     let head = format!("#let {name}(");
     let mut found = sources.iter().flat_map(|s| s.match_indices(&head).map(move |(i, _)| (s, i)));
     let (text, i) = found.next()?;
-    assert!(found.next().is_none(), "{name}: определена в библиотеке дважды");
+    assert!(found.next().is_none(), "{name}: defined twice in the library");
     Some(signature(&text[i..], head.len() - 1))
 }
 
-/// Текст между скобкой `(` на позиции `open` и парной ей `)`.
+/// The text between the bracket `(` at `open` and its matching `)`.
 fn signature(text: &str, open: usize) -> &str {
     let mut depth = 0;
     let mut quoted = false;
@@ -222,11 +223,11 @@ fn signature(text: &str, open: usize) -> &str {
             _ => {}
         }
     }
-    panic!("не закрыта скобка: {text}")
+    panic!("unclosed bracket: {text}")
 }
 
-/// Именованные параметры `имя: значение` (значение без лишних пробелов) и
-/// есть ли `..rest`.
+/// Named parameters `name: value` (the value without extra spaces) and whether
+/// there is `..rest`.
 fn named_params(params: &str) -> (Vec<(String, String)>, bool) {
     let mut parts = Vec::new();
     let (mut depth, mut quoted, mut start) = (0, false, 0);
@@ -257,7 +258,7 @@ fn named_params(params: &str) -> (Vec<(String, String)>, bool) {
     (named, rest)
 }
 
-/// Куски кода Markdown: блоки ``` … ``` и `…` в строке.
+/// Markdown code: ``` ... ``` blocks and `...` inline.
 fn code_spans(md: &str) -> Vec<&str> {
     let mut out = Vec::new();
     for (i, part) in md.split("```").enumerate() {
@@ -270,7 +271,7 @@ fn code_spans(md: &str) -> Vec<&str> {
     out
 }
 
-/// `name` в тексте целым словом: соседи — не буквы, не цифры, не `-` и `_`.
+/// `name` as a whole word in the text: the neighbours are not letters, digits, `-` or `_`.
 fn has_word(text: &str, name: &str) -> bool {
     let is_name_char = |c: char| c.is_alphanumeric() || c == '-' || c == '_';
     text.match_indices(name).any(|(i, _)| {
@@ -280,7 +281,7 @@ fn has_word(text: &str, name: &str) -> bool {
     })
 }
 
-/// Словари оформления полные: у каждого языка — все ключи всех словарей.
+/// The design dictionaries are complete: every language has every key of every dictionary.
 #[test]
 fn dictionaries_have_same_keys() {
     let page = compile(
@@ -289,12 +290,12 @@ fn dictionaries_have_same_keys() {
          #for (lang, dict) in words { for key in all { if key not in dict [#lang: #key; ] } }\n",
     );
     assert!(page.errors.is_empty(), "{:?}", page.errors);
-    let body = &page.rendered.as_ref().expect("нет отрисовки").body;
-    assert!(!body.contains(':'), "в словарях не хватает слов (язык: ключ): {body}");
+    let body = &page.rendered.as_ref().expect("no rendering").body;
+    assert!(!body.contains(':'), "the dictionaries lack words (language: key): {body}");
 }
 
-/// Языка нет в словарях — слова из английского, в том числе те, которых
-/// нет в своих `words:`.
+/// A language not in the dictionaries gets English words, including those
+/// missing from its own `words:`.
 #[test]
 fn unknown_language_falls_back_to_english() {
     let body = |template: &str| {
@@ -302,7 +303,7 @@ fn unknown_language_falls_back_to_english() {
             "#import \"/_baluk/lib.typ\": *\n#show: note.with({template})\n#definition[x]\n#remark[y]\n"
         ));
         assert!(page.errors.is_empty(), "{:?}", page.errors);
-        page.rendered.as_ref().expect("нет отрисовки").body.clone()
+        page.rendered.as_ref().expect("no rendering").body.clone()
     };
     let plain = body("lang: \"uk\"");
     assert!(plain.contains("Definition") && plain.contains("Remark"), "{plain}");
@@ -312,7 +313,7 @@ fn unknown_language_falls_back_to_english() {
     assert!(russian.contains("Определение") && russian.contains("Замечание"), "{russian}");
 }
 
-/// `words:` шаблона: неизвестный ключ и не строка — ошибка с подсказкой.
+/// `words:` of the template: an unknown key and a non-string are errors with a hint.
 #[test]
 fn own_words_are_checked() {
     let error = |words: &str| {
@@ -326,7 +327,7 @@ fn own_words_are_checked() {
     assert_eq!(error("(figure: \"Abb.\")"), "");
 }
 
-/// `frames(…, pdf:)`: номера кадров от 1 до числа кадров.
+/// `frames(..., pdf:)`: frame numbers from 1 to the number of frames.
 #[test]
 fn frames_pdf_is_checked() {
     let error = |pdf: &str| {
@@ -342,7 +343,7 @@ fn frames_pdf_is_checked() {
     }
 }
 
-/// `chapter`: только в книге; название обязательно, теги — массив строк.
+/// `chapter`: only in a book; the title is required, tags are an array of strings.
 #[test]
 fn chapter_is_checked() {
     let error = |template: &str, chapter: &str| {
@@ -358,10 +359,11 @@ fn chapter_is_checked() {
     assert!(error("book", "title: [Глава], label: <гл>").contains("label — строка"));
 }
 
-/// Тексты навыка `/baluk-note` (`SKILL.md`, `reference.md`, образцы) — для
-/// модели: английский и простой Markdown без типографики (`skills/README.md`).
-/// Кириллица и `« » — …` можно только в `код` в строке (дословные сообщения
-/// `notes`, русские слова оформления) и в `argument-hint` (его видит человек).
+/// The texts of the `/baluk-note` skill (`SKILL.md`, `reference.md`, examples)
+/// are for a model: English and plain Markdown without typography
+/// (`skills/README.md`). Cyrillic and `« » — …` are allowed only in inline
+/// `code` (verbatim `notes` messages, Russian design words) and in
+/// `argument-hint` (a person sees it).
 #[test]
 fn skill_texts_are_plain_english() {
     let forbidden = |c: char| "«»„“”‘’—–…→←".contains(c) || ('\u{0400}'..='\u{04FF}').contains(&c);
@@ -377,7 +379,7 @@ fn skill_texts_are_plain_english() {
             if markdown && line.starts_with("argument-hint:") {
                 continue;
             }
-            // Вне блоков кода Markdown — без `…` в строке.
+            // Outside Markdown code blocks: no inline `...`.
             let checked: String =
                 if markdown && !fenced { line.split('`').step_by(2).collect() } else { line.to_owned() };
             if checked.chars().any(forbidden) {
@@ -387,14 +389,14 @@ fn skill_texts_are_plain_english() {
     }
     assert!(
         problems.is_empty(),
-        "кириллица или типографика в текстах навыка (цитату вывода notes — в `код`):\n{}",
+        "Cyrillic or typography in the skill texts (quote notes output in `code`):\n{}",
         problems.join("\n")
     );
 }
 
-/// Размер навыка — бюджет: текст растёт, только когда это задумано. Меряем
-/// знаки (у английского текста токенов около четверти от них); вырос больше
-/// чем на 10 % от записанного — тест падает. Задумано — обновить:
+/// The skill size is a budget: the text grows only on purpose. We count
+/// characters (English text has about a quarter as many tokens); more than
+/// 10 % over the recorded size fails the test. Intended growth: update with
 /// `UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library::`.
 #[test]
 fn skill_size_within_budget() {
@@ -406,26 +408,26 @@ fn skill_size_within_budget() {
     for (name, text) in &files {
         let _ = writeln!(table, "{} {name}", text.chars().count());
     }
-    let _ = writeln!(table, "{total} всего");
+    let _ = writeln!(table, "{total} total");
     if std::env::var_os("UPDATE_SNAPSHOTS").is_some() {
         std::fs::write(&path, &table).unwrap();
         return;
     }
     let recorded = std::fs::read_to_string(&path).unwrap_or_default();
     let budget: usize =
-        recorded.lines().find_map(|l| l.strip_suffix(" всего")).and_then(|n| n.parse().ok()).expect(
-            "нет tests/snapshots/skill-size.txt — UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library::",
+        recorded.lines().find_map(|l| l.strip_suffix(" total")).and_then(|n| n.parse().ok()).expect(
+            "no tests/snapshots/skill-size.txt: UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library::",
         );
     #[expect(clippy::cast_precision_loss, reason = "the text is thousands of tokens, well within f64 precision")]
     let over = total as f64 > budget as f64 * GROWTH;
     assert!(
         !over,
-        "навык вырос больше чем на 10 %: было {budget} знаков, стало {total}. Сократить или, если рост задуман, \
+        "the skill grew by more than 10 %: it was {budget} characters, now {total}. Cut it or, if the growth is intended, \
          UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it library::\n{table}"
     );
 }
 
-/// Файлы навыка `/baluk-note`, которые читает модель: путь от `skills/baluk-note/` и текст.
+/// The files of the `/baluk-note` skill the model reads: the path from `skills/baluk-note/`, and the text.
 fn skill_files() -> Vec<(String, String)> {
     fn walk(root: &Path, dir: &Path, out: &mut Vec<(String, String)>) {
         let mut entries: Vec<_> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()).collect();
