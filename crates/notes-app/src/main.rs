@@ -1,9 +1,9 @@
-//! `notes-app` - окно приложения (Tauri 2) без Typst (architecture §1).
-//! Интерфейс `app/` ходит своей схемой адресов `notes://localhost/...`, окно
-//! передаёт запрос ядру - `notes-typst serve` - через сокет Unix (`proxy`).
-//! Ядро уже работает (служба `notes service`) - окно подключается к нему,
-//! нет - запускает своё и останавливает при выходе (`core`). Внешние ссылки
-//! и PDF открывают программы системы.
+//! `notes-app`: the app window (Tauri 2) without Typst (architecture §1).
+//! The `app/` client uses its own URL scheme `notes://localhost/...`; the
+//! window passes each request to the core, `notes-typst serve`, over a Unix
+//! socket (`proxy`). If the core is already running (the `notes service`
+//! service), the window connects to it; otherwise it starts its own and stops
+//! it on exit (`core`). External links and PDFs open in system programs.
 
 mod core;
 mod proxy;
@@ -22,7 +22,7 @@ use webkit2gtk::WebViewExt;
 /// or position.
 const WINDOW_STATE: StateFlags = StateFlags::MAXIMIZED.union(StateFlags::FULLSCREEN);
 
-/// Схема адресов окна.
+/// The window's URL scheme.
 const SCHEME: &str = "notes";
 
 fn main() -> ExitCode {
@@ -32,10 +32,10 @@ fn main() -> ExitCode {
         .with_writer(std::io::stderr)
         .init();
     if let Err(e) = notes::check_version("notes-app") {
-        eprintln!("ошибка: {e}");
+        eprintln!("error: {e}");
         return ExitCode::FAILURE;
     }
-    // `notes app --data …`: команда `app` - не флаг ядра, остальное - ему.
+    // `notes app --data ...`: the `app` command is not a core flag; the rest goes to the core.
     let mut args: Vec<OsString> = std::env::args_os().skip(1).collect();
     if let Some(i) = args.iter().position(|a| a == "app") {
         args.remove(i);
@@ -43,7 +43,7 @@ fn main() -> ExitCode {
     let core = match core::Core::start(&args) {
         Ok(core) => core,
         Err(e) => {
-            eprintln!("ошибка: ядро: {e}");
+            eprintln!("error: core: {e}");
             return ExitCode::FAILURE;
         }
     };
@@ -51,7 +51,7 @@ fn main() -> ExitCode {
     match run(socket, core) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("ошибка: окно: {e}");
+            eprintln!("error: window: {e}");
             ExitCode::FAILURE
         }
     }
@@ -72,14 +72,14 @@ fn run(socket: Arc<PathBuf>, core: core::Core) -> tauri::Result<()> {
             }
         })
         .setup(move |app| {
-            // SIGTERM и Ctrl+C - штатный выход (своё ядро останавливается), а не
-            // смерть процесса с ядром-сиротой.
+            // SIGTERM and Ctrl+C quit cleanly (our own core stops) instead of
+            // killing the process and orphaning the core.
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 stop_signal().await;
                 quit(&handle);
             });
-            // `NOTES_APP_START=/v/<хранилище>/n/<заметка>` - открыть с неё (проверка, отладка).
+            // `NOTES_APP_START=/v/<vault>/n/<note>`: start on that page (checks, debugging).
             let path = std::env::var("NOTES_APP_START").unwrap_or_default();
             let start: Url = format!("{SCHEME}://localhost/{}", path.trim_start_matches('/')).parse()?;
             WebviewWindowBuilder::new(app, "main", WebviewUrl::CustomProtocol(start))
@@ -101,7 +101,7 @@ fn run(socket: Arc<PathBuf>, core: core::Core) -> tauri::Result<()> {
     let core = Mutex::new(Some(core));
     app.run(move |_, event| {
         if let RunEvent::Exit = event {
-            // Своё ядро - остановить; ядро службы продолжает работать.
+            // Stop our own core; the service's core keeps running.
             drop(core.lock().unwrap_or_else(PoisonError::into_inner).take());
         }
     });
@@ -143,23 +143,23 @@ async fn stop_signal() {
     }
 }
 
-/// Адреса самого приложения - в окне; остальное - нет.
+/// The app's own addresses open in the window; nothing else does.
 fn allowed(url: &Url) -> bool {
     url.scheme() == SCHEME || url.scheme() == "about"
 }
 
-/// Внешняя ссылка - в программе системы (браузер, почта); окно остаётся.
+/// An external link opens in a system program (browser, mail); the window stays.
 fn open_external(url: &Url) -> bool {
     if matches!(url.scheme(), "http" | "https" | "mailto") {
         system_open(url.as_str());
     } else {
-        tracing::warn!("ссылка {url} не открыта: схема не поддерживается");
+        tracing::warn!("link {url} not opened: unsupported scheme");
     }
     false
 }
 
-/// PDF заметки: WebKitGTK его не показывает - собрать через ядро, сохранить
-/// во временную папку и открыть программой системы.
+/// A note's PDF: WebKitGTK does not show it, so build it through the core, save
+/// it to a temporary directory and open it in a system program.
 fn open_pdf(socket: Arc<PathBuf>, url: Url) {
     tauri::async_runtime::spawn(async move {
         let name = url
@@ -170,14 +170,14 @@ fn open_pdf(socket: Arc<PathBuf>, url: Url) {
         let request = match tauri::http::Request::get(url.as_str()).body(Vec::new()) {
             Ok(request) => request,
             Err(e) => {
-                tracing::warn!("PDF «{name}»: bad address {url}: {e}");
+                tracing::warn!("PDF \"{name}\": bad address {url}: {e}");
                 return;
             }
         };
         let response = proxy::forward(&socket, request).await;
         if !response.status().is_success() {
             let body = String::from_utf8_lossy(response.body());
-            tracing::warn!("PDF «{name}» не собран: {} {body}", response.status());
+            tracing::warn!("PDF \"{name}\" not built: {} {body}", response.status());
             return;
         }
         let Some(dir) = notes::default_socket().and_then(|s| s.parent().map(|d| d.join("pdf"))) else { return };
@@ -193,10 +193,10 @@ fn open_pdf(socket: Arc<PathBuf>, url: Url) {
     });
 }
 
-/// Имя файла без разделителей пути.
+/// A file name without path separators.
 fn safe_name(name: &str) -> String {
     let name: String = name.chars().map(|c| if matches!(c, '/' | '\\' | '\0') { '_' } else { c }).collect();
-    if name.trim().is_empty() { "заметка".into() } else { name }
+    if name.trim().is_empty() { "note".into() } else { name }
 }
 
 fn system_open(target: &str) {

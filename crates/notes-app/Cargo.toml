@@ -1,6 +1,6 @@
 [package]
 name = "notes-app"
-description = "Окно приложения (Tauri 2) без Typst: интерфейс app/ и ядро notes-typst через сокет"
+description = "The app window (Tauri 2) without Typst: the app/ client and the notes-typst core over a socket"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

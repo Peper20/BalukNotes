@@ -1,54 +1,55 @@
-//! Части приложения (architecture §1): тонкий `notes` находит часть в своей
-//! папке и передаёт ей команду, часть сверяет версию. Без зависимостей:
-//! библиотеку берут и `notes`, и части.
+//! App parts (architecture §1): the thin `notes` finds a part in its own
+//! directory and hands it the command; the part checks the version. No
+//! dependencies: both `notes` and the parts use this library.
 
-/// Часть приложения - отдельный бинарник рядом с `notes`.
+use std::path::{Path, PathBuf};
+
+/// An app part: a separate binary next to `notes`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Part {
-    /// Имя бинарника (без `.exe`).
+    /// Binary name (without `.exe`).
     pub bin: &'static str,
-    /// Команды `notes`, которые ведут в эту часть; у `notes-typst` - все
-    /// остальные.
+    /// `notes` commands that go to this part; `notes-typst` takes all the rest.
     pub commands: &'static [&'static str],
-    /// Что это, для справки и сообщений.
+    /// What it is, for help and messages.
     pub about: &'static str,
 }
 
 impl Part {
-    /// Бинарник части в папке `dir`.
-    pub fn path(&self, dir: &std::path::Path) -> std::path::PathBuf {
+    /// The part's binary in `dir`.
+    pub fn path(&self, dir: &Path) -> PathBuf {
         dir.join(format!("{}{}", self.bin, std::env::consts::EXE_SUFFIX))
     }
 }
 
-/// Папка частей - папка запущенного бинарника (ссылка на него - не в счёт).
-pub fn parts_dir() -> std::io::Result<std::path::PathBuf> {
+/// Directory of the parts: the directory of the running binary (a symlink to it does not count).
+pub fn parts_dir() -> std::io::Result<PathBuf> {
     let exe = std::env::current_exe()?.canonicalize()?;
-    Ok(exe.parent().map(std::path::Path::to_path_buf).unwrap_or_default())
+    Ok(exe.parent().map(Path::to_path_buf).unwrap_or_default())
 }
 
-/// Сборка заметок: все команды, кроме команд других частей.
+/// Building notes: every command except those of other parts.
 pub const TYPST: Part =
-    Part { bin: "notes-typst", commands: &[], about: "сборка заметок: serve, new, list, check, pdf, ..." };
-/// Окно приложения.
-pub const APP: Part = Part { bin: "notes-app", commands: &["app"], about: "окно приложения: notes app" };
+    Part { bin: "notes-typst", commands: &[], about: "builds notes: serve, new, list, check, pdf, ..." };
+/// The app window.
+pub const APP: Part = Part { bin: "notes-app", commands: &["app"], about: "app window: notes app" };
 pub const PARTS: &[Part] = &[TYPST, APP];
 
-/// Общие флаги `notes-typst` со значением: в `notes --vault app list`
-/// команда - `list`. Сверяет с `clap` тест `notes-typst`.
+/// Global `notes-typst` flags that take a value: in `notes --vault app list`
+/// the command is `list`. A `notes-typst` test checks them against `clap`.
 pub const VALUE_FLAGS: &[&str] = &["--data", "--vault", "--trash", "--library", "--font-path"];
 
-/// Сокет ядра (`notes serve --socket`) по умолчанию:
-/// `$XDG_RUNTIME_DIR/baluk-notes/notes.sock`. Его ищет окно `notes-app`.
-pub fn default_socket() -> Option<std::path::PathBuf> {
-    std::env::var_os("XDG_RUNTIME_DIR").map(|dir| std::path::PathBuf::from(dir).join("baluk-notes").join("notes.sock"))
+/// Default core socket (`notes serve --socket`):
+/// `$XDG_RUNTIME_DIR/baluk-notes/notes.sock`. The `notes-app` window looks for it.
+pub fn default_socket() -> Option<PathBuf> {
+    std::env::var_os("XDG_RUNTIME_DIR").map(|dir| PathBuf::from(dir).join("baluk-notes").join("notes.sock"))
 }
 
-/// Версия `notes`, вызвавшего часть: переменная окружения части.
+/// Version of the `notes` that called a part: an environment variable of the part.
 pub const VERSION_ENV: &str = "NOTES_VERSION";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Команда - первый аргумент, который не флаг и не значение флага.
+/// The command: the first argument that is neither a flag nor a flag's value.
 pub fn command<S: AsRef<str>>(args: &[S]) -> Option<&str> {
     let mut args = args.iter().map(AsRef::as_ref);
     while let Some(arg) = args.next() {
@@ -65,16 +66,16 @@ pub fn command<S: AsRef<str>>(args: &[S]) -> Option<&str> {
     None
 }
 
-/// Часть, которой отдать аргументы.
+/// The part to hand the arguments to.
 pub fn part_for<S: AsRef<str>>(args: &[S]) -> Part {
     command(args).and_then(|c| PARTS.iter().find(|p| p.commands.contains(&c))).copied().unwrap_or(TYPST)
 }
 
-/// Часть вызвана из `notes` другой версии - ошибка: части ставятся вместе.
+/// A part called by a `notes` of another version is an error: parts are installed together.
 pub fn check_version(part: &str) -> Result<(), String> {
     match std::env::var(VERSION_ENV) {
         Ok(theirs) if theirs != VERSION => Err(format!(
-            "notes {theirs} и {part} {VERSION} - разных версий; поставьте их заново вместе (tools/install.sh)"
+            "notes {theirs} and {part} {VERSION} are different versions; reinstall them together (tools/install.sh)"
         )),
         _ => Ok(()),
     }

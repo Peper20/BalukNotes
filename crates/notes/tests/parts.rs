@@ -1,5 +1,5 @@
-//! `notes` вызывает часть из своей папки: копия бинарника во временной папке
-//! и поддельная часть - сценарий оболочки.
+//! `notes` calls a part from its own directory: a copy of the binary in a
+//! temporary directory and a fake part, a shell script.
 #![cfg(unix)]
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test helpers fail the test by panicking")]
 
@@ -21,8 +21,8 @@ fn fake_part(dir: &Path, name: &str) {
 }
 
 fn notes(bin: &Path, args: &[&str]) -> (Option<i32>, String, String) {
-    // Только что записанный файл может быть занят: его дескриптор на запись
-    // унаследовал процесс, запущенный соседним тестом (ETXTBSY) - повторить.
+    // A file just written may be busy: a process started by a neighbouring
+    // test inherited its write descriptor (ETXTBSY), so retry.
     let out = (0..50)
         .find_map(|_| match Command::new(bin).args(args).env_remove("NOTES_VERSION").output() {
             Err(e) if e.kind() == std::io::ErrorKind::ExecutableFileBusy => {
@@ -31,7 +31,7 @@ fn notes(bin: &Path, args: &[&str]) -> (Option<i32>, String, String) {
             }
             out => Some(out.unwrap()),
         })
-        .expect("файл занят");
+        .expect("the file stays busy");
     (out.status.code(), String::from_utf8_lossy(&out.stdout).into(), String::from_utf8_lossy(&out.stderr).into())
 }
 
@@ -57,7 +57,7 @@ fn missing_part_is_named() {
     let (_dir, bin) = setup();
     let (code, _, err) = notes(&bin, &["app"]);
     assert_eq!(code, Some(1));
-    assert!(err.contains("notes-app") && err.contains("не установлена"), "{err}");
+    assert!(err.contains("notes-app") && err.contains("not installed"), "{err}");
 }
 
 #[test]
@@ -65,8 +65,8 @@ fn help_and_version_list_parts() {
     let (dir, bin) = setup();
     fake_part(dir.path(), "notes-typst");
     let (code, out, _) = notes(&bin, &["--help"]);
-    assert_eq!(code, Some(7), "код справки - код части");
-    assert!(out.contains("--help") && out.contains("есть  notes-typst") && out.contains("нет   notes-app"), "{out}");
+    assert_eq!(code, Some(7), "help exits with the part's code");
+    assert!(out.contains("--help") && out.contains("yes  notes-typst") && out.contains("no   notes-app"), "{out}");
     let (code, out, _) = notes(&bin, &["--version"]);
     assert_eq!(code, Some(0));
     assert!(out.starts_with(&format!("notes {}\n", notes::VERSION)), "{out}");

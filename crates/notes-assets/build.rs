@@ -1,5 +1,5 @@
-//! Релизная сборка встраивает клиент из `app/dist` — без него она бесполезна.
-//! Отладочная читает клиент с диска и собирается и без него (тесты API).
+//! A release build embeds the client from `app/dist` and is useless without it.
+//! A debug build reads the client from disk and builds without it (API tests).
 
 fn main() {
     let dist = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app/dist");
@@ -7,6 +7,6 @@ fn main() {
     let release = std::env::var("PROFILE").as_deref() == Ok("release");
     assert!(
         !release || dist.join("index.html").is_file(),
-        "нет app/dist — сначала соберите клиент: npm --prefix app ci && npm --prefix app run build"
+        "no app/dist: build the client first: npm --prefix app ci && npm --prefix app run build"
     );
 }

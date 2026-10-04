@@ -1,25 +1,25 @@
-//! `notes-typst` — часть `notes` со сборкой Typst: все команды, кроме команд
-//! других частей; вызывается через тонкий `notes` (крейт `notes`,
-//! architecture §1). Работает из любой папки: хранилище — в каталоге данных
-//! пользователя, библиотека, клиент и шрифты встроены в бинарник (релизная
-//! сборка).
+//! `notes-typst`: the `notes` part that builds with Typst. It takes every
+//! command except those of other parts and is called through the thin `notes`
+//! (crate `notes`, architecture §1). Works from any directory: vaults live in
+//! the user's data directory; the library, client and fonts are embedded in
+//! the binary (release build).
 //!
-//!   notes serve            локальный сервер с клиентом (http://127.0.0.1:8421)
-//!   notes new <путь>       заготовка заметки (--book — книги)
-//!   notes list | tags      заметки хранилища / теги
-//!   notes check [путь]     ошибки компиляции и битые ссылки
-//!   notes pdf <путь>       заметка в PDF (вид PDF из baluk)
-//!   notes docs <тема>      как писать заметки, API библиотеки
-//!   notes info             где хранилище, настройки, библиотека
-//!   notes vaults [new <имя>]  хранилища / создать новое
-//!   notes service install  автозапуск notes serve (служба systemd пользователя)
+//!   notes serve               local server with the client (http://127.0.0.1:8421)
+//!   notes new <path>          a note stub (--book: a book)
+//!   notes list | tags         notes of the vault / tags
+//!   notes check [path]        compile errors and broken links
+//!   notes pdf <path>          a note as PDF (the PDF look of baluk)
+//!   notes docs <topic>        how to write notes, the library API
+//!   notes info                where the vault, settings and library are
+//!   notes vaults [new <name>] vaults / create a new one
+//!   notes service install     autostart of notes serve (systemd user service)
 //!
-//! Каталог данных (`vaults/`, `settings.json`, `cache/`): `--data` или
-//! `NOTES_DATA`, иначе `data` из `~/.config/baluk-notes/config.toml`, иначе
-//! `~/.local/share/baluk-notes`. Хранилища — `<данные>/vaults/<имя>/`;
-//! хранилища по умолчанию нет: команды заметок — всегда с `--vault <имя>`
-//! (папку вне каталога данных — путём: `--vault tests/vault`), первое
-//! хранилище создаёт пользователь (`notes vaults new`, приложение).
+//! Data directory (`vaults/`, `settings.json`, `cache/`): `--data` or
+//! `NOTES_DATA`, else `data` from `~/.config/baluk-notes/config.toml`, else
+//! `~/.local/share/baluk-notes`. Vaults are `<data>/vaults/<name>/`; there is
+//! no default vault: note commands always take `--vault <name>` (a directory
+//! outside the data directory by path: `--vault tests/vault`), and the user
+//! creates the first vault (`notes vaults new`, the app).
 
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::{Path, PathBuf};
@@ -38,37 +38,37 @@ use notes_core::{LibrarySource, NoteId, Notes, NotesConfig, VaultName, Vaults};
 
 mod service;
 
-/// Имя каталогов приложения: `~/.config/<APP>`, `~/.local/share/<APP>`.
+/// The app's directory name: `~/.config/<APP>`, `~/.local/share/<APP>`.
 const APP: &str = "baluk-notes";
-/// Адрес `notes serve` по умолчанию.
+/// Default address of `notes serve`.
 const ADDR: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 8421));
 
 #[derive(Debug, Parser)]
-#[command(name = "notes", version, about = "Заметки на Typst")]
+#[command(name = "notes", bin_name = "notes", version, about = "Notes in Typst")]
 struct Cli {
-    /// Каталог данных: хранилища vaults/, settings.json, кэш. По умолчанию —
-    /// `data` из ~/.config/baluk-notes/config.toml, иначе ~/.local/share/baluk-notes.
+    /// Data directory: vaults/, settings.json, cache. Default: `data` from
+    /// ~/.config/baluk-notes/config.toml, else ~/.local/share/baluk-notes.
     #[arg(long, global = true, env = "NOTES_DATA")]
     data: Option<PathBuf>,
 
-    /// Хранилище: имя (папка в <data>/vaults/) или путь к папке — со «/»
-    /// (tests/vault, ./заметки). Нужно командам заметок (new, list, tags,
-    /// check, pdf); список — `notes vaults`.
+    /// Vault: a name (a directory in <data>/vaults/) or a path to a directory,
+    /// with "/" (tests/vault, ./notes). Note commands need it (new, list, tags,
+    /// check, pdf); the list: `notes vaults`.
     #[arg(long, global = true)]
     vault: Option<String>,
 
-    /// Куда уходят удалённые из приложения заметки: по умолчанию — корзина
-    /// системы; каталог — в него (тесты).
+    /// Where notes deleted in the app go: the system trash by default; a
+    /// directory: into it (tests).
     #[arg(long, global = true, env = "NOTES_TRASH", hide = true)]
     trash: Option<PathBuf>,
 
-    /// Библиотека оформления (baluk/), видна заметкам как /_baluk/.
-    /// По умолчанию — встроенная в бинарник; в отладочной сборке — каталог
-    /// baluk/ репозитория (правки видны сразу).
+    /// The style library (baluk/), seen by notes as /_baluk/. Default: the
+    /// one embedded in the binary; in a debug build, the repository's baluk/
+    /// directory (edits show at once).
     #[arg(long, global = true, env = "NOTES_LIBRARY")]
     library: Option<PathBuf>,
 
-    /// Дополнительный каталог шрифтов (можно повторять).
+    /// An extra font directory (repeatable).
     #[arg(long = "font-path", global = true, env = "NOTES_FONT_PATHS", value_delimiter = ':')]
     font_paths: Vec<PathBuf>,
 
@@ -78,105 +78,106 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Локальный сервер с клиентом.
+    /// Local server with the client.
     Serve {
-        /// Адрес для браузера; для доступа из сети — 0.0.0.0:8421. По
-        /// умолчанию — 127.0.0.1:8421, если не задан только --socket.
+        /// Address for the browser; 0.0.0.0:8421 for access from the network.
+        /// Default: 127.0.0.1:8421, unless only --socket is given.
         #[arg(long)]
         addr: Option<SocketAddr>,
-        /// Ещё и сокет Unix — для окна `notes app` (права — только у
-        /// пользователя, без токена). Без пути —
+        /// Also a Unix socket, for the `notes app` window (user-only
+        /// permissions, no token). Without a path:
         /// $XDG_RUNTIME_DIR/baluk-notes/notes.sock.
-        #[arg(long, num_args = 0..=1, value_name = "ПУТЬ")]
+        #[arg(long, num_args = 0..=1, value_name = "PATH")]
         #[expect(clippy::option_option, reason = "clap: no flag, a flag without a path, a flag with a path")]
         socket: Option<Option<PathBuf>>,
-        /// Токен доступа: без него сервер отвечает 401. Передаётся заголовком
-        /// `Authorization: Bearer …`, параметром `?token=` (сервер ставит
-        /// cookie) или cookie `notes_token`. Сокета Unix не касается.
+        /// Access token: without it the server answers 401. Sent as the header
+        /// `Authorization: Bearer ...`, the parameter `?token=` (the server sets
+        /// a cookie) or the cookie `notes_token`. Does not apply to the Unix socket.
         #[arg(long, env = "NOTES_TOKEN", hide_env_values = true)]
         token: Option<String>,
     },
-    /// Заготовка новой заметки или книги; печатает путь её файла и, второй
-    /// строкой, путь заметки (для check, pdf, #see).
+    /// A stub of a new note or book; prints the path of its file and, on the
+    /// second line, the note path (for check, pdf, #see).
     ///
-    /// Имя файла — из названия (без / \ : * ? " < > |; занято — с номером),
-    /// в папке --folder; или путь целиком — аргументом. Существующее не
-    /// перезаписывается. Как писать дальше — `notes docs writing`.
+    /// The file name comes from the title (without / \ : * ? " < > |; a taken
+    /// name gets a number), in the --folder directory; or the whole path as
+    /// the argument. Existing files are never overwritten. How to write on:
+    /// `notes docs writing`.
     New {
-        /// Путь от корня хранилища, без .typ: «Сеть/SSH», «Курсы/Матан»;
-        /// без него — из названия.
+        /// Path from the vault root, without .typ: "Network/SSH",
+        /// "Courses/Calculus"; without it, from the title.
         #[arg(required_unless_present = "title", conflicts_with = "folder")]
         id: Option<String>,
-        /// Папка для заметки с именем из названия: «Сеть», «Курсы/Матан»; по умолчанию — корень.
+        /// Directory for a note named from its title: "Network", "Courses/Calculus"; default: the root.
         #[arg(long)]
         folder: Option<String>,
-        /// Книга: папка с main.typ, главы — файлы рядом (иначе — заметка, один файл).
+        /// A book: a directory with main.typ, chapters are files next to it (otherwise a note, one file).
         #[arg(long)]
         book: bool,
-        /// Название — любой текст; по умолчанию (с путём) — последний сегмент пути.
+        /// Title, any text; default (with a path): the last path segment.
         #[arg(long)]
         title: Option<String>,
-        /// Тег (можно повторять).
+        /// A tag (repeatable).
         #[arg(long = "tag")]
         tags: Vec<String>,
-        /// Язык заметки (ISO 639: en, de…); по умолчанию — русский.
+        /// Note language (ISO 639: en, de, ...); default: Russian.
         #[arg(long)]
         lang: Option<String>,
     },
-    /// Заметки и книги хранилища: путь, вид, название, теги; под книгой — её главы со своими тегами.
+    /// Notes and books of the vault: path, kind, title, tags; under a book, its chapters with their own tags.
     List {
-        /// В JSON.
+        /// As JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Теги хранилища и число заметок с ними.
+    /// Tags of the vault and the number of notes with each.
     Tags,
-    /// Проверить хранилище или одну заметку: ошибки компиляции,
-    /// предупреждения, битые ссылки (код выхода 1 — ошибки или битые ссылки).
+    /// Check the vault or one note: compile errors, warnings, broken links
+    /// (exit code 1: errors or broken links).
     Check {
-        /// Только эта заметка или книга (ссылки проверяются по всему хранилищу).
+        /// Only this note or book (links are checked against the whole vault).
         id: Option<String>,
-        /// Отчёт в JSON.
+        /// Report as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Заметку или книгу — в PDF.
+    /// A note or book as PDF.
     Pdf {
-        /// Путь заметки от корня хранилища: «Сеть/SSH», «Конспекты/Матан».
+        /// Note path from the vault root: "Network/SSH", "Courses/Calculus".
         id: String,
-        /// Файл результата; по умолчанию — <имя заметки>.pdf здесь.
+        /// Output file; default: <note name>.pdf here.
         #[arg(short, long)]
         out: Option<PathBuf>,
-        /// Тема; по умолчанию — первая (светлая).
+        /// Theme; default: the first (light).
         #[arg(long)]
         theme: Option<String>,
     },
-    /// Переименовать заметку, книгу или папку, как в приложении: новое
-    /// название в файле (у папки — `_folder.toml`), имя файла (папки) — из
-    /// него, ссылки `#see` на неё в других заметках переписываются. Папка не
-    /// меняется. Печатает новый путь, затем — где поправлены ссылки.
+    /// Rename a note, book or folder as the app does: the new title goes into
+    /// the file (a folder: `_folder.toml`), the file (folder) name follows it,
+    /// and `#see` links to it in other notes are rewritten. The parent folder
+    /// stays. Prints the new path, then where links were fixed.
     Rename {
-        /// Путь заметки, книги или папки от корня хранилища: «Сеть/SSH».
+        /// Path of the note, book or folder from the vault root: "Network/SSH".
         id: String,
-        /// Новое название — любой текст.
+        /// The new title, any text.
         title: String,
-        /// Только показать, что изменится.
+        /// Only show what would change.
         #[arg(long)]
         dry_run: bool,
     },
-    /// Документация: как писать заметки, API библиотеки оформления.
+    /// Documentation: how to write notes, the style library API.
     Docs {
-        /// Что показать.
+        /// What to show.
         topic: Topic,
     },
-    /// Где хранилище, настройки и кэш, какая библиотека, адрес сервера.
+    /// Where the vault, settings and cache are, which library, the server address.
     Info,
-    /// Хранилища каталога данных; `new <имя>` — создать новое.
+    /// Vaults of the data directory; `new <name>` creates a new one.
     Vaults {
         #[command(subcommand)]
         action: Option<VaultsAction>,
     },
-    /// Автозапуск `notes serve`: служба systemd пользователя (Linux), без root.
+    /// Autostart of `notes serve`: a systemd user service (Linux), no root.
     Service {
         #[command(subcommand)]
         action: ServiceAction,
@@ -185,35 +186,35 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum ServiceAction {
-    /// Поставить и запустить: сервер работает в фоне и стартует при входе в
-    /// систему, после падения перезапускается. Уже стоит — перезапустить
-    /// (после обновления notes). Запускает этот же бинарник `notes`; --data,
-    /// --library, --font-path передаются службе.
+    /// Install and start: the server runs in the background, starts at login
+    /// and restarts after a crash. Already installed: restart it (after
+    /// updating notes). Runs this same `notes` binary; --data, --library and
+    /// --font-path are passed to the service.
     Install {
-        /// Адрес; для доступа из сети — 0.0.0.0:8421.
+        /// Address; 0.0.0.0:8421 for access from the network.
         #[arg(long, default_value_t = ADDR)]
         addr: SocketAddr,
     },
-    /// Остановить и убрать службу.
+    /// Stop and remove the service.
     Remove,
-    /// Стоит ли служба, работает ли, что запускает, где лог.
+    /// Whether the service is installed and running, what it runs, where its log is.
     Status,
 }
 
 #[derive(Debug, Subcommand)]
 enum VaultsAction {
-    /// Новое пустое хранилище: <data>/vaults/<имя>/.
+    /// A new empty vault: <data>/vaults/<name>/.
     New {
-        /// Имя — оно же имя папки: «Учёба», «Работа 2026».
+        /// Name, also the directory name: "Study", "Work 2026".
         name: String,
     },
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum Topic {
-    /// Как писать заметки: процесс, текст, рисунки, проверка.
+    /// How to write notes: process, text, figures, checks.
     Writing,
-    /// Библиотека оформления baluk: шаблоны, блоки, рисунки, интерактив.
+    /// The baluk style library: templates, blocks, figures, interactivity.
     Library,
 }
 
@@ -226,11 +227,11 @@ impl Topic {
     }
 }
 
-/// Файл настроек `notes` (`~/.config/baluk-notes/config.toml`).
+/// The `notes` config file (`~/.config/baluk-notes/config.toml`).
 #[derive(Debug, Default, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Config {
-    /// Каталог данных; `~/` — домашний, относительный — от файла настроек.
+    /// Data directory; `~/` is home, a relative path is relative to the config file.
     data: Option<PathBuf>,
 }
 
@@ -238,11 +239,11 @@ fn config_path() -> Option<PathBuf> {
     dirs::config_dir().map(|dir| dir.join(APP).join("config.toml"))
 }
 
-/// Файл настроек: нет — пустые настройки.
+/// The config file; no file means an empty config.
 fn load_config() -> Result<Config> {
     let Some(path) = config_path().filter(|p| p.is_file()) else { return Ok(Config::default()) };
-    let text = std::fs::read_to_string(&path).with_context(|| format!("прочитать {}", path.display()))?;
-    let mut config: Config = toml::from_str(&text).with_context(|| format!("настройки {}", path.display()))?;
+    let text = std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    let mut config: Config = toml::from_str(&text).with_context(|| format!("config {}", path.display()))?;
     if let Some(data) = config.data.take() {
         let home = dirs::home_dir().unwrap_or_default();
         config.data = Some(match data.strip_prefix("~") {
@@ -253,19 +254,19 @@ fn load_config() -> Result<Config> {
     Ok(config)
 }
 
-/// Каталог данных: явный, из файла настроек или стандартный.
+/// Data directory: explicit, from the config file, or the standard one.
 fn data_dir(explicit: Option<&PathBuf>, config: &Config) -> Result<PathBuf> {
     if let Some(dir) = explicit.or(config.data.as_ref()) {
         return Ok(dir.clone());
     }
     match dirs::data_dir() {
         Some(dir) => Ok(dir.join(APP)),
-        None => bail!("не найден каталог данных пользователя — укажите --data"),
+        None => bail!("user data directory not found: pass --data"),
     }
 }
 
-/// Библиотека оформления: явно указанная, в отладочной сборке — из
-/// репозитория, иначе — встроенная.
+/// The style library: the given one, the repository's in a debug build, else
+/// the embedded one.
 fn library(explicit: Option<&PathBuf>) -> LibrarySource {
     if let Some(dir) = explicit {
         return LibrarySource::Dir(dir.clone());
@@ -278,7 +279,7 @@ fn library(explicit: Option<&PathBuf>) -> LibrarySource {
     }
 }
 
-/// jemalloc: память после сборок возвращается системе (docs/research/E5.md).
+/// jemalloc: memory goes back to the system after builds (docs/research/E5.md).
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
 static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
@@ -289,29 +290,29 @@ fn main() -> ExitCode {
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info,notes=info".into()),
         )
         .with_target(false)
-        // Без цветов вне терминала: лог службы (journald), файл.
+        // No colors outside a terminal: the service log (journald), a file.
         .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
         .with_writer(std::io::stderr)
         .init();
     if let Err(e) = notes::check_version("notes-typst") {
-        eprintln!("ошибка: {e}");
+        eprintln!("error: {e}");
         return ExitCode::FAILURE;
     }
     match run(Cli::parse()) {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("ошибка: {e:#}");
+            eprintln!("error: {e:#}");
             ExitCode::FAILURE
         }
     }
 }
 
-/// Какое хранилище: `--vault` (или `NOTES_VAULT`) и `vault` из config.toml.
+/// Which vault: `--vault`.
 #[derive(Debug, Clone)]
 enum VaultArg {
-    /// Хранилище каталога данных по имени.
+    /// A vault of the data directory, by name.
     Name(String),
-    /// Папка где угодно (в аргументе есть `/`).
+    /// A directory anywhere (the argument has a `/`).
     Path(PathBuf),
 }
 
@@ -325,21 +326,19 @@ impl VaultArg {
     }
 }
 
-/// Хранилище для команды: имя и папка. Хранилища по умолчанию нет: не
-/// названо — ошибка со списком. Папку по пути создаёт, если её нет (тесты);
-/// по имени — только существующее.
+/// The vault for a command: name and directory. There is no default vault:
+/// none named is an error with the list. A directory given by path is created
+/// if missing (tests); by name, only an existing vault.
 fn pick_vault(vaults: &Vaults, arg: Option<&VaultArg>) -> Result<(VaultName, PathBuf)> {
     match arg {
         Some(VaultArg::Path(dir)) => {
             if !dir.exists() {
-                std::fs::create_dir_all(dir).with_context(|| format!("создать {}", dir.display()))?;
-                tracing::info!("создано пустое хранилище {}", dir.display());
+                std::fs::create_dir_all(dir).with_context(|| format!("create {}", dir.display()))?;
+                tracing::info!("created an empty vault {}", dir.display());
             }
-            let dir = dir.canonicalize().with_context(|| format!("хранилище {}", dir.display()))?;
+            let dir = dir.canonicalize().with_context(|| format!("vault {}", dir.display()))?;
             let name = dir.file_name().and_then(|n| n.to_str()).map(VaultName::new);
-            let Some(Ok(name)) = name else {
-                bail!("имя папки {} не годится для хранилища", dir.display())
-            };
+            let Some(Ok(name)) = name else { bail!("the directory name {} does not fit a vault", dir.display()) };
             Ok((name, dir))
         }
         Some(VaultArg::Name(name)) => {
@@ -351,7 +350,7 @@ fn pick_vault(vaults: &Vaults, arg: Option<&VaultArg>) -> Result<(VaultName, Pat
 }
 
 fn run(cli: Cli) -> Result<ExitCode> {
-    // Без хранилища: документация, служба.
+    // Without a vault: documentation, the service.
     match &cli.command {
         Command::Docs { topic } => {
             print!("{}", topic.text());
@@ -360,10 +359,10 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Command::Service { action } => {
             match action {
                 ServiceAction::Install { addr } => {
-                    let exe = std::env::current_exe().context("путь бинарника notes")?;
+                    let exe = std::env::current_exe().context("path of the notes binary")?;
                     if cfg!(debug_assertions) {
                         eprintln!(
-                            "внимание: отладочная сборка — служба запустит её; обычно — tools/install.sh и notes из PATH"
+                            "warning: a debug build; the service will run it (usually: tools/install.sh and notes from PATH)"
                         );
                     }
                     service::install(&exe, &service_args(&cli, *addr)?, *addr)?;
@@ -386,14 +385,14 @@ fn run(cli: Cli) -> Result<ExitCode> {
         trash: cli.trash.clone(),
     };
 
-    // Без открытого хранилища: список хранилищ, сведения, сервер.
+    // Without an open vault: the vault list, info, the server.
     match cli.command {
         Command::Vaults { action } => return vaults_command(&vaults, action),
         Command::Info => return info(&vaults, &data, arg.as_ref(), cli.library.as_ref()),
         Command::Serve { addr, socket, token } => {
             let socket = socket
                 .map(|path| {
-                    path.or_else(notes::default_socket).context("нет $XDG_RUNTIME_DIR — укажите путь: --socket <путь>")
+                    path.or_else(notes::default_socket).context("no $XDG_RUNTIME_DIR: give a path: --socket <path>")
                 })
                 .transpose()?;
             return serve(vaults, config, &data, arg, Listen { addr, socket }, token);
@@ -403,8 +402,8 @@ fn run(cli: Cli) -> Result<ExitCode> {
 
     let (name, vault) = pick_vault(&vaults, arg.as_ref())?;
     let started = std::time::Instant::now();
-    let notes = Notes::open(&NotesConfig { vault: vault.clone(), ..config }).context("открыть хранилище")?;
-    tracing::debug!(ms = started.elapsed().as_millis(), "хранилище «{name}»: {}", notes.vault().location());
+    let notes = Notes::open(&NotesConfig { vault: vault.clone(), ..config }).context("open the vault")?;
+    tracing::debug!(ms = started.elapsed().as_millis(), "vault \"{name}\": {}", notes.vault().location());
 
     match cli.command {
         Command::New { id, folder, book, title, tags, lang } => {
@@ -413,7 +412,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
             let id = if let Some(id) = id {
                 new_note_id(&id, &vault)?
             } else {
-                // Имя файла — из названия, в папке --folder (нет — в корне).
+                // The file name comes from the title, in the --folder directory (none: the root).
                 let folder = match folder.as_deref().map(|f| f.trim_matches('/')) {
                     Some(f) if !f.is_empty() => new_note_id(f, &vault)?.to_string(),
                     _ => String::new(),
@@ -423,13 +422,13 @@ fn run(cli: Cli) -> Result<ExitCode> {
             let main = note.create(notes.vault(), &id)?;
             println!("{}", notes.vault().storage().display(&main).display());
             println!("{id}");
-            eprintln!("в приложении: http://{ADDR}/v/{name}/n/{id} (если запущен notes serve)");
+            eprintln!("in the app: http://{ADDR}/v/{name}/n/{id} (if notes serve is running)");
             Ok(ExitCode::SUCCESS)
         }
         Command::List { json } => list(&notes, json),
         Command::Tags => tags(&notes),
         Command::Check { id, json } => {
-            // Сборок одновременно и память Typst — как в приложении.
+            // Parallel builds and Typst memory as in the app.
             notes.apply_device(&open_settings(&notes, &data)?.device());
             let report = match id {
                 Some(id) => check_note(&notes, &note_id(&id, &vault)?)?,
@@ -438,7 +437,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
             print_check(&report, json)
         }
         Command::Pdf { id, out, theme } => {
-            // Пакеты сверх белого списка — как в приложении.
+            // Packages beyond the whitelist as in the app.
             notes.apply_device(&open_settings(&notes, &data)?.device());
             pdf(&notes, &note_id(&id, &vault)?, out, theme)
         }
@@ -448,18 +447,18 @@ fn run(cli: Cli) -> Result<ExitCode> {
         | Command::Info
         | Command::Vaults { .. }
         | Command::Serve { .. } => {
-            unreachable!("обработано выше")
+            unreachable!("handled above")
         }
     }
 }
 
-/// Аргументы службы: `serve --addr …` и общие флаги этого запуска (пути —
-/// абсолютные: у службы своя текущая папка).
+/// Arguments of the service: `serve --addr ...` and the global flags of this
+/// run (absolute paths: the service has its own working directory).
 fn service_args(cli: &Cli, addr: SocketAddr) -> Result<Vec<String>> {
     let absolute = |p: &PathBuf| -> Result<String> {
-        Ok(std::path::absolute(p).with_context(|| format!("путь {}", p.display()))?.to_string_lossy().into_owned())
+        Ok(std::path::absolute(p).with_context(|| format!("path {}", p.display()))?.to_string_lossy().into_owned())
     };
-    // Сокет — чтобы окно `notes app` работало с ядром службы, а не запускало второе.
+    // The socket lets the `notes app` window use the service's core instead of starting a second one.
     let mut args = vec!["serve".to_owned(), "--addr".to_owned(), addr.to_string(), "--socket".to_owned()];
     if let Some(data) = &cli.data {
         args.extend(["--data".to_owned(), absolute(data)?]);
@@ -474,18 +473,18 @@ fn service_args(cli: &Cli, addr: SocketAddr) -> Result<Vec<String>> {
 }
 
 fn rename(notes: &Notes, id: &NoteId, title: &str, dry_run: bool) -> Result<ExitCode> {
-    // Не заметка и не книга — папка (её нет — ошибка ядра «не найдено»).
+    // Neither a note nor a book: a folder (missing: the core's "not found" error).
     let kind = if notes.vault().entry(id).is_ok() { RenameKind::Note } else { RenameKind::Folder };
     let plan = notes.rename(kind, id, title, !dry_run)?;
     println!("{}", plan.to);
     let links: Vec<String> = plan.links.iter().map(|l| format!("{} ({})", l.note, l.count)).collect();
     match (links.is_empty(), dry_run) {
-        (true, _) => eprintln!("ссылок сюда в других заметках нет"),
-        (false, false) => eprintln!("ссылки поправлены: {}", links.join(", ")),
-        (false, true) => eprintln!("ссылки поправятся: {}", links.join(", ")),
+        (true, _) => eprintln!("no links to it in other notes"),
+        (false, false) => eprintln!("links fixed: {}", links.join(", ")),
+        (false, true) => eprintln!("links to fix: {}", links.join(", ")),
     }
     if dry_run {
-        eprintln!("ничего не изменено (--dry-run)");
+        eprintln!("nothing changed (--dry-run)");
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -495,7 +494,7 @@ fn vaults_command(vaults: &Vaults, action: Option<VaultsAction>) -> Result<ExitC
         let name = VaultName::new(name)?;
         let path = vaults.create(&name)?;
         println!("{}", path.display());
-        eprintln!("в приложении: http://{ADDR}/v/{name}/ (если запущен notes serve)");
+        eprintln!("in the app: http://{ADDR}/v/{name}/ (if notes serve is running)");
         return Ok(ExitCode::SUCCESS);
     }
     let list = vaults.list()?;
@@ -503,7 +502,7 @@ fn vaults_command(vaults: &Vaults, action: Option<VaultsAction>) -> Result<ExitC
         println!("{name}");
     }
     if list.is_empty() {
-        eprintln!("хранилищ нет — создайте: notes vaults new \"Имя\" (или в приложении)");
+        eprintln!("no vaults: create one: notes vaults new \"Name\" (or in the app)");
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -512,28 +511,28 @@ fn info(vaults: &Vaults, data: &Path, arg: Option<&VaultArg>, library_dir: Optio
     let config = config_path().map(|p| p.display().to_string()).unwrap_or_default();
     let library = match library(library_dir) {
         LibrarySource::Dir(dir) => dir.display().to_string(),
-        LibrarySource::Embedded => "встроенная в бинарник".into(),
+        LibrarySource::Embedded => "embedded in the binary".into(),
     };
-    // Хранилище не названо — не ошибка: показать список.
+    // No vault named is not an error here: show the list.
     match arg {
         Some(arg) => {
             let (name, path) = pick_vault(vaults, Some(arg))?;
-            println!("хранилище: {} («{name}»)", path.display());
+            println!("vault:     {} (\"{name}\")", path.display());
         }
-        None => println!("хранилище: не выбрано (--vault \"Имя\")"),
+        None => println!("vault:     not chosen (--vault \"Name\")"),
     }
     let names: Vec<String> = vaults.list()?.iter().map(ToString::to_string).collect();
-    let names = if names.is_empty() { "нет".to_owned() } else { names.join(", ") };
-    println!("хранилища: {names} ({})", vaults.root().display());
-    println!("данные:    {} (settings.json, cache/)", data.display());
-    println!("настройки: {config} (data = \"…\" — другой каталог данных)");
-    println!("библиотека: {library}");
-    println!("сервер:    http://{ADDR}/ (notes serve)");
+    let names = if names.is_empty() { "none".to_owned() } else { names.join(", ") };
+    println!("vaults:    {names} ({})", vaults.root().display());
+    println!("data:      {} (settings.json, cache/)", data.display());
+    println!("config:    {config} (data = \"...\" sets another data directory)");
+    println!("library:   {library}");
+    println!("server:    http://{ADDR}/ (notes serve)");
     Ok(ExitCode::SUCCESS)
 }
 
-/// Путь заметки из командной строки. Частая ошибка (особенно у агентов) —
-/// путь на диске вместо пути от корня хранилища: подсказать нужный.
+/// A note path from the command line. A common mistake (agents especially) is
+/// a disk path instead of a path from the vault root: suggest the right one.
 fn note_id(raw: &str, vault: &Path) -> Result<NoteId> {
     let path = Path::new(raw);
     if path.is_absolute() {
@@ -544,10 +543,10 @@ fn note_id(raw: &str, vault: &Path) -> Result<NoteId> {
         match inside {
             Some(rest) => {
                 let rest = rest.strip_suffix(".typ").unwrap_or(&rest);
-                bail!("«{raw}» — путь на диске; нужен путь от корня хранилища: «{rest}»")
+                bail!("\"{raw}\" is a disk path; give the path from the vault root: \"{rest}\"")
             }
             None => bail!(
-                "«{raw}» — путь на диске; нужен путь от корня хранилища ({}), например «Папка/Название»",
+                "\"{raw}\" is a disk path; give the path from the vault root ({}), e.g. \"Folder/Title\"",
                 vault.display()
             ),
         }
@@ -555,36 +554,35 @@ fn note_id(raw: &str, vault: &Path) -> Result<NoteId> {
     Ok(NoteId::new(raw)?)
 }
 
-/// Путь новой заметки: вдобавок к `note_id` — не начинается с имени
-/// каталога хранилища («vault/Тема» из каталога данных создало бы
-/// `vault/vault/Тема.typ`), если такой папки в хранилище нет.
+/// A new note's path: on top of `note_id`, it must not start with the vault
+/// directory's name (`vault/Topic` would create `vault/vault/Topic.typ`)
+/// unless the vault has such a folder.
 fn new_note_id(raw: &str, vault: &Path) -> Result<NoteId> {
     let id = note_id(raw, vault)?;
     if let Some(name) = vault.file_name().and_then(|n| n.to_str())
         && let Some(rest) = id.as_str().strip_prefix(&format!("{name}/"))
         && !vault.join(name).is_dir()
     {
-        bail!("«{raw}» начинается с имени каталога хранилища; путь — от его корня: «{rest}»");
+        bail!("\"{raw}\" starts with the vault directory name; the path is from its root: \"{rest}\"");
     }
     Ok(id)
 }
 
 fn open_settings(notes: &Notes, data: &Path) -> Result<SettingsStore> {
     let schema = Schema::new(notes.themes().themes(), Platform::current());
-    SettingsStore::open(data.join("settings.json"), schema).context("настройки")
+    SettingsStore::open(data.join("settings.json"), schema).context("settings")
 }
 
-/// Сервер: все хранилища каталога данных (открываются по запросу;
-/// хранилищ может не быть — первое создают в приложении) или одно
-/// (`--vault <имя или путь>`).
-/// Где слушать `notes serve`: `--addr` и `--socket`; ни того ни другого —
-/// адрес по умолчанию.
+/// Where `notes serve` listens: `--addr` and `--socket`; neither means the
+/// default address.
 #[derive(Debug)]
 struct Listen {
     addr: Option<SocketAddr>,
     socket: Option<PathBuf>,
 }
 
+/// The server: all vaults of the data directory (opened on request; there may
+/// be none, the first is created in the app) or one (`--vault <name or path>`).
 fn serve(
     vaults: Vaults,
     config: NotesConfig,
@@ -595,38 +593,38 @@ fn serve(
 ) -> Result<ExitCode> {
     let set = if let Some(arg) = arg {
         let (name, vault) = pick_vault(&vaults, Some(&arg))?;
-        let notes = Notes::open(&NotesConfig { vault, ..config }).context("открыть хранилище")?;
+        let notes = Notes::open(&NotesConfig { vault, ..config }).context("open the vault")?;
         let settings = Arc::new(open_settings(&notes, data)?);
-        tracing::info!("хранилище «{name}»: {}", notes.vault().location());
+        tracing::info!("vault \"{name}\": {}", notes.vault().location());
         notes_server::VaultSet::single(name, Arc::new(notes), settings)
     } else {
-        // Темы и шрифты — у всех хранилищ одни (библиотека): ядро без
-        // хранилища, чтобы сервер работал и без них.
-        let library = Notes::with_storage(Arc::new(notes_core::storage::MemStorage::new()), &config)
-            .context("библиотека оформления")?;
+        // Themes and fonts are the same for all vaults (the library): a core
+        // without a vault, so that the server works with no vaults at all.
+        let library =
+            Notes::with_storage(Arc::new(notes_core::storage::MemStorage::new()), &config).context("style library")?;
         let settings = Arc::new(open_settings(&library, data)?);
-        tracing::info!("хранилища: {}", vaults.root().display());
+        tracing::info!("vaults: {}", vaults.root().display());
         notes_server::VaultSet::registry(vaults, config, Arc::new(library), settings)
     };
     let state = notes_server::AppState::new(set).with_token(token);
     if state.token.is_some() {
-        tracing::info!("доступ — только с токеном");
+        tracing::info!("access only with the token");
     }
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async move {
         let mut listeners = Vec::new();
         let addr = listen.addr.or_else(|| listen.socket.is_none().then_some(ADDR));
         if let Some(addr) = addr {
-            let listener = tokio::net::TcpListener::bind(addr).await.with_context(|| format!("занять {addr}"))?;
-            tracing::info!("открыть: http://{addr}/");
+            let listener = tokio::net::TcpListener::bind(addr).await.with_context(|| format!("bind {addr}"))?;
+            tracing::info!("open: http://{addr}/");
             listeners.push(notes_server::Listen::Tcp(listener));
         }
         if let Some(path) = &listen.socket {
             listeners.push(bind_socket(path)?);
-            tracing::info!("сокет: {}", path.display());
+            tracing::info!("socket: {}", path.display());
         }
         let served = notes_server::serve(listeners, state, stop_signal()).await;
-        // Штатная остановка - сокет убрать (после падения его уберёт следующий запуск).
+        // A clean stop removes the socket (after a crash the next start removes it).
         if let Some(path) = &listen.socket {
             let _ = std::fs::remove_file(path);
         }
@@ -635,8 +633,9 @@ fn serve(
     })
 }
 
-/// Сокет Unix для окна: папка и сокет — только у пользователя. Сокет от
-/// упавшего сервера убирается; на живой (кто-то отвечает) — ошибка.
+/// The Unix socket for the window: the directory and the socket are user-only.
+/// A socket left by a crashed server is removed; a live one (someone answers)
+/// is an error.
 #[cfg(unix)]
 fn bind_socket(path: &Path) -> Result<notes_server::Listen> {
     use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
@@ -645,26 +644,26 @@ fn bind_socket(path: &Path) -> Result<notes_server::Listen> {
             .recursive(true)
             .mode(0o700)
             .create(dir)
-            .with_context(|| format!("создать {}", dir.display()))?;
+            .with_context(|| format!("create {}", dir.display()))?;
     }
     if path.exists() {
         if std::os::unix::net::UnixStream::connect(path).is_ok() {
-            bail!("сокет {} занят — notes serve уже работает", path.display());
+            bail!("socket {} is in use: notes serve is already running", path.display());
         }
-        std::fs::remove_file(path).with_context(|| format!("убрать старый сокет {}", path.display()))?;
+        std::fs::remove_file(path).with_context(|| format!("remove the old socket {}", path.display()))?;
     }
-    let listener = tokio::net::UnixListener::bind(path).with_context(|| format!("занять {}", path.display()))?;
+    let listener = tokio::net::UnixListener::bind(path).with_context(|| format!("bind {}", path.display()))?;
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
     Ok(notes_server::Listen::Unix(listener))
 }
 
 #[cfg(not(unix))]
 fn bind_socket(_path: &Path) -> Result<notes_server::Listen> {
-    bail!("--socket — только в Linux и macOS")
+    bail!("--socket works only on Linux and macOS")
 }
 
-/// Ctrl+C или SIGTERM (так останавливает служба systemd): сервер
-/// завершается штатно, ждущие запросы событий получают ответ.
+/// Ctrl+C or SIGTERM (how the systemd service stops it): the server stops
+/// cleanly and waiting event requests get an answer.
 async fn stop_signal() {
     #[cfg(unix)]
     {
@@ -686,14 +685,14 @@ async fn stop_signal() {
         let _ = tokio::signal::ctrl_c().await;
     }
 }
-/// Строка списка или объект JSON: заметка из индекса исходников.
+/// A list line or JSON object: a note from the source index.
 #[derive(Debug, serde::Serialize)]
 struct ListItem<'a> {
     id: &'a NoteId,
     kind: NoteKind,
     title: Option<&'a str>,
     tags: &'a [String],
-    /// Главы книги со своими тегами (теги книги они наследуют).
+    /// The book's chapters with their own tags (they inherit the book's tags).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     chapters: Vec<TaggedChapter>,
 }
@@ -715,13 +714,13 @@ fn list(notes: &Notes, json: bool) -> Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
     for item in &items {
-        let kind = if item.kind == NoteKind::Book { "  [книга]" } else { "" };
-        let title = item.title.filter(|t| *t != item.id.name()).map(|t| format!("  «{t}»")).unwrap_or_default();
+        let kind = if item.kind == NoteKind::Book { "  [book]" } else { "" };
+        let title = item.title.filter(|t| *t != item.id.name()).map(|t| format!("  \"{t}\"")).unwrap_or_default();
         let tags: String = item.tags.iter().flat_map(|t| ["  #", t.as_str()]).collect();
         println!("{}{kind}{title}{tags}", item.id);
         for chapter in &item.chapters {
             let tags: String = chapter.tags.iter().flat_map(|t| ["  #", t.as_str()]).collect();
-            println!("  глава «{}»{tags}", chapter.title);
+            println!("  chapter \"{}\"{tags}", chapter.title);
         }
     }
     Ok(ExitCode::SUCCESS)
@@ -731,7 +730,7 @@ fn tags(notes: &Notes) -> Result<ExitCode> {
     let index = notes.index()?;
     let mut counts = std::collections::BTreeMap::<&str, usize>::new();
     for (_, outline) in index.outlines() {
-        // Книга — одна, сколько бы глав ни несли тег.
+        // A book counts once, however many chapters carry the tag.
         for tag in outline.all_tags().collect::<std::collections::BTreeSet<_>>() {
             *counts.entry(tag).or_default() += 1;
         }
@@ -749,8 +748,8 @@ fn pdf(notes: &Notes, id: &NoteId, out: Option<PathBuf>, theme: Option<String>) 
     let out = out.unwrap_or_else(|| PathBuf::from(format!("{}.pdf", id.name())));
     match notes.pdf(id, &theme)? {
         Ok(bytes) => {
-            std::fs::write(&out, bytes).with_context(|| format!("записать {}", out.display()))?;
-            println!("{} → {}", id, out.display());
+            std::fs::write(&out, bytes).with_context(|| format!("write {}", out.display()))?;
+            println!("{} -> {}", id, out.display());
             Ok(ExitCode::SUCCESS)
         }
         Err(errors) => {
@@ -775,7 +774,7 @@ fn print_check(report: &Report, json: bool) -> Result<ExitCode> {
             }
             for l in &n.broken_links {
                 let anchor = l.anchor.as_deref().map(|a| format!(" / {a}")).unwrap_or_default();
-                println!("{}: битая ссылка «{}{anchor}»: {}", n.id, l.target, l.reason);
+                println!("{}: broken link \"{}{anchor}\": {}", n.id, l.target, l.reason);
             }
         }
         for f in &report.folders {
@@ -794,8 +793,8 @@ mod tests {
         result.unwrap_err().to_string()
     }
 
-    /// Тонкий `notes` ищет команду за общими флагами со значением - его
-    /// список совпадает с `Cli`; команды других частей здесь не заняты.
+    /// The thin `notes` finds the command after global flags with a value: its
+    /// list matches `Cli`, and commands of other parts are not taken here.
     #[test]
     fn thin_notes_knows_global_flags_and_commands() {
         use clap::CommandFactory;
@@ -811,7 +810,7 @@ mod tests {
         assert_eq!(flags, expected);
         for part in notes::PARTS {
             for command in part.commands {
-                assert!(cli.find_subcommand(command).is_none(), "команда {command} - у части {}", part.bin);
+                assert!(cli.find_subcommand(command).is_none(), "command {command} belongs to the part {}", part.bin);
             }
         }
     }
@@ -821,21 +820,22 @@ mod tests {
         let vault = Path::new("/нет/data/vault");
         assert_eq!(note_id("Сеть/SSH", vault).unwrap().as_str(), "Сеть/SSH");
         assert!(
-            err(note_id("/нет/data/vault/Сеть/SSH.typ", vault)).ends_with("нужен путь от корня хранилища: «Сеть/SSH»")
+            err(note_id("/нет/data/vault/Сеть/SSH.typ", vault))
+                .ends_with("give the path from the vault root: \"Сеть/SSH\"")
         );
         assert!(err(note_id("/elsewhere/SSH", vault)).contains("(/нет/data/vault)"));
-        assert!(err(note_id("/нет/data/vault", vault)).contains("например"));
+        assert!(err(note_id("/нет/data/vault", vault)).contains("e.g."));
     }
 
     #[test]
     fn new_note_is_not_under_vault_name() {
         let vault = Path::new("/нет/data/vault");
-        assert!(err(new_note_id("vault/Тема", vault)).ends_with("путь — от его корня: «Тема»"));
+        assert!(err(new_note_id("vault/Тема", vault)).ends_with("the path is from its root: \"Тема\""));
         assert_eq!(new_note_id("vaults/Тема", vault).unwrap().as_str(), "vaults/Тема");
         assert_eq!(new_note_id("Тема", vault).unwrap().as_str(), "Тема");
     }
 
-    /// Хранилища по умолчанию нет: даже единственное — только названное.
+    /// There is no default vault: even the only one must be named.
     #[test]
     fn vault_must_be_named() {
         let data = tempfile::tempdir().unwrap();
@@ -847,6 +847,6 @@ mod tests {
         let (name, path) = pick_vault(&vaults, Some(&VaultArg::parse("Учёба"))).unwrap();
         assert_eq!((name.as_str(), path), ("Учёба", vaults.root().join("Учёба")));
         assert!(err(Some(&VaultArg::parse("Нет"))).starts_with("нет хранилища «Нет»"));
-        assert!(!data.path().join("vaults/Нет").exists(), "не создаётся само");
+        assert!(!data.path().join("vaults/Нет").exists(), "not created by itself");
     }
 }
