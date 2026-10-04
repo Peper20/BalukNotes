@@ -1,5 +1,5 @@
-//! Заметки хранилища: список, страница (книга — по главам), версия, ссылки,
-//! превью, PDF, удаление и переименование (и папок), подсказки прогреву.
+//! Vault notes: the list, the page (a book by chapters), version, links,
+//! preview, PDF, deletion and renaming (folders too), warming hints.
 
 use std::sync::Arc;
 
@@ -88,8 +88,8 @@ struct NoteQuery {
     anchor: Option<String>,
 }
 
-/// Заметка. С `chapter` или `anchor` книга приходит одной главой (с
-/// оглавлением книги в `book`); не книга — целиком, как без них.
+/// A note. With `chapter` or `anchor` a book comes as one chapter (with the
+/// book contents in `book`); anything else comes whole, as without them.
 async fn note(
     State(s): State<AppState>,
     Path((vault, id)): Path<(String, String)>,
@@ -108,7 +108,7 @@ async fn note(
     Ok(Json(page).into_response())
 }
 
-/// Удалить заметку или книгу (папку целиком) — в корзину.
+/// Moves a note or a book (the whole folder) to the trash.
 async fn delete_note(State(s): State<AppState>, Path((vault, id)): Path<(String, String)>) -> ApiResult<StatusCode> {
     let id = NoteId::new(id)?;
     let notes = s.vault(vault).await?.notes.clone();
@@ -116,7 +116,7 @@ async fn delete_note(State(s): State<AppState>, Path((vault, id)): Path<(String,
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Удалить папку целиком (со всем, что в ней) — в корзину.
+/// Moves a whole folder (with everything in it) to the trash.
 async fn delete_folder(
     State(s): State<AppState>,
     Path((vault, path)): Path<(String, String)>,
@@ -127,8 +127,8 @@ async fn delete_folder(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Переименовать заметку (книгу) или папку: название, имя файла и ссылки на
-/// неё; без `apply` — только план.
+/// Renames a note (a book) or a folder: the title, the file name and the links
+/// to it; without `apply`, only the plan.
 async fn rename(
     State(s): State<AppState>,
     Path(vault): Path<String>,
@@ -187,17 +187,19 @@ async fn pdf(
     let result = blocking(move || notes.pdf(&id, &theme)).await?;
     Ok(match result {
         Ok(bytes) => {
-            // Имя файла в заголовке — по RFC 5987 (кириллица).
+            // The file name in the header follows RFC 5987 (non-ASCII names).
             let disposition = format!("inline; filename*=UTF-8''{}.pdf", percent(&name));
             ([(header::CONTENT_TYPE, "application/pdf".to_owned()), (header::CONTENT_DISPOSITION, disposition)], bytes)
                 .into_response()
         }
-        Err(errors) => (StatusCode::UNPROCESSABLE_ENTITY, Json(ErrorResponse { error: "не собралось".into(), errors }))
-            .into_response(),
+        Err(errors) => {
+            (StatusCode::UNPROCESSABLE_ENTITY, Json(ErrorResponse { error: "the note did not compile".into(), errors }))
+                .into_response()
+        }
     })
 }
 
-/// Процентное кодирование всего, кроме букв, цифр и `-._~`.
+/// Percent-encodes everything except ASCII letters, digits and `-._~`.
 fn percent(s: &str) -> String {
     s.bytes()
         .map(|b| {
@@ -210,7 +212,7 @@ fn percent(s: &str) -> String {
         .collect()
 }
 
-/// Подсказка прогреву; хранилище становится активным (прогревается оно).
+/// A warming hint; the vault becomes the active one (the one being warmed).
 async fn warm(
     State(s): State<AppState>,
     Path(vault): Path<String>,

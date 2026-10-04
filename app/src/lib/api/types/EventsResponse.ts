@@ -2,19 +2,19 @@
 import type { ChangeEvent } from "./ChangeEvent";
 
 /**
- * Ответ `GET /api/vaults/{хранилище}/events?after=<seq>` (долгий опрос, см. `events`).
+ * The answer to `GET /api/vaults/{vault}/events?after=<seq>` (long polling, see `events`).
  */
 export type EventsResponse = { 
 /**
- * Сервер следит за файлами: ждать изменений есть смысл. Нет - изменения
- * только по кнопке.
+ * The server watches the files: waiting for changes makes sense. If not,
+ * changes come only on the button.
  */
 watching: boolean, 
 /**
- * Номер последнего изменения - `after` следующего запроса.
+ * The number of the last change: `after` of the next request.
  */
 seq: number, 
 /**
- * Изменения после `after`; пусто - их не было (или запрос без `after`).
+ * Changes after `after`; empty if there were none (or no `after` in the request).
  */
 changes: Array<ChangeEvent>, };

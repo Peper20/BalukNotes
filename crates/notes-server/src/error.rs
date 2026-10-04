@@ -1,4 +1,4 @@
-//! Ошибки API и запуск блокирующей работы ядра.
+//! API errors and running blocking core work.
 
 use axum::Json;
 use axum::http::StatusCode;
@@ -6,7 +6,7 @@ use axum::response::{IntoResponse, Response};
 
 use crate::api::ErrorResponse;
 
-/// Ошибка API: код и сообщение в JSON.
+/// An API error: a status code and a message in JSON.
 #[derive(Debug)]
 pub(crate) struct ApiError(pub StatusCode, pub String);
 
@@ -36,12 +36,12 @@ impl From<notes_core::Error> for ApiError {
 
 pub(crate) type ApiResult<T> = Result<T, ApiError>;
 
-/// Блокирующая работа ядра — в отдельном потоке.
+/// Blocking core work, on a blocking thread.
 pub(crate) async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> notes_core::Result<T> + Send + 'static,
 ) -> ApiResult<T> {
     tokio::task::spawn_blocking(f)
         .await
-        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("сбой задачи: {e}")))?
+        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("task failed: {e}")))?
         .map_err(Into::into)
 }

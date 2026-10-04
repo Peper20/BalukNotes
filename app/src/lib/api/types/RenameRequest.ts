@@ -2,15 +2,15 @@
 import type { RenameKind } from "./RenameKind";
 
 /**
- * `POST /api/vaults/{хранилище}/rename`: переименовать заметку (книгу) или
- * папку; без `apply` — только план (новый путь, какие ссылки перепишутся).
+ * `POST /api/vaults/{vault}/rename`: rename a note (a book) or a folder;
+ * without `apply`, only the plan (the new path, which links get rewritten).
  */
 export type RenameRequest = { kind: RenameKind, 
 /**
- * Путь заметки или папки.
+ * The note or folder path.
  */
 id: string, 
 /**
- * Новое название.
+ * The new title.
  */
 title: string, apply: boolean, };

@@ -1,21 +1,22 @@
-//! Хранилища: список и создание (`GET`/`POST /api/vaults`), переименование
-//! и удаление в корзину (`PATCH`/`DELETE /api/vaults/{хранилище}`) и
-//! хранилища, открытые сервером.
+//! Vaults: listing and creating (`GET`/`POST /api/vaults`), renaming and
+//! moving to the trash (`PATCH`/`DELETE /api/vaults/{vault}`), and the vaults
+//! the server has open.
 //!
-//! API заметок — под `/api/vaults/{хранилище}/…` (модули `notes`, `graph`,
-//! `search`, `events`). Хранилище открывается при первом обращении: у
-//! каждого своё ядро (`Notes`: кэш, индекс ссылок, наблюдатель, прогрев) и
-//! свой журнал изменений (`events`). Прогревается только **активное** — открытое последним
-//! или то, которому клиент последним подсказал прогрев (`POST …/warm`, при
-//! запуске клиента): остальные собирают заметки по запросу. Неактивные
-//! хранилища без запросов и ждущих событий сервер закрывает через
-//! [`IDLE_CLOSE`]: следующий запрос откроет заново.
+//! The note API lives under `/api/vaults/{vault}/...` (modules `notes`,
+//! `graph`, `search`, `events`). A vault opens on first use: each has its own
+//! core (`Notes`: cache, link index, watcher, warming) and its own change log
+//! (`events`). Only the **active** vault is warmed - the last opened one, or
+//! the one the client last sent a warming hint for (`POST .../warm`, at client
+//! start); the others build notes on request. The server closes inactive
+//! vaults with no requests and no waiting events after [`IDLE_CLOSE`]; the
+//! next request opens them again.
 //!
-//! Источник хранилищ — каталог данных (`notes_core::vaults`, по запросу;
-//! хранилищ может не быть вовсе — первое создают в клиенте) или одно
-//! хранилище, открытое заранее (`notes serve --vault …`, тесты): тогда
-//! новые не создаются, а это не переименовывается и не удаляется. Темы и шрифты у всех общие (библиотека одна) — их
-//! отдаёт ядро без хранилища ([`VaultSet::library`]).
+//! The vaults come from the data directory (`notes_core::vaults`, on request;
+//! there may be none at all - the first is created in the client) or from one
+//! vault opened ahead (`notes serve --vault ...`, tests): then no new ones are
+//! created, and that one is neither renamed nor deleted. Themes and fonts are
+//! shared by all (one library): the core without a vault serves them
+//! ([`VaultSet::library`]).
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -42,19 +43,19 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/vaults/{vault}", patch(rename).delete(remove))
 }
 
-/// Через сколько неактивное хранилище закрывается сервером.
+/// After how long the server closes an inactive vault.
 pub const IDLE_CLOSE: Duration = Duration::from_secs(600);
 
-/// Как часто сервер проверяет, не пора ли закрыть неактивные.
+/// How often the server checks whether to close inactive vaults.
 const IDLE_POLL_MAX: Duration = Duration::from_secs(30);
 const IDLE_POLL_MIN: Duration = Duration::from_millis(100);
 
-/// Хранилища каталога данных; сервер на одном хранилище — 403.
+/// Only for vaults of the data directory; a server on one vault answers 403.
 fn registry_only(s: &AppState) -> ApiResult<()> {
     if s.vaults.can_create() {
         Ok(())
     } else {
-        Err(ApiError(StatusCode::FORBIDDEN, "сервер открыт на одном хранилище (--vault <путь>)".into()))
+        Err(ApiError(StatusCode::FORBIDDEN, "the server runs on a single vault (--vault <path>)".into()))
     }
 }
 
@@ -105,26 +106,26 @@ async fn remove(State(s): State<AppState>, Path(vault): Path<String>) -> ApiResu
     ))
 }
 
-/// Открытое хранилище.
+/// An open vault.
 #[derive(Debug)]
 pub struct OpenVault {
     pub name: VaultName,
     pub notes: Arc<Notes>,
-    /// Последние изменения хранилища для `GET …/events`.
+    /// Recent vault changes for `GET .../events`.
     pub(crate) events: Arc<VaultEvents>,
-    /// Настройки, заданные только для этого хранилища (поверх общих).
+    /// Settings set only for this vault (on top of the shared ones).
     pub settings: VaultSettings,
-    /// Последний запрос к API этого хранилища.
+    /// The last API request to this vault.
     last_request: Mutex<Instant>,
-    /// Сколько запросов `GET …/events` ждут изменений.
+    /// How many `GET .../events` requests wait for changes.
     waiting: AtomicUsize,
 }
 
-/// Сколько последних изменений помнит хранилище для `GET …/events?after=`.
+/// How many recent changes a vault keeps for `GET .../events?after=`.
 const CHANGE_LOG: usize = 64;
 
-/// Изменения хранилища: журнал последних и номер последнего (его смена
-/// будит ждущие `GET …/events`).
+/// Vault changes: a log of recent ones and the number of the last one (a new
+/// number wakes the waiting `GET .../events`).
 #[derive(Debug)]
 pub(crate) struct VaultEvents {
     log: Mutex<ChangeLog>,
@@ -133,9 +134,9 @@ pub(crate) struct VaultEvents {
 
 #[derive(Debug, Default)]
 struct ChangeLog {
-    /// Номер последнего изменения (0 - не было).
+    /// The number of the last change (0 - none yet).
     latest: u64,
-    /// Номер последнего вытесненного: `after` меньше - изменения потеряны.
+    /// The number of the last evicted change: a smaller `after` has lost changes.
     dropped: u64,
     items: VecDeque<ChangeEvent>,
 }
@@ -160,13 +161,13 @@ impl VaultEvents {
         self.seq.send_replace(seq);
     }
 
-    /// Номер последнего изменения.
+    /// The number of the last change.
     pub(crate) fn latest(&self) -> u64 {
         lock(&self.log).latest
     }
 
-    /// Изменения после `after`. Потеряны (старше журнала) или номер впереди
-    /// (хранилище открыто заново, сервер перезапущен) - одно "проверь всё".
+    /// Changes after `after`. Lost ones (older than the log) or a number ahead
+    /// (the vault was reopened, the server restarted) give one "check everything".
     pub(crate) fn since(&self, after: u64) -> Vec<ChangeEvent> {
         let log = lock(&self.log);
         if after == log.latest {
@@ -179,7 +180,7 @@ impl VaultEvents {
     }
 }
 
-/// Запрос `GET …/events` ждёт изменений: хранилище не закрывается.
+/// A `GET .../events` request waits for changes: the vault stays open.
 #[derive(Debug)]
 pub(crate) struct EventsWait {
     vault: Arc<OpenVault>,
@@ -195,9 +196,9 @@ impl Drop for EventsWait {
 impl OpenVault {
     fn new(name: VaultName, notes: Arc<Notes>, schema: &Schema) -> Self {
         let path = notes.dir().map(|d| d.join(notes_core::vaults::SETTINGS_FILE));
-        // Испорченный файл не перезаписываем: настройки хранилища — только в памяти.
+        // A broken file is not overwritten: the vault settings stay in memory only.
         let settings = VaultSettings::open(path, schema).unwrap_or_else(|e| {
-            tracing::warn!("настройки хранилища «{name}»: {e} — пока без них");
+            tracing::warn!("settings of vault \"{name}\": {e}; going without them for now");
             VaultSettings::in_memory()
         });
         let events = Arc::new(VaultEvents::new());
@@ -206,7 +207,7 @@ impl OpenVault {
         Self { name, notes, events, settings, last_request: Mutex::new(Instant::now()), waiting: AtomicUsize::new(0) }
     }
 
-    /// Обработка рисунков по настройкам этого хранилища.
+    /// Figure processing by the settings of this vault.
     pub fn figure_options(&self, shared: &SettingsStore) -> FigureOptions {
         notes_core::settings::figure_options(&self.settings.merged(shared.values()))
     }
@@ -223,8 +224,8 @@ impl OpenVault {
         self.waiting.load(Ordering::SeqCst) > 0
     }
 
-    /// Ждать изменений: приёмник номера (подписан до проверки журнала - смена
-    /// не потеряется) и отметка "ждёт", пока жива.
+    /// Waits for changes: a receiver of the number (subscribed before the log is
+    /// checked, so no change is lost) and a "waiting" mark while it lives.
     pub(crate) fn wait_events(self: &Arc<Self>) -> (watch::Receiver<u64>, EventsWait) {
         self.waiting.fetch_add(1, Ordering::SeqCst);
         self.touch();
@@ -234,46 +235,46 @@ impl OpenVault {
 
 #[derive(Debug)]
 enum Source {
-    /// Одно хранилище, открытое заранее.
+    /// One vault opened ahead.
     Single(VaultName),
-    /// Хранилища каталога данных.
+    /// The vaults of the data directory.
     Registry { vaults: Vaults, config: NotesConfig },
 }
 
-/// Хранилища сервера: откуда берутся и какие открыты.
+/// The server's vaults: where they come from and which are open.
 #[derive(Debug)]
 pub struct VaultSet {
     source: Source,
-    /// Ядро для общего у всех хранилищ: темы, шрифты библиотеки.
+    /// The core for what all vaults share: themes, library fonts.
     library: Arc<Notes>,
-    /// Общие шрифты и темы для открываемых хранилищ.
+    /// Shared fonts and themes for the vaults being opened.
     shared: SharedAssets,
-    /// Через сколько без запросов и ждущих событий закрывать неактивное.
+    /// After how long without requests and waiting events an inactive vault closes.
     idle_close: Duration,
     settings: Arc<SettingsStore>,
     open: Mutex<BTreeMap<VaultName, Arc<OpenVault>>>,
-    /// Хранилище, которое прогревается.
+    /// The vault being warmed.
     active: Mutex<Option<VaultName>>,
-    /// Сервер запущен ([`VaultSet::start_background`]): у открытых хранилищ
-    /// работают прогрев и наблюдатель.
+    /// The server is running ([`VaultSet::start_background`]): open vaults have
+    /// warming and the watcher on.
     background: AtomicBool,
 }
 
-/// Замок без «отравления»: паника в другом потоке данные не портит.
+/// A lock without poisoning: a panic in another thread does not spoil the data.
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 impl VaultSet {
-    /// Одно хранилище, открытое заранее; настройки устройства сразу применяются.
+    /// One vault opened ahead; device settings are applied right away.
     pub fn single(name: VaultName, notes: Arc<Notes>, settings: Arc<SettingsStore>) -> Self {
         let set = Self::with(Source::Single(name.clone()), notes.clone(), settings);
         set.insert(OpenVault::new(name, notes, set.settings.schema()));
         set
     }
 
-    /// Хранилища каталога данных (`config.vault` у каждого — своя папка);
-    /// `library` — ядро без хранилища для тем и шрифтов.
+    /// The vaults of the data directory (`config.vault` is each one's own
+    /// folder); `library` is the core without a vault, for themes and fonts.
     pub fn registry(vaults: Vaults, config: NotesConfig, library: Arc<Notes>, settings: Arc<SettingsStore>) -> Self {
         Self::with(Source::Registry { vaults, config }, library, settings)
     }
@@ -291,7 +292,7 @@ impl VaultSet {
         }
     }
 
-    /// Ядро для общего у всех хранилищ: темы, шрифты библиотеки.
+    /// The core for what all vaults share: themes, library fonts.
     pub fn library(&self) -> &Arc<Notes> {
         &self.library
     }
@@ -310,7 +311,7 @@ impl VaultSet {
         matches!(self.source, Source::Registry { .. })
     }
 
-    /// Список хранилищ.
+    /// The vault list.
     pub fn describe(&self) -> notes_core::Result<VaultsResponse> {
         let vaults = match &self.source {
             Source::Single(name) => vec![name.clone()],
@@ -319,36 +320,36 @@ impl VaultSet {
         Ok(VaultsResponse { vaults, can_create: self.can_create() })
     }
 
-    /// Создать новое пустое хранилище.
+    /// Creates a new empty vault.
     pub fn create(&self, name: &VaultName) -> notes_core::Result<()> {
         match &self.source {
             Source::Single(_) => Err(notes_core::Error::VaultExists(name.to_string())),
             Source::Registry { vaults, .. } => {
                 vaults.create(name)?;
-                tracing::info!("создано хранилище «{name}»");
+                tracing::info!("vault \"{name}\" created");
                 Ok(())
             }
         }
     }
 
-    /// Переименовать хранилище: открытое — закрыть (следующий запрос
-    /// откроет его под новым именем).
+    /// Renames a vault; an open one is closed (the next request opens it under
+    /// the new name).
     pub fn rename(&self, from: &str, to: &VaultName) -> notes_core::Result<()> {
         let Source::Registry { vaults, .. } = &self.source else {
             return Err(notes_core::Error::VaultExists(to.to_string()));
         };
-        // Под замком открытых: запрос не откроет хранилище, пока оно переезжает.
+        // Under the lock of open vaults: no request opens the vault while it moves.
         let mut open = lock(&self.open);
         let from = vaults.find(from)?;
         Self::close(&mut open, &from);
         vaults.rename(&from, to)?;
         drop(open);
         self.forget_active(&from);
-        tracing::info!("хранилище «{from}» переименовано в «{to}»");
+        tracing::info!("vault \"{from}\" renamed to \"{to}\"");
         Ok(())
     }
 
-    /// Хранилище целиком — в корзину системы; открытое — закрыть.
+    /// Moves the whole vault to the system trash; an open one is closed.
     pub fn trash(&self, name: &str) -> notes_core::Result<()> {
         let Source::Registry { vaults, config } = &self.source else {
             return Err(notes_core::Error::VaultNotFound { name: name.to_owned(), known: self.describe()?.vaults });
@@ -359,12 +360,12 @@ impl VaultSet {
         vaults.trash(&name, config.trash.as_deref())?;
         drop(open);
         self.forget_active(&name);
-        tracing::info!("хранилище «{name}» удалено в корзину");
+        tracing::info!("vault \"{name}\" moved to the trash");
         Ok(())
     }
 
-    /// Закрыть открытое хранилище: прогрев и наблюдатель — стоп, поток
-    /// событий кончается (клиенты переподключатся к новому имени).
+    /// Closes an open vault: warming and the watcher stop, the event stream
+    /// ends (clients reconnect to the new name).
     fn close(open: &mut BTreeMap<VaultName, Arc<OpenVault>>, name: &VaultName) {
         if let Some(vault) = open.remove(name) {
             vault.notes.close();
@@ -378,13 +379,13 @@ impl VaultSet {
         }
     }
 
-    /// Открытое хранилище, если уже открыто (без блокирующей работы).
+    /// The vault if it is already open (no blocking work).
     pub fn opened(&self, name: &str) -> Option<Arc<OpenVault>> {
         lock(&self.open).iter().find(|(n, _)| n.as_str() == name).map(|(_, v)| v.clone())
     }
 
-    /// Хранилище по имени; ещё не открыто — открыть (блокирующая работа:
-    /// шрифты, темы) и сделать активным.
+    /// The vault by name; if it is not open yet, opens it (blocking work:
+    /// fonts, themes) and makes it active.
     pub fn get(&self, name: &str) -> notes_core::Result<Arc<OpenVault>> {
         if let Some(open) = self.opened(name) {
             return Ok(open);
@@ -392,18 +393,18 @@ impl VaultSet {
         let Source::Registry { vaults, config, .. } = &self.source else {
             return Err(notes_core::Error::VaultNotFound { name: name.to_owned(), known: self.describe()?.vaults });
         };
-        // Под замком целиком: два запроса не откроют одно хранилище дважды.
+        // Under the lock the whole time: two requests do not open one vault twice.
         let mut open = lock(&self.open);
         let name = vaults.find(name)?;
         if let Some(v) = open.get(&name) {
             return Ok(v.clone());
         }
-        let started = std::time::Instant::now();
+        let started = Instant::now();
         let notes = Arc::new(Notes::open_with_shared(
             &NotesConfig { vault: vaults.path(&name), ..config.clone() },
             &self.shared,
         )?);
-        tracing::info!(ms = started.elapsed().as_millis(), "открыто хранилище «{name}»");
+        tracing::info!(ms = started.elapsed().as_millis(), "vault \"{name}\" opened");
         let vault = Arc::new(OpenVault::new(name.clone(), notes, self.settings.schema()));
         open.insert(name.clone(), vault.clone());
         drop(open);
@@ -420,8 +421,8 @@ impl VaultSet {
         self.activate(&name);
     }
 
-    /// Сделать хранилище активным: прогревается оно, у остальных прогрев
-    /// выключен. Настройки устройства — ко всем открытым.
+    /// Makes the vault active: it is the one warmed, warming is off for the
+    /// others. Device settings go to all open vaults.
     pub fn activate(&self, name: &VaultName) {
         let changed = lock(&self.active).replace(name.clone()).as_ref() != Some(name);
         if changed {
@@ -429,8 +430,8 @@ impl VaultSet {
         }
     }
 
-    /// Применить настройки устройства ко всем открытым хранилищам (после
-    /// изменения настроек).
+    /// Applies the device settings to all open vaults (after a settings
+    /// change).
     pub fn apply_device(&self) {
         let device = self.settings.device();
         let active = lock(&self.active).clone();
@@ -444,8 +445,8 @@ impl VaultSet {
         self.idle_close.min(IDLE_POLL_MAX).max(IDLE_POLL_MIN)
     }
 
-    /// Закрыть неактивные хранилища без запросов и ждущих событий дольше
-    /// `idle_close`. Сервер на одном хранилище (`--vault`) не закрывает.
+    /// Closes inactive vaults with no requests and no waiting events for longer
+    /// than `idle_close`. A server on one vault (`--vault`) closes nothing.
     fn close_idle_once(&self) {
         if !self.can_create() || self.idle_close.is_zero() {
             return;
@@ -464,7 +465,7 @@ impl VaultSet {
             .collect();
         for name in to_close {
             Self::close(&mut open, &name);
-            tracing::info!("хранилище «{name}» закрыто: не используется");
+            tracing::info!("vault \"{name}\" closed: not in use");
         }
     }
 
@@ -479,8 +480,8 @@ impl VaultSet {
         }
     }
 
-    /// Сервер запущен: у открытых (и открываемых потом) хранилищ —
-    /// прогрев и наблюдатель файлов; шрифты для браузера — заранее.
+    /// The server is running: open vaults (and those opened later) get warming
+    /// and the file watcher.
     pub fn start_background(&self) {
         if self.background.swap(true, Ordering::SeqCst) {
             return;
@@ -491,13 +492,13 @@ impl VaultSet {
     }
 
     fn background(vault: &OpenVault) {
-        // Заметки — заранее: все, по приоритету, пропуская собранные, в
-        // кэш на диске (рисунки обрабатываются при открытии — по настройкам).
+        // Notes ahead: all of them, by priority, skipping built ones, into the
+        // disk cache (figures are processed on opening, by the settings).
         let notes = vault.notes.clone();
         std::thread::spawn(move || notes.warm_forever());
-        // Наблюдатель файлов: индекс ссылок без обходов, прогрев и события клиенту.
+        // The file watcher: the link index without rescans, warming, client events.
         if vault.notes.watch() {
-            tracing::info!("слежу за файлами хранилища «{}»", vault.name);
+            tracing::info!("watching the files of vault \"{}\"", vault.name);
         }
     }
 }
@@ -567,7 +568,7 @@ mod tests {
         set.close_idle_once();
 
         assert!(set.opened("A").is_none());
-        assert!(weak.upgrade().is_none(), "ядро закрытого хранилища должно освободиться");
+        assert!(weak.upgrade().is_none(), "the core of a closed vault must be freed");
     }
 
     #[test]
@@ -581,12 +582,12 @@ mod tests {
         assert_eq!(seqs(events.since(0)), [2, 5]);
         assert_eq!(seqs(events.since(2)), [5]);
         assert!(events.since(5).is_empty());
-        // Номер впереди: хранилище открыто заново - "проверь всё".
+        // A number ahead: the vault was reopened, "check everything".
         assert_eq!(events.since(9)[0].paths, Vec::<String>::new());
         for seq in 6..6 + CHANGE_LOG as u64 {
             events.push(change(seq));
         }
-        // Вытеснены 2 и 5: с 2 потеряно, с 5 - всё на месте.
+        // 2 and 5 are evicted: changes since 2 are lost, since 5 all are there.
         assert!(events.since(2)[0].paths.is_empty());
         assert_eq!(events.since(5).len(), CHANGE_LOG);
         assert_eq!(events.latest(), 5 + CHANGE_LOG as u64);
@@ -601,7 +602,7 @@ mod tests {
         age(&inactive);
 
         set.close_idle_once();
-        assert!(set.opened("A").is_some(), "пока запрос событий ждёт, закрывать нельзя");
+        assert!(set.opened("A").is_some(), "a vault must not close while an events request waits");
 
         drop(wait);
         let inactive = set.opened("A").unwrap();
@@ -620,7 +621,7 @@ mod tests {
 
         set.close_idle_once();
 
-        assert!(set.opened("A").is_some(), "активное хранилище не закрывается");
+        assert!(set.opened("A").is_some(), "the active vault does not close");
     }
 
     #[test]
@@ -638,7 +639,10 @@ mod tests {
 
         let reopened = set.get("A").unwrap();
         let page = reopened.notes.page(&NoteId::new("A").unwrap(), FigureOptions::default()).unwrap();
-        assert!(page.rendered.as_ref().is_some_and(|r| r.body.contains("text")), "содержимое после переоткрытия то же");
+        assert!(
+            page.rendered.as_ref().is_some_and(|r| r.body.contains("text")),
+            "the content is the same after reopening"
+        );
     }
 
     #[test]
@@ -656,6 +660,6 @@ mod tests {
         *lock(&set.active) = None;
         set.close_idle_once();
 
-        assert!(set.opened("single").is_some(), "в режиме --vault ядро не закрывается");
+        assert!(set.opened("single").is_some(), "in --vault mode the core does not close");
     }
 }

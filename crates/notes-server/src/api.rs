@@ -1,6 +1,6 @@
-//! Ответы API, которые собирает сам сервер (остальные — типы ядра).
+//! API responses built by the server itself (the rest are core types).
 //!
-//! С фичей `ts` все они выгружаются в TypeScript для клиента `app/`:
+//! With the `ts` feature they are all exported to TypeScript for the `app/` client:
 //! `cd app && npm run types`.
 
 use notes_core::diag::Diagnostic;
@@ -11,91 +11,91 @@ use notes_core::{NoteId, NoteKind, VaultName};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-/// `GET /api/vaults`, ответ `POST /api/vaults`. Хранилища по умолчанию нет:
-/// какое открыть, решает клиент (открытое последним) или пользователь.
+/// `GET /api/vaults`, the answer to `POST /api/vaults`. There is no default
+/// vault: the client (the last opened one) or the user decides which to open.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct VaultsResponse {
-    /// Все хранилища по алфавиту (может не быть ни одного).
+    /// All vaults in alphabetical order (there may be none).
     pub vaults: Vec<VaultName>,
-    /// Можно ли создать новое (нельзя, если сервер открыт на одном
-    /// хранилище: `notes serve --vault <путь>`).
+    /// Whether a new one can be created (not when the server runs on one
+    /// vault: `notes serve --vault <path>`).
     pub can_create: bool,
 }
 
-/// `POST /api/vaults`: новое пустое хранилище.
+/// `POST /api/vaults`: a new empty vault.
 #[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct CreateVaultRequest {
     pub name: String,
 }
 
-/// `PATCH /api/vaults/{хранилище}`: новое имя хранилища.
+/// `PATCH /api/vaults/{vault}`: the new vault name.
 #[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct RenameVaultRequest {
     pub name: String,
 }
 
-/// Элемент `GET /api/vaults/{хранилище}/notes`.
+/// An item of `GET /api/vaults/{vault}/notes`.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct NoteListItem {
     pub id: NoteId,
     pub kind: NoteKind,
-    /// Последний сегмент пути — имя файла: `SSH` для `Сеть/SSH`.
+    /// The last path segment, the file name: `SSH` for `Network/SSH`.
     pub name: String,
-    /// Папка: `Сеть`; для корня — пустая строка.
+    /// The folder: `Network`; an empty string for the root.
     pub folder: String,
-    /// Название для показа: из шаблона (`title: […]`), иначе — имя файла.
+    /// The display title: from the template (`title: [...]`), otherwise the file name.
     pub title: String,
-    /// Теги заметки; у книги — корня (`main.typ`), их наследуют все главы.
+    /// The note tags; for a book, those of its root (`main.typ`), inherited by every chapter.
     pub tags: Vec<String>,
-    /// Главы книги со своими тегами.
+    /// The book chapters with their own tags.
     pub chapters: Vec<TaggedChapter>,
 }
 
-/// Элемент `GET /api/vaults/{хранилище}/folders`: папка с заметками или
-/// пустая (`Vault::folders`).
+/// An item of `GET /api/vaults/{vault}/folders`: a folder with notes or an
+/// empty one (`Vault::folders`).
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct FolderListItem {
-    /// Путь от корня: `Сеть/Linux`.
+    /// The path from the root: `Network/Linux`.
     pub path: String,
-    /// Название для показа: из `_folder.toml`, иначе — имя папки.
+    /// The display title: from `_folder.toml`, otherwise the folder name.
     pub title: String,
 }
 
-/// `POST /api/vaults/{хранилище}/rename`: переименовать заметку (книгу) или
-/// папку; без `apply` — только план (новый путь, какие ссылки перепишутся).
+/// `POST /api/vaults/{vault}/rename`: rename a note (a book) or a folder;
+/// without `apply`, only the plan (the new path, which links get rewritten).
 #[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct RenameRequest {
     pub kind: notes_core::rename::RenameKind,
-    /// Путь заметки или папки.
+    /// The note or folder path.
     pub id: String,
-    /// Новое название.
+    /// The new title.
     pub title: String,
     #[serde(default)]
     pub apply: bool,
 }
 
-/// `POST /api/vaults/{хранилище}/warm`: что собрать заранее первым (заметки во вкладках,
-/// недавние). Неизвестные и неверные пути пропускаются.
+/// `POST /api/vaults/{vault}/warm`: what to build ahead first (notes in tabs,
+/// recent ones). Unknown and invalid paths are skipped.
 #[derive(Debug, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct WarmRequest {
     pub ids: Vec<String>,
 }
 
-/// `GET /api/vaults/{хранилище}/version/{id}`.
+/// `GET /api/vaults/{vault}/version/{id}`.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct VersionResponse {
     pub version: String,
 }
 
-/// Ссылка из заметки и есть ли её цель.
+/// A link from a note and whether its target exists.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct OutgoingLink {
@@ -104,7 +104,7 @@ pub struct OutgoingLink {
     pub exists: bool,
 }
 
-/// `GET /api/vaults/{хранилище}/links/{id}`.
+/// `GET /api/vaults/{vault}/links/{id}`.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct LinksResponse {
@@ -117,14 +117,14 @@ pub struct LinksResponse {
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SettingsResponse {
     pub schema: Schema,
-    /// Ключ → число, строка или флаг (тип — по схеме).
+    /// Key -> a number, a string or a flag (the type is in the schema).
     #[cfg_attr(feature = "ts", ts(type = "Record<string, number | string | boolean>"))]
     pub values: Map<String, Value>,
 }
 
-/// `GET`/`PUT /api/vaults/{хранилище}/settings`: настройки для хранилища —
-/// итог (`values`) и откуда он: общие для всех (`shared`) и заданные только
-/// в этом хранилище (`own`).
+/// `GET`/`PUT /api/vaults/{vault}/settings`: settings for the vault - the
+/// result (`values`) and where it comes from: shared by all (`shared`) and set
+/// only in this vault (`own`).
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct VaultSettingsResponse {
@@ -137,7 +137,7 @@ pub struct VaultSettingsResponse {
     pub own: Map<String, Value>,
 }
 
-/// Тело ошибки. `errors` — ошибки компиляции (у PDF), иначе пусто.
+/// An error body. `errors` are compile errors (for a PDF), otherwise empty.
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ErrorResponse {
@@ -145,28 +145,28 @@ pub struct ErrorResponse {
     pub errors: Vec<Diagnostic>,
 }
 
-/// Изменение файлов хранилища (пачкой, см. `notes_core::watch`): клиенту пора
-/// сверить версию заметки.
+/// A change of vault files (batched, see `notes_core::watch`): time for the
+/// client to check the note version.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ChangeEvent {
-    /// Растёт с каждым изменением.
+    /// Grows with every change.
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub seq: u64,
-    /// Изменившиеся файлы хранилища; пусто — неизвестно какие (проверить всё).
+    /// The changed vault files; empty means unknown (check everything).
     pub paths: Vec<String>,
 }
 
-/// Ответ `GET /api/vaults/{хранилище}/events?after=<seq>` (долгий опрос, см. `events`).
+/// The answer to `GET /api/vaults/{vault}/events?after=<seq>` (long polling, see `events`).
 #[derive(Debug, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct EventsResponse {
-    /// Сервер следит за файлами: ждать изменений есть смысл. Нет - изменения
-    /// только по кнопке.
+    /// The server watches the files: waiting for changes makes sense. If not,
+    /// changes come only on the button.
     pub watching: bool,
-    /// Номер последнего изменения - `after` следующего запроса.
+    /// The number of the last change: `after` of the next request.
     #[cfg_attr(feature = "ts", ts(type = "number"))]
     pub seq: u64,
-    /// Изменения после `after`; пусто - их не было (или запрос без `after`).
+    /// Changes after `after`; empty if there were none (or no `after` in the request).
     pub changes: Vec<ChangeEvent>,
 }

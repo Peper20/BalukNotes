@@ -1,16 +1,17 @@
-//! Необязательный токен доступа (`notes serve --token`, `NOTES_TOKEN`).
+//! An optional access token (`notes serve --token`, `NOTES_TOKEN`).
 //!
-//! Закрывает API `notes serve` от других программ и страниц до входа с
-//! сессией (architecture §9). Окну Tauri не нужен: оно ходит к ядру своей
-//! схемой адресов, без порта (docs/research/E7.md). Токен принимается:
+//! Closes the `notes serve` API to other programs and pages until there is a
+//! login with sessions (architecture §9). The Tauri window does not need it:
+//! it reaches the core through its own URL scheme, with no port
+//! (docs/research/E7.md). The token is accepted as:
 //!
-//! - заголовком `Authorization: Bearer <токен>` — для запросов API из кода;
-//! - параметром адреса `?token=<токен>` — так открывается первая страница;
-//!   в ответ сервер ставит cookie;
-//! - cookie `notes_token` (`HttpOnly`, `SameSite=Strict`) — её браузер сам
-//!   шлёт со всеми запросами страницы: API, файлы клиента, шрифты, PDF.
+//! - the `Authorization: Bearer <token>` header, for API requests from code;
+//! - the `?token=<token>` URL parameter, which opens the first page; the
+//!   server answers with a cookie;
+//! - the `notes_token` cookie (`HttpOnly`, `SameSite=Strict`), which the
+//!   browser sends with every request of the page: API, client files, fonts, PDF.
 //!
-//! Без токена (по умолчанию) проверки нет — как раньше.
+//! Without a token (the default) nothing is checked.
 
 use axum::extract::{Query, Request, State};
 use axum::http::{HeaderValue, StatusCode, header};
@@ -19,7 +20,7 @@ use axum::response::{IntoResponse, Response};
 
 use crate::error::ApiError;
 
-/// Имя cookie с токеном.
+/// The name of the token cookie.
 pub(crate) const COOKIE: &str = "notes_token";
 
 #[derive(Debug, serde::Deserialize)]
@@ -27,17 +28,17 @@ struct TokenQuery {
     token: Option<String>,
 }
 
-/// Промежуточный слой: пропускает запрос с верным токеном, иначе — 401.
+/// Middleware: passes a request with the right token, otherwise answers 401.
 pub(crate) async fn require_token(State(token): State<std::sync::Arc<str>>, req: Request, next: Next) -> Response {
     let from_query = Query::<TokenQuery>::try_from_uri(req.uri()).ok().and_then(|q| q.0.token);
     let presented = from_query.as_deref().is_some_and(|t| same(t, &token));
     let valid = |t: Option<&str>| t.is_some_and(|t| same(t, &token));
     if !(presented || valid(bearer(&req)) || valid(cookie(&req))) {
-        return ApiError(StatusCode::UNAUTHORIZED, "нужен токен доступа".into()).into_response();
+        return ApiError(StatusCode::UNAUTHORIZED, "access token required".into()).into_response();
     }
     let mut res = next.run(req).await;
     if presented {
-        // Токен из адреса — запомнить в cookie: дальше браузер шлёт его сам.
+        // A token from the URL goes to a cookie: from now on the browser sends it itself.
         let value = format!("{COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict");
         if let Ok(value) = HeaderValue::from_str(&value) {
             res.headers_mut().append(header::SET_COOKIE, value);
@@ -59,7 +60,7 @@ fn cookie(req: &Request) -> Option<&str> {
         .find_map(|pair| pair.trim().strip_prefix(COOKIE)?.strip_prefix('='))
 }
 
-/// Сравнение без раннего выхода: время не выдаёт, сколько знаков совпало.
+/// Compares without an early exit: the time does not reveal how many characters matched.
 fn same(a: &str, b: &str) -> bool {
     a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0, |acc, (x, y)| acc | (x ^ y)) == 0
 }

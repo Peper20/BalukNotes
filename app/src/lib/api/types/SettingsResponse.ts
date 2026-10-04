@@ -6,6 +6,6 @@ import type { Schema } from "./Schema";
  */
 export type SettingsResponse = { schema: Schema, 
 /**
- * Ключ → число, строка или флаг (тип — по схеме).
+ * Key -> a number, a string or a flag (the type is in the schema).
  */
 values: Record<string, number | string | boolean>, };

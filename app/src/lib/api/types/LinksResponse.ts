@@ -3,6 +3,6 @@ import type { Backlink } from "./Backlink";
 import type { OutgoingLink } from "./OutgoingLink";
 
 /**
- * `GET /api/vaults/{хранилище}/links/{id}`.
+ * `GET /api/vaults/{vault}/links/{id}`.
  */
 export type LinksResponse = { outgoing: Array<OutgoingLink>, backlinks: Array<Backlink>, };
