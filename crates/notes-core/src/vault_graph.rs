@@ -1,16 +1,17 @@
-//! Граф хранилища для показа: фильтр и раскладка — **в одном месте** для
-//! всех, кто его рисует:
+//! The vault graph for display: the filter and the layout are **in one
+//! place** for everyone who draws it:
 //!
-//! - страница графа и главная клиента (`POST /api/graph/layout`);
-//! - заметка — `#vault-graph(…)` из `baluk/graph.typ`: библиотека читает
-//!   виртуальный файл `/_vault/graph/<фильтр>.json` (его отдаёт поставщик
-//!   [`GraphData`] из реестра [`crate::vault_data`]), CeTZ рисует граф в
-//!   PDF и HTML, а клиент оживляет его по тем же координатам.
+//! - the graph page and the home page of the client (`POST /api/graph/layout`);
+//! - a note, `#vault-graph(...)` from `baluk/graph.typ`: the library reads
+//!   the virtual file `/_vault/graph/<filter>.json` (served by the provider
+//!   [`GraphData`] from the registry [`crate::vault_data`]), CeTZ draws the
+//!   graph in PDF and HTML, and the client animates it by the same
+//!   coordinates.
 //!
-//! Раскладка — детерминированная силовая модель: отталкивание в радиусе через
-//! решётку соседей, рёбра — пружины, слабое притяжение к центру; затем узлы с
-//! подписями раздвигаются, пока подписи не перестанут наезжать. Одинаковый
-//! граф — одинаковая картинка.
+//! The layout is a deterministic force model: repulsion within a radius via
+//! a grid of neighbours, edges are springs, a weak pull to the center; then
+//! labelled nodes are pushed apart until the labels stop overlapping. The
+//! same graph gives the same picture.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -21,58 +22,60 @@ use crate::graph::{ChapterOf, Edge, Graph, Node, Snapshot, SourceIndex};
 use crate::vault::{NoteKind, Vault};
 use crate::vault_data::DataProvider;
 
-/// Группа заметок в корне хранилища.
+/// The group of notes in the vault root (interface text, also a value of the
+/// `folders` filter in `baluk/graph.typ`).
 pub const ROOT_GROUP: &str = "в корне";
 
-/// Кегль подписи и её отступ от кружка (в единицах раскладки) — те же, что
-/// при отрисовке.
+/// Label font size (in layout units), the same as when drawing.
 pub const LABEL_SIZE: f64 = 11.0;
+/// Gap between the circle and its label (in layout units).
 pub const LABEL_GAP: f64 = 2.0;
-/// Зазор между прямоугольниками узлов после раздвигания.
+/// Gap between node rectangles after pushing apart.
 const PAD: f64 = 4.0;
-/// Желаемая длина ребра.
+/// The desired edge length.
 const EDGE: f64 = 70.0;
 
-/// Группа узла — папка верхнего уровня.
+/// The group of a node: its top-level folder.
 pub fn group_of(id: &str) -> &str {
     id.split_once('/').map_or(ROOT_GROUP, |(g, _)| g)
 }
 
-/// Заметка вершины: у главы — её книга.
+/// The note of a node: for a chapter, its book.
 fn node_note(n: &Node) -> &str {
     n.chapter.as_ref().map_or(&n.id, |c| &c.book)
 }
 
-/// Группа вершины: у главы — группа её книги.
+/// The group of a node: for a chapter, the group of its book.
 fn node_group(n: &Node) -> &str {
     group_of(node_note(n))
 }
 
-/// Что показать. Пустой `folders` — все папки.
+/// What to show. Empty `folders` - all folders.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
 pub struct GraphFilter {
-    /// Только эти группы (папки верхнего уровня; корень — [`ROOT_GROUP`]).
+    /// Only these groups (top-level folders; the root is [`ROOT_GROUP`]).
     pub folders: Vec<String>,
-    /// Только заметки в этой папке и её подпапках (путь от корня: `Мат/Анализ`).
+    /// Only notes in this folder and its subfolders (path from the root: `Мат/Анализ`).
     pub folder: Option<String>,
-    /// Скрытые группы.
+    /// Hidden groups.
     pub hidden: Vec<String>,
-    /// Только заметки с этим тегом.
+    /// Only notes with this tag.
     pub tag: Option<String>,
-    /// Показывать несуществующие заметки (на них ссылаются, но их нет).
+    /// Show missing notes (linked to but not written).
     pub missing: bool,
-    /// Показывать заметки без связей.
+    /// Show notes without links.
     pub orphans: bool,
-    /// Только соседи этой заметки на `depth` шагов (в обе стороны); она
-    /// сама остаётся, даже если её скрыл бы другой фильтр.
+    /// Only the neighbours of this note within `depth` steps (both ways);
+    /// the note itself stays even if another filter would hide it.
     pub around: Option<String>,
+    /// Steps from `around`.
     pub depth: u32,
-    /// Книги — корнем и главами вокруг него, а не одной вершиной.
+    /// Books as a root with chapters around it, not one node.
     pub chapters: bool,
-    /// Силы раскладки (настройки вида на странице графа); граф в заметке -
-    /// по умолчанию.
+    /// Layout forces (view settings on the graph page); a graph in a note
+    /// uses the defaults.
     pub forces: Forces,
 }
 
@@ -93,21 +96,21 @@ impl Default for GraphFilter {
     }
 }
 
-/// Силы раскладки в процентах от обычных; по умолчанию папки чуть держатся
-/// вместе (`clusters` 5 %, решение пользователя), остальное - обычное.
+/// Layout forces in percent of the normal ones; by default folders hold
+/// together a little (`clusters` 5 %, user's decision), the rest is normal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 #[serde(default)]
 pub struct Forces {
-    /// Насколько выражены папки: узлы папки держатся вместе, чужие папки
-    /// отталкивают сильнее (между папками просвет); 0 - папки держатся
-    /// вместе только начальными местами и связями.
+    /// How pronounced folders are: the nodes of a folder hold together,
+    /// other folders repel more (a gap between folders); 0 - folders hold
+    /// together only by their starting places and links.
     pub clusters: u32,
-    /// Притяжение к центру: меньше - граф просторнее.
+    /// Pull to the center: less - a roomier graph.
     pub center: u32,
-    /// Отталкивание узлов.
+    /// Node repulsion.
     pub repel: u32,
-    /// Притяжение связанных узлов (жёсткость рёбер).
+    /// Pull of linked nodes (edge stiffness).
     pub links: u32,
 }
 
@@ -123,41 +126,47 @@ impl Forces {
     }
 }
 
-/// Узел на месте.
+/// A node in its place.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct PlacedNode {
+    /// Node id ([`Node::id`]).
     pub id: String,
-    /// `None` — заметки нет.
+    /// `None`: the note does not exist.
     pub kind: Option<NoteKind>,
-    /// Глава книги: открывается книга на этой главе.
+    /// A book chapter: the book opens at this chapter.
     pub chapter: Option<ChapterOf>,
-    /// Подпись: название заметки.
+    /// Label: the note title.
     pub name: String,
+    /// Group ([`group_of`]).
     pub group: String,
+    /// Center x.
     pub x: f64,
+    /// Center y.
     pub y: f64,
-    /// Радиус кружка: книга крупнее, связи прибавляют.
+    /// Circle radius: a book is larger, links add to it.
     pub r: f64,
-    /// Связей в показанном графе.
+    /// Links in the shown graph.
     pub degree: usize,
 }
 
-/// Граф, готовый к рисованию.
+/// A graph ready to draw.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct GraphLayout {
+    /// Placed nodes.
     pub nodes: Vec<PlacedNode>,
+    /// Edges between them.
     pub edges: Vec<Edge>,
-    /// Все группы хранилища по порядку — для цветов: фильтр не перекрашивает узлы.
+    /// All groups of the vault in order, for colors: a filter does not recolor nodes.
     pub groups: Vec<String>,
-    /// Границы нарисованного с подписями: `[x0, y0, x1, y1]`.
+    /// Bounds of the drawing with labels: `[x0, y0, x1, y1]`.
     pub bounds: [f64; 4],
-    /// Заметка в центре («соседи заметки»).
+    /// The note in the center ("neighbours of a note").
     pub center: Option<String>,
 }
 
-/// Заметки не дальше `depth` рёбер от `start` (направление не важно).
+/// Notes at most `depth` edges from `start` (direction does not matter).
 pub fn neighbourhood(graph: &Graph, start: &str, depth: u32) -> HashSet<String> {
     let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
     for e in &graph.edges {
@@ -183,8 +192,8 @@ pub fn neighbourhood(graph: &Graph, start: &str, depth: u32) -> HashSet<String> 
     seen
 }
 
-/// Подграф по фильтру. `has_tag(вершина, тег)` — есть ли тег у заметки (у
-/// книги — и у любой её главы; у главы — её или книги).
+/// The subgraph by the filter. `has_tag(node, tag)`: whether the note has
+/// the tag (a book - or any of its chapters; a chapter - it or its book).
 pub fn filter(graph: &Graph, has_tag: impl Fn(&Node, &str) -> bool, f: &GraphFilter) -> Graph {
     let center = f.around.as_deref();
     let near = center.map(|c| neighbourhood(graph, c, f.depth));
@@ -211,37 +220,40 @@ pub fn filter(graph: &Graph, has_tag: impl Fn(&Node, &str) -> bool, f: &GraphFil
     Graph { nodes, edges }
 }
 
-/// Место узла: радиус кружка и ширина подписи под ним.
+/// A node's place: the circle radius and the width of the label under it.
 #[derive(Debug, Clone, Copy)]
 pub struct NodeBox {
+    /// Circle radius.
     pub r: f64,
+    /// Label width.
     pub label: f64,
 }
 
-/// Ширина подписи — по числу знаков (без замера шрифтом: раскладка одна везде).
+/// Label width by the number of characters (no font measuring: the layout is the same everywhere).
 #[expect(clippy::cast_precision_loss, reason = "a label has tens of characters")]
 pub fn label_width(text: &str, size: f64) -> f64 {
     text.chars().count() as f64 * size * 0.58
 }
 
-/// Прямоугольник узла с подписью: `[левый, верхний, правый, нижний]`.
+/// The rectangle of a node with its label: `[left, top, right, bottom]`.
 pub fn box_rect((x, y): (f64, f64), b: NodeBox) -> [f64; 4] {
     let half = b.r.max(b.label / 2.0);
     [x - half, y - b.r, x + half, y + b.r + LABEL_GAP + LABEL_SIZE * 1.2]
 }
 
-/// Раскладка: координаты узлов по порядку `n` узлов, рёбра — пары номеров.
+/// Layout: node coordinates in the order of `n` nodes, edges are pairs of
+/// indices.
 ///
-/// Силы: отталкивание всех пар `EDGE²/d` (Барнс - Хат: далёкая клетка
-/// квадродерева — одно тело в центре масс), пружины рёбер к длине [`EDGE`],
-/// притяжение к центру. Притяжение подобрано так, что на узел приходится
-/// около [`AREA`] площади при любом числе узлов: большой граф не сжимается в
-/// кашу подписей и не расползается. Начало — [`initial_positions`]. Без
-/// случайности и с тем же порядком сумм — одинаковый вход даёт одинаковые
-/// координаты бит в бит.
+/// Forces: repulsion of all pairs `EDGE²/d` (Barnes-Hut: a far quadtree
+/// cell is one body at its center of mass), edge springs towards the length
+/// [`EDGE`], a pull to the center. The pull is tuned so that a node gets
+/// about [`AREA`] of area at any number of nodes: a big graph neither
+/// collapses into a mush of labels nor spreads out. The start is
+/// [`initial_positions`]. No randomness and the same order of sums - the
+/// same input gives the same coordinates bit for bit.
 ///
-/// `groups` - номер группы (папки) узла, для [`Forces::clusters`]; пустой -
-/// без групп.
+/// `groups` is the group (folder) number of each node, for
+/// [`Forces::clusters`]; empty - no groups.
 pub fn layout(
     n: usize,
     links: &[(usize, usize)],
@@ -252,8 +264,8 @@ pub fn layout(
     layout_with(n, links, &[], groups, boxes, forces)
 }
 
-/// [`layout`] с добавочными пружинами `tight` (книга - глава): короче
-/// ([`TIGHT_EDGE`]) и жёстче ([`TIGHT_SPRING`]) обычных.
+/// [`layout`] with extra springs `tight` (book - chapter): shorter
+/// ([`TIGHT_EDGE`]) and stiffer ([`TIGHT_SPRING`]) than the normal ones.
 fn layout_with(
     n: usize,
     links: &[(usize, usize)],
@@ -269,27 +281,30 @@ fn layout_with(
     pos
 }
 
-/// Площадь раскладки на узел: подпись в среднем ~130 x 35.
+/// Layout area per node: a label is ~130 x 35 on average.
 const AREA: f64 = 12_000.0;
-/// Притяжение к центру `CENTER_PULL * r`: равновесие с отталкиванием
-/// `EDGE²/d` — диск плотности `π EDGE² / CENTER_PULL` на узел.
+/// Pull to the center `CENTER_PULL * r`: in balance with the repulsion
+/// `EDGE²/d` it gives a density disc of `π EDGE² / CENTER_PULL` per node.
 const CENTER_PULL: f64 = std::f64::consts::PI * EDGE * EDGE / AREA;
-/// Барнс - Хат: клетка размера `s` на расстоянии `d` — одно тело, если `s/d`
-/// меньше этого.
+/// Barnes-Hut: a cell of size `s` at distance `d` is one body if `s/d` is
+/// less than this.
 const THETA: f64 = 0.9;
+/// Force iterations.
 const ITERATIONS: usize = 60;
-/// Наибольший шаг узла: сначала, потом убывает до ~2.
+/// The largest step of a node: at first, then it decreases to ~2.
 const START_TEMP: f64 = 40.0;
+/// Step factor per iteration.
 const COOLING: f64 = 0.95;
-/// Притяжение к папке при `clusters` = 100 %, в долях [`CENTER_PULL`].
+/// Pull to the folder at `clusters` = 100 %, in parts of [`CENTER_PULL`].
 const CLUSTER_PULL: f64 = 4.0 * CENTER_PULL;
-/// Добавочное отталкивание чужой папки при `clusters` = 100 %, в долях
-/// обычного (папка - одно тело в её середине).
+/// Extra repulsion of another folder at `clusters` = 100 %, in parts of the
+/// normal one (a folder is one body at its middle).
 const GROUP_REPEL: f64 = 1.0;
 
-/// Длина и жёсткость пружины «книга - глава» (в долях обычной; сама связь
-/// тоже ребро графа — пружины складываются).
+/// Length of the spring "book - chapter" (the link itself is a graph edge
+/// too, the springs add up).
 const TIGHT_EDGE: f64 = 0.4 * EDGE;
+/// Stiffness of the spring "book - chapter", in parts of the normal one.
 const TIGHT_SPRING: f64 = 10.0;
 
 fn layout_forces(
@@ -337,10 +352,10 @@ fn layout_forces(
         }
         if clustered {
             group_middles(&pos, groups, &mut middles);
-            // Только из-за края круга площади папки: отставшие подтягиваются,
-            // а плотнее, чем [`AREA`] на узел, папка не становится (иначе
-            // подписи наезжают).
-            // Чужие папки отталкивают сильнее - между папками просвет.
+            // Only because of the edge of the folder's area circle: stragglers
+            // are pulled in, but the folder does not get denser than [`AREA`]
+            // per node (otherwise labels overlap).
+            // Other folders repel more: a gap between folders.
             for ((f, p), &g) in force.iter_mut().zip(&pos).zip(groups) {
                 for (h, &(mx, my, radius, mass)) in middles.iter().enumerate() {
                     let (dx, dy) = (mx - p.0, my - p.1);
@@ -370,8 +385,8 @@ fn layout_forces(
     pos
 }
 
-/// Середины групп: `middles[g]` - центр масс узлов группы `g`, радиус
-/// круга площадью [`AREA`] на её узел и число узлов.
+/// Group middles: `middles[g]` is the center of mass of the nodes of group
+/// `g`, the radius of a circle with [`AREA`] per its node, and the node count.
 #[expect(clippy::cast_precision_loss, reason = "thousands of nodes")]
 fn group_middles(pos: &[(f64, f64)], groups: &[usize], middles: &mut Vec<(f64, f64, f64, f64)>) {
     let count = groups.iter().max().map_or(0, |g| g + 1);
@@ -388,10 +403,10 @@ fn group_middles(pos: &[(f64, f64)], groups: &[usize], middles: &mut Vec<(f64, f
     }));
 }
 
-/// Начальные места: узлы по порядку вдоль кривой Гильберта, квадрат площади
-/// [`AREA`] на узел. Узлы идут по путям (`Graph` упорядочен по имени), а
-/// отрезок кривой — компактное пятно: папки начинают кучками, а не
-/// вперемешку, и шагов нужно немного.
+/// Starting places: nodes in order along a Hilbert curve, a square of
+/// [`AREA`] per node. Nodes go by path (`Graph` is ordered by name), and a
+/// segment of the curve is a compact spot: folders start in clusters, not
+/// mixed, and few steps are needed.
 #[expect(clippy::cast_precision_loss, reason = "thousands of nodes")]
 fn initial_positions(n: usize) -> Vec<(f64, f64)> {
     let mut side = 1;
@@ -408,7 +423,7 @@ fn initial_positions(n: usize) -> Vec<(f64, f64)> {
         .collect()
 }
 
-/// Точка `d` кривой Гильберта на решётке `side` x `side` (`side` — степень двойки).
+/// Point `d` of the Hilbert curve on a `side` x `side` grid (`side` is a power of two).
 fn hilbert(side: usize, mut d: usize) -> (usize, usize) {
     let (mut x, mut y) = (0, 0);
     let mut s = 1;
@@ -430,9 +445,9 @@ fn hilbert(side: usize, mut d: usize) -> (usize, usize) {
     (x, y)
 }
 
-/// Квадродерево для отталкивания (Барнс - Хат). Клетки хранятся плоско;
-/// у листа — отрезок `order` с его узлами (больше одного — только узлы в
-/// одной точке).
+/// A quadtree for repulsion (Barnes-Hut). Cells are stored flat; a leaf has
+/// a segment of `order` with its nodes (more than one only for nodes at one
+/// point).
 #[derive(Debug, Default)]
 struct QuadTree {
     cells: Vec<Cell>,
@@ -442,19 +457,19 @@ struct QuadTree {
 
 #[derive(Debug, Clone, Copy)]
 struct Cell {
-    /// Центр масс и масса (число узлов).
+    /// Center of mass and mass (number of nodes).
     x: f64,
     y: f64,
     mass: f64,
     size: f64,
-    /// Первая из четырёх дочерних клеток подряд; 0 — лист.
+    /// The first of four consecutive child cells; 0 - a leaf.
     kids: usize,
-    /// Узлы листа: `order[from..to]`.
+    /// Leaf nodes: `order[from..to]`.
     from: usize,
     to: usize,
 }
 
-/// Переставить `items` так, чтобы сначала шли подходящие под `pred`; их число.
+/// Reorders `items` so that those matching `pred` go first; returns their count.
 fn partition(items: &mut [usize], pred: impl Fn(usize) -> bool) -> usize {
     let mut k = 0;
     for i in 0..items.len() {
@@ -466,7 +481,7 @@ fn partition(items: &mut [usize], pred: impl Fn(usize) -> bool) -> usize {
     k
 }
 
-/// Глубже — узлы почти в одной точке: лист с несколькими узлами.
+/// Deeper, the nodes are almost at one point: a leaf with several nodes.
 const MAX_DEPTH: usize = 40;
 
 impl QuadTree {
@@ -491,15 +506,15 @@ impl QuadTree {
         self.split(0, x0, y0, 0);
     }
 
-    /// Разбить клетку `c` с левым верхним углом `(x0, y0)` и посчитать её
-    /// центр масс.
+    /// Splits the cell `c` with the top left corner `(x0, y0)` and computes
+    /// its center of mass.
     #[expect(clippy::cast_precision_loss, reason = "thousands of nodes")]
     fn split(&mut self, c: usize, x0: f64, y0: f64, depth: usize) {
         let Cell { size, from, to, .. } = self.cells[c];
         if to - from > 1 && depth < MAX_DEPTH {
             let half = size / 2.0;
             let (mx, my) = (x0 + half, y0 + half);
-            // Сначала верхние (`y < my`), в каждой половине — сначала левые.
+            // The top ones (`y < my`) first, in each half the left ones first.
             let pos = &self.pos;
             let items = &mut self.order[from..to];
             let top = partition(items, |i| pos[i].1 < my);
@@ -550,8 +565,8 @@ impl QuadTree {
         }
     }
 
-    /// Сумма отталкивания `EDGE²/d` от всех узлов, кроме `i`, на точку `p`;
-    /// `stack` — место для обхода.
+    /// The sum of repulsion `EDGE²/d` from all nodes except `i` on the point
+    /// `p`; `stack` is space for the traversal.
     fn repulsion(&self, i: usize, p: (f64, f64), stack: &mut Vec<usize>) -> (f64, f64) {
         let mut f = (0.0, 0.0);
         let mut push = |dx: f64, dy: f64, mass: f64| {
@@ -571,7 +586,7 @@ impl QuadTree {
             if cell.kids == 0 {
                 for &j in &self.order[cell.from..cell.to] {
                     if j != i {
-                        // Узлы в одной точке: расталкивает детерминированный сдвиг по номерам.
+                        // Nodes at one point: a deterministic shift by index pushes them apart.
                         let (dx, dy) = (p.0 - self.pos[j].0, p.1 - self.pos[j].1);
                         let (dx, dy) =
                             if dx == 0.0 && dy == 0.0 { (if i < j { -1.0 } else { 1.0 }, 0.0) } else { (dx, dy) };
@@ -588,7 +603,7 @@ impl QuadTree {
     }
 }
 
-/// Решётка для поиска соседей: клетка → номера узлов по возрастанию.
+/// A grid to find neighbours: cell -> node indices in ascending order.
 struct Grid {
     w: f64,
     h: f64,
@@ -609,14 +624,14 @@ impl Grid {
         ((x / self.w).floor() as i64, (y / self.h).floor() as i64)
     }
 
-    /// Узлы с номером больше `i` (`usize::MAX` — все) в клетке `(cx, cy)` и
-    /// восьми соседних, по возрастанию номера.
+    /// Nodes with an index greater than `i` (`usize::MAX` - all) in the cell
+    /// `(cx, cy)` and the eight neighbouring ones, in ascending order.
     fn after(&self, i: usize, (cx, cy): (i64, i64), out: &mut Vec<usize>) {
         out.clear();
         for x in cx - 1..=cx + 1 {
             for y in cy - 1..=cy + 1 {
                 if let Some(v) = self.cells.get(&(x, y)) {
-                    // Клетки — возрастающие отрезки: слияние, а не сортировка.
+                    // Cells are ascending runs: a merge, not a sort.
                     let from = if i == usize::MAX { 0 } else { v.partition_point(|&j| j <= i) };
                     out.extend_from_slice(&v[from..]);
                 }
@@ -625,13 +640,13 @@ impl Grid {
         out.sort_unstable();
     }
 
-    /// Узел переехал.
+    /// A node moved.
     fn moved(&mut self, node: usize, from: (f64, f64), to: (f64, f64)) {
         let (old, new) = (self.cell(from), self.cell(to));
         if old == new {
             return;
         }
-        // Порядок номеров в клетке сохраняется.
+        // The order of indices in a cell is kept.
         if let Some(list) = self.cells.get_mut(&old)
             && let Ok(at) = list.binary_search(&node)
         {
@@ -643,15 +658,15 @@ impl Grid {
     }
 }
 
-/// Раздвигает пересекающиеся прямоугольники узлов: каждую пару — поровну по
-/// оси с меньшим перекрытием. Нескольких десятков проходов хватает, чтобы
-/// подписи перестали наезжать; связи при этом почти не меняют вид.
+/// Pushes apart overlapping node rectangles: each pair equally along the
+/// axis with the smaller overlap. A few dozen passes are enough for the
+/// labels to stop overlapping; links barely change the look.
 ///
-/// Пары — в том же порядке, что перебором всех (`i < j` по возрастанию), и
-/// с теми же сдвигами, но кандидаты `j` берутся из решётки по текущим
-/// местам: клетка шире двух самых широких прямоугольников, так что
-/// пересекающиеся узлы всегда в соседних клетках. Сдвинулся `i` — кандидаты
-/// ищутся заново.
+/// Pairs go in the same order as when trying all (`i < j` ascending) and
+/// with the same shifts, but the candidates `j` come from a grid by the
+/// current places: a cell is wider than the two widest rectangles, so
+/// overlapping nodes are always in neighbouring cells. When `i` moves, the
+/// candidates are looked up anew.
 fn separate(pos: &mut [(f64, f64)], boxes: &[NodeBox]) {
     let n = pos.len();
     let half = boxes.iter().map(|b| b.r.max(b.label / 2.0)).fold(0.0, f64::max);
@@ -677,7 +692,7 @@ fn separate(pos: &mut [(f64, f64)], boxes: &[NodeBox]) {
                 }
                 moved = true;
                 let (pi, pj) = (pos[i], pos[j]);
-                // Одинаковые центры — первый влево/вверх: детерминированно.
+                // Equal centers: the first goes left/up, deterministically.
                 if ox < oy {
                     let s = if pos[i].0 <= pos[j].0 { -ox / 2.0 } else { ox / 2.0 };
                     pos[i].0 += s;
@@ -689,7 +704,7 @@ fn separate(pos: &mut [(f64, f64)], boxes: &[NodeBox]) {
                 }
                 grid.moved(i, pi, pos[i]);
                 grid.moved(j, pj, pos[j]);
-                // i сдвинулся — соседи другие: дальше — кандидаты больше j.
+                // i moved, so the neighbours differ: next come candidates greater than j.
                 grid.after(j, grid.cell(pos[i]), &mut near);
                 next = 0;
             }
@@ -700,18 +715,18 @@ fn separate(pos: &mut [(f64, f64)], boxes: &[NodeBox]) {
     }
 }
 
-/// Радиус кружка заметки без связей (связи прибавляют) и главы книги (всегда
-/// один, меньше любой заметки).
+/// Radius of the circle of a note without links (links add to it).
 const NOTE_R: f64 = 5.5;
+/// Radius of a book chapter (always the same, smaller than any note).
 const CHAPTER_R: f64 = 4.5;
 
-/// Разложить граф: радиусы, подписи, координаты, границы. `groups` — все
-/// группы хранилища (порядок цветов).
+/// Lays out the graph: radii, labels, coordinates, bounds. `groups` are all
+/// groups of the vault (the order of colors).
 pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>, forces: Forces) -> GraphLayout {
     let index: HashMap<&str, usize> = graph.nodes.iter().enumerate().map(|(i, n)| (n.id.as_str(), i)).collect();
     let pair = |e: &Edge| Some((*index.get(e.from.as_str())?, *index.get(e.to.as_str())?));
     let links: Vec<(usize, usize)> = graph.edges.iter().filter_map(pair).collect();
-    // Книга и главы — кластер: рёбра «книга - глава» короче и жёстче ссылок.
+    // A book and its chapters are a cluster: the edges "book - chapter" are shorter and stiffer than links.
     let tight: Vec<(usize, usize)> = graph.edges.iter().filter(|e| e.chapter).filter_map(pair).collect();
     let mut degree = vec![0usize; graph.nodes.len()];
     for &(a, b) in &links {
@@ -726,7 +741,7 @@ pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>, forces:
             let book = n.kind == Some(NoteKind::Book) && n.chapter.is_none();
             #[expect(clippy::cast_precision_loss, reason = "at most 8")]
             let grown = |base: f64| base + d.min(8) as f64 * 0.7;
-            // Глава - меньше любой заметки: она часть книги, а не отдельная заметка.
+            // A chapter is smaller than any note: it is a part of the book, not a separate note.
             let r = if n.chapter.is_some() {
                 CHAPTER_R
             } else if book {
@@ -763,28 +778,31 @@ pub fn place(graph: &Graph, groups: Vec<String>, center: Option<String>, forces:
     GraphLayout { nodes, edges: graph.edges.clone(), groups, bounds: bounds.unwrap_or([0.0, 0.0, 1.0, 1.0]), center }
 }
 
-/// Префикс графа в данных хранилища: `/_vault/graph/…`.
+/// Prefix of the graph in vault data: `/_vault/graph/...`.
 pub const DATA_PREFIX: &str = "graph";
 
-/// Поставщик `/_vault/graph/<фильтр>.json` — граф по фильтру.
+/// Provider of `/_vault/graph/<filter>.json`: the graph by the filter.
 #[derive(Debug)]
 pub struct GraphData {
+    /// The vault.
     pub vault: Vault,
+    /// Its source index.
     pub index: Arc<SourceIndex>,
+    /// Layout cache.
     pub layouts: Arc<Layouts>,
 }
 
-/// Отпечаток — по самому ответу (по умолчанию): правка заметки, не
-/// изменившая граф, заметку с графом не пересобирает.
+/// The fingerprint is by the response itself (the default): a note edit
+/// that did not change the graph does not rebuild a note with the graph.
 impl DataProvider for GraphData {
     fn read(&self, path: &str) -> Result<Vec<u8>, String> {
         data_file(|| self.index.snapshot(&self.vault).map_err(|e| e.to_string()), &self.layouts, path)
     }
 }
 
-/// Файл `/_vault/graph/<path>` для заметки: `<фильтр>.json`, где фильтр —
-/// JSON [`GraphFilter`] с экранированными `%`, `/`, `\\` (`baluk/graph.typ`).
-/// Ответ — [`GraphLayout`] в JSON.
+/// File `/_vault/graph/<path>` for a note: `<filter>.json`, where the filter
+/// is the JSON of [`GraphFilter`] with `%`, `/`, `\` escaped
+/// (`baluk/graph.typ`). The response is [`GraphLayout`] as JSON.
 pub fn data_file(
     snapshot: impl FnOnce() -> Result<Snapshot, String>,
     layouts: &Layouts,
@@ -792,34 +810,34 @@ pub fn data_file(
 ) -> Result<Vec<u8>, String> {
     let query = path
         .strip_suffix(".json")
-        .ok_or_else(|| format!("нет данных хранилища «{DATA_PREFIX}/{path}» (граф — {DATA_PREFIX}/<фильтр>.json)"))?;
+        .ok_or_else(|| format!("no vault data \"{DATA_PREFIX}/{path}\" (the graph is {DATA_PREFIX}/<filter>.json)"))?;
     let filter: GraphFilter =
-        serde_json::from_str(&unescape(query)).map_err(|e| format!("граф: неверный фильтр ({e})"))?;
+        serde_json::from_str(&unescape(query)).map_err(|e| format!("graph: invalid filter ({e})"))?;
     let layout = snapshot()?.graph_layout_cached(&filter, layouts);
     serde_json::to_vec(&*layout).map_err(|e| e.to_string())
 }
 
-/// Обратное к экранированию в `baluk/graph.typ`: `%25` → `%`, `%2F` → `/`, `%5C` → `\\`.
+/// The reverse of the escaping in `baluk/graph.typ`: `%25` -> `%`, `%2F` -> `/`, `%5C` -> `\`.
 fn unescape(s: &str) -> String {
     s.replace("%2F", "/").replace("%5C", "\\").replace("%25", "%")
 }
 
-/// Сколько раскладок помнить.
+/// How many layouts to remember.
 const LAYOUTS: usize = 32;
 
-/// Кэш раскладок: тот же показанный граф (узлы, рёбра, группы, центр) —
-/// та же раскладка, считать её заново незачем. Ключ — хэш самого графа и
-/// сил, поэтому кэш не устаревает: изменилось хранилище — другой ключ.
-/// Переключатели страницы `/graph`, версия заметки с `#vault-graph`
-/// ([`GraphData`]) и её сборка берут готовую.
+/// Layout cache: the same shown graph (nodes, edges, groups, center) gives
+/// the same layout, no need to compute it anew. The key is a hash of the
+/// graph itself and the forces, so the cache does not go stale: a changed
+/// vault is another key. The switches of the `/graph` page, the version of
+/// a note with `#vault-graph` ([`GraphData`]) and its build take a ready one.
 #[derive(Debug, Default)]
 pub struct Layouts {
-    /// Недавние — в начале.
+    /// Recent ones first.
     entries: parking_lot::Mutex<std::collections::VecDeque<(u64, Arc<GraphLayout>)>>,
 }
 
 impl Layouts {
-    /// Раскладка графа (см. [`place`]) — из кэша или посчитанная.
+    /// The graph layout (see [`place`]): from the cache or computed.
     pub fn place(
         &self,
         graph: &Graph,
@@ -847,20 +865,20 @@ impl Layouts {
 }
 
 impl Snapshot {
-    /// Граф хранилища по фильтру, разложенный для рисования; раскладка — из
-    /// кэша `layouts`, если такой граф уже раскладывали.
+    /// The vault graph by the filter, laid out for drawing; the layout comes
+    /// from the cache `layouts` if this graph was laid out before.
     pub fn graph_layout_cached(&self, f: &GraphFilter, layouts: &Layouts) -> Arc<GraphLayout> {
         let (shown, groups) = self.shown(f);
         layouts.place(&shown, groups, f.around.clone(), f.forces)
     }
 
-    /// Граф хранилища по фильтру, разложенный для рисования.
+    /// The vault graph by the filter, laid out for drawing.
     pub fn graph_layout(&self, f: &GraphFilter) -> GraphLayout {
         let (shown, groups) = self.shown(f);
         place(&shown, groups, f.around.clone(), f.forces)
     }
 
-    /// Показанный граф по фильтру и все группы хранилища.
+    /// The shown graph by the filter and all groups of the vault.
     fn shown(&self, f: &GraphFilter) -> (Graph, Vec<String>) {
         let full = self.graph_of(f.chapters);
         let mut groups: Vec<String> = Vec::new();
@@ -916,7 +934,7 @@ mod tests {
         for (i, &group) in groups.iter().enumerate() {
             group_nodes[group].push(i);
         }
-        // Локальная связность внутри папки: цепочка + короткие перемычки.
+        // Local connectivity inside a folder: a chain plus short bridges.
         for nodes in &group_nodes {
             for pair in nodes.windows(2) {
                 edges.insert((pair[0], pair[1]));
@@ -925,7 +943,7 @@ mod tests {
                 edges.insert((pair[0], pair[3]));
             }
         }
-        // Межпапочные связи: кольцо центров групп.
+        // Links between folders: a ring of group centers.
         let centers: Vec<usize> = group_nodes.iter().filter_map(|nodes| nodes.first().copied()).collect();
         for i in 0..centers.len() {
             let a = centers[i];
@@ -934,7 +952,7 @@ mod tests {
                 edges.insert((a.min(b), a.max(b)));
             }
         }
-        // Несколько хабов с широкими связями по всему хранилищу.
+        // A few hubs with wide links across the whole vault.
         let hubs: Vec<usize> = [0usize, n / 7, n / 3, n / 2].into_iter().filter(|&i| i < n).collect();
         for &hub in &hubs {
             for step in [17usize, 41, 89, 157] {
@@ -947,7 +965,7 @@ mod tests {
                 }
             }
         }
-        // Изолированные заметки: как в реальном хранилище, часть узлов без ссылок.
+        // Isolated notes: as in a real vault, some nodes have no links.
         for i in (19..n).step_by(53) {
             if i % 7 == 0 {
                 edges.retain(|&(a, b)| a != i && b != i);
@@ -1040,7 +1058,7 @@ mod tests {
         Quality { edge_mean, area_per_node, overlaps, intra_group, group_gap, isolated_radius }
     }
 
-    /// Время раскладки и раздвигания подписей (мс) и качество.
+    /// Layout and label separation time (ms) and quality.
     fn bench_current(graph: &BenchGraph) -> (f64, f64, Quality) {
         let started = Instant::now();
         let mut pos = layout_forces(graph.boxes.len(), &graph.links, &[], &graph.groups, Forces::default());
@@ -1059,7 +1077,7 @@ mod tests {
         Edge { from: from.into(), to: to.into(), count, chapter: false }
     }
 
-    /// A → B → C, D → B, E — без связей, «Нет» — ссылка на несуществующую заметку.
+    /// A -> B -> C, D -> B, E without links, "Нет" is a link to a missing note.
     fn sample() -> Graph {
         Graph {
             nodes: vec![
@@ -1107,7 +1125,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "инструментальный замер производительности; запускать в release с --ignored --nocapture"]
+    #[ignore = "a performance measurement tool; run in release with --ignored --nocapture"]
     fn layout_bench_synthetic() {
         for n in [100usize, 300, 1000, 5000] {
             let graph = synthetic_graph(n);
@@ -1147,7 +1165,7 @@ mod tests {
         assert_eq!(ids(&filter(&g, tags, &GraphFilter { tag: Some("ssh".into()), ..f.clone() })), ["Сеть/B"]);
         let linked = filter(&g, tags, &GraphFilter { missing: false, orphans: false, ..f.clone() });
         assert_eq!(ids(&linked), ["D", "Мат/C", "Сеть/A", "Сеть/B"]);
-        // Папка - с подпапками, но не соседка с тем же началом имени.
+        // A folder with its subfolders, but not a neighbour with the same name start.
         let mut deep = g.clone();
         deep.nodes.extend(["Сеть/Linux/SSH", "Сетевое"].map(|id| node(id, Some(NoteKind::Note))));
         assert_eq!(
@@ -1183,7 +1201,7 @@ mod tests {
         let dist = |p: usize, q: usize| (pos[p].0 - pos[q].0).hypot(pos[p].1 - pos[q].1);
         let cluster = dist(0, 1).max(dist(1, 2)).max(dist(0, 3));
         for lone in 4..7 {
-            assert!(dist(lone, 0) < cluster * 8.0, "несвязанные не улетают");
+            assert!(dist(lone, 0) < cluster * 8.0, "unlinked ones do not fly away");
         }
         assert!(dist(0, 1) > 20.0);
     }
@@ -1217,10 +1235,10 @@ mod tests {
     fn data_file_path() {
         assert_eq!(unescape("a%2Fb%5Cc%25252F"), "a/b\\c%252F");
         let layouts = Layouts::default();
-        let err = data_file(|| Err("не нужен".into()), &layouts, "{}.txt").unwrap_err();
+        let err = data_file(|| Err("not needed".into()), &layouts, "{}.txt").unwrap_err();
         assert!(err.contains("graph/"), "{err}");
-        let err = data_file(|| Err("не нужен".into()), &layouts, "{нет.json").unwrap_err();
-        assert!(err.contains("фильтр"), "{err}");
+        let err = data_file(|| Err("not needed".into()), &layouts, "{нет.json").unwrap_err();
+        assert!(err.contains("filter"), "{err}");
     }
 
     #[test]
@@ -1229,15 +1247,15 @@ mod tests {
         let g = sample();
         let f = Forces::default();
         let a = layouts.place(&g, vec![], None, f);
-        assert!(Arc::ptr_eq(&a, &layouts.place(&g, vec![], None, f)), "тот же граф — из кэша");
+        assert!(Arc::ptr_eq(&a, &layouts.place(&g, vec![], None, f)), "the same graph: from the cache");
         assert_eq!(*a, place(&g, vec![], None, f));
         let other = layouts.place(&g, vec![], Some("D".into()), f);
-        assert!(!Arc::ptr_eq(&a, &other), "другой центр — другая раскладка");
+        assert!(!Arc::ptr_eq(&a, &other), "another center: another layout");
         let mut g2 = sample();
         g2.edges.pop();
-        assert!(!Arc::ptr_eq(&a, &layouts.place(&g2, vec![], None, f)), "другой граф — заново");
+        assert!(!Arc::ptr_eq(&a, &layouts.place(&g2, vec![], None, f)), "another graph: anew");
         let looser = layouts.place(&g, vec![], None, Forces { repel: 200, ..f });
-        assert!(!Arc::ptr_eq(&a, &looser), "другие силы — заново");
+        assert!(!Arc::ptr_eq(&a, &looser), "other forces: anew");
     }
 
     #[test]
@@ -1273,19 +1291,19 @@ mod tests {
     fn forces_do_what_they_say() {
         let graph = synthetic_graph(300);
         let q = |forces| quality(&layout(300, &graph.links, &graph.groups, Some(&graph.boxes), forces), &graph);
-        // Каждая сила — против нейтральной раскладки (папки 0 %).
+        // Each force against the neutral layout (folders 0 %).
         let neutral = Forces { clusters: 0, ..Forces::default() };
         let base = q(neutral);
         let clusters = q(Forces { clusters: 100, ..neutral });
         let repel = q(Forces { repel: 200, ..neutral });
         let center = q(Forces { center: 50, ..neutral });
         let links = q(Forces { links: 500, ..neutral });
-        assert_eq!(q(Forces::default()).overlaps, 0, "по умолчанию (папки 5 %)");
+        assert_eq!(q(Forces::default()).overlaps, 0, "by default (folders 5 %)");
         let apart = |q: &Quality| q.group_gap / q.intra_group;
-        assert!(apart(&clusters) > apart(&base) * 1.4, "папки - врозь");
-        assert!(repel.area_per_node > base.area_per_node * 1.3, "просторнее");
-        assert!(center.area_per_node > base.area_per_node * 1.3, "слабее к центру - просторнее");
-        assert!(links.edge_mean < base.edge_mean * 0.9, "связи короче");
+        assert!(apart(&clusters) > apart(&base) * 1.4, "folders apart");
+        assert!(repel.area_per_node > base.area_per_node * 1.3, "roomier");
+        assert!(center.area_per_node > base.area_per_node * 1.3, "weaker to the center: roomier");
+        assert!(links.edge_mean < base.edge_mean * 0.9, "shorter links");
         for q in [clusters, repel, center, links] {
             assert_eq!(q.overlaps, 0);
         }
@@ -1297,7 +1315,7 @@ mod tests {
         let l = place(&g, vec!["Сеть".into(), "Мат".into(), ROOT_GROUP.into()], None, Forces::default());
         let c = l.nodes.iter().find(|n| n.id == "Мат/C").unwrap();
         assert_eq!((c.name.as_str(), c.group.as_str(), c.degree), ("C", "Мат", 1));
-        assert!(c.r > l.nodes.iter().find(|n| n.id == "E").unwrap().r, "книга крупнее");
+        assert!(c.r > l.nodes.iter().find(|n| n.id == "E").unwrap().r, "a book is larger");
         for n in &l.nodes {
             assert!(l.bounds[0] <= n.x && n.x <= l.bounds[2] && l.bounds[1] <= n.y && n.y <= l.bounds[3]);
         }

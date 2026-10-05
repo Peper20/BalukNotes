@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-# Копии чужих крейтов с правками (vendor/README.md) — не члены workspace.
+# Copies of foreign crates with patches (vendor/README.md), not workspace members.
 exclude = ["vendor"]
 
 [workspace.package]
@@ -17,8 +17,8 @@ notes-core = { path = "crates/notes-core" }
 notes-server = { path = "crates/notes-server" }
 notes-assets = { path = "crates/notes-assets" }
 
-# Typst закреплён точно: HTML-экспорт экспериментальный, API меняется между
-# версиями. Обновлять осознанно, с прогоном tests/vault (docs/tech-debt.md).
+# Typst is pinned exactly: HTML export is experimental, the API changes between
+# versions. Update deliberately, with a run over tests/vault (docs/tech-debt.md).
 typst = "=0.15.1"
 typst-html = "=0.15.1"
 typst-layout = "=0.15.1"
@@ -26,54 +26,54 @@ typst-pdf = "=0.15.1"
 typst-kit = { version = "=0.15.1", features = [
     "embedded-fonts", "scan-fonts", "system-files", "system-downloader", "datetime",
 ] }
-# Версии — как у самого typst (см. Cargo.lock): иначе две копии кэша comemo.
+# Versions as in typst itself (see Cargo.lock): otherwise two copies of the comemo cache.
 comemo = "0.5.1"
 ecow = "0.2.6"
 
 anyhow = "1"
 axum = "0.8"
-# Шрифты для браузера (notes-core::webfonts): подмножества по наборам знаков
-# и WOFF2. brotli и ttf-parser — те же версии, что уже тянут tower-http и typst.
+# Fonts for the browser (notes-core::webfonts): subsets by character sets and
+# WOFF2. brotli and ttf-parser are the versions tower-http and typst already pull.
 brotli = "8"
-# WOFF2 с преобразованием glyf (−11 % к частям шрифтов TrueType); тянет brotli 9.
+# WOFF2 with the glyf transform (-11 % on TrueType font chunks); pulls brotli 9.
 ttf2woff2 = { version = "0.13.3", default-features = false }
 fontcull = { version = "2.0.1", default-features = false }
 ttf-parser = "0.25"
-# Запасной текстовый шрифт CFF -> TrueType для браузера (webfonts::cff_to_truetype):
-# контуры - skrifa, glyf/loca - write-fonts, кривые - kurbo. Те же версии, что
-# уже тянут typst-svg и typst-pdf.
+# Fallback CFF text font -> TrueType for the browser (webfonts::cff_to_truetype):
+# outlines - skrifa, glyf/loca - write-fonts, curves - kurbo. The versions
+# typst-svg and typst-pdf already pull.
 skrifa = { version = "0.42", default-features = false, features = ["std"] }
 write-fonts = { version = "0.48", default-features = false }
 kurbo = { version = "0.13", default-features = false, features = ["std"] }
 clap = { version = "4.6", features = ["derive", "env"] }
-# Каталоги пользователя (данные, настройки) для `notes` — та же версия, что
-# уже тянет typst-kit.
+# User directories (data, settings) for `notes`: the version typst-kit already
+# pulls.
 dirs = "6"
-# Наблюдатель файлов хранилища (notes-core::watch): индекс ссылок, прогрев,
-# события клиенту.
+# Vault file watcher (notes-core::watch): the link index, warming, events for
+# the client.
 notify = "8"
 parking_lot = "0.12"
 rust-embed = { version = "8", features = ["mime-guess", "include-exclude"] }
 serde = { version = "1", features = ["derive", "rc"] }
-# Стабильный хэш версий и кэша на диске (notes-core::version) — та же
-# версия, что уже тянет typst.
+# Stable hash of versions and the disk cache (notes-core::version): the version
+# typst already pulls.
 siphasher = "1"
 serde_json = { version = "1", features = ["preserve_order"] }
-# Аллокатор бинарника `notes`: возвращает системе память после сборок сам
-# (glibc держит сотни МБ свободных кусков; docs/research/E5.md). Под MSVC не
-# собирается - там системный.
+# Allocator of the `notes` binary: returns memory to the system after builds by
+# itself (glibc keeps hundreds of MB of free chunks; docs/research/E5.md). Does
+# not build under MSVC - the system one there.
 tikv-jemallocator = "0.6"
 tempfile = "3"
 trash = "5"
 thiserror = "2"
-# Файл настроек `notes` (~/.config/baluk-notes/config.toml) — та же версия,
-# что уже тянет typst.
+# Settings file of `notes` (~/.config/baluk-notes/config.toml): the version typst
+# already pulls.
 toml = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
 tower-http = { version = "0.6", features = ["compression-gzip", "compression-br"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-# Типы API для клиента на TypeScript: фича `ts` у notes-core и notes-server.
+# API types for the TypeScript client: the feature `ts` of notes-core and notes-server.
 ts-rs = { version = "12", features = ["serde-json-impl", "no-serde-warnings"] }
 
 [workspace.lints.rust]
@@ -83,7 +83,7 @@ missing_debug_implementations = "warn"
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
-# Pedantic слишком шумный в этих местах:
+# Pedantic is too noisy in these places:
 module_name_repetitions = "allow"
 must_use_candidate = "allow"
 missing_errors_doc = "allow"
@@ -96,15 +96,15 @@ unwrap_used = "warn"
 expect_used = "warn"
 
 [profile.dev.package."*"]
-# Typst в отладочной сборке компилирует заметки в разы медленнее.
+# Typst in a debug build compiles notes many times slower.
 opt-level = 2
-# У зависимостей — только номера строк (для трассировки паники): полная
-# отладочная информация Typst копировалась в каждый тестовый бинарник, и
-# target/debug весил ~9 ГБ, стал ~5. Наши крейты — с полной, как обычно
-# (`debug = "line-tables-only"` и для них даёт лишь ещё −0,7 ГБ).
+# Dependencies get line numbers only (for panic traces): the full debug info of
+# Typst was copied into every test binary, and target/debug weighed ~9 GB, now
+# ~5. Our crates get the full one as usual (`debug = "line-tables-only"` would
+# save only another 0.7 GB on them).
 debug = "line-tables-only"
 
-# comemo с правкой: после полной очистки кэша (`evict(0)`) память
-# отдаётся, а не остаётся ёмкостью структур — vendor/README.md.
+# comemo with a patch: after a full cache clear (`evict(0)`) memory is given
+# back instead of staying as the capacity of structures - vendor/README.md.
 [patch.crates-io]
 comemo = { path = "vendor/comemo" }

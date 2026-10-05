@@ -1,5 +1,5 @@
-# Куда ts-rs выгружает типы API (cargo test --features ts): клиент app/.
+# Where ts-rs exports the API types (cargo test --features ts): the client app/.
 [env]
 TS_RS_EXPORT_DIR = { value = "app/src/lib/api/types", relative = true }
-# usize/u64 в JSON — обычные числа, не bigint.
+# usize/u64 in JSON are plain numbers, not bigint.
 TS_RS_LARGE_INT = "number"

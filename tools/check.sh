@@ -137,7 +137,7 @@ baluk_note() {
   printf '#import "/_baluk/lib.typ": *\n#show: note.with(title: [Производная])\n' >"$vault/Math/Derivative.typ"
   local actual
   actual=$("${notes[@]}" check | tee /dev/stderr | tail -n 1)
-  [[ $actual == "заметок: 10, ошибок: 0, предупреждений: 0, битых ссылок: 0" ]]
+  [[ $actual == "notes: 10, errors: 0, warnings: 0, broken links: 0" ]]
 }
 
 in_app() { (cd app && "$@"); }

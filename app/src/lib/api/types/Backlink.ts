@@ -2,12 +2,20 @@
 import type { NoteId } from "./NoteId";
 
 /**
- * Ссылка на заметку из другой заметки.
+ * A link to a note from another note.
  */
-export type Backlink = { from: NoteId, anchor: string | null, 
+export type Backlink = { 
 /**
- * Раздел заметки, куда ведёт якорь: `id` заголовка (HTML заголовка —
- * в `Rendered::headings`) и его текст (формула — исходником); якоря
- * нет или раздел не нашёлся — `None`.
+ * The linking note.
+ */
+from: NoteId, 
+/**
+ * The link anchor as written.
+ */
+anchor: string | null, 
+/**
+ * The section of the note the anchor leads to: the heading `id` (the
+ * heading HTML is in `Rendered::headings`) and its text (a formula as
+ * source); no anchor or the section was not found - `None`.
  */
 section: string | null, heading: string | null, };

@@ -48,7 +48,9 @@ crates/notes-app/icons/icon.png`.
 - **Язык**: проект переходит на английский (roadmap, "Приоритетное"); файл,
   переписанный по навыку, переводится целиком (комментарии, документация,
   сообщения) вместе с тестами текстов сообщений. Тексты интерфейса в ядре
-  (подписи настроек в `settings.rs`, имя `new_note::UNTITLED`) - русские.
+  (подписи настроек в `settings.rs`, имя `new_note::UNTITLED`, группа
+  `vault_graph::ROOT_GROUP`, подсказка битой ссылки `passes/links.rs`,
+  якорь `"раздел"` в `render::slug`) - русские.
 - **Потоки**: в ядре - `parking_lot`; у `std::sync::Mutex` отравление -
   явно (`unwrap_or_else(PoisonError::into_inner)`); в сервере блокирующее
   (Typst, диск) - в `spawn_blocking` (`notes-server/src/error.rs`).

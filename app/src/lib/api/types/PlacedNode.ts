@@ -3,26 +3,42 @@ import type { ChapterOf } from "./ChapterOf";
 import type { NoteKind } from "./NoteKind";
 
 /**
- * Узел на месте.
+ * A node in its place.
  */
-export type PlacedNode = { id: string, 
+export type PlacedNode = { 
 /**
- * `None` — заметки нет.
+ * Node id ([`Node::id`]).
+ */
+id: string, 
+/**
+ * `None`: the note does not exist.
  */
 kind: NoteKind | null, 
 /**
- * Глава книги: открывается книга на этой главе.
+ * A book chapter: the book opens at this chapter.
  */
 chapter: ChapterOf | null, 
 /**
- * Подпись: название заметки.
+ * Label: the note title.
  */
-name: string, group: string, x: number, y: number, 
+name: string, 
 /**
- * Радиус кружка: книга крупнее, связи прибавляют.
+ * Group ([`group_of`]).
+ */
+group: string, 
+/**
+ * Center x.
+ */
+x: number, 
+/**
+ * Center y.
+ */
+y: number, 
+/**
+ * Circle radius: a book is larger, links add to it.
  */
 r: number, 
 /**
- * Связей в показанном графе.
+ * Links in the shown graph.
  */
 degree: number, };

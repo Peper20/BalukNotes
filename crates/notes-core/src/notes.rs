@@ -1,22 +1,21 @@
-//! Заметки как сервис — фасад ядра для сервера и CLI.
+//! Notes as a service: the facade of the core for the server and the CLI.
 //!
-//! Слои (каждый со своими тестами, без компиляции Typst):
+//! Layers (each with its own tests, without compiling Typst):
 //!
-//! - [`crate::storage`] — файлы хранилища ([`Storage`]: каталог на диске, в
-//!   тестах — память);
-//! - [`crate::pipeline`] — сборка: исходник → компиляция по темам →
-//!   отрисовка, обработка рисунков;
-//! - [`crate::page_cache`] — кэш страниц: память (LRU) + диск
-//!   ([`crate::cache`]), версии по файлам ([`crate::version`]);
-//! - [`crate::pages`] — страница по запросу: сборки по одной, ошибка поверх
-//!   прежней отрисовки;
-//! - [`crate::warm`] — прогрев поверх `pages`.
+//! - [`crate::storage`]: vault files ([`Storage`]: a directory on disk, in
+//!   tests - memory);
+//! - [`crate::pipeline`]: the build - source -> compilation per theme ->
+//!   rendering, figure processing;
+//! - [`crate::page_cache`]: the page cache - memory (LRU) + disk
+//!   ([`crate::cache`]), versions by files ([`crate::version`]);
+//! - [`crate::pages`]: a page on request - builds one at a time, an error
+//!   on top of the previous rendering;
+//! - [`crate::warm`]: warming on top of `pages`.
 //!
-//! Здесь они собираются вместе; сюда же — индекс исходников (ссылки,
-//! поиск) и PDF. Наблюдатель файлов
-//! ([`crate::watch`]) включает только сервер ([`Notes::watch`]): индекс не
-//! обходит хранилище без изменений, прогрев просыпается от них; CLI
-//! обходится без него.
+//! Here they come together, plus the source index (links, search) and PDF.
+//! Only the server starts the file watcher ([`crate::watch`],
+//! [`Notes::watch`]): the index does not scan an unchanged vault, warming
+//! wakes up on changes; the CLI does without it.
 
 use std::fs;
 use std::path::PathBuf;
@@ -44,30 +43,35 @@ use crate::{Error, Result};
 pub use crate::pages::NotePage;
 pub use crate::pipeline::encode;
 
+/// How to open a vault.
 #[derive(Debug, Clone)]
 pub struct NotesConfig {
-    /// Корень хранилища.
+    /// Vault root.
     pub vault: PathBuf,
-    /// Библиотека оформления (`baluk/`), видна заметкам как `/_baluk/`.
+    /// The styling library (`baluk/`), seen by notes as `/_baluk/`.
     pub library: LibrarySource,
-    /// Дополнительные каталоги шрифтов (к системным и встроенным в Typst).
+    /// Extra font directories (on top of the system ones and those built into Typst).
     pub font_dirs: Vec<PathBuf>,
-    /// Каталог кэша на диске (`<данные>/cache`, `None` — только в памяти):
-    /// `pages/` — отрисовка заметок, `fonts/` — части шрифтов для браузера.
+    /// Disk cache directory (`<data>/cache`, `None` - memory only): `pages/`
+    /// for rendered notes, `fonts/` for font chunks for the browser.
     pub cache: Option<PathBuf>,
-    /// Куда уходят удалённые заметки ([`Notes::delete`]): `None` — корзина
-    /// системы (там их можно восстановить), каталог — в него (тесты).
+    /// Where deleted notes go ([`Notes::delete`]): `None` - the system trash
+    /// (they can be restored there), a directory - into it (tests).
     pub trash: Option<PathBuf>,
 }
 
-/// Общие для нескольких `Notes` ресурсы (сервер: ядро библиотеки и
-/// хранилища). Темы зависят только от библиотеки и шрифтов, не от хранилища.
+/// Resources shared by several `Notes` (the server: the library core and
+/// the vaults). Themes depend only on the library and the fonts, not on the
+/// vault.
 #[derive(Debug, Clone, Default)]
 pub struct SharedAssets {
+    /// Loaded fonts.
     pub fonts: Option<Arc<Fonts>>,
+    /// Themes of the library.
     pub themes: Option<Arc<ThemeSet>>,
 }
 
+/// An open vault: pages, index, graph, warming and the watcher.
 #[derive(Debug)]
 pub struct Notes {
     pages: Pages,
@@ -76,22 +80,22 @@ pub struct Notes {
     layouts: Arc<Layouts>,
     warmer: Arc<Warmer>,
     changes: Arc<Changes>,
-    /// Каталог библиотеки на диске (`--library`, отладочная сборка):
-    /// наблюдатель следит и за ним.
+    /// Library directory on disk (`--library`, a debug build): the watcher
+    /// watches it too.
     library_dir: Option<PathBuf>,
-    /// Папка хранилища на диске ([`Notes::open`]); в памяти — `None`.
+    /// Vault directory on disk ([`Notes::open`]); `None` in memory.
     dir: Option<PathBuf>,
-    /// Какие пакеты Typst можно брать (настройка устройства).
+    /// Which Typst packages may be imported (a device setting).
     packages: Arc<crate::packages::PackagePolicy>,
 }
 
 impl Notes {
-    /// Хранилище — каталог `config.vault`.
+    /// The vault is the directory `config.vault`.
     pub fn open(config: &NotesConfig) -> Result<Self> {
         Self::open_with_shared(config, &SharedAssets::default())
     }
 
-    /// То же, но с общими шрифтами и темами (сервер).
+    /// The same, with shared fonts and themes (the server).
     pub fn open_with_shared(config: &NotesConfig, shared: &SharedAssets) -> Result<Self> {
         let root = &config.vault;
         let storage = crate::storage::DirStorage::open(root).map_err(|e| Error::io(root, e))?;
@@ -101,7 +105,7 @@ impl Notes {
         Ok(notes)
     }
 
-    /// Хранилище — любой [`Storage`] (`config.vault` не используется).
+    /// The vault is any [`Storage`] (`config.vault` is not used).
     pub fn with_storage(storage: Arc<dyn Storage>, config: &NotesConfig) -> Result<Self> {
         Self::with_vault(Vault::new(storage), config, &SharedAssets::default())
     }
@@ -112,7 +116,7 @@ impl Notes {
             LibrarySource::Embedded => LibrarySource::Embedded,
         };
         if !library.is_valid() {
-            return Err(Error::Library(format!("в библиотеке {library:?} нет lib.typ")));
+            return Err(Error::Library(format!("library {library:?} has no lib.typ")));
         }
         let fonts = shared.fonts.clone().unwrap_or_else(|| {
             Arc::new(Fonts::load(&config.font_dirs).with_web_cache(config.cache.as_ref().map(|c| c.join("fonts"))))
@@ -122,7 +126,7 @@ impl Notes {
         links.set_changes(changes.clone());
         let layouts = Arc::new(Layouts::default());
         let packages = Arc::new(crate::packages::PackagePolicy::default());
-        // Данные хранилища для заметок: `/_vault/<префикс>/…`.
+        // Vault data for notes: `/_vault/<prefix>/...`.
         let data = VaultData::new()
             .with(crate::packages::DATA_PREFIX, crate::packages::PolicyData(packages.clone()))
             .with(
@@ -145,8 +149,8 @@ impl Notes {
         let cache = PageCache::new(versions, disk, MEMORY_BUDGET);
         let typst = Arc::new(TypstPipeline::new(vault.clone(), compiler, themes));
         let pages = Pages::new(vault, typst.clone(), cache);
-        // Индекс ссылок дополняется ссылками собранных страниц (вычисляемые
-        // пути). Слабая ссылка: кэш страниц сам держит индекс через граф.
+        // The link index adds the links of built pages (computed paths). A
+        // weak reference: the page cache holds the index itself via the graph.
         let cache = Arc::downgrade(pages.cache());
         links.set_built(Box::new(move |id: &NoteId| cache.upgrade()?.links(id)));
         let warmer = Arc::new(Warmer::default());
@@ -159,55 +163,59 @@ impl Notes {
         Ok(Self { pages, typst, links, layouts, warmer, changes, library_dir, dir: None, packages })
     }
 
+    /// The vault files.
     pub fn vault(&self) -> &Vault {
         self.pages.vault()
     }
 
-    /// Папка хранилища на диске; хранилище в памяти — `None`.
+    /// Vault directory on disk; `None` for a vault in memory.
     pub fn dir(&self) -> Option<&std::path::Path> {
         self.dir.as_deref()
     }
 
+    /// Themes of the library.
     pub fn themes(&self) -> &ThemeSet {
         self.typst.themes()
     }
 
-    /// Шрифты и темы этого ядра - для других ядер с той же библиотекой.
+    /// Fonts and themes of this core, for other cores with the same library.
     pub fn shared_assets(&self) -> SharedAssets {
         SharedAssets { fonts: Some(self.typst.compiler().fonts().clone()), themes: Some(self.typst.themes_arc()) }
     }
 
+    /// Fonts for Typst and the browser.
     pub fn fonts(&self) -> &Fonts {
         self.typst.fonts()
     }
 
+    /// Notes and books of the vault.
     pub fn entries(&self) -> Result<Vec<Entry>> {
         self.vault().entries()
     }
 
-    /// Индекс исходников (без компиляции): ссылки, граф, названия и теги,
-    /// разделы для поиска.
+    /// The source index (no compiling): links, graph, titles and tags,
+    /// sections for search.
     pub fn index(&self) -> Result<Snapshot> {
         self.links.snapshot(self.vault())
     }
 
-    /// Граф хранилища по фильтру, разложенный (раскладка — из кэша, если
-    /// такой граф уже раскладывали).
+    /// The vault graph by the filter, laid out (the layout comes from the
+    /// cache if this graph was laid out before).
     pub fn graph_layout(&self, filter: &GraphFilter) -> Result<GraphLayout> {
         Ok((*self.index()?.graph_layout_cached(filter, &self.layouts)).clone())
     }
 
-    /// Превью заметки (и раздела) для подсказки при наведении на ссылку.
+    /// Preview of a note (and a section) for the tooltip over a link.
     pub fn preview(&self, id: &NoteId, anchor: Option<&str>) -> Result<crate::search::Preview> {
         crate::search::preview(&self.index()?, id, anchor).ok_or_else(|| Error::NotFound(id.to_string()))
     }
 
-    /// Поиск по тексту всех заметок.
+    /// Full-text search over all notes.
     pub fn search(&self, query: &str, limit: usize) -> Result<Vec<crate::search::SearchHit>> {
         Ok(crate::search::search(&self.index()?, query, limit))
     }
 
-    /// Поиск в одной заметке (книге): все разделы по порядку текста.
+    /// Search in one note (book): all sections in text order.
     pub fn search_in(&self, id: &NoteId, query: &str, limit: usize) -> Result<Vec<crate::search::SearchHit>> {
         let index = self.index()?;
         if !index.exists(id.as_str()) {
@@ -216,30 +224,30 @@ impl Notes {
         Ok(crate::search::search_in(&index, id, query, limit))
     }
 
-    /// Страница заметки для сервера: из кэша, если её файлы не менялись
-    /// (см. [`Pages::page`]).
+    /// The note page for the server: from the cache if its files did not
+    /// change (see [`Pages::page`]).
     pub fn page(&self, id: &NoteId, opts: FigureOptions) -> Result<Arc<NotePage>> {
         self.pages.page(id, opts)
     }
 
-    /// Текущая версия заметки. Для уже собранной — только `stat` её файлов,
-    /// без компиляции; для новой — собирает.
+    /// The current note version. For a built note only the `stat` of its
+    /// files, no compiling; a new one gets built.
     pub fn version(&self, id: &NoteId, opts: FigureOptions) -> Result<String> {
         self.pages.version(id, opts)
     }
 
-    /// Заметка в PDF (вид PDF из baluk) в теме `theme`; без кэша.
+    /// The note as PDF (the PDF look of baluk) in the theme `theme`; no cache.
     pub fn pdf(&self, id: &NoteId, theme: &str) -> Result<std::result::Result<Vec<u8>, Vec<Diagnostic>>> {
         let entry = self.vault().entry(id)?;
         if !self.themes().names().iter().any(|t| t == theme) {
-            return Err(Error::Setting { key: "тема".into(), reason: format!("нет темы «{theme}»") });
+            return Err(Error::Setting { key: "theme".into(), reason: format!("no theme \"{theme}\"") });
         }
         Ok(self.typst.compiler().compile_pdf(&entry.main, theme))
     }
 
-    /// Удалить заметку или книгу (папку целиком) — в корзину
-    /// ([`Storage::trash`]). Список заметок и индекс ссылок обновляются
-    /// сразу, не дожидаясь наблюдателя.
+    /// Deletes a note or a book (the whole folder) to the trash
+    /// ([`Storage::trash`]). The note list and the link index update at
+    /// once, without waiting for the watcher.
     pub fn delete(&self, id: &NoteId) -> Result<()> {
         let entry = self.vault().entry(id)?;
         let path = match entry.kind {
@@ -247,13 +255,14 @@ impl Notes {
             NoteKind::Book => id.as_str().to_owned(),
         };
         self.vault().storage().trash(&path).map_err(|e| self.vault().io_error(&path, e))?;
-        tracing::info!("удалено в корзину: {}", self.vault().storage().display(&path).display());
+        tracing::info!("moved to trash: {}", self.vault().storage().display(&path).display());
         self.changes.local(vec![path]);
         Ok(())
     }
 
-    /// Удалить папку хранилища целиком (подпапки, заметки, книги) — в
-    /// корзину. Путь проверяется по правилам [`NoteId`]; не папка — `NotFound`.
+    /// Deletes a vault folder entirely (subfolders, notes, books) to the
+    /// trash. The path is checked by the rules of [`NoteId`]; not a folder -
+    /// `NotFound`.
     pub fn delete_folder(&self, path: &NoteId) -> Result<()> {
         let path = path.as_str();
         let storage = self.vault().storage();
@@ -261,13 +270,13 @@ impl Notes {
             return Err(Error::NotFound(path.to_owned()));
         }
         storage.trash(path).map_err(|e| self.vault().io_error(path, e))?;
-        tracing::info!("удалено в корзину: {}", storage.display(path).display());
+        tracing::info!("moved to trash: {}", storage.display(path).display());
         self.changes.local(vec![path.to_owned()]);
         Ok(())
     }
 
-    /// Переименовать заметку, книгу или папку ([`crate::rename`]): название,
-    /// имя файла и ссылки на неё. `apply` = `false` — только план.
+    /// Renames a note, book or folder ([`crate::rename`]): the title, the
+    /// file name and the links to it. `apply` = `false` - only the plan.
     pub fn rename(
         &self,
         kind: crate::rename::RenameKind,
@@ -283,10 +292,10 @@ impl Notes {
         Ok(plan)
     }
 
-    // ── Прогрев (см. crate::warm) ─────────────────────────────────────────
+    // -- Warming (see crate::warm) --------------------------------------------
 
-    /// Применить настройки устройства — на ходу: число сборок, память
-    /// Typst, пределы кэша, режим прогрева.
+    /// Applies the device settings on the fly: the number of builds, Typst
+    /// memory, cache limits, the warming mode.
     pub fn apply_device(&self, device: &crate::settings::Device) {
         let compiler = self.typst.compiler();
         compiler.set_parallel(device.builds);
@@ -294,76 +303,76 @@ impl Notes {
         self.pages.cache().set_limits(device.memory, device.disk);
         self.warmer.set_mode(device.warm);
         if self.packages.set_extra(&device.packages) {
-            tracing::info!(packages = ?device.packages, "пакеты сверх белого списка");
+            tracing::info!(packages = ?device.packages, "packages on top of the whitelist");
         }
     }
 
-    /// Сжать части шрифтов для браузера заранее (фон при запуске сервера) и
-    /// почистить их кэш на диске.
+    /// Compresses font chunks for the browser in advance (background at
+    /// server start) and cleans their disk cache.
     pub fn warm_fonts(&self) {
         let families = self.themes().web_fonts();
         self.fonts().warm_web(families);
         let removed = self.fonts().prune_web(families, self.pages.cache().disk_limits().foreign_ttl);
         if removed > 0 {
-            tracing::info!(removed, "кэш шрифтов почищен");
+            tracing::info!(removed, "font cache cleaned");
         }
     }
 
-    /// Подсказать прогреву, что собрать первым (заметки во вкладках, недавние).
+    /// Tells warming what to build first (notes in tabs, recent ones).
     pub fn hint_warm(&self, ids: Vec<NoteId>) {
         self.warmer.hint(ids);
     }
 
-    /// Один проход прогрева: собрать всё несобранное по порядку.
+    /// One warming pass: builds everything unbuilt in order.
     pub fn warm_pass(&self) -> WarmStats {
         self.warmer.pass(&self.pages)
     }
 
-    /// Прогревать до закрытия хранилища ([`Notes::close`]; фоновый поток сервера).
+    /// Warms until the vault is closed ([`Notes::close`]; a server background thread).
     pub fn warm_forever(&self) {
         let changes = self.changes.clone();
         self.warmer.forever(&self.pages, move || if changes.watching() { RESCAN } else { RESCAN_UNWATCHED });
     }
 
-    // ── Изменения хранилища (см. crate::watch) ─────────────────────────────
+    // -- Vault changes (see crate::watch) -------------------------------------
 
-    /// Включить наблюдатель файлов хранилища (сервер) — и каталога
-    /// библиотеки, если она с диска. `false` — хранилище не умеет или не
-    /// вышло: всё работает обходом, как без него.
+    /// Starts the watcher of the vault files (the server), and of the library
+    /// directory if it is on disk. `false`: the storage cannot watch or it
+    /// failed; everything works by scanning, as without it.
     pub fn watch(&self) -> bool {
         if !self.changes.start(&**self.vault().storage()) {
             return false;
         }
-        // Правка библиотеки — тоже изменение: заметки пересоберутся сами.
+        // An edit of the library is a change too: notes rebuild by themselves.
         if let Some(dir) = &self.library_dir {
             match crate::storage::DirStorage::open(dir) {
                 Ok(lib) => {
                     self.changes.also(&lib, crate::world::LIB_DIR);
                 }
-                Err(e) => tracing::warn!("библиотека {}: {e}", dir.display()),
+                Err(e) => tracing::warn!("library {}: {e}", dir.display()),
             }
         }
         true
     }
 
-    /// Закрыть хранилище (его переименовывают или удаляют): прогрев и
-    /// наблюдатель останавливаются. Запросы к закрытому не делают.
+    /// Closes the vault (it is being renamed or deleted): warming and the
+    /// watcher stop. No requests go to a closed vault.
     pub fn close(&self) {
         self.warmer.stop();
         self.changes.stop();
     }
 
-    /// Работает ли наблюдатель.
+    /// Whether the watcher works.
     pub fn watching(&self) -> bool {
         self.changes.watching()
     }
 
-    /// Звать `f` с каждой пачкой изменений хранилища (из потока наблюдателя).
+    /// Calls `f` with every batch of vault changes (from the watcher thread).
     pub fn on_change(&self, f: impl Fn(&Change) + Send + Sync + 'static) {
         self.changes.subscribe(f);
     }
 
-    /// Сколько страниц и байт держит кэш в памяти.
+    /// How many pages and bytes the memory cache holds.
     pub fn memory(&self) -> (usize, usize) {
         self.pages.cache().memory()
     }

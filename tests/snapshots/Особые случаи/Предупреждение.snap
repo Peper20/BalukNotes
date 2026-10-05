@@ -1,9 +1,9 @@
 id: Особые случаи/Предупреждение
 kind: Note
 Warning: /Особые случаи/Предупреждение.typ:6: h was ignored during HTML export
-Warning: /Особые случаи/Предупреждение.typ:3: для этого языка в библиотеке нет слов оформления: «Definition», «Fig.», «Chapter» будут английскими
-Warning: /Особые случаи/Предупреждение.typ:15: «;» после #выражения не попадёт в текст: Typst считает его концом выражения
-Warning: /Особые случаи/Предупреждение.typ:17: запятая между цифрами в формуле: Typst напечатает «0, 5», а не десятичную дробь
+Warning: /Особые случаи/Предупреждение.typ:3: the library has no styling words for this language: "Definition", "Fig.", "Chapter" will be English
+Warning: /Особые случаи/Предупреждение.typ:15: ";" after #expression does not get into the text: Typst takes it as the end of the expression
+Warning: /Особые случаи/Предупреждение.typ:17: a comma between digits in a formula: Typst prints "0, 5", not a decimal fraction
 title: Предупреждение
 tags: 
 headings:

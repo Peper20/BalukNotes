@@ -154,12 +154,12 @@ Typst is neither LaTeX nor Markdown: `\frac`, `\begin`, `**bold**`, `# Heading` 
 - `непонятный знак` in a formula of `interactive-plot`: the formula language has no `**` or `^`; write `x * x` or `calc.pow(x, 2)`.
 - `неизвестное имя` in such a formula: functions need `calc.`, e.g. `calc.sin(x)`.
 - `file not found ... /_baluk/...`: the import must be exactly `#import "/_baluk/lib.typ": *`.
-- warning `запятая между цифрами`: `dc("0,5")` instead of `0,5` in math.
+- warning `a comma between digits`: `dc("0,5")` instead of `0,5` in math.
 - warning about `;` after a call: `\;`.
-- warning `нет слов оформления`: the note language is neither ru nor en, so block words fall back to English; set own words with `words:` (keys in `reference.md`).
+- warning `no styling words`: the note language is neither ru nor en, so block words fall back to English; set own words with `words:` (keys in `reference.md`).
 - `broken link`: the `#see("...")` path is not in `notes list`, or the anchor does not match a heading text. Either write the target note or drop the link.
 - `_folder.toml: unknown field`: only `title = "Title"` is allowed.
-- `пакет ... не из белого списка`: notes may import only whitelisted Typst packages (the library already brings CeTZ). Draw with the library instead; if a package is really needed, ask the user - only they can allow it in the device settings.
+- `package ... is not whitelisted`: notes may import only whitelisted Typst packages (the library already brings CeTZ). Draw with the library instead; if a package is really needed, ask the user - only they can allow it in the device settings.
 - Other Russian messages come from the library and say what to change.
 
 ## Writing a good note

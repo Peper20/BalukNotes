@@ -22,7 +22,7 @@
 Итог - последняя строка вывода; его сверяют `tools/check.sh` и тест
 `check_finds_exactly_the_planted_problems`:
 
-Итог: `заметок: 22, ошибок: 2, предупреждений: 4, битых ссылок: 4`
+Итог: `notes: 22, errors: 2, warnings: 4, broken links: 4`
 
 ## Каталог
 

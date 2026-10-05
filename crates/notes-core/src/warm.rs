@@ -1,37 +1,36 @@
-//! Прогрев: все заметки собираются заранее, в фоне, чтобы открывались сразу.
+//! Warming: all notes are built in advance, in the background, so they open
+//! at once.
 //!
-//! Работает поверх [`Pages`] — только через его открытые методы.
+//! Works on top of [`Pages`], only through its public methods.
 //!
-//! - **Порядок** ([`order`]): сначала подсказанные клиентом (открытые во
-//!   вкладках, недавние); затем ещё не собиравшиеся заметки (от маленьких
-//!   к большим — новая заметка, скорее всего, та, что сейчас пишут);
-//!   затем собиравшиеся — по времени прошлой сборки (оно в кэше на диске:
-//!   время решают рисунки CeTZ, а не байты); книги, которые ещё не
-//!   собирались, — последними.
-//! - **Только на диск**: собранное пишется в кэш на диске и в памяти не
-//!   держится ([`Pages::prebuild`]) — память занимают лишь открытые
-//!   заметки. Без кэша на диске — в памяти, в пределе
-//!   [`crate::page_cache::MEMORY_BUDGET`].
-//! - **Не дважды**: заметка, у которой есть сборка для текущих файлов (в том
-//!   числе с ошибкой), пропускается — собранное в прошлый запуск не
-//!   собирается снова.
-//! - **Пользователь — вне очереди**: сборки идут по одной, и прогрев не
-//!   берёт следующую заметку, пока кто-то ждёт страницу. Уже начатую сборку
-//!   он не прерывает (см. `docs/tech-debt.md`).
-//! - **Бережно**: сборка прогрева — темы по очереди в одном потоке с
-//!   пониженным приоритетом ([`crate::world::Priority::Background`]). После
-//!   большого прохода (запуск, правка библиотеки) память Typst
-//!   освобождается — редко ([`should_release`]): обычная правка заметки её
-//!   не трогает, иначе пересборка после правки потеряла бы memo.
-//! - **Режим** — настройка устройства ([`WarmMode`]): всё хранилище, только
-//!   подсказанное клиентом (открытое) или выключен.
+//! - **Order** ([`order`]): first the notes hinted by the client (open in
+//!   tabs, recent); then notes never built (small to large - a new note is
+//!   most likely the one being written); then built ones by the time of the
+//!   last build (it is in the disk cache: CeTZ figures decide the time, not
+//!   bytes); books never built go last.
+//! - **Disk only**: a build goes to the disk cache and is not kept in memory
+//!   ([`Pages::prebuild`]), only open notes take memory. Without a disk
+//!   cache - in memory, within [`crate::page_cache::MEMORY_BUDGET`].
+//! - **Not twice**: a note that has a build for its current files (an
+//!   erroneous one too) is skipped - what was built in the last run is not
+//!   built again.
+//! - **The user goes first**: builds run one at a time, and warming does
+//!   not take the next note while someone waits for a page. It does not
+//!   interrupt a build already started (see `docs/tech-debt.md`).
+//! - **Gently**: a warming build does the themes one by one in one thread
+//!   with lowered priority ([`crate::world::Priority::Background`]). After a
+//!   big pass (start, a library edit) Typst memory is released - rarely
+//!   ([`should_release`]): an ordinary note edit leaves it alone, otherwise
+//!   the rebuild after the edit would lose the memo.
+//! - **Mode**: a device setting ([`WarmMode`]) - the whole vault, only what
+//!   the client hinted (open notes) or off.
 //!
-//! Проход повторяется по новой подсказке, по изменению файлов хранилища
-//! ([`Warmer::poke`] от наблюдателя, [`crate::watch`]) и на всякий случай раз
-//! в [`RESCAN`] (без наблюдателя — раз в [`RESCAN_UNWATCHED`]): новые и
-//! изменённые заметки тоже собираются заранее. Проверка неизменившейся
-//! заметки — несколько `stat`. При запуске фонового потока кэш на диске
-//! чистится ([`crate::cache::DiskCache::prune`]).
+//! A pass repeats on a new hint, on a change of vault files
+//! ([`Warmer::poke`] from the watcher, [`crate::watch`]) and, just in case,
+//! once per [`RESCAN`] (without the watcher - once per [`RESCAN_UNWATCHED`]):
+//! new and changed notes get built in advance too. Checking an unchanged
+//! note is a few `stat` calls. When the background thread starts, the disk
+//! cache is cleaned ([`crate::cache::DiskCache::prune`]).
 
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -41,30 +40,30 @@ use parking_lot::{Condvar, Mutex};
 use crate::pages::Pages;
 use crate::vault::{Entry, NoteId, NoteKind};
 
-/// Как часто проверять, не появилось ли несобранное, если наблюдатель файлов
-/// работает (страховка от потерянного события).
+/// How often to check for something unbuilt while the file watcher works
+/// (insurance against a lost event).
 pub const RESCAN: Duration = Duration::from_secs(600);
 
-/// То же без наблюдателя файлов.
+/// The same without the file watcher.
 pub const RESCAN_UNWATCHED: Duration = Duration::from_secs(60);
 
-/// Что прогревать (настройка устройства).
+/// What to warm (a device setting).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(u8)]
 pub enum WarmMode {
-    /// Всё хранилище (компьютер).
+    /// The whole vault (a computer).
     #[default]
     All = 0,
-    /// Только подсказанное клиентом: заметки во вкладках, недавние.
+    /// Only what the client hinted: notes in tabs, recent ones.
     Open = 1,
-    /// Ничего: заметки собираются, когда их открыли (телефон).
+    /// Nothing: notes are built when opened (a phone).
     Off = 2,
 }
 
 impl WarmMode {
     const ALL: [Self; 3] = [Self::All, Self::Open, Self::Off];
 
-    /// Значение настройки: `all`, `open`, `off`.
+    /// Setting value: `all`, `open`, `off`.
     pub fn key(self) -> &'static str {
         match self {
             Self::All => "all",
@@ -73,6 +72,7 @@ impl WarmMode {
         }
     }
 
+    /// The mode by its setting value.
     pub fn from_key(key: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|m| m.key() == key)
     }
@@ -83,41 +83,43 @@ impl WarmMode {
     }
 }
 
-/// Освобождать память после прохода, собравшего хотя бы столько заметок.
+/// Release memory after a pass that built at least this many notes.
 pub const RELEASE_MIN_BUILT: usize = 5;
 
-/// И не чаще, чем раз в столько.
+/// And not more often than once per this.
 pub const RELEASE_EVERY: Duration = Duration::from_secs(600);
 
-/// Освободить ли память Typst после прохода: только большой проход и не
-/// чаще [`RELEASE_EVERY`] (`last` — прошлое освобождение).
+/// Whether to release Typst memory after a pass: only a big pass and not
+/// more often than [`RELEASE_EVERY`] (`last` is the previous release).
 pub fn should_release(stats: WarmStats, last: Option<Instant>, now: Instant) -> bool {
     stats.built >= RELEASE_MIN_BUILT && last.is_none_or(|t| now.duration_since(t) >= RELEASE_EVERY)
 }
 
-/// Прогрев: подсказки клиента и будильник фонового потока.
+/// Warming: the client's hints and the alarm of the background thread.
 #[derive(Debug, Default)]
 pub struct Warmer {
     hints: Mutex<Vec<NoteId>>,
     /// [`WarmMode`] as its discriminant.
     mode: AtomicU8,
-    /// Растёт с каждой подсказкой: проход начинается заново.
+    /// Grows with every hint: the pass starts anew.
     generation: AtomicU64,
     wake: Condvar,
-    /// Хранилище закрыто ([`Warmer::stop`]): фоновый поток выходит.
+    /// The vault is closed ([`Warmer::stop`]): the background thread exits.
     stopped: AtomicBool,
 }
 
-/// Итог одного прохода.
+/// The result of one pass.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct WarmStats {
+    /// Notes built.
     pub built: usize,
+    /// Notes already built.
     pub skipped: usize,
 }
 
-/// Порядок сборки: подсказки (в их порядке); затем не собиравшиеся заметки
-/// по размеру исходников; затем собиравшиеся по времени прошлой сборки;
-/// затем не собиравшиеся книги по размеру.
+/// Build order: hints (in their order); then notes never built, by source
+/// size; then built ones by the time of the last build; then books never
+/// built, by size.
 pub fn order(
     entries: &[Entry],
     size: impl Fn(&Entry) -> u64,
@@ -138,9 +140,9 @@ pub fn order(
 }
 
 impl Warmer {
-    /// Подсказать, что собрать первым (заметки во вкладках, недавние).
+    /// Tells what to build first (notes in tabs, recent ones).
     pub fn hint(&self, ids: Vec<NoteId>) {
-        // Под замком: фоновый поток сверяет поколение под ним же перед сном.
+        // Under the lock: the background thread checks the generation under it before sleeping.
         let mut hints = self.hints.lock();
         *hints = ids;
         self.generation.fetch_add(1, Ordering::SeqCst);
@@ -148,11 +150,12 @@ impl Warmer {
         self.wake.notify_all();
     }
 
+    /// The current mode.
     pub fn mode(&self) -> WarmMode {
         WarmMode::from_u8(self.mode.load(Ordering::SeqCst))
     }
 
-    /// Сменить режим; изменился — пройти заново.
+    /// Changes the mode; if it changed, passes anew.
     pub fn set_mode(&self, mode: WarmMode) {
         let value = mode as u8;
         if self.mode.swap(value, Ordering::SeqCst) != value {
@@ -160,15 +163,15 @@ impl Warmer {
         }
     }
 
-    /// Остановить прогрев навсегда (хранилище закрыто): проход кончается,
-    /// фоновый поток ([`Warmer::forever`]) выходит.
+    /// Stops warming for good (the vault is closed): the pass ends, the
+    /// background thread ([`Warmer::forever`]) exits.
     pub fn stop(&self) {
         self.stopped.store(true, Ordering::SeqCst);
         self.set_mode(WarmMode::Off);
         self.poke();
     }
 
-    /// Файлы хранилища изменились: пройти заново (подсказки те же).
+    /// Vault files changed: pass anew (with the same hints).
     pub fn poke(&self) {
         let hints = self.hints.lock();
         self.generation.fetch_add(1, Ordering::SeqCst);
@@ -176,9 +179,9 @@ impl Warmer {
         self.wake.notify_all();
     }
 
-    /// Один проход: собрать всё несобранное по порядку (в режиме
-    /// [`WarmMode::Open`] — только подсказанное). Новая подсказка — проход
-    /// начинается заново (собранное пропустится).
+    /// One pass: builds everything unbuilt in order (in the mode
+    /// [`WarmMode::Open`] only what was hinted). A new hint restarts the
+    /// pass (what is built gets skipped).
     pub fn pass(&self, pages: &Pages) -> WarmStats {
         let mut stats = WarmStats::default();
         'pass: loop {
@@ -205,17 +208,17 @@ impl Warmer {
                 pages.wait_for_users();
                 match pages.prebuild(&id) {
                     Ok(true) => stats.built += 1,
-                    // Пока ждали, заметку собрал запрос пользователя.
+                    // While we waited, a user request built the note.
                     Ok(false) => stats.skipped += 1,
-                    Err(e) => tracing::debug!(%id, "прогрев: {e}"),
+                    Err(e) => tracing::debug!(%id, "warming: {e}"),
                 }
             }
             return stats;
         }
     }
 
-    /// Прогревать бесконечно (фоновый поток сервера). Сначала — чистка
-    /// кэша на диске. `rescan` — сколько спать без подсказок и изменений.
+    /// Warms forever (a server background thread). First cleans the disk
+    /// cache. `rescan` is how long to sleep without hints and changes.
     pub fn forever(&self, pages: &Pages, rescan: impl Fn() -> Duration) {
         prune(pages);
         let mut released = None;
@@ -234,7 +237,7 @@ impl Warmer {
                     ms = started.elapsed().as_millis(),
                     held,
                     bytes,
-                    "прогрев: заметки собраны заранее"
+                    "warming: notes built in advance"
                 );
             }
             let generation = self.generation.load(Ordering::SeqCst);
@@ -246,12 +249,12 @@ impl Warmer {
     }
 }
 
-/// Чистка кэша на диске: записи заметок, которых больше нет, и лишнее.
+/// Cleans the disk cache: entries of notes that are gone, and leftovers.
 pub fn prune(pages: &Pages) {
     let Ok(entries) = pages.vault().entries() else { return };
     let alive = |id: &str| entries.iter().any(|e| e.id.as_str() == id);
     if let Some(p) = pages.cache().prune(&alive) {
-        tracing::info!(removed = p.removed, bytes = p.bytes, "кэш на диске почищен");
+        tracing::info!(removed = p.removed, bytes = p.bytes, "disk cache cleaned");
     }
 }
 
@@ -300,14 +303,14 @@ mod tests {
         let warmer = Warmer::default();
         warmer.hint(vec![NoteId::new("Книга").unwrap()]);
         assert_eq!(warmer.pass(&pages), WarmStats { built: 3, skipped: 0 });
-        assert_eq!(pages.cache().memory(), (0, 0), "прогрев не держит страницы в памяти");
+        assert_eq!(pages.cache().memory(), (0, 0), "warming does not keep pages in memory");
         assert_eq!(warmer.pass(&pages), WarmStats { built: 0, skipped: 3 });
 
-        // Новый запуск: всё на диске, и заметка с ошибкой тоже.
+        // A new run: everything is on disk, the note with an error too.
         let (restarted, _) = s.pages(true, Duration::ZERO);
         assert_eq!(Warmer::default().pass(&restarted), WarmStats { built: 0, skipped: 3 });
 
-        // Правка — собирается только она.
+        // An edit: only that note is built.
         s.mem.write("A.typ", "aa");
         assert_eq!(Warmer::default().pass(&restarted), WarmStats { built: 1, skipped: 2 });
         assert_eq!(pipeline.builds.load(Ordering::SeqCst), 3);
@@ -321,9 +324,9 @@ mod tests {
         assert_eq!(warmer.mode(), WarmMode::All);
         warmer.set_mode(WarmMode::Off);
         warmer.hint(vec![NoteId::new("A").unwrap()]);
-        assert_eq!(warmer.pass(&pages), WarmStats::default(), "выключен");
+        assert_eq!(warmer.pass(&pages), WarmStats::default(), "off");
         warmer.set_mode(WarmMode::Open);
-        assert_eq!(warmer.pass(&pages), WarmStats { built: 1, skipped: 0 }, "только подсказанное");
+        assert_eq!(warmer.pass(&pages), WarmStats { built: 1, skipped: 0 }, "only the hinted");
         assert!(!pages.is_built(&NoteId::new("B").unwrap()));
         warmer.set_mode(WarmMode::All);
         assert_eq!(warmer.pass(&pages), WarmStats { built: 1, skipped: 1 });
@@ -337,9 +340,9 @@ mod tests {
         let t = Instant::now();
         let big = WarmStats { built: RELEASE_MIN_BUILT, skipped: 0 };
         let one = WarmStats { built: 1, skipped: 10 };
-        assert!(should_release(big, None, t), "первый большой проход (запуск)");
-        assert!(!should_release(one, None, t), "правка одной заметки — нет");
-        assert!(!should_release(big, Some(t), t + RELEASE_EVERY / 2), "не чаще раза в RELEASE_EVERY");
+        assert!(should_release(big, None, t), "the first big pass (start)");
+        assert!(!should_release(one, None, t), "not after editing one note");
+        assert!(!should_release(big, Some(t), t + RELEASE_EVERY / 2), "not more often than RELEASE_EVERY");
         assert!(should_release(big, Some(t), t + RELEASE_EVERY));
     }
 
@@ -350,7 +353,7 @@ mod tests {
         warmer.hint(vec![NoteId::new("A").unwrap()]);
         warmer.poke();
         assert_eq!(warmer.generation.load(Ordering::SeqCst), before + 2);
-        assert_eq!(warmer.hints.lock().len(), 1, "подсказки те же");
+        assert_eq!(warmer.hints.lock().len(), 1, "the same hints");
     }
 
     #[test]

@@ -2,44 +2,48 @@
 import type { Forces } from "./Forces";
 
 /**
- * Что показать. Пустой `folders` — все папки.
+ * What to show. Empty `folders` - all folders.
  */
 export type GraphFilter = { 
 /**
- * Только эти группы (папки верхнего уровня; корень — [`ROOT_GROUP`]).
+ * Only these groups (top-level folders; the root is [`ROOT_GROUP`]).
  */
 folders: Array<string>, 
 /**
- * Только заметки в этой папке и её подпапках (путь от корня: `Мат/Анализ`).
+ * Only notes in this folder and its subfolders (path from the root: `Мат/Анализ`).
  */
 folder: string | null, 
 /**
- * Скрытые группы.
+ * Hidden groups.
  */
 hidden: Array<string>, 
 /**
- * Только заметки с этим тегом.
+ * Only notes with this tag.
  */
 tag: string | null, 
 /**
- * Показывать несуществующие заметки (на них ссылаются, но их нет).
+ * Show missing notes (linked to but not written).
  */
 missing: boolean, 
 /**
- * Показывать заметки без связей.
+ * Show notes without links.
  */
 orphans: boolean, 
 /**
- * Только соседи этой заметки на `depth` шагов (в обе стороны); она
- * сама остаётся, даже если её скрыл бы другой фильтр.
+ * Only the neighbours of this note within `depth` steps (both ways);
+ * the note itself stays even if another filter would hide it.
  */
-around: string | null, depth: number, 
+around: string | null, 
 /**
- * Книги — корнем и главами вокруг него, а не одной вершиной.
+ * Steps from `around`.
+ */
+depth: number, 
+/**
+ * Books as a root with chapters around it, not one node.
  */
 chapters: boolean, 
 /**
- * Силы раскладки (настройки вида на странице графа); граф в заметке -
- * по умолчанию.
+ * Layout forces (view settings on the graph page); a graph in a note
+ * uses the defaults.
  */
 forces: Forces, };

@@ -1,65 +1,72 @@
-//! Содержание исходника без компиляции: название и теги из шаблона,
-//! разделы и их текст — для быстрого перехода, поиска и тегов. Глава книги
-//! со своими характеристиками (`#show: chapter.with(title: […], tags: (…))`)
-//! — раздел первого уровня со своими тегами.
+//! The outline of a source without compiling: the title and tags from the
+//! template, sections and their text - for quick navigation, search and
+//! tags. A book chapter with its own properties
+//! (`#show: chapter.with(title: [...], tags: (...))`) is a first-level
+//! section with its own tags.
 //!
-//! Как и ссылки ([`crate::graph`]), берётся из синтаксического дерева Typst:
-//! весь индекс строится за миллисекунды. Текст — приблизительный: формулы
-//! в тексте пропускаются, а в названии и заголовках — исходником без `$`
-//! (`Ряд $sum 1/n^2$` -> «Ряд sum 1/n^2», решение пользователя: в дереве,
-//! вкладках и графе формула не пропадает); вычисляемое содержимое
-//! (`#let x = …; #x`) не раскрывается.
-//! Для поиска этого достаточно; точный текст есть только у собранной страницы.
+//! Like links ([`crate::graph`]), it comes from the Typst syntax tree: the
+//! whole index is built in milliseconds. The text is approximate: formulas
+//! in the text are skipped, and in the title and headings they are kept as
+//! source without `$` (`Ряд $sum 1/n^2$` -> "Ряд sum 1/n^2", user's
+//! decision: the formula does not vanish in the tree, the tabs and the
+//! graph); computed content (`#let x = ...; #x`) is not expanded. That is
+//! enough for search; only a built page has the exact text.
 
 use typst::syntax::ast::AstNode as _;
 use typst::syntax::{SyntaxKind, SyntaxNode, ast};
 
-/// Ссылка на заметку из `baluk/links.typ`.
+/// Link to a note from `baluk/links.typ`.
 const LINK_FN: &str = "see";
-/// Шаблоны baluk, у которых берём `название` и `теги`.
+/// baluk templates we take `title` and `tags` from.
 const TEMPLATES: &[&str] = &["note", "book"];
-/// Глава книги: её `title` — заголовок первого уровня, `tags` — свои теги.
+/// A book chapter: its `title` is a first-level heading, `tags` are its own tags.
 const CHAPTER: &str = "chapter";
-/// Именованные строковые аргументы, которые видны читателю (подписи блоков).
+/// Named string arguments the reader sees (block captions).
 const VISIBLE_ARGS: &[&str] = &["title", "label", "caption", "description", "subtitle"];
 
+/// The outline of one source file.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Outline {
+    /// Title from the template.
     pub title: Option<String>,
-    /// Теги шаблона; у книги — корня (`main.typ`), их наследуют все главы.
+    /// Template tags; of a book - of the root (`main.typ`), all chapters inherit them.
     pub tags: Vec<String>,
-    /// Первый раздел — текст до первого заголовка (без заголовка).
+    /// The first section is the text before the first heading (no heading).
     pub sections: Vec<Section>,
 }
 
+/// A section: a heading and the text up to the next one.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Section {
-    /// Текст заголовка; `None` — начало файла до первого заголовка.
+    /// Heading text; `None` - the start of the file before the first heading.
     pub heading: Option<String>,
-    /// Уровень `=` (1 — `=`).
+    /// The level of `=` (1 - `=`).
     pub level: usize,
-    /// Метка заголовка `= Раздел <метка>` — она станет его `id`.
+    /// Heading label `= Раздел <label>`: it becomes its `id`.
     pub label: Option<String>,
-    /// Свои теги главы книги (`chapter.with(tags: …)`); у остальных разделов пусто.
+    /// Own tags of a book chapter (`chapter.with(tags: ...)`); empty for other sections.
     pub tags: Vec<String>,
+    /// Plain text of the section.
     pub text: String,
-    /// Ссылки `#see` в тексте раздела (без повторов) — чьи они на графе с
-    /// главами книг. Полный список ссылок заметки — у индекса ([`crate::graph`]).
+    /// `#see` links in the section text (no repeats): whose they are on the
+    /// graph with book chapters. The full list of a note's links is in the
+    /// index ([`crate::graph`]).
     pub links: Vec<crate::render::LinkRef>,
 }
 
 impl Outline {
-    /// Теги заметки или книги: корня, затем глав (могут повторяться).
+    /// Tags of the note or book: of the root, then of the chapters (may repeat).
     pub fn all_tags(&self) -> impl Iterator<Item = &str> {
         self.tags.iter().chain(self.sections.iter().flat_map(|s| &s.tags)).map(String::as_str)
     }
 
-    /// Есть ли тег у заметки или книги: у корня или хотя бы у одной главы.
+    /// Whether the note or book has the tag: at the root or in at least one chapter.
     pub fn has_tag(&self, tag: &str) -> bool {
         self.all_tags().any(|t| t == tag)
     }
 }
 
+/// Parses the outline of a source.
 pub fn parse_outline(source: &str) -> Outline {
     let root = typst::syntax::parse(source);
     let mut w = Walker::default();
@@ -78,19 +85,19 @@ struct Walker {
     label: Option<String>,
     tags: Vec<String>,
     links: Vec<crate::render::LinkRef>,
-    /// Название или заголовок: формула — исходником, а не пропуском.
+    /// Title or heading: a formula as source, not skipped.
     formulas: bool,
 }
 
 impl Walker {
-    /// Для названия и заголовка: формулы — исходником.
+    /// For the title and a heading: formulas as source.
     fn inline() -> Self {
         Self { formulas: true, ..Self::default() }
     }
 
     fn walk(&mut self, node: &SyntaxNode, parent: SyntaxKind) {
         match node.kind() {
-            // Кавычка — как написана (`'` не становится `"`).
+            // A quote as written (`'` does not turn into `"`).
             SyntaxKind::Text | SyntaxKind::SmartQuote => self.text.push_str(node.leaf_text()),
             SyntaxKind::Space | SyntaxKind::Linebreak | SyntaxKind::Parbreak | SyntaxKind::RawTrimmed => {
                 self.space();
@@ -123,13 +130,13 @@ impl Walker {
                 let named = node.cast::<ast::Named>();
                 let visible = named.is_some_and(|n| VISIBLE_ARGS.contains(&n.name().as_str()));
                 for child in node.children() {
-                    // Строка именованного аргумента — только если он виден читателю.
+                    // The string of a named argument only if the reader sees it.
                     self.walk(child, if visible { SyntaxKind::Args } else { SyntaxKind::Named });
                 }
             }
             SyntaxKind::Heading => self.heading(node),
             SyntaxKind::FuncCall if self.link(node) => {}
-            // `= Раздел <метка>`: метка — сосед заголовка сразу после него.
+            // `= Раздел <label>`: the label is the heading's neighbour right after it.
             SyntaxKind::Label if self.heading.is_some() && self.label.is_none() && self.text.trim().is_empty() => {
                 self.label = node.cast::<ast::Label>().map(|l| l.get().to_owned());
             }
@@ -179,8 +186,8 @@ impl Walker {
         });
     }
 
-    /// `#see("Сеть/SSH")` — надпись как на странице (`baluk/links.typ`):
-    /// своя подпись, иначе якорь, иначе последний сегмент пути.
+    /// `#see("Сеть/SSH")`: the caption as on the page (`baluk/links.typ`) -
+    /// own text, otherwise the anchor, otherwise the last path segment.
     fn link(&mut self, node: &SyntaxNode) -> bool {
         let Some(call) = node.cast::<ast::FuncCall>() else { return false };
         let ast::Expr::Ident(name) = call.callee() else { return false };
@@ -217,8 +224,8 @@ impl Walker {
         true
     }
 
-    /// `#show: note.with(title: […], tags: (…))`; глава —
-    /// `#show: chapter.with(title: […], tags: (…), label: "…")`.
+    /// `#show: note.with(title: [...], tags: (...))`; a chapter is
+    /// `#show: chapter.with(title: [...], tags: (...), label: "...")`.
     fn template(&mut self, node: &SyntaxNode) {
         let Some(rule) = node.cast::<ast::ShowRule>() else { return };
         let ast::Expr::FuncCall(call) = rule.transform() else { return };
@@ -253,7 +260,7 @@ impl Walker {
             }
         }
         if chapter {
-            // Заголовок главы ставит сам шаблон — как `= Название <метка>`.
+            // The template sets the chapter heading itself, as `= Название <label>`.
             self.finish_section();
             self.heading = Some(title.unwrap_or_default());
             self.level = 1;
@@ -266,7 +273,7 @@ impl Walker {
     }
 }
 
-/// Пробелы схлопнуты, по краям — без пробелов.
+/// Whitespace collapsed, none at the edges.
 fn normalize(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
@@ -309,15 +316,15 @@ ssh-copy-id host
         assert!(s1.contains("ключа") && s1.contains("Ключ — файл."), "{s1}");
         assert!(s1.contains("ячейка"), "{s1}");
         for noise in ["служебное", "line", "1,*", "x^2", "не текст", "_baluk"] {
-            assert!(!s1.contains(noise) && !o.sections[0].text.contains(noise), "«{noise}» в тексте: {s1}");
+            assert!(!s1.contains(noise) && !o.sections[0].text.contains(noise), "\"{noise}\" in the text: {s1}");
         }
         let s2 = &o.sections[2].text;
-        assert!(s2.contains("→ межсетевой экран; дальше."), "своя подпись ссылки, без пути: {s2}");
+        assert!(s2.contains("→ межсетевой экран; дальше."), "own link caption, no path: {s2}");
         assert!(!s2.contains("Сеть/UFW"), "{s2}");
         let o = parse_outline(r#"О ключах — #see("Сеть/SSH"). Порт — #see("Сеть/SSH", anchor: "Смена порта")."#);
         assert_eq!(o.sections[0].text, "О ключах — SSH. Порт — Смена порта.");
         assert!(!s2.contains("комментарий"));
-        assert!(s2.contains("ssh-keygen ssh-copy-id host"), "строки кода — через пробел: {s2}");
+        assert!(s2.contains("ssh-keygen ssh-copy-id host"), "code lines joined by a space: {s2}");
     }
 
     #[test]
@@ -330,8 +337,8 @@ ssh-copy-id host
 Текст.
 "#,
         );
-        assert_eq!(o.title, None, "название главы — не название книги");
-        assert!(o.tags.is_empty(), "теги главы — не теги корня");
+        assert_eq!(o.title, None, "a chapter title is not the book title");
+        assert!(o.tags.is_empty(), "chapter tags are not root tags");
         let heads: Vec<_> =
             o.sections.iter().map(|s| (s.heading.as_deref(), s.level, s.label.as_deref(), s.tags.clone())).collect();
         assert_eq!(
@@ -352,7 +359,7 @@ ssh-copy-id host
         );
         assert_eq!(o.title.as_deref(), Some("Ряд sum 1/n^2"));
         assert_eq!(o.sections[0].heading.as_deref(), Some("Норма norm(x) и y"));
-        // В тексте раздела формула по-прежнему пропускается.
+        // In the section text the formula is still skipped.
         assert_eq!(o.sections[0].text, "Текст после.");
     }
 

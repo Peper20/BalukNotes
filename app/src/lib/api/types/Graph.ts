@@ -2,4 +2,15 @@
 import type { Edge } from "./Edge";
 import type { Node } from "./Node";
 
-export type Graph = { nodes: Array<Node>, edges: Array<Edge>, };
+/**
+ * The link graph of a vault.
+ */
+export type Graph = { 
+/**
+ * Nodes in the order of their ids.
+ */
+nodes: Array<Node>, 
+/**
+ * Edges in the order of (from, to).
+ */
+edges: Array<Edge>, };

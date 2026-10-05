@@ -1,27 +1,29 @@
-//! Индекс исходников хранилища: ссылки (обратные ссылки, граф) и
-//! содержание заметок ([`crate::outline`]: название, теги, разделы — для
-//! быстрого перехода и поиска).
+//! The source index of a vault: links (backlinks, the graph) and note
+//! outlines ([`crate::outline`]: title, tags, sections - for quick
+//! navigation and search).
 //!
-//! Ссылки берутся **из исходников, без компиляции**: парсер Typst находит
-//! вызовы `#see("путь", anchor: "…")` с буквальными строками. Так весь граф
-//! строится за миллисекунды, а не за время сборки всех заметок (у книги —
-//! десятки секунд). Ссылка с вычисляемым путём (`#see(путь-из-переменной)`) в
-//! индекс не попадёт — Claude Code пишет ссылки буквально, а `notes check`
-//! проверяет ссылки по собранным страницам, так что расхождение будет видно.
+//! Links come **from the sources, without compiling**: the Typst parser
+//! finds the calls `#see("path", anchor: "...")` with literal strings. So
+//! the whole graph is built in milliseconds, not in the time of building all
+//! notes (tens of seconds for a book). A link with a computed path
+//! (`#see(path-from-a-variable)`) does not get into the index - Claude Code
+//! writes links literally, and `notes check` checks links by the built
+//! pages, so a mismatch shows.
 //!
-//! Файл разбирается заново, только если изменились его время изменения или
-//! размер. Заметке принадлежит её файл; книге — все `.typ` в её папке.
-//! Названия папок — их файлы `_folder.toml` ([`crate::folders`]), так же по
-//! времени и размеру.
+//! A file is parsed anew only if its modification time or size changed. A
+//! note owns its file; a book owns all `.typ` in its folder. Folder titles
+//! are their `_folder.toml` files ([`crate::folders`]), also by time and
+//! size.
 //!
-//! Вычисляемые пути индекс берёт из собранных страниц: ссылки последней
-//! удачной сборки заметки ([`SourceIndex::set_built`], из кэша страниц)
-//! дописываются к найденным в исходнике — так они попадают в обратные
-//! ссылки и граф. Пока заметка не пересобрана, её прежние ссылки остаются.
+//! The index takes computed paths from the built pages: the links of the
+//! last successful build of a note ([`SourceIndex::set_built`], from the
+//! page cache) are added to those found in the source, so they get into the
+//! backlinks and the graph. Until the note is rebuilt, its old links stay.
 //!
-//! С наблюдателем файлов ([`crate::watch::Changes`], сервер) индекс не
-//! обходит хранилище, пока в нём ничего не менялось: разбор всех заметок
-//! берётся из памяти (и на всякий случай обновляется не реже [`MAX_AGE`]).
+//! With the file watcher ([`crate::watch::Changes`], the server) the index
+//! does not scan the vault while nothing in it changed: the parse of all
+//! notes comes from memory (and is refreshed at least every [`MAX_AGE`],
+//! just in case).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, OnceLock};
@@ -38,70 +40,80 @@ use crate::render::LinkRef;
 use crate::vault::{Entry, NoteId, NoteKind, Vault};
 use crate::watch::Changes;
 
-/// С наблюдателем — обходить хранилище хотя бы так часто (страховка от
-/// потерянного события).
+/// With the watcher, scan the vault at least this often (insurance against a
+/// lost event).
 pub const MAX_AGE: Duration = Duration::from_secs(600);
 
-/// Функция ссылки из `baluk/links.typ`.
+/// The link function from `baluk/links.typ`.
 const LINK_FN: &str = "see";
+/// The named argument of the link with the anchor.
 const ANCHOR_ARG: &str = "anchor";
 
-/// Ссылка на заметку из другой заметки.
+/// A link to a note from another note.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Backlink {
+    /// The linking note.
     pub from: NoteId,
+    /// The link anchor as written.
     pub anchor: Option<String>,
-    /// Раздел заметки, куда ведёт якорь: `id` заголовка (HTML заголовка —
-    /// в `Rendered::headings`) и его текст (формула — исходником); якоря
-    /// нет или раздел не нашёлся — `None`.
+    /// The section of the note the anchor leads to: the heading `id` (the
+    /// heading HTML is in `Rendered::headings`) and its text (a formula as
+    /// source); no anchor or the section was not found - `None`.
     pub section: Option<String>,
     pub heading: Option<String>,
 }
 
+/// A graph node: a note, a book, a book chapter or a missing note.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Node {
-    /// Путь заметки; у главы книги — `<книга>/.<номер>` (сегмент на `.` в
-    /// пути заметки невозможен).
+    /// Note path; for a book chapter `<book>/.<number>` (a segment starting
+    /// with `.` is impossible in a note path).
     pub id: String,
-    /// `None` — заметки нет (на неё ссылаются, но её не написали).
+    /// `None`: the note does not exist (it is linked to but not written).
     pub kind: Option<NoteKind>,
-    /// Название ([`Snapshot::title`]); у главы — её заголовок.
+    /// Title ([`Snapshot::title`]); for a chapter, its heading.
     pub title: String,
-    /// Глава книги (граф с главами, [`Snapshot::graph_of`]).
+    /// A book chapter (the graph with chapters, [`Snapshot::graph_of`]).
     pub chapter: Option<ChapterOf>,
 }
 
-/// Чья глава вершина и куда она ведёт.
+/// Whose chapter the node is and where it leads.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct ChapterOf {
-    /// Путь книги.
+    /// Book path.
     pub book: String,
-    /// `id` заголовка главы на странице книги.
+    /// `id` of the chapter heading on the book page.
     pub anchor: String,
 }
 
+/// A graph edge: links from one node to another.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Edge {
+    /// Source node.
     pub from: String,
+    /// Target node.
     pub to: String,
-    /// Сколько ссылок (с разными якорями) ведёт по этому ребру.
+    /// How many links (with different anchors) go along this edge.
     pub count: usize,
-    /// Не ссылка, а книга - её глава (граф с главами).
+    /// Not a link but a book to its chapter (the graph with chapters).
     pub chapter: bool,
 }
 
+/// The link graph of a vault.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Graph {
+    /// Nodes in the order of their ids.
     pub nodes: Vec<Node>,
+    /// Edges in the order of (from, to).
     pub edges: Vec<Edge>,
 }
 
-/// Файл, разобранный при таком `(время, размер)`.
+/// A file parsed at this `(time, size)`.
 #[derive(Debug)]
 struct Parsed {
     stamp: (Option<SystemTime>, u64),
@@ -109,35 +121,36 @@ struct Parsed {
     outline: Outline,
 }
 
-/// `_folder.toml`, разобранный при таком `(время, размер)`.
+/// `_folder.toml` parsed at this `(time, size)`.
 #[derive(Debug)]
 struct ParsedFolder {
     stamp: (Option<SystemTime>, u64),
     folder: Folder,
 }
 
-/// Ссылки последней удачной сборки заметки (`None` — не собиралась).
+/// Links of the last successful build of a note (`None` - not built).
 pub type BuiltLinks = Box<dyn Fn(&NoteId) -> Option<Vec<LinkRef>> + Send + Sync>;
 
+/// The source index of a vault, reparsing only changed files.
 #[derive(Default)]
 pub struct SourceIndex {
-    /// Путь файла в хранилище → разбор.
+    /// File path in the vault -> its parse.
     files: Mutex<HashMap<String, Parsed>>,
-    /// Папка → её `_folder.toml` (только папки, где он есть).
+    /// Folder -> its `_folder.toml` (only folders that have one).
     folder_files: Mutex<HashMap<String, ParsedFolder>>,
-    /// Откуда брать ссылки собранных страниц.
+    /// Where to take the links of built pages from.
     built: OnceLock<BuiltLinks>,
-    /// Наблюдатель файлов: пока счётчик тот же, обход не нужен.
+    /// The file watcher: while the counter is the same, no scan is needed.
     changes: OnceLock<Arc<Changes>>,
-    /// Последний обход: при каком счётчике, когда и что нашёл.
+    /// The last scan: at which counter, when and what it found.
     walked: Mutex<Option<(u64, Instant, Arc<Walk>)>>,
 }
 
-/// Разбор всех заметок хранилища — итог обхода.
+/// The parse of all notes of a vault, the result of a scan.
 #[derive(Debug)]
 struct Walk {
     entries: Arc<Vec<Entry>>,
-    /// Ссылки из исходников.
+    /// Links from the sources.
     links: BTreeMap<NoteId, Vec<LinkRef>>,
     outlines: Arc<BTreeMap<NoteId, Outline>>,
     folders: Arc<BTreeMap<String, Folder>>,
@@ -149,40 +162,40 @@ impl std::fmt::Debug for SourceIndex {
     }
 }
 
-/// Ссылки всех заметок хранилища на данный момент.
+/// The links of all notes of a vault at a moment.
 #[derive(Debug)]
 pub struct Snapshot {
     entries: Arc<Vec<Entry>>,
-    /// Заметка → её ссылки (без повторов, в порядке появления).
+    /// Note -> its links (no repeats, in order of appearance).
     links: BTreeMap<NoteId, Vec<LinkRef>>,
-    /// Заметка → содержание (у книги — всех файлов по порядку).
+    /// Note -> outline (of a book - of all files in order).
     outlines: Arc<BTreeMap<NoteId, Outline>>,
-    /// Папки, в которых есть заметки (и все их предки), → название.
+    /// Folders that have notes (and all their ancestors) -> title.
     folders: Arc<BTreeMap<String, Folder>>,
 }
 
 impl SourceIndex {
-    /// Дополнять ссылки из исходников ссылками собранных страниц (один раз).
+    /// Adds the links of built pages to the links from sources (set once).
     pub fn set_built(&self, built: BuiltLinks) {
         if self.built.set(built).is_err() {
-            tracing::warn!("индекс ссылок: источник собранных страниц уже задан");
+            tracing::warn!("link index: the source of built pages is already set");
         }
     }
 
-    /// Не обходить хранилище, пока `changes` не сообщит об изменении (один раз).
+    /// Do not scan the vault until `changes` reports a change (set once).
     pub fn set_changes(&self, changes: Arc<Changes>) {
         if self.changes.set(changes).is_err() {
-            tracing::warn!("индекс ссылок: наблюдатель уже задан");
+            tracing::warn!("link index: the watcher is already set");
         }
     }
 
-    /// Ссылки и содержание всех заметок. Обходит хранилище (разбираются
-    /// только изменившиеся файлы) — или, с наблюдателем, берёт прошлый обход,
-    /// если с тех пор ничего не менялось.
+    /// Links and outlines of all notes. Scans the vault (only changed files
+    /// are parsed) or, with the watcher, takes the previous scan if nothing
+    /// changed since.
     pub fn snapshot(&self, vault: &Vault) -> Result<Snapshot> {
         let walk = self.walk(vault)?;
         let mut links = walk.links.clone();
-        // Ссылки собранных страниц: вычисляемые пути — после буквальных.
+        // Links of built pages: computed paths after literal ones.
         if let Some(built) = self.built.get() {
             for (id, own) in &mut links {
                 for link in built(id).unwrap_or_default() {
@@ -202,7 +215,7 @@ impl SourceIndex {
 
     fn walk(&self, vault: &Vault) -> Result<Arc<Walk>> {
         let watched = self.changes.get().filter(|c| c.watching());
-        // Счётчик — до обхода: событие во время обхода сделает его устаревшим.
+        // The counter before the scan: an event during the scan makes it stale.
         let seq = watched.map(|c| c.seq());
         if let (Some(seq), Some((at_seq, at, walk))) = (seq, &*self.walked.lock())
             && *at_seq == seq
@@ -217,7 +230,7 @@ impl SourceIndex {
         Ok(walk)
     }
 
-    /// Обход хранилища: разбираются только изменившиеся файлы.
+    /// Scans the vault: only changed files are parsed.
     fn walk_files(&self, vault: &Vault) -> Result<Walk> {
         let entries = vault.entries()?;
         let mut files = self.files.lock();
@@ -241,7 +254,7 @@ impl SourceIndex {
                         own.push(link.clone());
                     }
                 }
-                // Книга: название и теги — из главного файла (где шаблон), разделы — всех глав.
+                // A book: title and tags from the main file (with the template), sections from all chapters.
                 outline.title = outline.title.or_else(|| parsed.outline.title.clone());
                 if outline.tags.is_empty() {
                     outline.tags.clone_from(&parsed.outline.tags);
@@ -252,15 +265,15 @@ impl SourceIndex {
             links.insert(entry.id.clone(), own);
             outlines.insert(entry.id.clone(), outline);
         }
-        // Удалённые файлы — из кэша вон.
+        // Deleted files leave the cache.
         files.retain(|path, _| seen.contains(path));
         drop(files);
         let folders = self.walk_folders(vault, &entries)?;
         Ok(Walk { entries: Arc::new(entries), links, outlines: Arc::new(outlines), folders: Arc::new(folders) })
     }
 
-    /// Папки хранилища (и пустые) и их `_folder.toml` (перечитываются только
-    /// изменившиеся).
+    /// Vault folders (empty ones too) and their `_folder.toml` (only changed
+    /// ones are reread).
     fn walk_folders(&self, vault: &Vault, entries: &[Entry]) -> Result<BTreeMap<String, Folder>> {
         let all = vault.folders()?;
         let paths: BTreeSet<&str> =
@@ -294,18 +307,18 @@ impl SourceIndex {
 }
 
 impl Snapshot {
-    /// Содержание заметки: название, теги, разделы.
+    /// Note outline: title, tags, sections.
     pub fn outline(&self, id: &NoteId) -> Option<&Outline> {
         self.outlines.get(id)
     }
 
-    /// Есть ли тег у заметки по пути: у неё самой или у главы книги.
+    /// Whether the note at the path has the tag: itself or a chapter of the book.
     pub fn has_tag(&self, id: &str, tag: &str) -> bool {
         NoteId::new(id).ok().and_then(|id| self.outlines.get(&id)).is_some_and(|o| o.has_tag(tag))
     }
 
-    /// Есть ли тег у главы книги: у корня книги или у самой главы (`anchor` —
-    /// `id` её заголовка).
+    /// Whether a book chapter has the tag: at the book root or in the chapter
+    /// itself (`anchor` is the `id` of its heading).
     pub fn chapter_has_tag(&self, book: &str, anchor: &str, tag: &str) -> bool {
         let Some(outline) = NoteId::new(book).ok().and_then(|id| self.outlines.get(&id)) else { return false };
         outline.tags.iter().any(|t| t == tag)
@@ -313,16 +326,16 @@ impl Snapshot {
                 .is_some_and(|(i, _)| outline.sections[i].tags.iter().any(|t| t == tag))
     }
 
-    /// Название заметки для показа: из шаблона (`title: […]`), иначе —
-    /// имя файла. Для ненаписанной (на неё только ссылаются) — последний
-    /// сегмент пути.
+    /// Note title for display: from the template (`title: [...]`), otherwise
+    /// the file name. For an unwritten note (only linked to), the last path
+    /// segment.
     pub fn title(&self, id: &str) -> String {
         let fallback = || id.rsplit('/').next().unwrap_or(id).to_owned();
         let Ok(id) = NoteId::new(id) else { return fallback() };
         self.outlines.get(&id).and_then(|o| o.title.clone()).unwrap_or_else(fallback)
     }
 
-    /// Название папки: из `_folder.toml`, иначе — её имя.
+    /// Folder title: from `_folder.toml`, otherwise its name.
     pub fn folder_title(&self, path: &str) -> String {
         self.folders
             .get(path)
@@ -330,27 +343,27 @@ impl Snapshot {
             .unwrap_or_else(|| path.rsplit('/').next().unwrap_or(path).to_owned())
     }
 
-    /// Папки хранилища (и пустые), по алфавиту путей.
+    /// Vault folders (empty ones too), by path alphabetically.
     pub fn folders(&self) -> impl Iterator<Item = (&str, &Folder)> {
         self.folders.iter().map(|(path, f)| (path.as_str(), f))
     }
 
-    /// Все заметки с содержанием.
+    /// All notes with outlines.
     pub fn outlines(&self) -> impl Iterator<Item = (&Entry, &Outline)> {
         self.entries.iter().filter_map(|e| self.outlines.get(&e.id).map(|o| (e, o)))
     }
 
-    /// Ссылки заметки (как написаны в исходнике).
+    /// Note links (as written in the source).
     pub fn outgoing(&self, id: &NoteId) -> &[LinkRef] {
         self.links.get(id).map_or(&[], Vec::as_slice)
     }
 
-    /// Есть ли в хранилище заметка с таким путём.
+    /// Whether the vault has a note at this path.
     pub fn exists(&self, target: &str) -> bool {
         self.entries.iter().any(|e| e.id.as_str() == target)
     }
 
-    /// Кто ссылается на заметку (без ссылок на себя).
+    /// Who links to the note (no links to itself).
     pub fn backlinks(&self, id: &NoteId) -> Vec<Backlink> {
         let outline = self.outlines().find(|(e, _)| e.id == *id).map(|(_, o)| o);
         let mut out = Vec::new();
@@ -370,16 +383,17 @@ impl Snapshot {
         out
     }
 
-    /// Граф: все заметки и те, на которые ссылаются, но которых нет.
-    /// Рёбра — между заметками (якоря сливаются), без петель.
+    /// The graph: all notes and those linked to but missing. Edges are
+    /// between notes (anchors merge), no loops.
     pub fn graph(&self) -> Graph {
         self.graph_of(false)
     }
 
-    /// Граф; `chapters` — книга не одной вершиной, а корнем и главами вокруг
-    /// него (рёбра «книга - глава»). Ссылка из главы — от её вершины, в
-    /// раздел книги (`anchor`) — к главе с этим разделом; ссылки до первой
-    /// главы и без якоря — у корня.
+    /// The graph; with `chapters` a book is not one node but a root with
+    /// chapters around it (edges "book - chapter"). A link from a chapter
+    /// goes from its node; a link to a book section (`anchor`) goes to the
+    /// chapter with that section; links before the first chapter and without
+    /// an anchor belong to the root.
     pub fn graph_of(&self, chapters: bool) -> Graph {
         let books: BTreeMap<&str, Vec<Chapter>> = if chapters {
             self.entries
@@ -415,7 +429,7 @@ impl Snapshot {
                 edges.insert(((*book).to_owned(), c.node.clone()), (0, true));
             }
         }
-        // Куда ведёт ссылка: в главу (раздел книги), иначе — в заметку.
+        // Where a link leads: to a chapter (a book section), otherwise to the note.
         let target_of = |link: &LinkRef| -> String {
             let chapter = books.get(link.target.as_str()).and_then(|list| {
                 let outline = self.outlines.get(&NoteId::new(&link.target).ok()?)?;
@@ -427,7 +441,7 @@ impl Snapshot {
         for (from, links) in &self.links {
             let own = books.get(from.as_str());
             for link in links {
-                // Ссылка главы — от главы (у ссылки в нескольких главах — от каждой).
+                // A chapter link goes from the chapter (a link in several chapters - from each).
                 let mut sources: Vec<String> =
                     own.into_iter().flatten().filter(|c| c.links.contains(link)).map(|c| c.node.clone()).collect();
                 if sources.is_empty() {
@@ -453,20 +467,20 @@ impl Snapshot {
     }
 }
 
-/// Глава книги на графе.
+/// A book chapter on the graph.
 #[derive(Debug)]
 struct Chapter {
-    /// Вершина: `<книга>/.<номер>`.
+    /// Node: `<book>/.<number>`.
     node: String,
     title: String,
     anchor: String,
-    /// Номер раздела заголовка главы в содержании книги.
+    /// Section number of the chapter heading in the book outline.
     section: usize,
-    /// Ссылки всех разделов главы.
+    /// Links of all sections of the chapter.
     links: Vec<LinkRef>,
 }
 
-/// Главы книги — разделы первого уровня, со ссылками своих подразделов.
+/// Book chapters: first-level sections, with the links of their subsections.
 fn book_chapters(book: &str, outline: &Outline) -> Vec<Chapter> {
     let ids = crate::search::section_ids(outline);
     let mut out: Vec<Chapter> = Vec::new();
@@ -493,17 +507,19 @@ fn book_chapters(book: &str, outline: &Outline) -> Vec<Chapter> {
     out
 }
 
-/// Префикс названий в данных хранилища: `/_vault/title/<путь>`.
+/// Prefix of titles in vault data: `/_vault/title/<path>`.
 pub const TITLE_PREFIX: &str = "title";
 
-/// Поставщик `/_vault/title/<путь>` — название заметки ([`Snapshot::title`])
-/// текстом: его показывает `#see("путь")` без своей подписи. Ненаписанная
-/// заметка — последний сегмент пути (битую ссылку покажет `notes check`, а
-/// сборка не падает). Отпечаток — по содержимому: заметка пересобирается,
-/// только когда меняется название цели.
+/// Provider of `/_vault/title/<path>`: the note title ([`Snapshot::title`])
+/// as text, shown by `#see("path")` without its own caption. An unwritten
+/// note gives the last path segment (`notes check` shows the broken link,
+/// the build does not fail). The fingerprint is by content: a note is
+/// rebuilt only when the title of the target changes.
 #[derive(Debug)]
 pub struct TitleData {
+    /// The vault.
     pub vault: Vault,
+    /// Its source index.
     pub index: Arc<SourceIndex>,
 }
 
@@ -514,7 +530,7 @@ impl crate::vault_data::DataProvider for TitleData {
     }
 }
 
-/// Все `see("…", anchor: "…")` с буквальными строками, без повторов.
+/// All `see("...", anchor: "...")` with literal strings, no repeats.
 pub fn parse_links(text: &str) -> Vec<LinkRef> {
     let root = typst::syntax::parse(text);
     let mut out = Vec::new();
@@ -599,7 +615,7 @@ mod tests {
         let b = NoteId::new("B").unwrap();
         let from: Vec<_> = snap.backlinks(&b).into_iter().map(|l| (l.from.to_string(), l.anchor)).collect();
         assert_eq!(from, [("A".into(), None), ("A".into(), Some("x".into())), ("Книга".into(), None)]);
-        assert!(snap.backlinks(&NoteId::new("A").unwrap()).is_empty(), "ссылка на себя — не обратная");
+        assert!(snap.backlinks(&NoteId::new("A").unwrap()).is_empty(), "a link to itself is not a backlink");
 
         let g = snap.graph();
         let nodes: Vec<_> = g.nodes.iter().map(|n| (n.id.as_str(), n.kind)).collect();
@@ -610,7 +626,7 @@ mod tests {
         let edges: Vec<_> = g.edges.iter().map(|e| (e.from.as_str(), e.to.as_str(), e.count)).collect();
         assert_eq!(edges, [("A", "B", 2), ("A", "Нет", 1), ("Книга", "B", 1)]);
 
-        // Правка файла видна без перезапуска; удалённый файл уходит из кэша.
+        // A file edit shows without a restart; a deleted file leaves the cache.
         write("B.typ", r#"#see("A")"#);
         fs::remove_file(root.join("Книга/01.typ")).unwrap();
         let snap = index.snapshot(&vault).unwrap();
@@ -635,12 +651,12 @@ mod tests {
         let first = index.walked.lock().as_ref().map(|w| Arc::as_ptr(&w.2)).unwrap();
         index.snapshot(&vault).unwrap();
         let again = index.walked.lock().as_ref().map(|w| Arc::as_ptr(&w.2)).unwrap();
-        assert_eq!(first, again, "без изменений — прошлый обход");
+        assert_eq!(first, again, "no changes: the previous scan");
 
         mem.write("C.typ", r#"#see("B")"#);
-        assert_eq!(index.snapshot(&vault).unwrap().backlinks(&b).len(), 2, "изменение — новый обход");
+        assert_eq!(index.snapshot(&vault).unwrap().backlinks(&b).len(), 2, "a change: a new scan");
 
-        // Без наблюдателя — обход всегда.
+        // Without the watcher: always a scan.
         changes.stop();
         mem.write("D.typ", r#"#see("B")"#);
         assert_eq!(index.snapshot(&vault).unwrap().backlinks(&b).len(), 3);
@@ -657,7 +673,7 @@ mod tests {
         assert!(index.snapshot(&vault).unwrap().backlinks(&NoteId::new("B").unwrap()).is_empty());
         index.set_built(Box::new(|id: &NoteId| (id.as_str() == "A").then(|| vec![link("C", None), link("B", None)])));
         let snap = index.snapshot(&vault).unwrap();
-        assert_eq!(snap.outgoing(&a), [link("C", None), link("B", None)], "вычисляемая — после буквальных");
+        assert_eq!(snap.outgoing(&a), [link("C", None), link("B", None)], "computed after literal");
         assert_eq!(snap.backlinks(&NoteId::new("B").unwrap()).len(), 1);
         assert_eq!(snap.graph().edges.len(), 2);
     }
@@ -679,24 +695,24 @@ mod tests {
         let snap = index.snapshot(&vault).unwrap();
 
         assert_eq!(snap.title("Сеть/ssh"), "SSH: основы");
-        assert_eq!(snap.title("Сеть/без-названия"), "без-названия", "нет title — имя файла");
+        assert_eq!(snap.title("Сеть/без-названия"), "без-названия", "no title: the file name");
         assert_eq!(snap.title("Курсы/Глубже/Матан"), "Кратные интегралы");
-        assert_eq!(snap.title("Нет/такой"), "такой", "ненаписанная — последний сегмент");
-        assert_eq!(snap.title("../x"), "x", "недопустимый путь — тоже");
+        assert_eq!(snap.title("Нет/такой"), "такой", "unwritten: the last segment");
+        assert_eq!(snap.title("../x"), "x", "an invalid path too");
 
         assert_eq!(snap.folder_title("Сеть"), "Сети и протоколы");
-        assert_eq!(snap.folder_title("Курсы"), "Учёба", "папка только с подпапками");
-        assert_eq!(snap.folder_title("Курсы/Глубже"), "Глубже", "ошибка в файле — имя папки");
+        assert_eq!(snap.folder_title("Курсы"), "Учёба", "a folder with subfolders only");
+        assert_eq!(snap.folder_title("Курсы/Глубже"), "Глубже", "an error in the file: the folder name");
         let folders: Vec<&str> = snap.folders().map(|(p, _)| p).collect();
-        assert_eq!(folders, ["Курсы", "Курсы/Глубже", "Сеть"], "книга — не папка");
+        assert_eq!(folders, ["Курсы", "Курсы/Глубже", "Сеть"], "a book is not a folder");
         let (_, broken) = snap.folders().find(|(p, _)| *p == "Курсы/Глубже").unwrap();
         assert!(broken.error.as_deref().is_some_and(|e| e.contains("titel")), "{broken:?}");
 
         let graph = snap.graph();
         let ssh = graph.nodes.iter().find(|n| n.id == "Сеть/ssh").unwrap();
-        assert_eq!(ssh.title, "SSH: основы", "граф подписывает названием");
+        assert_eq!(ssh.title, "SSH: основы", "the graph labels by title");
 
-        // Правка и удаление `_folder.toml` видны при следующем обходе.
+        // An edit and a removal of `_folder.toml` show on the next scan.
         mem.write("Сеть/_folder.toml", "title = \"Сеть\"");
         mem.remove("Курсы/_folder.toml");
         let snap = index.snapshot(&vault).unwrap();
