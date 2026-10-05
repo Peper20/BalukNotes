@@ -1,4 +1,4 @@
-/* Начало и конец главы: вводный абзац, план, итоги, вопросы. */
+/* The start and end of a chapter: the lead paragraph, the plan, the summary, questions. */
 
 .k-note {
   .k-lead { margin: 0.4em 0 1.2em; font-size: 1.07em; color: var(--k-lead); text-align: justify; }

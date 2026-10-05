@@ -1,7 +1,7 @@
 <!--
-  Переименовать заметку (книгу) или папку: новое название -> имя файла из
-  него и какие заметки поправятся (ссылки #see на неё) - план с сервера, по
-  ходу ввода; применяется по «Переименовать».
+  Renames a note (book) or a folder: the new title -> the file name from it
+  and which notes get fixed (#see links to it) - a plan from the server, as
+  you type; applied by "Переименовать".
 -->
 <script lang="ts">
   import X from "@lucide/svelte/icons/x";
@@ -11,7 +11,7 @@
   import { notes } from "../lib/state";
   import { ui } from "../lib/ui.svelte";
 
-  /** Сколько заметок со ссылками показать списком. */
+  /** How many notes with links to show as a list. */
   const SHOWN = 6;
 
   let dialog: HTMLDialogElement | undefined = $state();
@@ -26,7 +26,7 @@
   const book = $derived(!folder && notes.byId(target?.id ?? null)?.kind === "book");
   const current = $derived(!target ? "" : folder ? notes.folderTitle(target.id) : notes.title(target.id));
   const what = $derived(folder ? "папку" : book ? "книгу" : "заметку");
-  /** План — для того, что сейчас в поле. */
+  /** The plan for what is in the input now. */
   const fresh = $derived(plan != null && plan.title === title.split(/\s+/).filter(Boolean).join(" "));
   const links = $derived(plan?.links.reduce((sum, l) => sum + l.count, 0) ?? 0);
 
@@ -42,7 +42,7 @@
     } else if (!target && dialog.open) dialog.close();
   });
 
-  // План — по ходу ввода, с паузой; устаревший запрос отменяется.
+  // The plan as you type, with a pause; a stale request is cancelled.
   $effect(() => {
     const t = target;
     const wanted = title;
@@ -83,7 +83,7 @@
     }
   }
 
-  /** Путь для показа: файл заметки — с `.typ`, книга и папка — с `/`. */
+  /** A path for display: a note file with `.typ`, a book and a folder with `/`. */
   const shownPath = (path: string) => (folder || book ? `${path}/` : `${path}.typ`);
 </script>
 

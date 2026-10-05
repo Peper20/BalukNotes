@@ -1,21 +1,21 @@
-/* Интерфейс приложения вокруг заметки: боковая панель, верхняя строка,
- * ошибки, настройки. Цвета — те же переменные тем, что у заметок. */
+/* The app interface around a note: the sidebar, the top bar, errors,
+ * settings. The colors are the same theme variables as in notes. */
 
-/* Тема ещё не известна (первый запуск): цвета окна — по системе, не белые. */
+/* The theme is not known yet (first start): window colors follow the system, not white. */
 :root:not([data-theme]) { color-scheme: light dark; }
 body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, CanvasText); background: var(--k-bg, Canvas); }
-/* Без отскока страницы на краю (тачпад в WebKitGTK): с ним дрожит боковая
- * панель. Телефону отскок и "потянуть - обновить" оставлены. */
+/* No page bounce at the edge (a touchpad in WebKitGTK): with it the sidebar
+ * jitters. A phone keeps the bounce and "pull to refresh". */
 @media (pointer: fine) { :root, .page { overscroll-behavior: none; } }
 
-/* Документ не прокручивается: окно делят боковая панель и колонка (верхняя
- * панель + прокручиваемая страница `.page`, lib/scroll.ts). */
+/* The document does not scroll: the window is shared by the sidebar and the
+ * column (the top bar + the scrolling page `.page`, lib/scroll.ts). */
 .app { display: grid; grid-template-columns: 17rem 1fr; height: 100vh; overflow: hidden; }
 .app.sidebar-hidden { grid-template-columns: 0 1fr; }
 .app.sidebar-hidden .sidebar { visibility: hidden; }
 
-/* ── Боковая панель ─────────────────────────────────────────────────── */
-/* Дерево прокручивается, хранилище — всегда внизу (как в Obsidian). */
+/* ── Sidebar ────────────────────────────────────────────────────────── */
+/* The tree scrolls, the vault is always at the bottom (as in Obsidian). */
 .sidebar {
   height: 100vh; display: flex; flex-direction: column; box-sizing: border-box;
   border-right: 1px solid var(--k-line); background: var(--k-surface);
@@ -32,7 +32,7 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, Can
 .vault-switch:hover, .vault-switch[aria-expanded="true"] { background: color-mix(in srgb, var(--k-text) 7%, transparent); }
 .vault-switch:focus-visible { outline: 2px solid var(--k-accent); outline-offset: -2px; }
 .vault-switch-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; letter-spacing: 0.02em; }
-/* Меню хранилищ и меню заметки в дереве — одинаковые строки. */
+/* The vault menu and the note menu in the tree have the same rows. */
 .vault-menu, .note-menu {
   z-index: 30; display: flex; flex-direction: column; padding: 0.3rem; min-width: 12rem; box-sizing: border-box;
   border: 1px solid var(--k-line); border-radius: 8px; background: var(--k-bg); box-shadow: 0 8px 28px rgb(0 0 0 / 0.22);
@@ -60,9 +60,9 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, Can
 .vault-menu-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vault-menu-note { margin: 0.3rem 0.5rem; color: var(--k-muted); }
 .note-menu button.danger, .vault-menu button.danger { color: var(--k-box-pitfall); }
-/* Строка дерева: [шеврон] значок имя [счётчик]. Отступ уровня — ширина
- * шеврона с зазором: шеврон вложенной папки встаёт под значок родителя,
- * значок заметки — под значок соседней папки; направляющая — под шевроном. */
+/* A tree row: [chevron] icon name [count]. The level indent is the chevron
+ * width with a gap: a nested folder's chevron goes under the parent's icon,
+ * a note icon under the neighbouring folder's icon; the guide is under the chevron. */
 .tree { --tree-pad: 0.5rem; --tree-gap: 0.4rem; flex: 1; min-height: 0; overflow-y: auto; padding: 0.6rem 0.5rem 2rem; font-size: 13.5px; }
 .tree summary, .tree a {
   display: flex; align-items: center; gap: var(--tree-gap); min-height: 1.75rem; box-sizing: border-box;
@@ -90,7 +90,7 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, Can
 .tree a.active, .tree summary.active { background: color-mix(in srgb, var(--k-accent) 16%, transparent); color: var(--k-accent); font-weight: 600; }
 .tree a.active .tree-icon, .tree summary.active .tree-icon { color: var(--k-accent); }
 
-/* ── Нет связи с сервером: метка в верхней строке (Topbar) ───────────── */
+/* ── No connection to the server: a label in the top bar (Topbar) ────── */
 .offline-chip {
   display: inline-flex; align-items: center; gap: 0.3rem; flex: none; padding: 0.15rem 0.6rem; border-radius: 1em;
   font: inherit; font-size: 0.85em; cursor: pointer; color: var(--k-box-pitfall);
@@ -99,11 +99,11 @@ body { margin: 0; font: 14px/1.4 system-ui, sans-serif; color: var(--k-text, Can
 .offline-chip:hover { background: color-mix(in srgb, var(--k-box-pitfall) 16%, transparent); }
 .offline-chip:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
 
-/* ── Верхняя строка ─────────────────────────────────────────────────── */
+/* ── Top bar ────────────────────────────────────────────────────────── */
 .main { grid-column: -2; min-width: 0; display: flex; flex-direction: column; height: 100vh; }
 .page { flex: 1; min-height: 0; overflow-y: auto; }
 .page:focus { outline: none; }
-/* Верхняя строка и вкладки - одна панель: общий фон, без щели. */
+/* The top bar and the tabs are one panel: a shared background, no gap. */
 .chrome {
   flex: none; position: relative; z-index: 5; border-bottom: 1px solid var(--k-line);
   background: color-mix(in srgb, var(--k-bg) 88%, transparent); backdrop-filter: blur(6px);
@@ -124,7 +124,7 @@ button.icon:focus-visible, a.icon:focus-visible { outline: 2px solid var(--k-acc
 button.icon:hover, a.icon:hover { color: var(--k-accent); border-color: var(--k-line); background: var(--k-surface); }
 button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 
-/* ── Ошибки компиляции ──────────────────────────────────────────────── */
+/* ── Compile errors ─────────────────────────────────────────────────── */
 .problems { margin: 0.8rem auto 0; max-width: 52rem; padding: 0 1rem; }
 .problems .errors {
   border: 1px solid var(--k-box-pitfall); border-left-width: 4px; border-radius: 4px;
@@ -138,8 +138,8 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .problems details { margin-top: 0.5rem; color: var(--k-muted); }
 .problems summary { cursor: pointer; }
 
-/* ── Заметка собирается ─────────────────────────────────────────────
- * Видна не сразу: заметка из кэша успевает её сменить без мигания. */
+/* ── The note is building ───────────────────────────────────────────
+ * Shown with a delay: a note from the cache replaces it without a flash. */
 .k-note .loading {
   margin: 18vh auto 0; max-width: 26em; text-align: center; opacity: 0;
   animation: loading-in 0.2s ease 0.25s forwards;
@@ -159,7 +159,7 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .k-note .loading-hint { color: var(--k-muted); font-size: 0.8em; text-align: center; margin-top: 1em; }
 @media (prefers-reduced-motion: reduce) { .k-note .loading-bar::after { animation: none; width: 100%; } }
 
-/* ── Главная: граф и список ─────────────────────────────────────────── */
+/* ── Home: the graph and the list ───────────────────────────────────── */
 .k-note .home {
   h1 { margin: 0 0 0.3em; color: var(--k-accent); }
   h2 { margin-top: 1.6em; font-size: 1.15em; color: var(--k-accent); }
@@ -178,7 +178,7 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
   min-height: 3em; overflow: hidden;
 }
 .k-note .graph-hint { font-size: 0.75em; color: var(--k-muted); text-align: left; margin-top: 0.5em; }
-/* Сам граф (узлы, рёбра, подсветка) — в baluk.css: он общий с графом в заметке. */
+/* The graph itself (nodes, edges, highlight) is in baluk.css: it is shared with the graph in a note. */
 .graph-page { display: flex; flex-direction: column; min-height: 20rem; box-sizing: border-box; }
 .graph-bar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; padding: 0.5rem 0.8rem 0;
@@ -198,9 +198,9 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .graph-body { flex: 1; min-height: 0; display: flex; border-top: 1px solid var(--k-line); border-bottom: 1px solid var(--k-line); }
 .graph-canvas { flex: 1; min-width: 0; position: relative; }
 .graph-zoom button.icon.on { color: var(--k-accent); }
-/* Силы графа: сбоку от графа (узкий экран - под ним), граф виден и отвечает сразу. */
+/* Graph forces: beside the graph (a narrow screen - below it), the graph is visible and responds at once. */
 .graph-forces { flex: none; overflow: hidden; border-left: 1px solid var(--k-line); background: var(--k-surface); font-size: 0.85em; }
-/* Ширина содержимого постоянная: пока панель выезжает, ползунки не переносятся, а открываются. */
+/* Constant content width: while the panel slides in, the sliders do not wrap but get revealed. */
 .graph-forces-in { width: 15rem; height: 100%; box-sizing: border-box; overflow-y: auto; padding: 0.3rem 0.9rem 0.8rem; }
 .graph-forces-head { display: flex; align-items: center; justify-content: space-between; margin-right: -0.5rem; }
 .graph-forces-head h2 { margin: 0; font-size: 1em; font-weight: 600; color: var(--k-text); }
@@ -222,13 +222,13 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .graph-empty { margin: 3rem auto; text-align: center; color: var(--k-muted); }
 .backlinks h2 .backlinks-graph { font-size: 0.75em; font-weight: 400; margin-left: 0.6em; }
 
-/* ── Пустое состояние и список ──────────────────────────────────────── */
+/* ── Empty state and the list ───────────────────────────────────────── */
 .welcome { color: var(--k-muted); }
 .welcome ul { columns: 2 16rem; }
 
-/* ── Оглавление ─────────────────────────────────────────────────────
- * Сбоку от колонки заметки, если справа хватает места (.toc-room ставит
- * JS: ширина колонки зависит от кегля); иначе — всплывающая панель по §. */
+/* ── Outline ────────────────────────────────────────────────────────
+ * Beside the note column if there is room on the right (.toc-room is set by
+ * JS: the column width depends on the font size); otherwise a popup panel by §. */
 .toc { display: none; }
 :root[data-toc="true"] .app.toc-room .toc, .toc.open {
   display: block; position: fixed; top: calc(var(--chrome-h, 3rem) + 0.6rem); z-index: 4; overflow-y: auto; box-sizing: border-box;
@@ -252,10 +252,10 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .toc a[data-depth="1"] { padding-left: 1.1rem; }
 .toc a[data-depth="2"] { padding-left: 1.7rem; font-size: 0.95em; }
 .toc a[data-depth="3"] { padding-left: 2.3rem; font-size: 0.92em; }
-/* Формулы в пунктах (HTML заголовка из ядра) — математическим шрифтом, как в заметке. */
+/* Formulas in the items (heading HTML from the core) in the math font, as in the note. */
 .toc a math { font-family: var(--k-font-math); font-size: 1.1em; }
 
-/* ── Главы книги ────────────────────────────────────────────────────── */
+/* ── Book chapters ──────────────────────────────────────────────────── */
 .chapter-nav {
   box-sizing: border-box; max-width: var(--k-measure); margin: -3em auto 3em; padding: 0 1.2em;
   font-size: var(--k-size); display: flex; gap: 1em; justify-content: space-between;
@@ -268,25 +268,25 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
   small { display: block; color: var(--k-muted); font-size: 0.85em; margin-bottom: 0.2em; }
 }
 .chapter-nav + .backlinks { margin-top: 0; }
-/* Панели заходят на нижнее поле заметки (отрицательный отступ), а .k-note —
- * свой слой (isolation): без этого заметка перекрывает их и они не нажимаются. */
+/* The panels overlap the bottom margin of the note (a negative margin), and
+ * .k-note is its own layer (isolation): otherwise the note covers them and they cannot be clicked. */
 .chapter-nav, .backlinks { position: relative; z-index: 1; }
 
-/* Общее книги (BookInfo.svelte) — вверху оглавления. */
+/* What the book shares (BookInfo.svelte), at the top of the outline. */
 .book-info {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; color: var(--k-muted); line-height: 1.4;
   margin: 0.3rem 0.5rem 0.5rem; padding-bottom: 0.55rem; border-bottom: 1px solid var(--k-line);
 }
 .book-info svg { flex: none; }
 .book-info-tags { display: flex; flex-wrap: wrap; gap: 0.1rem 0.55rem; }
-/* Ссылки внутри — не пункты оглавления. */
+/* Links inside are not outline items. */
 .toc .book-info a { display: inline; padding: 0; border: none; color: var(--k-muted); }
 .toc .book-info a.book-info-title { color: var(--k-text); font-weight: 600; }
 .toc .book-info a:hover { color: var(--k-accent); }
 
-/* ── Ссылаются сюда ─────────────────────────────────────────────────── */
+/* ── Backlinks ──────────────────────────────────────────────────────── */
 .backlinks {
-  /* Кегль — как у заметки, чтобы em ширины совпали с колонкой; текст — мельче. */
+  /* Font size as in the note, so that the em widths match the column; the text is smaller. */
   box-sizing: border-box; max-width: var(--k-measure); margin: -3em auto 3em; padding: 0 1.2em;
   font-size: var(--k-size);
   > * { font-size: 0.8em; }
@@ -300,7 +300,7 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .backlinks a:hover { text-decoration: underline; }
 .backlinks .anchor { color: var(--k-muted); }
 
-/* ── Настройки ──────────────────────────────────────────────────────── */
+/* ── Settings ───────────────────────────────────────────────────────── */
 .settings {
   width: min(34rem, 94vw); max-height: 88vh; padding: 0; border: 1px solid var(--k-line); border-radius: 10px;
   background: var(--k-bg); color: var(--k-text); box-shadow: 0 10px 40px rgb(0 0 0 / 0.3);
@@ -315,13 +315,13 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .settings legend { font-weight: 600; color: var(--k-accent); padding: 0.4rem 0 0.2rem; }
 .setting { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.2rem 1rem; padding: 0.35rem 0; }
 .setting-help { grid-column: 1 / -1; color: var(--k-muted); font-size: 0.85em; }
-/* Чем опасна настройка (пакеты сверх белого списка) — цветом «осторожно». */
+/* What makes a setting dangerous (extra packages) in the "caution" color. */
 .setting-warning {
   grid-column: 1 / -1; font-size: 0.85em; padding: 0.35rem 0.55rem; border-radius: 5px;
   border-left: 3px solid var(--k-box-pitfall); color: var(--k-text);
   background: color-mix(in srgb, var(--k-box-pitfall) 10%, transparent);
 }
-/* Текст — во всю ширину строки под подписью. */
+/* The text spans the whole row under the label. */
 .setting input[type="text"] { grid-column: 1 / -1; min-width: 0; }
 .setting select, .setting input[type="number"], .setting input[type="text"] {
   font: inherit; padding: 0.2rem 0.4rem; border-radius: 5px;
@@ -332,7 +332,7 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .setting input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: var(--k-accent); }
 .settings-error { margin: 0 1rem 1rem; color: var(--k-box-pitfall); }
 .settings-scope { margin: 0.6rem 1rem 0; color: var(--k-muted); font-size: 0.85em; overflow-wrap: anywhere; }
-/* Откуда значение: метка и действия под настройкой. */
+/* Where the value comes from: a label and actions under the setting. */
 .setting-source { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.7rem; font-size: 0.8em; }
 .setting-badge { padding: 0 0.5em; border-radius: 1em; border: 1px solid currentColor; }
 .setting-badge.own { color: var(--k-accent); }
@@ -344,7 +344,7 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .setting-action:hover { color: var(--k-accent); }
 .setting-action:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
 
-/* ── Выбор хранилища (адрес без хранилища, первый запуск) ───────────── */
+/* ── Vault picker (an address without a vault, the first start) ─────── */
 .vault-picker { box-sizing: border-box; width: min(28rem, 100%); margin: 12vh auto 2rem; padding: 0 1rem; }
 .vault-picker h1 { margin: 0 0 0.4rem; font-size: 1.5rem; }
 .vault-picker-lead { margin: 0 0 1.2rem; color: var(--k-muted); }
@@ -369,7 +369,7 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 }
 .vault-picker-row button:disabled { opacity: 0.5; cursor: default; }
 
-/* ── Короткие диалоги: хранилище (новое, переименовать, удалить), заметка и папка (переименовать, удалить) ── */
+/* ── Short dialogs: vault (new, rename, delete), note and folder (rename, delete) ── */
 .vault-new, .vault-edit, .note-delete, .note-rename { width: min(26rem, 94vw); }
 .vault-new h2, .vault-edit h2, .note-delete h2, .note-rename h2 { overflow-wrap: anywhere; }
 .rename-links { margin: 0 0 0.6rem; padding-left: 1.2rem; max-height: 9rem; overflow-y: auto; overflow-wrap: anywhere; }
@@ -395,7 +395,7 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .dialog-actions .primary { border-color: var(--k-accent); background: var(--k-accent); color: var(--k-bg); }
 .dialog-actions .danger { border-color: var(--k-box-pitfall); background: var(--k-box-pitfall); color: var(--k-bg); }
 
-/* ── Телефон: панель поверх заметки ─────────────────────────────────── */
+/* ── Phone: the sidebar over the note ───────────────────────────────── */
 .backdrop { display: none; }
 @media (max-width: 800px) {
   .app, .app.sidebar-hidden { grid-template-columns: 1fr; }
@@ -405,10 +405,10 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
   .status { display: none; }
 }
 
-/* Якорь не прячется под липкой верхней строкой. */
+/* An anchor does not hide under the sticky top bar. */
 .k-note [id] { scroll-margin-top: 0.6rem; }
 
-/* ── Палитра: быстрый переход, команды, поиск ───────────────────────── */
+/* ── Palette: quick open, commands, search ──────────────────────────── */
 .palette-backdrop { position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / 0.25); }
 .palette {
   position: fixed; top: 12vh; left: 50%; transform: translateX(-50%); width: min(40rem, 94vw);
@@ -446,7 +446,7 @@ button.icon:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
   display: flex; flex-wrap: wrap; gap: 0.3rem 1rem; padding: 0.45rem 0.9rem; border-top: 1px solid var(--k-line);
   font-size: 0.78em; color: var(--k-muted);
 }
-/* Касание без клавиатуры: подсказки про клавиши — лишний шум. */
+/* Touch without a keyboard: hints about keys are just noise. */
 @media (pointer: coarse) {
   .palette-help, .palette-list li kbd { display: none; }
 }
@@ -455,7 +455,7 @@ kbd {
   border: 1px solid var(--k-line); border-bottom-width: 2px; background: var(--k-surface); color: var(--k-text);
 }
 
-/* ── Вкладки ────────────────────────────────────────────────────────── */
+/* ── Tabs ───────────────────────────────────────────────────────────── */
 .tabbar {
   display: flex; gap: 2px; overflow-x: auto; padding: 0 0.5rem; margin-bottom: -1px; scrollbar-width: thin;
 }
@@ -474,7 +474,7 @@ kbd {
 .tab-close:hover, .tab-new:hover { background: color-mix(in srgb, var(--k-accent) 14%, transparent); color: var(--k-text); }
 .tab-new { align-self: center; margin-left: 0.2rem; }
 
-/* ── Справка ────────────────────────────────────────────────────────── */
+/* ── Help ───────────────────────────────────────────────────────────── */
 .help { width: min(46rem, 94vw); }
 .help-body { padding: 0.4rem 1rem 1rem; columns: 2 18rem; column-gap: 2rem; }
 .help section { break-inside: avoid; margin-bottom: 0.8rem; }
@@ -484,8 +484,8 @@ kbd {
 .help dd { margin: 0; color: var(--k-muted); }
 .help .or { color: var(--k-muted); font-size: 0.8em; }
 
-/* ── Теги ───────────────────────────────────────────────────────────── */
-/* Теги в шапке заметки — ссылками: baluk.css (note/links.css). */
+/* ── Tags ───────────────────────────────────────────────────────────── */
+/* Tags in the note header are links: baluk.css (note/links.css). */
 .k-note .tag-cloud { display: flex; flex-wrap: wrap; gap: 0.5em; }
 .k-note .tag-chip {
   display: inline-block; padding: 0.15em 0.7em; border-radius: 1em; font-size: 0.85em;
@@ -499,7 +499,7 @@ kbd {
 .k-note .tag-others .tag-chip { font-size: 0.7em; }
 .k-note .tags-back a { color: var(--k-muted); }
 
-/* ── Превью ссылки ──────────────────────────────────────────────────── */
+/* ── Link preview ───────────────────────────────────────────────────── */
 .link-preview {
   position: fixed; z-index: 25; width: min(24rem, 90vw); padding: 0.7rem 0.9rem; box-sizing: border-box;
   background: var(--k-bg); color: var(--k-text); border: 1px solid var(--k-line); border-radius: 8px;
@@ -512,8 +512,8 @@ kbd {
 .lp-text { margin: 0.4rem 0 0; color: var(--k-text); font-family: var(--k-font-text); font-size: 14px; }
 .lp-tags { margin-top: 0.4rem; display: flex; gap: 0.5rem; color: var(--k-muted); font-size: 0.9em; }
 
-/* ── Режим чтения: только текст ─────────────────────────────────────── */
-/* Панель скрыта (display: none) — колонка заметки одна: иначе она встала бы в нулевую. */
+/* ── Reading mode: text only ────────────────────────────────────────── */
+/* The sidebar is hidden (display: none): the note column is alone, otherwise it would go into the zero-width one. */
 .app.reading { grid-template-columns: 1fr; }
 .app.reading .sidebar, .app.reading .tabbar, .app.reading .toc:not(.open) { display: none !important; }
 .app.reading .chrome { opacity: 0; transition: opacity 0.2s; }

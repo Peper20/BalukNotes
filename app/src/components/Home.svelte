@@ -1,4 +1,4 @@
-<!-- Главная: сколько заметок, граф связей и список по папкам. -->
+<!-- Home: how many notes, the link graph and the list by folders. -->
 <script lang="ts">
   import { api, type GraphLayout } from "../lib/api";
   import { notes, router } from "../lib/state";
@@ -22,7 +22,7 @@
 
   const books = $derived(notes.all.filter((n) => n.kind === "book").length);
   const byTitle = (a: string, b: string) => a.localeCompare(b, "ru", { numeric: true });
-  // Папка — названиями (`Учёба / Матан`), заметки в ней — по названию.
+  // A folder by titles (`Учёба / Матан`), its notes by title.
   const byFolder = $derived(
     [...Map.groupBy(notes.all, (n) => (n.folder ? notes.folderLabel(n.folder) : "—"))]
       .map(([folder, list]) => [folder, list.toSorted((a, b) => byTitle(a.title, b.title))] as const)

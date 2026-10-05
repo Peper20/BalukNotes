@@ -1,4 +1,4 @@
-/* Шапка заметки: надпись, название, описание, автор. */
+/* The note header: the label, the title, the description, the author. */
 
 .k-note {
   .k-title { margin: 1em 0 2.4em; text-align: center; }

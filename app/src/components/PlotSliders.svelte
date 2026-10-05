@@ -1,4 +1,4 @@
-<!-- Ползунки параметров интерактивного рисунка. -->
+<!-- Parameter sliders of an interactive figure. -->
 <script lang="ts">
   import { formatNumber } from "../lib/plot/geometry";
   import type { Param } from "../lib/plot/spec";

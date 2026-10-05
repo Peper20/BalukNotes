@@ -1,7 +1,8 @@
 <!--
-  Низ боковой панели (как в Obsidian): хранилище и меню хранилищ — перейти в
-  другое (с перезагрузкой: вкладки и места чтения у каждого свои), создать
-  новое, переименовать или удалить открытое. Рядом — главная и граф хранилища.
+  The bottom of the sidebar (as in Obsidian): the vault and the vault menu -
+  go to another one (with a reload: tabs and reading places are per vault),
+  create a new one, rename or delete the open one. Next to it - home and the
+  vault graph.
 -->
 <script lang="ts">
   import Check from "@lucide/svelte/icons/check";

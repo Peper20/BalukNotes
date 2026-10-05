@@ -1,4 +1,4 @@
-/* Код: строчный, блоки, листинги с номерами строк и метками. */
+/* Code: inline, blocks, listings with line numbers and labels. */
 
 .k-note {
   code { font-family: var(--k-font-code); font-variant-ligatures: none; font-feature-settings: "calt" 0; }

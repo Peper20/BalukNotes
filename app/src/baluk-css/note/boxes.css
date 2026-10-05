@@ -1,4 +1,4 @@
-/* Врезки, ответ, доказательство, формула в рамке, заметка на полях, «сбоку». */
+/* Callouts, an answer, a proof, a boxed formula, a margin note, "сбоку". */
 
 .k-note {
   .k-box {
@@ -34,7 +34,7 @@
     text-align: justify;
   }
   .k-proof-head { font-style: italic; color: var(--k-muted); }
-  .k-qed { float: right; color: var(--k-muted); font-family: var(--k-font-math); } /* ∎ нет в Gentium */
+  .k-qed { float: right; color: var(--k-muted); font-family: var(--k-font-math); } /* ∎ is not in Gentium */
 
   .k-formula {
     margin: 1.1em 0; padding: 0.8em 0.9em;

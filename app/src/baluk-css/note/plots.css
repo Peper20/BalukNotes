@@ -1,8 +1,8 @@
-/* Интерактивные рисунки (baluk/plots.typ) и ползунки (общие с кадрами). */
+/* Interactive figures (baluk/plots.typ) and sliders (shared with frames). */
 
 .k-note {
-  /* Интерактивный рисунок (baluk/plots.typ): кадр Typst и подпись значений
-   * видны без JS; клиент ставит data-live и рисует живой. */
+  /* An interactive figure (baluk/plots.typ): the Typst frame and the value
+   * caption are visible without JS; the client sets data-live and draws the live one. */
   .k-plot-values { text-align: center; font-size: 0.8em; color: var(--k-muted); }
   .k-plot[data-live] > :not(.k-plot-live) { display: none; }
   .k-plot-legend {
@@ -12,12 +12,12 @@
   .k-plot-live .k-plot-legend { font-size: 0.72em; }
   .k-plot-live {
     display: flex; flex-direction: column; align-items: center; gap: 0.35em;
-    font-size: 1.15em; /* как .k-fig: рисунок крупнее текста */
+    font-size: 1.15em; /* as .k-fig: a figure is larger than the text */
   }
   .k-plot-svg, .k-plot-canvas { display: block; max-width: 100%; height: auto; font-family: var(--k-font-text); }
   .k-plot-svg { touch-action: pan-y; cursor: crosshair; }
-  /* Палец: вертикальный свайп — прокрутка страницы, начатый вбок —
-   * вращение (дальше и наклон: жест уже у рисунка). */
+  /* A finger: a vertical swipe scrolls the page, one started sideways
+   * rotates (then tilts too: the gesture already belongs to the figure). */
   .k-plot-canvas { touch-action: pan-y; cursor: grab; }
   .k-plot-canvas:active { cursor: grabbing; }
   .k-plot-canvas:focus-visible { outline: 1px dashed var(--k-accent); outline-offset: 2px; }
@@ -36,8 +36,8 @@
   .k-plot-slider input { width: 9em; max-width: 40vw; accent-color: var(--k-accent); }
   .k-plot-slider output { min-width: 3em; font-variant-numeric: tabular-nums; }
 
-  /* Ползунки кадров и интерактивных рисунков: тонкая дорожка, пройденная
-   * часть — цветом акцента (--k-fill ставит клиент). */
+  /* Sliders of frames and interactive figures: a thin track, the passed
+   * part in the accent color (--k-fill is set by the client). */
   .k-frames-controls input[type="range"], .k-plot-slider input[type="range"] {
     appearance: none; height: 1.4em; background: none; cursor: pointer;
   }

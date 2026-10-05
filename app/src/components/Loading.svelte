@@ -1,7 +1,7 @@
 <!--
-  Заглушка «собирается» на месте заметки. Появляется с задержкой (CSS),
-  поэтому заметка из кэша сменяет её раньше, чем она станет видна; у долгой
-  сборки — счётчик секунд и объяснение.
+  The "собирается" placeholder in place of the note. It appears with a delay
+  (CSS), so a note from the cache replaces it before it becomes visible; a
+  long build shows a seconds counter and an explanation.
 -->
 <script lang="ts">
   import { notes } from "../lib/state";

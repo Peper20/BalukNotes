@@ -1,4 +1,4 @@
-<!-- Новое хранилище: имя → папка в каталоге данных; создано — открыть его. -->
+<!-- A new vault: a name -> a folder in the data directory; created - open it. -->
 <script lang="ts">
   import X from "@lucide/svelte/icons/x";
   import { api, ApiError } from "../lib/api";
@@ -27,7 +27,7 @@
     error = null;
     try {
       await api.createVault(wanted);
-      // Другое хранилище — с перезагрузкой: вкладки и места чтения у него свои.
+      // Another vault opens with a reload: it has its own tabs and reading places.
       location.assign(vaultHome(wanted));
     } catch (err) {
       error = err instanceof ApiError ? err.message : String(err);

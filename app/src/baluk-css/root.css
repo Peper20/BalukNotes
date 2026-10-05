@@ -1,4 +1,4 @@
-/* Переменные оформления и фон страницы (кегль и ширину колонки меняют настройки). */
+/* Styling variables and the page background (font size and column width are changed by the settings). */
 
 :root {
   --k-font-text: "Gentium Plus", "Gentium Book", "New Computer Modern", serif;

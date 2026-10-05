@@ -1,7 +1,7 @@
 <!--
-  Общее для всех глав книги (корень `main.typ`): название (ссылка к началу)
-  и теги книги — вверху оглавления, при чтении любой главы (выбор
-  пользователя). Под заголовком главы — только её теги.
+  What all chapters of a book share (the root `main.typ`): the title (a link
+  to the start) and the book tags, at the top of the outline while reading
+  any chapter (user's choice). Under a chapter heading - only its own tags.
 -->
 <script lang="ts">
   import BookOpen from "@lucide/svelte/icons/book-open";

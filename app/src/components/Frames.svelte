@@ -1,7 +1,8 @@
 <!--
-  Кадры (`div.k-frames`): ползунок по кадрам, «назад»/«вперёд» и «проиграть». Кадры уже в
-  разметке (их собрал Typst) — переключается только `data-current`,
-  без перерисовки. Клавиши ←/→ — у ползунка (фокус), пробел — у кнопок.
+  Frames (`div.k-frames`): a slider over the frames, "назад"/"вперёд" and
+  "проиграть". The frames are already in the markup (Typst built them), only
+  `data-current` switches, without redrawing. The ←/→ keys belong to the
+  slider (focus), space to the buttons.
 -->
 <script lang="ts">
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";

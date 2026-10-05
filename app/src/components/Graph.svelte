@@ -1,19 +1,22 @@
 <!--
-  Граф заметок: узлы — заметки и книги, рёбра — ссылки #see. Цвет узла — по
-  папке верхнего уровня, цвета — переменные темы: граф перекрашивается вместе
-  с темой. Наведение подсвечивает узел и его соседей.
+  The note graph: nodes are notes and books, edges are #see links. A node's
+  color is by its top-level folder, the colors are theme variables: the graph
+  recolors with the theme. Hover highlights a node and its neighbours.
 
-  Граф живой (`graph-physics.ts`): протянутый узел тянет соседей; отпустили —
-  он стоит, соседи немного отходят назад; при смене графа узлы переезжают, новые
-  проявляются, ушедшие гаснут. `prefers-reduced-motion` — без движения.
+  The graph is live (`graph-physics.ts`): a dragged node pulls its
+  neighbours; released, it stays and the neighbours go a bit back; when the
+  graph changes, nodes move, new ones fade in, gone ones fade out.
+  `prefers-reduced-motion` - no motion.
 
-  `interactive` (страница графа): колесо и два пальца — масштаб, протянуть
-  фон — сдвиг. Без него (главная, граф в заметке) — картинка во всю ширину:
-  узел тянется, но не дальше рамки рисунка; колесо и касание фона — странице.
-  Щелчок по узлу — открыть заметку.
+  `interactive` (the graph page): the wheel and two fingers zoom, dragging the
+  background pans. Without it (home, a graph in a note) - a full-width
+  picture: a node can be dragged, but not past the figure frame; the wheel
+  and touching the background go to the page. A click on a node opens the
+  note.
 
-  Здесь — разметка и связки: жесты — `graph-gesture.ts`, переезд, появление
-  и кадры — `graph-motion.ts`, физика — `graph-physics.ts`, вид — `graph-view.ts`.
+  Here are the markup and the glue: gestures - `graph-gesture.ts`, moving,
+  appearing and frames - `graph-motion.ts`, physics - `graph-physics.ts`,
+  the view - `graph-view.ts`.
 -->
 <script lang="ts">
   import { untrack } from "svelte";
@@ -33,21 +36,21 @@
     moved = $bindable(false),
     drag = DRAG,
   }: {
-    /** Граф с раскладкой из ядра (`POST /api/graph/layout` или `#vault-graph` заметки). */
+    /** The graph with the layout from the core (`POST /api/graph/layout` or a note's `#vault-graph`). */
     layout: GraphLayout;
     /**
-     * `background` — Ctrl+щелчок или средняя кнопка: в фоновой вкладке. Глава
-     * книги — книга (`id`) на заголовке главы (`anchor`).
+     * `background` - Ctrl+click or the middle button: in a background tab. A
+     * book chapter is the book (`id`) at the chapter heading (`anchor`).
      */
     onopen: (id: string, background: boolean, anchor: string | null) => void;
     interactive?: boolean;
-    /** Совпадения поиска: остальные узлы бледнеют. */
+    /** Search matches: the other nodes fade. */
     highlight?: Set<string> | null;
-    /** Названия заметок для подсказки. */
+    /** Note titles for the tooltip. */
     titles?: Map<string, string> | null;
-    /** Узлы переставлены руками — картинка разошлась с раскладкой ядра. */
+    /** Nodes were moved by hand: the picture differs from the core layout. */
     moved?: boolean;
-    /** Отклик соседей на перетаскивание (настройки графа). */
+    /** Neighbours' response to dragging (graph settings). */
     drag?: Drag;
   } = $props();
 
@@ -65,20 +68,20 @@
   const color = (id: string) => groupColor(nodeById.get(id)?.group ?? "", layout.groups);
 
   const base = $derived(new Map<string, Point>(layout.nodes.map((n) => [n.id, [n.x, n.y]])));
-  /** Где узлы нарисованы сейчас: переезд к новой раскладке, физика. */
+  /** Where the nodes are drawn now: moving to a new layout, physics. */
   let at = $state.raw(new Map<string, Point>());
   const pos = (id: string): Point => at.get(id) ?? base.get(id) ?? [0, 0];
 
   const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-  /** Длительность переезда и угасания, мс. */
+  /** Duration of moving and fading, ms. */
   const GLIDE = reduced ? 0 : 500;
   const FADE = reduced ? 0 : 200;
 
-  // Один цикл кадров на узлы графа: переезд или физика (новое отменяет старое).
+  // One frame loop for the graph nodes: moving or physics (the new one cancels the old).
   const frames = new Frames();
   $effect(() => () => frames.stop());
 
-  // Новая раскладка (фильтр): оставшиеся узлы переезжают со своих мест.
+  // A new layout (filter): the remaining nodes move from their places.
   let sim: Physics | null = null;
   $effect(() => {
     const target = base;
@@ -95,23 +98,23 @@
     });
   });
 
-  // Появление: узлы вспыхивают от середины к краям; добавленные потом — чуть позже переезда.
+  // Appearing: nodes light up from the middle to the edges; ones added later - a bit after the move.
   const intro = untrack(() => introDelays(layout.nodes, layout.bounds));
   const delay = (id: string) => `${intro.get(id) ?? 0.15}s`;
 
-  /** Границы нарисованного (с подписями) — в единицах раскладки. */
+  /** Bounds of the drawing (with labels), in layout units. */
   const bounds = $derived(layout.bounds);
 
-  // ── Главная: картинка во всю ширину ──────────────────────────────────
+  // -- Home: a full-width picture ------------------------------------------
   const viewBox = $derived.by(() => {
     const [x0, y0, x1, y1] = bounds;
     const pad = 12;
-    // Заметок мало (новое хранилище) — не крупнее, чем на странице графа:
-    // иначе одна заметка во всю ширину. Лишнее место — по бокам.
+    // Few notes (a new vault): no larger than on the graph page, otherwise one
+    // note fills the whole width. Spare room goes to the sides.
     const w = Math.max(x1 - x0 + 2 * pad, width / FIT_ZOOM);
     return `${(x0 + x1 - w) / 2} ${y0 - pad} ${w} ${y1 - y0 + 2 * pad}`;
   });
-  // Рисунок ужимается по ширине (телефон) — подписи не мельче 9 px на экране.
+  // The figure shrinks in width (a phone): labels no smaller than 9 px on screen.
   let width = $state(0);
   let height = $state(0);
   const staticLabel = $derived.by(() => {
@@ -120,11 +123,11 @@
   });
 
 
-  // ── Страница графа: масштаб и сдвиг ──────────────────────────────────
+  // -- The graph page: zoom and pan ----------------------------------------
   let view = $state<View>({ x: 0, y: 0, k: 1 });
-  /** Вид вписан и его не двигали: поле поменяло размер (окно, панель сил) — вписать заново. */
+  /** The view is fitted and was not moved: the area changed size (window, forces panel) - fit again. */
   let snug = true;
-  /** Вписать граф в окно (при смене графа и по кнопке). */
+  /** Fits the graph into the window (on a graph change and by the button). */
   export function fit() {
     if (width > 0 && height > 0) view = fitView(bounds, width, height);
     snug = true;
@@ -138,8 +141,8 @@
     if (interactive && fitted !== null && untrack(() => snug)) untrack(fit);
   });
   /**
-   * Вернуть раскладку ядра: узлы плавно переезжают на свои места (с
-   * замедлением, без перелёта), физика забывает перестановки.
+   * Brings back the core layout: nodes smoothly move to their places (eased,
+   * no overshoot), the physics forgets the rearrangements.
    */
   export function restore() {
     pull = null;
@@ -152,10 +155,10 @@
       return;
     }
     const target = base;
-    // Последний кадр — ровно раскладка (без ошибки округления).
+    // The last frame is exactly the layout (no rounding error).
     frames.tween(GLIDE, (e) => (at = e < 1 ? glide(from, target, e) : target));
   }
-  /** Показать узел: в центр окна, не мельче 1:1. */
+  /** Shows a node: in the center of the window, no smaller than 1:1. */
   export function show(id: string) {
     const [x, y] = pos(id);
     const k = Math.max(view.k, 1);
@@ -163,7 +166,7 @@
     snug = false;
     focused = id;
   }
-  // Новый граф (фильтр) или первый замер окна — вписать (при смене графа — плавно, вместе с узлами).
+  // A new graph (filter) or the first window measure: fit (on a graph change - smoothly, together with the nodes).
   let fitted: unknown = null;
   const viewFrames = new Frames();
   $effect(() => {
@@ -187,7 +190,7 @@
     const r = svg!.getBoundingClientRect();
     return [e.clientX - r.left, e.clientY - r.top];
   };
-  /** Точка экрана в координатах раскладки (с масштабом страницы графа или `viewBox` картинки). */
+  /** A screen point in layout coordinates (with the graph page zoom or the picture's `viewBox`). */
   const world = (e: { clientX: number; clientY: number }): Point => {
     const m = layer?.getScreenCTM()?.inverse();
     if (!m) return [0, 0];
@@ -195,14 +198,14 @@
     return [p.x, p.y];
   };
 
-  // ── Физика: протянутый узел тянет соседей ────────────────────────────
-  /** Рамка картинки (главная, заметка) — `viewBox`; у страницы графа рамки нет. */
+  // -- Physics: a dragged node pulls its neighbours ------------------------
+  /** The picture frame (home, a note) is the `viewBox`; the graph page has no frame. */
   const frameRect = $derived.by((): Rect => {
     const [x0, y0, w, h] = viewBox.split(" ").map(Number) as [number, number, number, number];
     return [x0, y0, x0 + w, y0 + h];
   });
   const index = $derived(new Map(layout.nodes.map((n, i) => [n.id, i])));
-  /** Корень книги — крупнее; глава — как заметка. */
+  /** A book root is larger; a chapter is like a note. */
   const isBook = (n: { kind: string | null; chapter: unknown }) => n.kind === "book" && !n.chapter;
   const labelSize = (n: { kind: string | null; chapter: unknown }, px: number) => (isBook(n) ? px * 1.1 : px);
 
@@ -217,8 +220,8 @@
         return a == null || b == null ? [] : [[a, b] as [number, number]];
       }),
     );
-    // Размеры узлов — по подписям на экране: они крупнее, чем считало ядро
-    // (телефон, отдаление), и шире оценки по числу знаков.
+    // Node sizes by the labels on screen: they are larger than the core
+    // assumed (a phone, zoomed out) and wider than the estimate by characters.
     const drawn = new Map([...(layer?.querySelectorAll<SVGGElement>(".graph-node") ?? [])].map((g) => [g.dataset.id, g.querySelector("text")?.getBBox()]));
     const extents = layout.nodes.map((n) => {
       const e = extentOf(n.r, n.name, labelSize(n, labelPx), LABEL_GAP);
@@ -231,13 +234,13 @@
     return sim;
   }
 
-  /** Куда тянут узел (обновляется движением указателя, применяется в кадре). */
+  /** Where the node is pulled (updated by pointer moves, applied in a frame). */
   let pull: { i: number; to: Point } | null = null;
   function run() {
     const p = sim!;
     frames.run(() => {
       if (pull) p.drag(pull.i, ...pull.to);
-      // Без движения: только сам узел, соседи стоят.
+      // No motion: only the node itself, the neighbours stand.
       const fastest = reduced ? 0 : p.step();
       at = new Map(layout.nodes.map((n, i) => [n.id, p.at(i)]));
       return !(reduced ? !p.holding : p.settled(fastest));
@@ -250,14 +253,14 @@
   function onpointerdown(e: PointerEvent) {
     if (e.button > 1) return;
     const id = (e.target as Element).closest<SVGElement>(".graph-node")?.dataset.id;
-    // Картинка: фон — странице (прокрутка, выделение), жесты — только с узла.
+    // The picture: the background goes to the page (scroll, selection), gestures only from a node.
     if (!interactive && (!id || pointers.size > 0)) return;
     try {
       svg!.setPointerCapture(e.pointerId);
     } catch {
-      return; // указателя уже нет — жеста не будет
+      return; // the pointer is gone already: there will be no gesture
     }
-    // Жест - графу: мышь, ушедшая за его край, не выделяет текст страницы.
+    // The gesture goes to the graph: a mouse leaving its edge does not select page text.
     if (e.pointerType !== "touch") e.preventDefault();
     let node = null;
     if (id) {
@@ -287,7 +290,7 @@
     }
   }
 
-  /** Отпустить протянутый узел: он стоит, соседи немного отходят назад. */
+  /** Releases the dragged node: it stays, the neighbours go a bit back. */
   function releaseNode() {
     if (!pull) return;
     pull = null;
@@ -301,7 +304,7 @@
     const g = up.gesture;
     dragging = false;
     releaseNode();
-    // Узел упёрся в рамку, а указатель ушёл дальше — подсветку снять.
+    // The node hit the frame and the pointer went further: remove the highlight.
     if (g?.kind === "node" && g.far && document.elementFromPoint(e.clientX, e.clientY)?.closest<SVGElement>(".graph-node")?.dataset.id !== g.id)
       focused = null;
     if (g?.kind === "node" && !g.far && e.type === "pointerup") {
@@ -310,7 +313,7 @@
     }
   }
 
-  // Колесо — своим слушателем: у атрибута Svelte он пассивный, прокрутку страницы не отменить.
+  // The wheel with its own listener: a Svelte attribute one is passive, page scrolling cannot be cancelled.
   $effect(() => {
     if (!interactive || !svg) return;
     const el = svg;
@@ -326,7 +329,7 @@
     snug = false;
   }
 
-  /** Открыть узел: заметку, книгу или книгу на главе. */
+  /** Opens a node: a note, a book or a book at a chapter. */
   function open(id: string, background: boolean) {
     const n = nodeById.get(id);
     if (n?.chapter) onopen(n.chapter.book, background, n.chapter.anchor);
@@ -339,7 +342,7 @@
 
   let focused = $state<string | null>(null);
   const near = $derived(focused ? neighbours.get(focused) : null);
-  /** Подписи на экране не мельче 8 px; совсем мелко — прячутся (кроме книг, найденных и соседей наведённого). */
+  /** Labels on screen no smaller than 8 px; very small ones hide (except books, found ones and the hovered one's neighbours). */
   const labelPx = $derived(interactive ? Math.max(LABEL_SIZE, 8 / view.k) : staticLabel);
   const far = $derived(interactive && view.k < 0.5);
 </script>
@@ -385,7 +388,7 @@
       {#each graph.nodes as n (n.id)}
         {@const [x, y] = pos(n.id)}
         {@const r = n.r}
-        <!-- роль задана условно (на странице графа — ссылка), проверка этого не видит -->
+        <!-- the role is conditional (a link on the graph page), the check does not see it -->
         <!-- svelte-ignore a11y_no_static_element_interactions, a11y_no_noninteractive_tabindex -->
         <g
           out:fade={{ duration: FADE }}
@@ -405,7 +408,7 @@
           onpointerenter={() => !dragging && (focused = n.id)}
           onpointerleave={() => !dragging && (focused = null)}
         >
-          <!-- Глава книги — полый кружок цвета книги: часть книги, а не заметка. -->
+          <!-- A book chapter is a hollow circle of the book's color: a part of the book, not a note. -->
           <circle {r} style:fill={n.chapter ? "var(--k-surface)" : n.kind ? color(n.id) : "none"} style:stroke={color(n.id)} />
           <text y={r + LABEL_GAP + labelPx * 0.9} text-anchor="middle">{n.name}</text>
           <title>

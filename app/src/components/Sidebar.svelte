@@ -1,4 +1,4 @@
-<!-- Боковая панель: дерево заметок и книг, внизу — хранилище (меню хранилищ). -->
+<!-- The sidebar: the tree of notes and books, the vault at the bottom (the vault menu). -->
 <script lang="ts">
   import { notes, router } from "../lib/state";
   import { tick, untrack } from "svelte";
@@ -10,9 +10,9 @@
 
   let nav: HTMLElement | undefined = $state();
 
-  // Открытая заметка или папка видна в дереве: папки на пути раскрыты (при
-  // переходе — потом их можно свернуть), строка — в поле зрения дерева (не
-  // всей страницы).
+  // The open note or folder is visible in the tree: the folders on the way
+  // are expanded (on a navigation - they can be collapsed later), the row is
+  // in view of the tree (not of the whole page).
   $effect(() => {
     const id = router.currentId;
     const folder = router.currentFolder;

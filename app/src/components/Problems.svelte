@@ -1,4 +1,4 @@
-<!-- Ошибки и предупреждения сборки над заметкой. -->
+<!-- Build errors and warnings above the note. -->
 <script lang="ts">
   import type { Diagnostic, NotePage } from "../lib/api";
 

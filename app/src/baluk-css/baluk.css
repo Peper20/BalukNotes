@@ -1,24 +1,24 @@
-/* Оформление заметок baluk в HTML — сборка из файлов блоков.
+/* The look of baluk notes in HTML, assembled from block files.
  *
- * Разметку выдаёт библиотека baluk/ (HTML-ветка, классы k-…), цвета —
- * переменные --k-* из тем baluk/theme.typ (сервер отдаёт их как
- * /api/themes.css). Размеры переведены из PDF: 1em = кегль текста (11pt),
- * поэтому 9.2pt → 0.84em, 14pt → 1.27em и т. д. Рисунки (SVG) заданы в em
- * того же кегля и масштабируются вместе с текстом.
+ * The markup comes from the baluk/ library (the HTML branch, classes k-...),
+ * the colors are the --k-* variables from the baluk/theme.typ themes (the
+ * server serves them as /api/themes.css). Sizes are converted from the PDF:
+ * 1em = the text font size (11pt), so 9.2pt -> 0.84em, 14pt -> 1.27em etc.
+ * Figures (SVG) are set in em of the same size and scale with the text.
  *
- * Всё, кроме переменных, — внутри .k-note (контейнер заметки), чтобы не
- * задевать интерфейс приложения. Настройки клиента приходят атрибутами на
- * <html> (data-numbering, data-header-title, …) — note/settings.css.
+ * Everything except the variables is inside .k-note (the note container),
+ * so as not to touch the app interface. Client settings come as attributes on
+ * <html> (data-numbering, data-header-title, ...) - note/settings.css.
  *
- * Этот файл — порядок блоков: при сборке (`vite build`, и `npm run dev`)
- * `@import` заменяются содержимым файлов (bundle.ts), и получается один
- * `assets/baluk.css`. Порядок важен: правила с равной специфичностью — по
- * порядку (телефон и настройки — после блоков).
+ * This file is the order of the blocks: in a build (`vite build`, and
+ * `npm run dev`) the `@import`s are replaced by the file contents
+ * (bundle.ts), giving one `assets/baluk.css`. The order matters: rules of
+ * equal specificity apply in order (phone and settings after the blocks).
  */
 
 @import "./root.css";
 
-/* Заметка */
+/* The note */
 @import "./note/base.css";
 @import "./note/title.css";
 @import "./note/headings.css";
@@ -33,5 +33,5 @@
 @import "./note/settings.css";
 @import "./note/links.css";
 
-/* Граф заметок: страница графа и граф в заметке */
+/* The note graph: the graph page and the graph in a note */
 @import "./graph.css";

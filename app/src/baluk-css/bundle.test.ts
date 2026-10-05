@@ -4,7 +4,7 @@ import { dirname, join, relative } from "node:path";
 import { expect, it } from "vitest";
 import { bundle, ENTRY, forBrowsers } from "./bundle";
 
-it("baluk.css: подключены все файлы блоков, по разу", async () => {
+it("baluk.css: all block files are included, once each", async () => {
   const seen = new Set<string>();
   const css = await bundle(ENTRY, seen);
   const dir = dirname(ENTRY);
@@ -16,7 +16,7 @@ it("baluk.css: подключены все файлы блоков, по раз�
   expect(css).toContain(".k-note");
 });
 
-it("baluk.css для браузеров: префиксы WebKit (окно приложения)", async () => {
+it("baluk.css for browsers: WebKit prefixes (the app window)", async () => {
   const css = forBrowsers(await bundle());
   expect(css).toMatch(/\.graph-svg\s*\{[^}]*-webkit-user-select:\s*none/);
 });

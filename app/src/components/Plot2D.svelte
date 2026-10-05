@@ -1,7 +1,8 @@
 <!--
-  Живой график y = f(x): SVG в тех же единицах (pt), что и кадр Typst, цвета —
-  переменные темы (смена темы перекрашивает сама). Ползунки меняют
-  параметры, под указателем — координаты и значения кривых.
+  A live plot y = f(x): SVG in the same units (pt) as the Typst frame, the
+  colors are theme variables (a theme change recolors it by itself). Sliders
+  change the parameters, under the pointer - the coordinates and the curve
+  values.
 -->
 <script lang="ts">
   import { untrack } from "svelte";
@@ -10,12 +11,12 @@
   import { colorVar, defaults, PT_PER_CM, SMALL_PT, TEXT_PT, type Plot2D } from "../lib/plot/spec";
   import PlotSliders from "./PlotSliders.svelte";
 
-  // Описание рисунка задано раз при монтировании (NoteView) и не меняется.
+  // The figure description is set once on mount (NoteView) and does not change.
   let { spec: initial }: { spec: Plot2D } = $props();
   const spec = untrack(() => initial);
   const uid = $props.id();
 
-  // Поля вокруг поля графика — под подписи делений и осей, pt.
+  // Margins around the plot area for tick and axis labels, pt.
   const M = { left: 22, right: 12, top: 12, bottom: 16 };
   const N = 400;
 
@@ -45,7 +46,7 @@
     curves.map((runs) => runs.map((r) => "M" + r.map(([x, y]) => `${X(x).toFixed(2)},${Y(y).toFixed(2)}`).join("L")).join("")),
   );
 
-  // Указатель: x в координатах графика (null — вне поля).
+  // The pointer: x in plot coordinates (null - outside the area).
   let hover: number | null = $state(null);
   const readout = $derived(
     hover === null ? null : fns.map((f) => f({ ...values, x: hover! })),

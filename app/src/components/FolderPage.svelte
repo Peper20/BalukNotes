@@ -1,4 +1,4 @@
-<!-- Страница папки: что в ней (подпапки, заметки) и ссылка на граф её поддерева. -->
+<!-- A folder page: what is in it (subfolders, notes) and a link to the graph of its subtree. -->
 <script lang="ts">
   import { notes } from "../lib/state";
   import { folderGraphHref, folderHref, homeHref, noteHref } from "../lib/ids";

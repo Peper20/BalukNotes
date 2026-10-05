@@ -1,4 +1,4 @@
-/* Контейнер заметки и текст: абзацы, ссылки, формулы, списки. */
+/* The note container and text: paragraphs, links, formulas, lists. */
 
 .k-note {
   box-sizing: border-box;
@@ -10,26 +10,27 @@
   line-height: 1.5;
   hyphens: auto;
   text-rendering: optimizeLegibility;
-  /* Своя стопка слоёв: бледная цифра главы (z-index: -1) не уходит под фон страницы. */
+  /* Its own stacking context: the pale chapter number (z-index: -1) does not go under the page background. */
   isolation: isolate;
 
   @media (max-width: 640px) { font-size: calc(var(--k-size) * 0.9); padding-inline: 0.9em; }
 
-  /* ── Текст ─────────────────────────────────────────────────────────────── */
+  /* ── Text ──────────────────────────────────────────────────────────────── */
 
   p { margin: 0.55em 0; text-align: justify; }
   p + p { text-indent: 1.2em; margin-top: 0; }
-  /* Отступы `#h`/`#v` заметки (страховка шаблона): величина — переменной.
-   * Пустой `k-v` схлопывает поля с соседями — как `v` в Typst, отступ вместо
-   * промежутка абзацев, а не сверх него; отрицательный — сдвигает вверх.
-   * Только `span`: класс `k-h` носят и заголовки baluk (они — блоки). */
+  /* The `#h`/`#v` spacing of a note (a template safeguard): the size is a
+   * variable. An empty `k-v` collapses margins with its neighbours, like `v`
+   * in Typst: a spacing instead of the paragraph gap, not on top of it; a
+   * negative one moves up. Only `span`: baluk headings carry the class `k-h`
+   * too (they are blocks). */
   span.k-h { display: inline-block; margin-inline-start: var(--k-h); }
   .k-v { margin-top: var(--k-v); }
   strong { font-weight: bold; }
   a { color: var(--k-accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
   math { font-family: var(--k-font-math); font-size: 1.05em; }
-  /* Широкая формула прокручивается сама, а не вся страница (телефон). */
+  /* A wide formula scrolls by itself, not the whole page (a phone). */
   math[display="block"] { margin: 0.7em 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 
   ul, ol { padding-left: 1.4em; margin: 0.55em 0; }

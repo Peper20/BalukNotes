@@ -1,4 +1,4 @@
-<!-- Папка дерева заметок: подпапки, затем заметки. Рекурсивно. -->
+<!-- A folder of the note tree: subfolders, then notes. Recursive. -->
 <script lang="ts">
   import BookIcon from "@lucide/svelte/icons/book";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
@@ -14,7 +14,7 @@
   let { folder }: { folder: Folder } = $props();
   const icon = { size: 16, strokeWidth: 1.75, "aria-hidden": true } as const;
 
-  /** Правый клик (на телефоне — долгое касание): меню заметки или папки. */
+  /** Right click (on a phone - a long tap): the menu of a note or folder. */
   function menu(e: MouseEvent, kind: "note" | "folder", id: string) {
     e.preventDefault();
     ui.noteMenu = { kind, id, x: e.clientX, y: e.clientY };

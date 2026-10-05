@@ -1,9 +1,9 @@
-/* Кадры (baluk/frames.typ) и их панель. */
+/* Frames (baluk/frames.typ) and their panel. */
 
 .k-note {
-  /* Кадры (baluk/frames.typ): все кадры лежат в одной клетке сетки — место
-   * по самому большому, страница не прыгает при переключении. Без JS виден
-   * кадр по умолчанию; клиент ставит data-live и data-current. */
+  /* Frames (baluk/frames.typ): all frames are in one grid cell - room for
+   * the largest, the page does not jump when switching. Without JS the
+   * default frame is visible; the client sets data-live and data-current. */
   .k-frames { display: flex; flex-direction: column; align-items: center; gap: 0.35em; max-width: 100%; }
   .k-frames-stack { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
   .k-frames-item {
@@ -13,7 +13,7 @@
   .k-frames:not([data-live]) .k-frames-item:not([data-k-frame-default]),
   .k-frames[data-live] .k-frames-item:not([data-current]) { visibility: hidden; }
   .k-frames-label { text-align: center; font-size: 0.8em; color: var(--k-muted); }
-  /* Панель кадров: контурные значки без фона и рамки, ползунок, счётчик. */
+  /* The frames panel: outline icons without a background or border, a slider, a counter. */
   .k-frames-controls {
     display: flex; align-items: center; justify-content: center; gap: 0.15em;
     font-size: 0.8em; max-width: 100%;

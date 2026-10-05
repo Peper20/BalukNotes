@@ -1,8 +1,8 @@
-/* Настройки клиента — атрибуты на <html> (appearance.ts). */
+/* Client settings: attributes on <html> (appearance.ts). */
 
 .k-note {
-  /* По умолчанию номера заголовков видны только в книгах (вид документа
-     ставит библиотека: <article class="k-doc" data-doc="book|note">). */
+  /* By default heading numbers are visible only in books (the document kind
+     is set by the library: <article class="k-doc" data-doc="book|note">). */
   :root:not([data-numbering="all"]) & .k-doc:not([data-doc="book"]) .k-num,
   :root[data-numbering="none"] & .k-num { display: none; }
 

@@ -1,4 +1,4 @@
-<!-- Верхняя строка: панель, путь заметки, статус и кнопки. -->
+<!-- The top bar: the sidebar button, the note path, the status and buttons. -->
 <script lang="ts">
   import FileDown from "@lucide/svelte/icons/file-down";
   import Moon from "@lucide/svelte/icons/moon";
@@ -18,7 +18,7 @@
 
   const run = (id: string) => commands().find((c) => c.id === id)?.run();
 
-  /** Путь в верхней строке: папки (ссылки) и сама заметка или папка. */
+  /** The path in the top bar: folders (links) and the note or folder itself. */
   const crumb = $derived.by(() => {
     const r = router.route;
     if (r.kind === "note") return { folders: ancestors(r.id), title: notes.title(r.id) };
@@ -32,7 +32,7 @@
   );
   const icon = { size: 18, strokeWidth: 1.75, "aria-hidden": true } as const;
 
-  // PDF собирается секунды — открываем в новой вкладке, браузер покажет его сам.
+  // A PDF builds for seconds: open it in a new tab, the browser shows it itself.
   function openPdf() {
     const url = reader.pdfUrl();
     if (url) open(url, "_blank");
@@ -42,14 +42,14 @@
 <header class="topbar">
   <button type="button" class="icon" title="Список заметок" aria-label="Список заметок" onclick={() => run("sidebar")}><PanelLeft {...icon} /></button>
   <div class="crumbs" id="crumbs">
-    <!-- Папки пути - ссылки на их страницы. -->
+    <!-- Path folders are links to their pages. -->
     {#if crumb}{#each crumb.folders as path (path)}<a class="crumb" href={folderHref(path)}
           >{notes.folderTitle(path)}</a
         >{" / "}{/each}<b>{crumb.title}</b>{/if}
   </div>
   <span class="status" class:busy={reader.busy} id="status" role="status">{reader.status}</span>
   {#if !connection.online}
-    <!-- Нет связи с сервером (state/connection): метка, подробности — в подсказке. -->
+    <!-- No connection to the server (state/connection): a label, details in the tooltip. -->
     <button
       type="button"
       class="offline-chip"
