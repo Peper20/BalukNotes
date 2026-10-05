@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { VAULT, open, ready, resetTheme, title, vaultUrl } from "./helpers";
 
-test("тема: каждый клик — сразу другая на вид («как в системе» — в настройках)", async ({ page }) => {
+test("theme: every click gives a different look at once (\"как в системе\" is in the settings)", async ({ page }) => {
   await open(page, "Сеть/SSH");
   const html = page.locator("html");
   await expect(html).toHaveAttribute("data-theme", "classic");
@@ -18,12 +18,12 @@ test("тема: каждый клик — сразу другая на вид (�
   }
 });
 
-test("тема — с первого кадра: запомненная, ещё до настроек с сервера", async ({ page }) => {
+test("theme from the first frame: the remembered one, before the settings from the server", async ({ page }) => {
   await open(page, "Сеть/SSH");
   try {
     await page.locator("#theme").click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "night");
-    // Настройки не пришли (клиент не запустится), а тема и фон — уже её.
+    // The settings did not come (the client will not start), but the theme and the background are already its own.
     await page.route("**/api/vaults/*/settings", (r) => r.abort());
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "night");
@@ -34,7 +34,7 @@ test("тема — с первого кадра: запомненная, ещё 
   }
 });
 
-test("переход к собранной заметке — без пустого кадра между заметками", async ({ page }) => {
+test("going to a built note: no empty frame between notes", async ({ page }) => {
   await open(page, "Сеть/UFW");
   await open(page, "Сеть/SSH");
   await page.evaluate(() => {
@@ -48,19 +48,19 @@ test("переход к собранной заметке — без пусто�
   await expect(page.locator("html")).not.toHaveAttribute("data-blank", "1");
 });
 
-test("раскрытые «Ответы» не сворачиваются, когда заметка пересобрана", async ({ page }) => {
+test("open \"Ответы\" do not collapse when the note is rebuilt", async ({ page }) => {
   await open(page, "демо/компоненты");
   const answers = page.locator(".k-quiz-answers").first();
   await answers.locator("summary").click();
   await expect(answers).toHaveAttribute("open", "");
-  // Метка на старой разметке: пропала — значит, HTML вставлен заново.
+  // A mark on the old markup: gone means the HTML was inserted anew.
   await page.locator("#note .note-body > *").first().evaluate((el) => el.setAttribute("data-old", ""));
   await page.locator("#refresh").click();
   await expect(page.locator("#note [data-old]")).toHaveCount(0);
   await expect(answers).toHaveAttribute("open", "");
 });
 
-test("раскрытые «Ответы» — по разделу и тексту: блок выше не раскрывает чужой", async ({ page }) => {
+test("open \"Ответы\" by section and text: a block above does not open someone else's", async ({ page }) => {
   const dir = join(VAULT, "Ответы");
   const file = join(dir, "Заметка.typ");
   const text = (extra: boolean) =>
@@ -87,7 +87,7 @@ test("раскрытые «Ответы» — по разделу и текст�
   }
 });
 
-test("настройки: кегль — для всех хранилищ, по выбору — только для этого; прочее — для хранилища", async ({ page }) => {
+test("settings: the font size for all vaults, optionally only for this one; the rest for the vault", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await page.locator("#open-settings").click();
   const size = page.locator('input[id="setting-appearance.font_size"]');
@@ -103,7 +103,7 @@ test("настройки: кегль — для всех хранилищ, по 
   await ready(page);
   await expect(page.locator("html")).toHaveCSS("--k-size", "23px");
 
-  // Только для этого хранилища: дальше кегль меняется лишь здесь.
+  // Only for this vault: from now on the font size changes only here.
   await page.locator("#open-settings").click();
   await row.getByRole("button", { name: "только для этого хранилища" }).click();
   await expect(row.locator(".setting-badge")).toHaveText("только в этом хранилище");
@@ -117,7 +117,7 @@ test("настройки: кегль — для всех хранилищ, по 
   await expect(row).toHaveAttribute("data-source", "default");
   await expect(page.locator("html")).toHaveCSS("--k-size", "19px");
 
-  // Прочие настройки — только для хранилища.
+  // Other settings: only for the vault.
   const tags = page.locator('.setting[data-key="header.tags"]');
   await tags.locator("input").uncheck();
   await expect(tags.locator(".setting-badge")).toHaveText("только в этом хранилище");
@@ -125,7 +125,7 @@ test("настройки: кегль — для всех хранилищ, по 
   await expect(tags).toHaveAttribute("data-source", "default");
 });
 
-test("оглавление: сбоку на широком экране, всплывающее на узком", async ({ page }) => {
+test("outline: beside on a wide screen, a popup on a narrow one", async ({ page }) => {
   await page.setViewportSize({ width: 1700, height: 900 });
   await open(page, "демо/компоненты");
   const toc = page.locator(".toc");
@@ -144,7 +144,7 @@ test("оглавление: сбоку на широком экране, всп�
   await expect(page.locator(`[id="${target}"]`)).toBeInViewport();
 });
 
-test("с вкладками: заголовок по якорю и оглавление - под панелью, а не за ней", async ({ page }) => {
+test("with tabs: a heading by anchor and the outline are under the panel, not behind it", async ({ page }) => {
   await page.setViewportSize({ width: 1700, height: 900 });
   await open(page, "демо/компоненты");
   await page.keyboard.press("Alt+KeyT");
@@ -166,7 +166,7 @@ test("с вкладками: заголовок по якорю и оглавл�
   }).toPass();
 });
 
-test("оглавление: заголовок с формулой — формулой, а не текстом", async ({ page }) => {
+test("outline: a heading with a formula as a formula, not text", async ({ page }) => {
   await page.setViewportSize({ width: 1700, height: 900 });
   await open(page, "Формулы и теги");
   const item = page.locator(".toc a", { hasText: "Пространство" });
@@ -177,7 +177,7 @@ test("оглавление: заголовок с формулой — форм�
   await expect(page.locator("#note h2", { hasText: "Пространство" })).toBeInViewport();
 });
 
-test("новая заметка появляется в дереве без перезагрузки", async ({ page }) => {
+test("a new note shows up in the tree without a reload", async ({ page }) => {
   const dir = join(VAULT, "Новое");
   try {
     await open(page, "Сеть/SSH");
@@ -194,7 +194,7 @@ test("новая заметка появляется в дереве без пе
   }
 });
 
-test("изменение файла подхватывается по ⟳ без потери места", async ({ page }) => {
+test("a file change is picked up by ⟳ without losing the place", async ({ page }) => {
   const dir = join(VAULT, "Правка");
   const file = join(dir, "Заметка.typ");
   const text = (n: number) =>
@@ -207,7 +207,7 @@ test("изменение файла подхватывается по ⟳ без
     await page.locator("#refresh").click();
     await page.locator("#tree").locator('a[data-id="Правка/Заметка"]').click();
     await ready(page);
-    await page.mouse.move(700, 400); // над заметкой, а не над деревом (оно прокручивается само)
+    await page.mouse.move(700, 400); // over the note, not over the tree (it scrolls by itself)
     await page.mouse.wheel(0, 800);
     await expect.poll(() => page.evaluate(() => document.getElementById("page")!.scrollTop)).toBeGreaterThan(300);
     const y = await page.evaluate(() => document.getElementById("page")!.scrollTop);
@@ -220,11 +220,11 @@ test("изменение файла подхватывается по ⟳ без
   }
 });
 
-test("правка файла приходит событием сервера — без кнопки; «только по кнопке» — нет", async ({ page }) => {
+test("a file edit comes as a server event without the button; \"только по кнопке\" - it does not", async ({ page }) => {
   const dir = join(VAULT, "События");
   const file = join(dir, "Заметка.typ");
   const text = (n: number) => `#import "/_baluk/lib.typ": *\n#show: note.with(title: [События])\n\nВерсия ${n}.\n`;
-  // Сервер следит за файлами: опроса нет, обновляет событие.
+  // The server watches the files: no polling, an event updates.
   const mode = async (value: "auto" | "manual") =>
     expect((await page.request.put("/api/settings", { data: { "refresh.mode": value } })).ok()).toBe(true);
   try {
@@ -235,7 +235,7 @@ test("правка файла приходит событием сервера �
     await events;
     mkdirSync(dir, { recursive: true });
     writeFileSync(file, text(1));
-    // Новая заметка — в дереве, правка — на экране, без ⟳.
+    // The new note is in the tree, the edit on screen, without ⟳.
     const link = page.locator("#tree").locator('a[data-id="События/Заметка"]');
     await expect(link).toBeVisible();
     await link.click();
@@ -244,12 +244,12 @@ test("правка файла приходит событием сервера �
     writeFileSync(file, text(2));
     await expect(page.locator("#note")).toContainText("Версия 2.");
 
-    // «Только по кнопке»: событие пришло, а заметка прежняя — до «Обновить».
+    // "Только по кнопке": the event came, but the note is the old one until "Обновить".
     await mode("manual");
     await page.reload();
     await ready(page);
     writeFileSync(file, text(3));
-    // В автоматическом режиме правка приходит за доли секунды.
+    // In the automatic mode an edit arrives in a fraction of a second.
     await page.waitForTimeout(1500);
     await expect(page.locator("#note")).toContainText("Версия 2.");
     await page.locator("#refresh").click();
@@ -260,35 +260,35 @@ test("правка файла приходит событием сервера �
   }
 });
 
-test("нет связи с сервером: заметка остаётся, метка в строке; связь вернулась — метка пропадает", async ({ page }) => {
+test("no connection to the server: the note stays, a label in the bar; the connection is back - the label goes", async ({ page }) => {
   await open(page, "Сеть/SSH");
   const offline = page.locator("#offline");
   await expect(offline).toHaveCount(0);
-  // Сервер «выключили»: запросы не доходят.
+  // The server was "switched off": requests do not get through.
   await page.route("**/api/**", (route) => route.abort("connectionrefused"));
   await page.locator("#refresh").click();
   await expect(offline).toBeVisible();
   await expect(offline).toHaveText("нет связи");
   await expect(offline).toHaveAttribute("title", /Нет связи с сервером/);
   await expect(title(page)).toHaveText("SSH");
-  // Другая заметка без связи — объяснение, а не ошибка запроса.
+  // Another note without the connection: an explanation, not a request error.
   await page.locator("#tree").getByRole("link", { name: "UFW" }).click();
   await expect(page.locator("#note")).toContainText("заметка откроется, когда связь вернётся");
-  // Связь вернулась: пробный запрос (нажатие на метку) — метка пропала, заметка догрузилась.
+  // The connection is back: a probe request (clicking the label) - the label is gone, the note loaded.
   await page.unroute("**/api/**");
   await offline.click();
   await expect(offline).toHaveCount(0);
   await expect(title(page)).toHaveText("UFW");
 });
 
-test("PDF заметки в текущей теме", async ({ page }) => {
+test("note PDF in the current theme", async ({ page }) => {
   await open(page, "Сеть/SSH");
   const [popup] = await Promise.all([page.waitForEvent("popup"), page.locator("#pdf").click()]);
   expect(decodeURIComponent(popup.url())).toContain("/pdf/Сеть/SSH?theme=classic");
   await popup.close();
 });
 
-test("телефон: панель выезжает и прячется после выбора заметки", async ({ page }) => {
+test("phone: the sidebar slides in and hides after choosing a note", async ({ page }) => {
   await page.setViewportSize({ width: 400, height: 800 });
   await open(page, "Сеть/SSH");
   const sidebar = page.locator("#sidebar");
@@ -301,7 +301,7 @@ test("телефон: панель выезжает и прячется посл
   await expect(sidebar).not.toBeInViewport();
 });
 
-test("настройки: пакеты сверх белого списка — с предупреждением; неверная запись — ошибка, верная сохраняется", async ({ page }) => {
+test("settings: extra packages come with a warning; a wrong entry is an error, a right one is saved", async ({ page }) => {
   try {
     await open(page, "Сеть/SSH");
     await page.locator("#open-settings").click();

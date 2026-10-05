@@ -1,6 +1,6 @@
-// Названия вместо имён файлов: заметка называется по `title:` в своём
-// файле, папка — по `_folder.toml`. Дерево, шапка, вкладка и ссылки без
-// своей подписи показывают названия; правка файла видна без перезагрузки.
+// Titles instead of file names: a note is named by `title:` in its file, a
+// folder by `_folder.toml`. The tree, the header, a tab and links without
+// their own caption show titles; a file edit shows without a reload.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
@@ -8,27 +8,27 @@ import { VAULT, open } from "./helpers";
 
 const ODD = String.raw`@#$@&$*%@#!.:/\ — в названии можно всё`;
 
-test("дерево, шапка, вкладка и ссылки — названиями из файлов", async ({ page }) => {
+test("the tree, the header, a tab and links use the titles from the files", async ({ page }) => {
   await open(page, "Имена/странное");
   const tree = page.locator("#tree");
-  // Папка «Имена» — названием из `_folder.toml`, заметка — из своего файла.
+  // The folder "Имена" by its title from `_folder.toml`, the note from its file.
   await expect(tree.locator("summary .tree-name", { hasText: "Имена: файлы / названия" })).toBeVisible();
   await expect(tree.locator('a[data-id="Имена/странное"]')).toHaveText(ODD);
   await expect(page.locator("#crumbs")).toHaveText(`Имена: файлы / названия / ${ODD}`);
   await expect(page).toHaveTitle(`${ODD} — Заметки`);
-  // Полоса вкладок — со второй вкладки.
+  // The tab bar from the second tab on.
   await page.keyboard.press("Alt+KeyT");
   await expect(page.locator(".tabbar .tab").first()).toContainText(ODD);
   await page.keyboard.press("Alt+KeyW");
-  // Ошибка в `_folder.toml` — папка своим именем.
+  // An error in `_folder.toml`: the folder by its name.
   await expect(tree.locator("summary .tree-name", { hasText: /^б$/ })).toHaveCount(1);
 
-  // Ссылка без подписи — название цели.
+  // A link without a caption: the title of the target.
   await open(page, "Особые случаи/Ссылки");
   await expect(page.locator('#note a.k-link[data-k-target="Имена/странное"]')).toHaveText(ODD);
 });
 
-test("правка названия и _folder.toml — видна сразу", async ({ page }) => {
+test("an edit of the title and _folder.toml shows at once", async ({ page }) => {
   const dir = join(VAULT, "Переименование");
   const note = (title: string) => `#import "/_baluk/lib.typ": *\n#show: note.with(title: [${title}])\n\nТекст.\n`;
   mkdirSync(dir, { recursive: true });
@@ -50,7 +50,7 @@ test("правка названия и _folder.toml — видна сразу", 
   }
 });
 
-test("формула в названии — текстом исходника; в «Ссылаются сюда» — заголовок с формулой", async ({ page }) => {
+test("a formula in a title as source text; in \"Ссылаются сюда\" the heading with the formula", async ({ page }) => {
   const dir = join(VAULT, "Формулы в названиях");
   mkdirSync(dir, { recursive: true });
   const head = (title: string) => `#import "/_baluk/lib.typ": *\n#show: note.with(title: [${title}])\n\n`;

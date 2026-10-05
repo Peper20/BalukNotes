@@ -3,19 +3,19 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { VAULT, apiPath, noteUrl, open, ready, title, vaultUrl } from "./helpers";
 
-test("главная: граф и список, клик по узлу открывает заметку", async ({ page }) => {
+test("home: the graph and the list, a click on a node opens the note", async ({ page }) => {
   await page.goto(vaultUrl("/"));
   await ready(page);
   await expect(page.locator(".home-lead")).toContainText("2 книги");
   await expect(page.locator(".graph-node")).not.toHaveCount(0);
-  // По кружку: центр узла (кружок + подпись) может прийтись на щель между ними.
+  // By the circle: the node center (circle + label) may fall into the gap between them.
   await page.locator('.graph-node[data-id="Сеть/SSH"] circle').click();
   await ready(page);
   await expect(title(page)).toHaveText("SSH");
   await expect(page).toHaveURL(noteUrl("Сеть/SSH"));
 });
 
-test("ссылка в главу книги по тексту и по метке; назад и вперёд", async ({ page }) => {
+test("a link into a book chapter by text and by label; back and forward", async ({ page }) => {
   await open(page, "Особые случаи/Ссылки");
   await page.locator("#note").getByRole("link", { name: "Код из файла" }).click();
   await ready(page);
@@ -23,7 +23,7 @@ test("ссылка в главу книги по тексту и по метке
   await expect(page.locator("#note h3", { hasText: "Код из файла" })).toBeInViewport();
   await expect(page.locator(".chapter-nav")).toContainText("1. Основы");
 
-  // По метке: <особый> — тот же раздел книги.
+  // By the label: <особый> is the same section of the book.
   await page.goBack();
   await ready(page);
   await expect(title(page)).toHaveText("Ссылки");
@@ -38,7 +38,7 @@ test("ссылка в главу книги по тексту и по метке
   await expect(page.locator("#особый")).toBeInViewport();
 });
 
-test("главы книги: следующая, предыдущая, оглавление ведёт в нужную главу", async ({ page }) => {
+test("book chapters: next, previous, the outline leads to the right chapter", async ({ page }) => {
   await open(page, "Книга");
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Основы/);
   await page.locator(".chapter-nav a.next").click();
@@ -49,10 +49,10 @@ test("главы книги: следующая, предыдущая, огла�
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Основы/);
 });
 
-test("книгу поправили — переход к главе показывает новую версию, а не запас", async ({ page }) => {
+test("the book was edited: going to a chapter shows the new version, not the stock", async ({ page }) => {
   const file = join(VAULT, "Книга", "02-продолжение.typ");
   const before = readFileSync(file, "utf8");
-  // «Только по кнопке»: событие о правке заметку само не перезагрузит.
+  // "Только по кнопке": the edit event does not reload the note by itself.
   const mode = async (value: "auto" | "manual") =>
     expect((await page.request.put("/api/settings", { data: { "refresh.mode": value } })).ok()).toBe(true);
   try {
@@ -72,18 +72,18 @@ test("книгу поправили — переход к главе показ�
   }
 });
 
-test("Ctrl+F в книге по главам — поиск по всей книге с номером главы; повторное — браузеру", async ({ page }) => {
+test("Ctrl+F in a book by chapters: search over the whole book with chapter numbers; a second one goes to the browser", async ({ page }) => {
   await open(page, "Книга");
   await page.keyboard.press("Control+KeyF");
   const palette = page.locator(".palette");
   await expect(palette.locator("input")).toHaveAttribute("placeholder", /книги «/);
   await palette.locator("input").fill("Итоги");
-  // «Итоги» есть в каждой главе — различаются номером главы.
+  // "Итоги" is in every chapter: they differ by the chapter number.
   const chapters = palette.locator(".p-chapter");
   for (const n of [1, 2, 3]) await expect(chapters.filter({ hasText: `гл. ${n}` }).first()).toBeVisible();
   await palette.locator("input").press("Control+KeyF");
   await expect(palette).toBeHidden();
-  // Выбор результата — переход в главу.
+  // Choosing a result goes to the chapter.
   await page.keyboard.press("Control+KeyF");
   await palette.locator("input").fill("Итоги");
   await expect(chapters.first()).toBeVisible();
@@ -91,7 +91,7 @@ test("Ctrl+F в книге по главам — поиск по всей кни
   await ready(page);
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Продолжение/);
   await expect(page.locator("#Итоги-2")).toBeInViewport();
-  // Где искать - показанная глава: только её разделы, без номера главы.
+  // Where to search - the shown chapter: only its sections, without a chapter number.
   await page.keyboard.press("Control+KeyF");
   const scopes = palette.locator(".palette-scopes [role=radio]");
   await expect(scopes).toHaveText(["Глава", "Книга", "Всё хранилище"]);
@@ -103,7 +103,7 @@ test("Ctrl+F в книге по главам — поиск по всей кни
   await expect(palette.locator(".palette-list li[role=option]")).toContainText("Итоги второй");
 });
 
-test("главу книги отдаёт сервер: в странице одна глава, перезагрузка — та же глава", async ({ page }) => {
+test("the server serves a book chapter: one chapter in the page, a reload gives the same chapter", async ({ page }) => {
   const requested: string[] = [];
   page.on("request", (r) => {
     const url = new URL(r.url());
@@ -119,7 +119,7 @@ test("главу книги отдаёт сервер: в странице од�
   await expect(page.locator("#note .k-title")).not.toBeAttached();
   expect(requested).toContain("/api/notes/Книга?chapter=1");
 
-  // Оглавление — всей книги; пункт из другой главы грузит её.
+  // The outline is of the whole book; an item from another chapter loads it.
   await page.locator(".toc a", { hasText: "Картинка из файла" }).first().dispatchEvent("click");
   await ready(page);
   await expect(page.locator("#Картинка-из-файла")).toBeInViewport();
@@ -130,7 +130,7 @@ test("главу книги отдаёт сервер: в странице од�
   expect(requested.at(-1)).toBe("/api/notes/Книга?anchor=Картинка-из-файла");
 });
 
-test("соседние главы — заранее: переход без запроса к серверу", async ({ page }) => {
+test("neighbouring chapters in advance: navigation without a server request", async ({ page }) => {
   const requested: string[] = [];
   page.on("request", (r) => {
     const url = new URL(r.url());
@@ -138,7 +138,7 @@ test("соседние главы — заранее: переход без за
   });
   const prefetched = page.waitForResponse((r) => decodeURIComponent(r.url()).endsWith("/notes/Книга?chapter=1"));
   await open(page, "Книга");
-  // Ответ пришёл целиком и разобран клиентом (запас пополняется после разбора).
+  // The response came whole and was parsed by the client (the stock fills after parsing).
   await (await prefetched).finished();
   await page.waitForTimeout(200);
   const before = requested.length;
@@ -146,14 +146,14 @@ test("соседние главы — заранее: переход без за
   await ready(page);
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Продолжение/);
   expect(requested.slice(before)).not.toContain("/api/notes/Книга?chapter=1");
-  // И назад — тоже из запаса (показанная глава остаётся соседкой).
+  // And back - from the stock too (the shown chapter stays a neighbour).
   await page.keyboard.press("BracketLeft");
   await ready(page);
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Основы/);
   expect(requested.slice(before)).not.toContain("/api/notes/Книга?chapter=0");
 });
 
-test("имена с + # % и глубокая вложенность", async ({ page }) => {
+test("names with + # % and deep nesting", async ({ page }) => {
   await open(page, "Особые случаи/Ссылки");
   for (const name of ["C++ и C#", "50% готово", "Дно"]) {
     await page.locator("#note").getByRole("link", { name, exact: true }).click();
@@ -168,25 +168,25 @@ test("имена с + # % и глубокая вложенность", async ({ 
   await expect(page.locator('#tree a[data-id="Глубоко/а/б/в/г/Дно"]')).toBeVisible();
 });
 
-test("битая ссылка не ведёт никуда", async ({ page }) => {
+test("a broken link leads nowhere", async ({ page }) => {
   await open(page, "Особые случаи/Ссылки");
   const broken = page.locator('#note a.k-link[data-k-target="Нет/Такой заметки"]');
   await expect(broken).not.toHaveAttribute("href");
 });
 
-test("ошибка и предупреждения сборки", async ({ page }) => {
+test("a build error and warnings", async ({ page }) => {
   await open(page, "Особые случаи/Ошибка компиляции");
   await expect(page.locator("#problems .errors")).toContainText("unknown variable: no-such-function");
   await open(page, "Особые случаи/Предупреждение");
   await expect(page.locator("#problems summary")).toHaveText("Предупреждения: 4");
 });
 
-test("несуществующая заметка", async ({ page }) => {
+test("a missing note", async ({ page }) => {
   await open(page, "Нет/Такой");
   await expect(page.locator("#note")).toContainText("Заметки «Нет/Такой» нет.");
 });
 
-test("ссылаются сюда", async ({ page }) => {
+test("backlinks", async ({ page }) => {
   await open(page, "Сеть/SSH");
   const bl = page.locator("#backlinks");
   await expect(bl).toContainText("UFW");
@@ -196,7 +196,7 @@ test("ссылаются сюда", async ({ page }) => {
   await expect(title(page)).toHaveText("UFW");
 });
 
-test("общее книги — вверху оглавления в любой главе: название и теги корня", async ({ page }) => {
+test("what the book shares is at the top of the outline in any chapter: the title and the root tags", async ({ page }) => {
   await page.setViewportSize({ width: 1700, height: 900 });
   await open(page, "Книга");
   await page.keyboard.press("BracketRight");
@@ -205,12 +205,12 @@ test("общее книги — вверху оглавления в любой 
   await expect(info).toBeVisible();
   await expect(info.locator(".book-info-title")).toHaveText("Тестовая книга");
   await expect(info.locator(".book-info-tags a")).toHaveText(["#книга", "#фикстура"]);
-  // Под заголовком главы — только её теги.
+  // Under a chapter heading - only its own tags.
   await expect(page.locator("#note .k-chapter-tags li")).toHaveText(["код"]);
   await info.locator(".book-info-title").click();
   await ready(page);
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Основы/);
-  // У заметки — нет.
+  // A note has none.
   await open(page, "демо/компоненты");
   await expect(page.locator(".toc")).toBeVisible();
   await expect(page.locator(".toc .book-info")).toHaveCount(0);
