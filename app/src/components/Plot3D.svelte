@@ -1,8 +1,8 @@
 <!--
-  Живая поверхность z = f(x, y): canvas, грани со светотенью по алгоритму
-  художника (как кадр Typst), вращение перетаскиванием (мышь, палец) и
-  стрелками, двойной щелчок — начальный вид. Цвета — переменные темы:
-  смена темы перерисовывает.
+  A live surface z = f(x, y): a canvas, faces shaded by the painter's
+  algorithm (as the Typst frame), rotation by dragging (mouse, finger) and by
+  arrows, a double click restores the initial view. The colors are theme
+  variables: a theme change redraws it.
 -->
 <script lang="ts">
   import { onMount, untrack } from "svelte";
@@ -11,7 +11,7 @@
   import { colorVar, defaults, PT_PER_CM, SMALL_PT, TEXT_PT, type Plot3D } from "../lib/plot/spec";
   import PlotSliders from "./PlotSliders.svelte";
 
-  // Описание рисунка задано раз при монтировании (NoteView) и не меняется.
+  // The figure description is set once on mount (NoteView) and does not change.
   let { spec: initial }: { spec: Plot3D } = $props();
   const spec = untrack(() => initial);
 
@@ -20,10 +20,10 @@
   const deg = Math.PI / 180;
   let th = $state(spec.view[0] * deg);
   let ph = $state(spec.view[1] * deg);
-  // Мир холста: коробка с запасом под подписи, в единицах коробки.
+  // The canvas world: the box with room for labels, in box units.
   const HALF_W = 1.6;
   const HALF_H = 1.5;
-  // Размер как у кадра Typst: единица коробки = size / 2 см.
+  // The size as in the Typst frame: a box unit = size / 2 cm.
   const widthEm = (2 * HALF_W * (spec.size / 2) * PT_PER_CM) / TEXT_PT;
 
   let canvas: HTMLCanvasElement | undefined = $state();
@@ -51,7 +51,7 @@
     const h = (w * HALF_H) / HALF_W;
     cv.width = Math.round(w * dpr);
     cv.height = Math.round(h * dpr);
-    const k = w / (2 * HALF_W); // px на единицу коробки
+    const k = w / (2 * HALF_W); // px per box unit
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     const css = getComputedStyle(cv);
@@ -64,7 +64,7 @@
     const S = ([u, v]: [number, number] | P3): [number, number] => [w / 2 + u * k, h / 2 - v * k];
     const at = (p: P3) => S(view(p, th, ph));
 
-    // пол коробки и вертикальное ребро в дальнем углу
+    // the box floor and the vertical edge in the far corner
     const corners: [number, number][] = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
     const far = [...corners].sort((p, q) => view([...p, 0], th, ph)[2] - view([...q, 0], th, ph)[2])[0]!;
     ctx.strokeStyle = axis;
@@ -76,7 +76,7 @@
     ctx.lineTo(...at([...far, Z]));
     ctx.stroke();
 
-    // грани
+    // faces
     ctx.lineJoin = "round";
     for (const face of faces(grid, z0, z1, th, ph)) {
       ctx.beginPath();
@@ -94,7 +94,7 @@
       ctx.stroke();
     }
 
-    // подписи осей — поверх: x и y у ближних рёбер, z над дальним углом
+    // axis labels on top: x and y at the near edges, z above the far corner
     const nearer = (p: P3, q: P3) => (view(p, th, ph)[2] > view(q, th, ph)[2] ? p : q);
     const fontPx = (SMALL_PT / TEXT_PT) * parseFloat(css.fontSize);
     ctx.font = `italic ${fontPx}px ${css.getPropertyValue("--k-font-text")}`;
@@ -106,10 +106,10 @@
     ctx.fillText(spec.labels[2], ...at([...far, Z + 0.14]));
   }
 
-  // Вращение: перетаскивание по горизонтали — поворот, по вертикали — наклон;
-  // ближняя сторона едет за указателем (`turn`). Палец, начавший вертикально,
-  // прокручивает страницу (touch-action: pan-y — браузер пришлёт pointercancel):
-  // до TOUCH_SLOP пикселей палец не вращает — ждём, куда он пошёл.
+  // Rotation: dragging horizontally rotates, vertically tilts; the near side
+  // follows the pointer (`turn`). A finger that started vertically scrolls the
+  // page (touch-action: pan-y - the browser sends pointercancel): up to
+  // TOUCH_SLOP pixels a finger does not rotate, we wait to see where it goes.
   const TOUCH_SLOP = 8;
   let drag: { id: number; x: number; y: number; held: boolean } | null = null;
   function down(e: PointerEvent) {
@@ -121,7 +121,7 @@
     const [dx, dy] = [e.clientX - drag.x, e.clientY - drag.y];
     if (drag.held) {
       if (Math.hypot(dx, dy) < TOUCH_SLOP) return;
-      // Вертикально — это прокрутка страницы, не рисунка.
+      // Vertically: that is page scrolling, not the figure.
       if (Math.abs(dy) > Math.abs(dx)) return void (drag = null);
       drag.held = false;
     }
@@ -143,8 +143,8 @@
     ph = spec.view[1] * deg;
   }
 
-  // Смена темы — те же переменные, другие значения; догрузился шрифт
-  // подписей — другие буквы: перерисовать.
+  // A theme change - the same variables, other values; the label font loaded
+  // - other glyphs: redraw.
   onMount(() => {
     const again = () => theme++;
     const obs = new MutationObserver(again);

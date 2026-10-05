@@ -1,4 +1,4 @@
-<!-- Легенда графа: цвет — папка верхнего уровня. С `ontoggle` пункты — переключатели показа папки. -->
+<!-- The graph legend: a color is a top-level folder. With `ontoggle` the items toggle showing a folder. -->
 <script lang="ts">
   import { groupColor } from "../lib/graph-view";
   import { notes } from "../lib/state";

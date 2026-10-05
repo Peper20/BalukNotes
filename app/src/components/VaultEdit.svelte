@@ -1,7 +1,7 @@
 <!--
-  Открытое хранилище: переименовать (папку) или удалить целиком в корзину
-  системы. Вкладки и места чтения в этом браузере — вслед за ним; потом —
-  перезагрузка: под новым именем или экран выбора хранилища.
+  The open vault: rename (its folder) or delete it entirely to the system
+  trash. Tabs and reading places in this browser follow it; then a reload:
+  under the new name or the vault picker screen.
 -->
 <script lang="ts">
   import X from "@lucide/svelte/icons/x";
@@ -28,7 +28,7 @@
       error = null;
       busy = false;
       dialog.showModal();
-      // Удаление: «Отмена» — по умолчанию, Enter не удалит случайно.
+      // Deleting: "Отмена" is the default, Enter does not delete by accident.
       if (ui.vaultEdit === "delete") cancel?.focus();
     } else if (!ui.vaultEdit && dialog.open) dialog.close();
   });
@@ -56,7 +56,7 @@
       () => api.renameVault(current, wanted),
       () => {
         vaultMoved(current, wanted);
-        // Та же страница — под новым именем хранилища.
+        // The same page under the new vault name.
         const rest = splitVaultPath(location.pathname)?.rest ?? "/";
         location.assign(vaultBase(wanted) + rest + location.search + location.hash);
       },

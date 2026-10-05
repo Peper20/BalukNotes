@@ -1,8 +1,8 @@
-/* Узкий экран (телефон). */
+/* A narrow screen (a phone). */
 
 .k-note {
-  /* Выключка по ширине в узкой колонке без переносов даёт дыры между словами;
-   * ужатый рисунок нечитаем — пусть лучше прокручивается пальцем. */
+  /* Justified text in a narrow column without hyphenation leaves holes
+   * between words; a shrunk figure is unreadable, better let it scroll by finger. */
   @media (max-width: 640px) {
     p, .k-box, .k-proof, .k-lead { text-align: left; }
     .k-frame { overflow-x: auto; justify-content: flex-start; }

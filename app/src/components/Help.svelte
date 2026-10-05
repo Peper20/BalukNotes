@@ -1,4 +1,4 @@
-<!-- Справка: горячие клавиши по группам (из реестра команд) и приёмы палитры. -->
+<!-- Help: shortcuts by groups (from the command registry) and palette tricks. -->
 <script lang="ts">
   import X from "@lucide/svelte/icons/x";
   import { commands } from "../lib/commands.svelte";

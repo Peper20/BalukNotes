@@ -1,4 +1,4 @@
-<!-- Теги: все теги с числом заметок; выбранный тег — его заметки и главы книг. -->
+<!-- Tags: all tags with the number of notes; the chosen tag - its notes and book chapters. -->
 <script lang="ts">
   import { notes } from "../lib/state";
   import { noteHref, tagHref } from "../lib/ids";

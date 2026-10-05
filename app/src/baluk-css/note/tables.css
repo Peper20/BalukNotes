@@ -1,4 +1,4 @@
-/* Таблицы. */
+/* Tables. */
 
 .k-note {
   table {
@@ -15,6 +15,6 @@
   .k-pitfalls td { width: 50%; vertical-align: top; }
   .k-bad { color: var(--k-box-pitfall); }
   .k-good { color: var(--k-box-example); }
-  /* Широкая таблица на телефоне прокручивается сама, а не страница. */
+  /* A wide table on a phone scrolls by itself, not the page. */
   @media (max-width: 640px) { table { display: block; overflow-x: auto; } }
 }

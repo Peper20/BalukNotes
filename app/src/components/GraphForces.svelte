@@ -1,11 +1,10 @@
 <!--
-  Силы графа — выдвижная панель сбоку от графа на его странице (не
-  всплывающее меню: граф виден и отвечает сразу; на узком экране — под
-  графом). Выезжает и уезжает плавно, без отскока. Подписи, пределы и
-  значения по умолчанию — из схемы настроек ядра (`graph.*`), значение — в
-  процентах от обычного.
-  Раскладка (папки, отталкивание, центр, связи) пересчитывается ядром,
-  перетаскивание (соседи) — физика клиента.
+  Graph forces: a sliding panel beside the graph on its page (not a popup
+  menu: the graph is visible and responds at once; on a narrow screen - under
+  the graph). Slides in and out smoothly, without a bounce. Labels, limits and
+  defaults come from the core settings schema (`graph.*`), the value is in
+  percent of the normal one. The layout (folders, repulsion, center, links)
+  is recomputed by the core, dragging (neighbours) is the client's physics.
 -->
 <script lang="ts">
   import X from "@lucide/svelte/icons/x";
@@ -21,19 +20,19 @@
     onreset,
     onclose,
   }: {
-    /** Настройки `graph.*` из схемы. */
+    /** The `graph.*` settings from the schema. */
     defs: SettingDef[];
     values: Record<string, number>;
-    /** Ползунок двигают — показать сразу. */
+    /** A slider moves: show at once. */
     oninput: (key: string, value: number) => void;
-    /** Отпустили — сохранить. */
+    /** Released: save. */
     onchange: (key: string, value: number) => void;
     onreset: () => void;
     onclose: () => void;
   } = $props();
 
   const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-  /** Сбоку — по ширине, под графом (узкий экран) — по высоте. */
+  /** Beside: by width; under the graph (a narrow screen): by height. */
   const axis = () => (matchMedia("(max-width: 700px)").matches ? "y" : "x");
 
   const DRAG = ["graph.pull", "graph.return"];

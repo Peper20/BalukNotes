@@ -1,7 +1,8 @@
 <!--
-  Заметка: вставка готового HTML с сервера (у книги — одной главы: главы режет
-  сервер), прокрутка к якорю, переход между главами. HTML заметки большой и чужой — вставляется
-  напрямую в DOM, а не шаблоном Svelte.
+  A note: inserts the ready HTML from the server (of a book - one chapter:
+  the server cuts the chapters), scrolls to the anchor, moves between
+  chapters. The note HTML is big and foreign, so it goes straight into the
+  DOM, not through a Svelte template.
 -->
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
@@ -17,7 +18,7 @@
 
   let content: HTMLDivElement | undefined = $state();
   let seenAnchorSeq = 0;
-  /** Что сейчас показано: заметка и глава — чтобы при перерисовке той же сохранить раскрытое. */
+  /** What is shown now: the note and the chapter, to keep what is open when redrawing the same one. */
   let shown: string | null = null;
   let unmountLive = () => {};
   onDestroy(() => unmountLive());
@@ -28,7 +29,7 @@
     if (page && el) untrack(() => render(page, el));
   });
 
-  // Переход по якорю в той же заметке (ссылка, оглавление, «назад»).
+  // An anchor navigation within the same note (a link, the outline, "back").
   $effect(() => {
     const seq = router.anchorSeq;
     if (seq === seenAnchorSeq) return;
@@ -36,7 +37,7 @@
     untrack(() => {
       if (!reader.page) return;
       if (scrollToAnchor(router.anchor)) return;
-      // «Назад» к месту без якоря — туда, где были; иначе — к началу.
+      // "Back" to a place without an anchor goes where we were; otherwise to the start.
       const place = reader.restore;
       reader.restore = null;
       const chapter = place?.chapter ?? 0;
@@ -49,9 +50,9 @@
     const r = page.rendered;
     const intent = reader.scroll;
     unmountLive();
-    // Та же заметка пересобрана (правка файла, «обновить») — раскрытые
-    // «Ответы» и прочие <details> не должны свернуться сами (по разделу и
-    // тексту summary — lib/details.ts).
+    // The same note was rebuilt (a file edit, "refresh"): the open "Ответы"
+    // and other <details> must not collapse by themselves (by section and
+    // summary text - lib/details.ts).
     const key = `${page.id}#${page.book?.chapter ?? ""}`;
     const open = key === shown ? openDetails(el) : new Set<string>();
     shown = key;
@@ -66,12 +67,12 @@
     if (intent.mode === "keep") scrollToTop(intent.y);
     else if (intent.mode === "anchor" && scrollToAnchor(router.anchor)) holdAnchor(page.id);
     else scrollToTop(0);
-    // Клавиши прокрутки (пробел, PgDn) - колонке заметки, если фокус не в поле ввода.
+    // Scroll keys (space, PgDn) go to the note column unless the focus is in an input.
     if (!document.activeElement?.closest("input, select, textarea, [contenteditable], dialog")) scroller().focus({ preventScroll: true });
     document.documentElement.dataset.state = "ready";
   }
 
-  /** Теги в шапке заметки — ссылки на страницу тега. */
+  /** Tags in the note header are links to the tag page. */
   function linkTags(root: Element) {
     for (const li of root.querySelectorAll(".k-tags li")) {
       const tag = li.textContent?.trim();
@@ -80,20 +81,20 @@
   }
 
   /**
-   * Ссылки на заметки ядро ставит без хранилища (`/n/…`: HTML один на все
-   * адреса) — в показанное хранилище: «открыть в новой вкладке» и адрес
-   * ссылки ведут туда же, куда клик.
+   * The core puts note links without a vault (`/n/...`: one HTML for all
+   * addresses); they go to the shown vault, so "open in a new tab" and the
+   * link address lead where a click does.
    */
   function linkVault(root: Element) {
     for (const a of root.querySelectorAll<HTMLAnchorElement>('a[href^="/n/"]')) a.setAttribute("href", inVault(a.getAttribute("href")!));
   }
 
-  /** Прокрутить к разделу; раздел в другой главе книги — загрузить её (прокрутит сама). */
+  /** Scrolls to a section; a section in another book chapter - loads it (it scrolls itself). */
   function scrollToAnchor(name: string | null): boolean {
     if (!name || !content) return false;
     const k = ui.book?.anchors[name];
     if (k != null && k !== ui.chapter) {
-      // Уже грузится (глава или сборка) — после загрузки прокрутит сама.
+      // Already loading (a chapter or a build): it scrolls itself after loading.
       if (!reader.pending) reader.showChapter(k, { mode: "anchor" });
       return true;
     }
@@ -103,9 +104,9 @@
   }
 
   /**
-   * Шрифты догружаются уже после вставки заметки (font-display: swap), и
-   * текст выше якоря перестраивается — якорь уезжает. Пару секунд после
-   * перехода возвращаемся к нему после каждой догрузки шрифтов.
+   * Fonts load after the note is inserted (font-display: swap), and the text
+   * above the anchor reflows, so the anchor drifts. For a couple of seconds
+   * after a navigation we return to it after every font load.
    */
   function holdAnchor(id: string) {
     const anchor = router.anchor;

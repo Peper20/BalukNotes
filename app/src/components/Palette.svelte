@@ -1,8 +1,8 @@
 <!--
-  Палитра: быстрый переход (Ctrl+O), команды (Ctrl+K или «>»), поиск по
-  тексту (Ctrl+Shift+F или «/»), теги («#»), поиск Ctrl+F из заметки (Tab —
-  где искать: глава, заметка, хранилище; повторное Ctrl+F — поиск браузера).
-  ↑↓ — выбор, Enter — открыть, Ctrl+Enter — в новой вкладке, Esc — закрыть.
+  The palette: quick open (Ctrl+O), commands (Ctrl+K or ">"), full-text
+  search (Ctrl+Shift+F or "/"), tags ("#"), the Ctrl+F search from a note
+  (Tab - where to search: chapter, note, vault; a second Ctrl+F is the
+  browser's search). ↑↓ select, Enter opens, Ctrl+Enter in a new tab, Esc closes.
 -->
 <script lang="ts">
   import { tick } from "svelte";
@@ -29,17 +29,17 @@
   let searching = $state(false);
 
   const query = $derived(ui.palette?.query ?? "");
-  /** Поиск Ctrl+F из заметки — или обычная палитра. */
+  /** The Ctrl+F search from a note, or the usual palette. */
   const find = $derived(ui.palette?.find ?? null);
   const mode = $derived(
     find ? "find" : query.startsWith(">") ? "commands" : query.startsWith("/") ? "text" : query.startsWith("#") ? "tags" : "notes",
   );
   const q = $derived(mode === "notes" || mode === "find" ? query.trim() : query.slice(1).trim());
-  /** Поиск внутри одной заметки (книги): её id. */
+  /** Search inside one note (book): its id. */
   const inNote = $derived(find && find.scope !== "vault" ? find.note : null);
   const findTitle = $derived(find ? notes.title(find.note) : "");
   const findBook = $derived(find ? notes.all.find((n) => n.id === find.note)?.kind === "book" : false);
-  /** Книга показана по главам — можно искать в главе. */
+  /** The book is shown by chapters: a chapter can be searched. */
   const byChapters = $derived(find != null && ui.book != null && find.note === router.currentId);
   const chapterTitle = $derived(byChapters ? (ui.book!.chapters[ui.book!.chapter]?.title ?? "") : "");
 
@@ -88,7 +88,7 @@
   const hitItems = $derived<Item[]>(mode === "notes" || mode === "text" || mode === "find" ? shownHits.map((hit) => ({ kind: "hit", hit })) : []);
   const items = $derived([...noteItems, ...commandItems, ...tagItems, ...hitItems]);
 
-  // Поиск по тексту — с задержкой и отменой прежнего запроса.
+  // Full-text search with a delay, cancelling the previous request.
   $effect(() => {
     const text = mode === "notes" || mode === "text" || mode === "find" ? q : "";
     const note = inNote;
@@ -119,7 +119,7 @@
   $effect(() => {
     if (ui.palette && input) {
       input.focus();
-      // Префикс режима — выделить нельзя, курсор — в конец.
+      // The mode prefix cannot be selected, the caret goes to the end.
       input.setSelectionRange(input.value.length, input.value.length);
     }
   });
@@ -149,7 +149,7 @@
   }
 
   function onKeydown(e: KeyboardEvent) {
-    // Повторное Ctrl+F — поиск браузера (в показанной главе).
+    // A second Ctrl+F is the browser's search (in the shown chapter).
     if (mode === "find" && (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.code === "KeyF") {
       close();
       e.stopPropagation();
@@ -220,7 +220,7 @@
       {#if find}
         <div class="palette-scopes" role="radiogroup" aria-label="Где искать">
           {#each scopes(byChapters) as scope}
-            <!-- Фокус остаётся в поле ввода. -->
+            <!-- The focus stays in the input. -->
             <button
               type="button"
               role="radio"

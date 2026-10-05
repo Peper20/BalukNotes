@@ -1,10 +1,10 @@
-/* Заголовки: глава книги (разрядка, линейка, бледная цифра) и разделы. */
+/* Headings: a book chapter (letter spacing, a rule, a pale number) and sections. */
 
 .k-note {
   .k-h { font-weight: bold; hyphens: manual; text-align: left; line-height: 1.25; }
   .k-h .k-num { margin-right: 0.35em; }
 
-  /* Глава: надпись разрядкой, название, линейка, бледная крупная цифра. */
+  /* A chapter: a letter-spaced label, the title, a rule, a big pale number. */
   .k-h1 {
     position: relative;
     margin: 2.2em 0 1.1em; padding-bottom: 0.35em;

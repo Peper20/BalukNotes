@@ -1,7 +1,8 @@
 <!--
-  Выбор хранилища: адрес его не называет, а открытого в этом браузере
-  последним нет (первый запуск, хранилище удалили). Хранилища по умолчанию
-  нет — пользователь выбирает или создаёт (и называет) сам, даже первое.
+  The vault picker: the address does not name a vault, and there is no last
+  opened one in this browser (the first start, the vault was deleted). There
+  is no default vault: the user picks or creates (and names) one, even the
+  first.
 -->
 <script lang="ts">
   import Library from "@lucide/svelte/icons/library";
@@ -17,7 +18,7 @@
   const first = $derived(list.vaults.length === 0);
 
   onMount(() => {
-    // Тема — как в приложении; нет настроек — по системе (CSS тем).
+    // The theme as in the app; no settings - by the system (theme CSS).
     void settings
       .load()
       .catch(() => {})

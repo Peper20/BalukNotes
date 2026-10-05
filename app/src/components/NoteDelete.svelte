@@ -1,7 +1,7 @@
 <!--
-  Удалить заметку (папку)? — подтверждение: что уйдёт в корзину (книга —
-  папкой, папка — со всем, что в ней) и сколько других заметок ссылается туда
-  (их ссылки станут битыми).
+  Delete a note (folder)? A confirmation: what goes to the trash (a book as a
+  folder, a folder with everything in it) and how many other notes link
+  there (their links will break).
 -->
 <script lang="ts">
   import X from "@lucide/svelte/icons/x";
@@ -13,7 +13,7 @@
 
   let dialog: HTMLDialogElement | undefined = $state();
   let cancel: HTMLButtonElement | undefined = $state();
-  /** Сколько других заметок ссылается сюда; null — ещё не знаем. */
+  /** How many other notes link here; null - not known yet. */
   let linked = $state<number | null>(null);
   let error = $state<string | null>(null);
   let busy = $state(false);
@@ -23,10 +23,10 @@
   const folder = $derived(target?.kind === "folder");
   const book = $derived(!folder && notes.byId(id)?.kind === "book");
   const name = $derived(!target ? "" : folder ? notes.folderTitle(target.id) : notes.title(target.id));
-  /** Заметок и книг в удаляемой папке. */
+  /** Notes and books in the folder being deleted. */
   const count = $derived(folder && id ? notes.all.filter((n) => n.id.startsWith(`${id}/`)).length : 0);
 
-  /** Сколько других заметок ссылается на заметку или внутрь папки. */
+  /** How many other notes link to the note or into the folder. */
   async function linkedTo(t: TreeItem): Promise<number> {
     if (t.kind === "note") return new Set((await api.links(t.id)).backlinks.map((b) => b.from).filter((f) => f !== t.id)).size;
     const inside = (n: string) => n.startsWith(`${t.id}/`);
@@ -41,7 +41,7 @@
       error = null;
       busy = false;
       dialog.showModal();
-      // «Отмена» — по умолчанию: Enter не удалит случайно.
+      // "Отмена" is the default: Enter does not delete by accident.
       cancel?.focus();
       linkedTo(t)
         .then((n) => {

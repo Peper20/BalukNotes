@@ -2,9 +2,9 @@ import { mount } from "svelte";
 import { pickVault } from "./lib/boot";
 import "./app.css";
 
-// Хранилище — раньше состояния клиента (вкладки и места чтения у каждого
-// свои), поэтому App и модули состояния загружаются после. Какое — не
-// ясно (первый запуск) — экран выбора хранилища.
+// The vault comes before the client state (tabs and reading places are per
+// vault), so App and the state modules load after it. If it is unclear
+// which one (the first start) - the vault picker screen.
 try {
   const choose = await pickVault();
   if (choose) {

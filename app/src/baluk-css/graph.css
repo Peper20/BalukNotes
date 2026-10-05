@@ -1,16 +1,16 @@
-/* ── Граф заметок (Graph.svelte): главная и /graph приложения, граф в
- * заметке (`#vault-graph`). */
+/* ── The note graph (Graph.svelte): home and /graph of the app, the graph
+ * in a note (`#vault-graph`). */
 .graph-svg { display: block; width: 100%; height: auto; max-height: 70vh; font-family: system-ui, sans-serif; user-select: none; }
 .graph-edge { stroke: var(--k-muted); opacity: 0.45; transition: opacity 0.15s; }
 .graph-node { cursor: pointer; transition: opacity 0.15s; }
 .graph-node circle { stroke-width: 1.5; }
 .graph-node.missing { cursor: default; }
-/* Узел тянется и на картинке (главная, заметка): касание узла — не прокрутка страницы. */
+/* A node can be dragged on the picture too (home, a note): touching a node does not scroll the page. */
 .graph-node { touch-action: none; }
 .graph-svg.dragging, .graph-svg.dragging .graph-node { cursor: grabbing; }
 .graph-node.missing circle { stroke-dasharray: 3 2; }
-/* Книга главами (выбор пользователя): глава — полый кружок, связь «книга -
-   глава» — сплошная, бледнее ссылок. */
+/* A book as chapters (user's choice): a chapter is a hollow circle, the
+   link "book - chapter" is solid, paler than links. */
 .graph-edge.chapter { opacity: 0.3; }
 .graph-node.chapter circle { stroke-width: 2; }
 .graph-node text { font-size: var(--label, 11px); fill: var(--k-text); paint-order: stroke; stroke: var(--k-surface); stroke-width: 3px; }
@@ -26,10 +26,10 @@
 .graph-svg.searching:not(.focused) .graph-edge { opacity: 0.12; }
 .graph-node.hit circle { stroke: var(--k-accent) !important; stroke-width: 3; }
 .graph-svg.far .graph-node:not(.book, .hit, .near, .center) text { display: none; }
-/* Страница графа: холст во всю оставшуюся высоту. */
+/* The graph page: the canvas takes the rest of the height. */
 .graph-svg.interactive { height: 100%; max-height: none; cursor: grab; touch-action: none; }
-/* Появление: рёбра и подписи проявляются, кружки растут — от середины к
- * краям (`--delay`); так же — узлы, добавленные фильтром. */
+/* Appearing: edges and labels fade in, circles grow, from the middle to the
+ * edges (`--delay`); the same for nodes added by a filter. */
 @keyframes graph-fade-in { from { opacity: 0; } }
 @keyframes graph-grow { from { opacity: 0; transform: scale(0.2); } }
 .graph-edge, .graph-node text { animation: graph-fade-in 0.45s ease-out var(--delay, 0s) backwards; }
@@ -40,12 +40,12 @@
 .graph-svg.interactive.dragging { cursor: grabbing; }
 .graph-svg.interactive .graph-edge { vector-effect: non-scaling-stroke; }
 
-/* Граф в заметке: картинка Typst, пока нет скрипта; живой граф — поверх. */
+/* The graph in a note: the Typst picture while there is no script; the live graph on top. */
 .k-note .k-graph { margin: 1em auto; max-width: 100%; }
 .k-note .k-graph[data-live] > :not(.k-graph-live) { display: none; }
 .k-note .k-graph-live .graph-svg { max-height: 60vh; }
 
-/* Легенда графа (GraphLegend.svelte): цвет — папка верхнего уровня. */
+/* The graph legend (GraphLegend.svelte): a color is a top-level folder. */
 .graph-legend { display: flex; flex-wrap: wrap; gap: 0.3em 1em; padding: 0.4em 0.8em 0.6em; font: 12px system-ui, sans-serif; color: var(--k-muted); }
 .graph-legend i { display: inline-block; width: 0.7em; height: 0.7em; border-radius: 50%; margin-right: 0.35em; vertical-align: -0.05em; }
 .graph-legend button {

@@ -1,9 +1,9 @@
-// Тема до загрузки клиента: без неё первый кадр — пустой фон браузера
-// (белый в тёмной теме). Что показать — запомнил клиент (`settings.apply`,
-// `themeMemo` в src/lib/appearance.ts): выбранная тема или своя для светлой
-// и тёмной системы.
-// Своя у каждого хранилища (`k-theme@<имя>`, адрес /v/<имя>/…), иначе —
-// последняя показанная.
+// The theme before the client loads: without it the first frame is the
+// empty browser background (white in a dark theme). What to show was
+// remembered by the client (`settings.apply`, `themeMemo` in
+// src/lib/appearance.ts): the chosen theme or its own for a light and a dark
+// system. Per vault (`k-theme@<name>`, the address /v/<name>/...), otherwise
+// the last shown one.
 try {
   var m = /^\/v\/([^/]+)/.exec(location.pathname);
   var own = m && localStorage.getItem("k-theme@" + decodeURIComponent(m[1]));
@@ -11,5 +11,5 @@ try {
   var name = t && (t.fixed || (matchMedia("(prefers-color-scheme: dark)").matches ? t.dark : t.light));
   if (typeof name === "string") document.documentElement.dataset.theme = name;
 } catch (e) {
-  // нет localStorage — тема придёт с настройками
+  // no localStorage: the theme comes with the settings
 }

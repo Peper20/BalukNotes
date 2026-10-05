@@ -1,8 +1,8 @@
 <!--
-  Оглавление заметки (пункты — reader.toc; заголовок с формулой — его HTML
-  из ядра, `Heading.html`, того же доверия, что и тело заметки). Сбоку от
-  колонки, если справа хватает места (ширина колонки зависит от кегля),
-  иначе — всплывающее по §. Подсвечивает раздел, который сейчас читают.
+  The note outline (items - reader.toc; a heading with a formula is its HTML
+  from the core, `Heading.html`, as trusted as the note body). Beside the
+  column if there is room on the right (the column width depends on the font
+  size), otherwise a popup by §. Highlights the section being read.
 -->
 <script lang="ts">
   import { reader, settings } from "../lib/state";
@@ -14,11 +14,11 @@
 
   const shown = $derived(reader.toc);
 
-  /** Раздел, который сейчас читают: последний заголовок выше верха окна. */
+  /** The section being read: the last heading above the window top. */
   function markCurrent() {
     const visible = shown.map((h) => document.getElementById(h.id)).filter((el): el is HTMLElement => el?.isConnected ?? false);
     let current: HTMLElement | undefined;
-    // Докрутили до конца — последние разделы до верха окна не доедут.
+    // Scrolled to the end: the last sections will not reach the window top.
     if (atBottom()) current = visible.at(-1);
     else {
       const top = (document.querySelector(".chrome")?.getBoundingClientRect().bottom ?? 50) + 40;
@@ -30,7 +30,7 @@
     ui.currentHeading = (current ?? visible[0])?.id ?? null;
   }
 
-  /** Хватает ли места справа от колонки заметки для оглавления. */
+  /** Whether there is room for the outline to the right of the note column. */
   function layout() {
     const note = document.getElementById("note");
     if (!note) return;
@@ -40,7 +40,7 @@
     if (ui.tocRoom && settings.values["panels.toc"]) ui.tocOpen = false;
   }
 
-  // Пересчёт: новая заметка, глава, кегль, ширина окна или панели.
+  // Recompute: a new note, chapter, font size, window or panel width.
   $effect(() => {
     void [shown, ui.chapter, settings.values];
     queueMicrotask(() => {
@@ -69,7 +69,7 @@
     };
   });
 
-  // Текущий пункт — в поле зрения боковой панели.
+  // The current item stays in view of the side panel.
   $effect(() => {
     const id = ui.currentHeading;
     if (!id || !nav || !(ui.tocRoom || ui.tocOpen)) return;

@@ -1,8 +1,9 @@
 <!--
-  «Ссылаются сюда»: кто ссылается на заметку — из индекса ссылок (без
-  компиляции). Ссылка в раздел — его заголовок как в оглавлении (HTML
-  заголовка из ядра: формулы, выделение); раздела нет на странице (другая
-  глава книги) — текст заголовка, не нашёлся — якорь как написан.
+  "Ссылаются сюда": who links to the note, from the link index (no
+  compiling). A link into a section shows its heading as in the outline
+  (heading HTML from the core: formulas, emphasis); the section is not on the
+  page (another book chapter) - the heading text; not found - the anchor as
+  written.
 -->
 <script lang="ts">
   import { api, type Backlink, type LinksResponse } from "../lib/api";
@@ -24,8 +25,9 @@
   });
 
   /**
-   * Заголовок раздела на странице: якорь — его `id` (метка) или слаг текста
-   * (`data-k-anchor`), как находит ссылка; иначе — раздел, найденный ядром.
+   * The section heading on the page: the anchor is its `id` (a label) or the
+   * text slug (`data-k-anchor`), as a link finds it; otherwise the section
+   * found by the core.
    */
   function headingOf(b: Backlink) {
     const headings = reader.page?.rendered?.headings ?? [];

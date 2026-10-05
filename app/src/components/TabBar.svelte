@@ -1,6 +1,6 @@
 <!--
-  Вкладки (видны, когда их больше одной). Ссылка с Ctrl или средней кнопкой
-  открывается в новой вкладке; средняя кнопка на вкладке — закрыть.
+  Tabs (shown when there is more than one). A link with Ctrl or the middle
+  button opens in a new tab; the middle button on a tab closes it.
 -->
 <script lang="ts">
   import Plus from "@lucide/svelte/icons/plus";
@@ -21,9 +21,9 @@
 
   let bar: HTMLDivElement | undefined = $state();
 
-  // Активная вкладка — в поле зрения полосы (на телефоне вкладки не влезают).
+  // The active tab stays in view of the bar (on a phone the tabs do not fit).
   $effect(() => {
-    void [tabs.active, tabs.list.length, notes.all]; // названия (ширина) — по списку заметок
+    void [tabs.active, tabs.list.length, notes.all]; // titles (width) follow the note list
     const tab = bar?.querySelector<HTMLElement>(".tab.active");
     if (!bar || !tab) return;
     const [b, t] = [bar.getBoundingClientRect(), tab.getBoundingClientRect()];

@@ -1,4 +1,4 @@
-/* Рисунки: подписи, кадры SVG (`k-frame`), ряды, варианты по темам. */
+/* Figures: captions, SVG frames (`k-frame`), rows, variants per theme. */
 
 .k-note {
   figure { margin: 1.3em 0; }
@@ -8,11 +8,11 @@
   }
   .k-fig-num { font-weight: bold; color: var(--k-accent); }
   .k-frame { display: flex; justify-content: center; max-width: 100%; }
-  /* Подписи рисунков в PDF — 9.2pt при тексте 11pt; с экрана это мелко,
-   * поэтому рисунок крупнее на 15% (SVG задан в em — растёт целиком). */
+  /* Figure captions in the PDF are 9.2pt with 11pt text; that is small on a
+   * screen, so a figure is 15% larger (the SVG is set in em, it grows whole). */
   .k-fig { font-size: 1.15em; }
   .k-layout { justify-content: flex-start; }
-  /* Размер SVG задан инлайн в em: на узком экране ужимаем по ширине. */
+  /* The SVG size is set inline in em: on a narrow screen shrink it by width. */
   .k-frame svg { max-width: 100% !important; height: auto !important; }
   .k-row {
     display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.8em;
@@ -22,6 +22,6 @@
   .k-right { text-align: right; }
   .k-center > .k-frame { justify-content: center; }
 
-  /* Варианты рисунка по темам: видим только вариант текущей темы. */
+  /* Figure variants per theme: only the variant of the current theme is visible. */
   .k-frame-v { display: none; }
 }

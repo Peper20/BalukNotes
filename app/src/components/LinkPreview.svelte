@@ -1,20 +1,21 @@
 <!--
-  Превью ссылки на заметку при наведении (задержка — чтобы не мигать при
-  случайном проходе мышью): название, раздел, начало текста, теги. Текст —
-  из индекса исходников, без сборки заметки: быстро даже для большой книги.
-  В дереве карточка — справа от строки, не закрывает соседние.
+  A preview of a note link on hover (with a delay, so it does not flash when
+  the mouse passes by): the title, the section, the start of the text, tags.
+  The text comes from the source index, without building the note: fast even
+  for a big book. In the tree the card is to the right of the row and does
+  not cover the neighbouring ones.
 -->
 <script lang="ts">
   import { api, type Preview } from "../lib/api";
   import { router } from "../lib/state";
   import { hashAnchor, isAppPath, parseRoute } from "../lib/ids";
 
-  /** Ссылки на заметки: в HTML заметки, в «Ссылаются сюда» (адреса хранилища) и в дереве. */
+  /** Note links: in the note HTML, in "Ссылаются сюда" (vault addresses) and in the tree. */
   const NOTE_LINKS = [".k-note", ".backlinks"]
     .flatMap((c) => [`${c} a[href^='/v/']`, `${c} a[href^='/n/']`])
     .concat(".tree a[data-id]")
     .join(", ");
-  const CARD_W = 384; // ширина .link-preview (24rem)
+  const CARD_W = 384; // width of .link-preview (24rem)
 
   const DELAY = 350;
   const cache = new Map<string, Preview | null>();
@@ -64,7 +65,7 @@
     }, DELAY);
   }
 
-  /** Ушли и со ссылки, и с карточки — спрятать (с задержкой: можно перейти на карточку). */
+  /** Left both the link and the card: hide (with a delay, so one can move onto the card). */
   function onOut(e: PointerEvent) {
     const ours = (n: Node | null) => n != null && Boolean(link?.contains(n) || card?.contains(n));
     if (!ours(e.target as Node) || ours(e.relatedTarget as Node | null)) return;
@@ -75,7 +76,7 @@
     }, 150);
   }
 
-  // Переход — превью больше не к месту.
+  // A navigation: the preview is out of place now.
   $effect(() => {
     void router.route;
     void router.anchorSeq;

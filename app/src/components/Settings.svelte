@@ -1,8 +1,8 @@
 <!--
-  Настройки: форма строится по схеме с сервера, каждое изменение сразу
-  сохраняется — только для этого хранилища (настройки устройства — для всех).
-  У изменённой настройки видно, откуда значение: только это хранилище или
-  все хранилища; рядом — «для всех хранилищ», «как у всех», «по умолчанию».
+  Settings: the form is built by the schema from the server, every change is
+  saved at once - only for this vault (device settings - for all). A changed
+  setting shows where its value comes from: only this vault or all vaults;
+  next to it - "для всех хранилищ", "как у всех", "по умолчанию".
 -->
 <script lang="ts">
   import X from "@lucide/svelte/icons/x";
@@ -23,7 +23,7 @@
 
   const inGroup = (key: string) => settings.schema?.settings.filter((s) => s.key.startsWith(`${key}.`)) ?? [];
   const save = (def: SettingDef, value: number | string | boolean) => settings.save({ [def.key]: value });
-  /** Что меняется для всех хранилищ сразу: «тема, кегль текста». */
+  /** What changes for all vaults at once: "тема, кегль текста". */
   const everywhere = $derived(
     (settings.schema?.settings ?? [])
       .filter((d) => d.shared)
@@ -94,7 +94,7 @@
                     <span class="setting-badge shared">{def.device ? "изменено на этом устройстве" : "изменено для всех хранилищ"}</span>
                     <button type="button" class="setting-action" onclick={() => settings.resetShared(def.key)}>по умолчанию</button>
                   {/if}
-                  <!-- Тема и кегль меняются для всех: своё у хранилища — по выбору. -->
+                  <!-- The theme and the font size change for all: a vault's own value is optional. -->
                   {#if def.shared}
                     <button type="button" class="setting-action" onclick={() => settings.onlyHere(def.key)}>только для этого хранилища</button>
                   {/if}

@@ -1,5 +1,5 @@
-// Плагин Vite: `assets/baluk.css` из файлов блоков (`bundle.ts`) — в сборке
-// файлом `dist/assets/baluk.css`, в `npm run dev` — по тому же адресу.
+// Vite plugin: `assets/baluk.css` from the block files (`bundle.ts`) - in a
+// build as the file `dist/assets/baluk.css`, in `npm run dev` at the same address.
 
 import type { Plugin } from "vite";
 import { bundle, forBrowsers } from "./bundle.ts";

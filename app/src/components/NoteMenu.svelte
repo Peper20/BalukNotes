@@ -1,6 +1,7 @@
 <!--
-  Меню заметки или папки в дереве (правый клик, долгое касание): сверху - для
-  чего оно (указатель на краю строки мог попасть в соседнюю), ниже - действия.
+  The menu of a note or folder in the tree (right click, long tap): at the
+  top - what it is for (a pointer at the row edge could hit the neighbouring
+  one), below - the actions.
 -->
 <script lang="ts">
   import BookIcon from "@lucide/svelte/icons/book";
@@ -13,7 +14,7 @@
   import { ui } from "../lib/ui.svelte";
 
   let menu: HTMLElement | undefined = $state();
-  /** Место меню: у указателя, но в пределах окна. */
+  /** The menu place: at the pointer, but within the window. */
   let pos = $state({ x: 0, y: 0 });
 
   $effect(() => {
@@ -30,7 +31,7 @@
 
   const close = () => (ui.noteMenu = null);
 
-  /** Для чего меню: значок как в дереве, название, путь - в подсказке. */
+  /** What the menu is for: an icon as in the tree, the title, the path in the tooltip. */
   const head = $derived.by(() => {
     const at = ui.noteMenu;
     if (!at) return null;

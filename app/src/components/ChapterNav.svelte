@@ -1,4 +1,4 @@
-<!-- Предыдущая / следующая глава книги под текстом главы. -->
+<!-- Previous / next book chapter under the chapter text. -->
 <script lang="ts">
   import { ui } from "../lib/ui.svelte";
 

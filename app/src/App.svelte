@@ -1,4 +1,4 @@
-<!-- Каркас приложения: панель, верхняя строка, заметка или главная, настройки. -->
+<!-- The app frame: the sidebar, the top bar, a note or home, settings. -->
 <script lang="ts">
   import { onMount } from "svelte";
   import { reader, router, settings, start } from "./lib/state";
@@ -38,12 +38,12 @@
 
   $effect(() => settings.apply(document.documentElement));
 
-  // Высота верхней панели (строка + вкладки) - для места оглавления под ней.
+  // Height of the top panel (bar + tabs), for the outline's place under it.
   let chromeBox: ResizeObserverSize[] | undefined = $state();
   const chromeHeight = $derived(chromeBox?.[0]?.blockSize ?? 0);
   $effect(() => document.documentElement.style.setProperty("--chrome-h", `${chromeHeight}px`));
 
-  // Место чтения — по ходу прокрутки (к «назад» запись истории уже другая).
+  // The reading place while scrolling (by "back" the history entry is already another).
   let rememberTimer: ReturnType<typeof setTimeout> | undefined;
   function onScroll() {
     clearTimeout(rememberTimer);
@@ -51,8 +51,9 @@
   }
 
   /**
-   * Ссылки на заметки, теги и якоря — внутри клиента, без перезагрузки.
-   * Ctrl+клик и средняя кнопка — в фоновой вкладке приложения, а не браузера.
+   * Links to notes, tags and anchors stay inside the client, without a
+   * reload. Ctrl+click and the middle button open in a background tab of the
+   * app, not of the browser.
    */
   function onClick(e: MouseEvent) {
     const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
@@ -61,7 +62,7 @@
     if (url.origin !== location.origin || !isAppPath(url.pathname)) return;
     const newTab = e.button === 1 || e.ctrlKey || e.metaKey;
     if (url.pathname === location.pathname && url.search === location.search && !newTab) {
-      // Якорь в той же заметке: прокрутка — клиентом, запоминаем в истории.
+      // An anchor in the same note: the client scrolls, we remember it in the history.
       if (url.hash) {
         e.preventDefault();
         router.go(url);
@@ -74,7 +75,7 @@
     router.go(url.pathname + url.search + url.hash);
   }
 
-  /** Горячие клавиши — по реестру команд; одиночные — не во время ввода. */
+  /** Shortcuts by the command registry; single keys not while typing. */
   function onKeydown(e: KeyboardEvent) {
     if (e.key === "Escape") {
       if (ui.tocOpen) ui.tocOpen = false;
@@ -116,7 +117,7 @@
         <Topbar />
         <TabBar />
       </div>
-      <!-- Прокручивается колонка, а не документ (lib/scroll.ts). -->
+      <!-- The column scrolls, not the document (lib/scroll.ts). -->
       <div class="page" id="page" tabindex="-1" onscroll={onScroll}>
       {#if router.route.kind === "note"}
         {#if reader.page}<Problems page={reader.page} />{/if}

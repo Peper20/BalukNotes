@@ -1,9 +1,10 @@
 <!--
-  Граф заметок во весь экран: масштаб, сдвиг, перестановка узлов, фильтры
-  (папки, тег, несуществующие, без связей, книги главами), поиск по графу, «соседи
-  заметки» (`/graph?around=…&depth=…`) и граф папки (`/graph?folder=…`, её
-  заметки с подпапками). Фильтры запоминаются в браузере.
-  Силы графа — панель сбоку (`GraphForces`), значения — настройки `graph.*`.
+  The full-screen note graph: zoom, pan, moving nodes, filters (folders, tag,
+  missing notes, unlinked ones, books as chapters), search on the graph, "the
+  neighbours of a note" (`/graph?around=...&depth=...`) and a folder graph
+  (`/graph?folder=...`, its notes with subfolders). Filters are remembered in
+  the browser. Graph forces are a side panel (`GraphForces`), the values are
+  the `graph.*` settings.
 -->
 <script lang="ts">
   import Maximize from "@lucide/svelte/icons/maximize";
@@ -37,22 +38,22 @@
   });
   $effect(() => save("k-graph", $state.snapshot(prefs)));
 
-  // Силы графа: настройки `graph.*`; пока ползунок двигают — его значение (`live`).
+  // Graph forces: the `graph.*` settings; while a slider moves, its value (`live`).
   const forceDefs = $derived(settings.schema?.settings.filter((d) => d.key.startsWith("graph.")) ?? []);
   let live = $state<Record<string, number>>({});
   const tune = $derived(
     Object.fromEntries(forceDefs.map((d) => [d.key, live[d.key] ?? Number(settings.values[d.key] ?? d.default)])) as Record<string, number>,
   );
-  // Силы раскладки — строкой: граф запрашивается заново, только когда они
-  // правда изменились (ползунки соседей раскладку не трогают). Схемы ещё
-  // нет — по умолчанию ядра.
+  // Layout forces as a string: the graph is requested again only when they
+  // really changed (the neighbour sliders do not touch the layout). No schema
+  // yet - the core defaults.
   const forces = $derived(
     forceDefs.length
       ? JSON.stringify({ clusters: tune["graph.clusters"]!, center: tune["graph.center"]!, repel: tune["graph.repel"]!, links: tune["graph.links"]! } satisfies Forces)
       : null,
   );
   const drag = $derived<Drag>(forceDefs.length ? { pull: tune["graph.pull"]! / 100, back: tune["graph.return"]! / 100 } : DRAG);
-  /** Панель сил выдвигают кнопкой; при каждом заходе на граф она спрятана. */
+  /** The forces panel slides out by a button; it is hidden on every visit to the graph. */
   let forcesOpen = $state(false);
   function onkeydown(e: KeyboardEvent) {
     if (e.key === "Escape" && forcesOpen && !e.defaultPrevented && !document.querySelector("dialog[open]")) forcesOpen = false;
@@ -67,7 +68,7 @@
     void settings.save(Object.fromEntries(forceDefs.map((d) => [d.key, d.default as number])));
   }
 
-  // Граф по фильтру — с сервера, уже разложенный (фильтр и раскладка — в ядре).
+  // The graph by the filter comes from the server already laid out (filter and layout are in the core).
   let shown = $state.raw<GraphLayout | null>(null);
   let failed = $state(false);
   let first = true;
@@ -92,14 +93,14 @@
 
   const titles = $derived(new Map(notes.all.map((n) => [n.id, n.title] as const)));
   const allTags = $derived([...new Set(notes.all.flatMap(noteTags))].sort((a, b) => a.localeCompare(b, "ru")));
-  // Цвета — по всем группам, а не по показанным: фильтр не перекрашивает узлы.
+  // Colors by all groups, not the shown ones: a filter does not recolor nodes.
   const groups = $derived(shown?.groups ?? []);
 
   let query = $state("");
   const hits = $derived(shown && query.trim() ? new Set(shown.nodes.filter((n) => matches(query, n.id, titles.get(n.id))).map((n) => n.id)) : null);
 
   let graph: Graph | undefined = $state();
-  /** Узлы переставлены — есть что вернуть. */
+  /** Nodes were moved: there is something to bring back. */
   let moved = $state(false);
 
   function toggleGroup(g: string) {
@@ -111,7 +112,7 @@
     if (e.key === "Escape") query = "";
   }
 
-  // Страница — во всю высоту колонки под верхними панелями.
+  // The page takes the full height of the column under the top panels.
   let page: HTMLElement | undefined = $state();
   let top = $state(0);
   $effect(() => {
