@@ -9,7 +9,7 @@ async function ask(page: Page, query: string) {
   await page.locator(".palette input").fill(query);
 }
 
-test("Ctrl+O: нечёткий переход к заметке", async ({ page }) => {
+test("Ctrl+O: fuzzy jump to a note", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await ask(page, "дно");
   await expect(page.locator(".palette-list li.selected")).toContainText("Дно");
@@ -19,7 +19,7 @@ test("Ctrl+O: нечёткий переход к заметке", async ({ page 
   await expect(palette(page)).toBeHidden();
 });
 
-test("поиск по тексту ведёт в раздел нужной главы", async ({ page }) => {
+test("full-text search leads to the section of the right chapter", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await ask(page, "/итоги второй");
   const hit = page.locator(".palette-list li[role=option]").first();
@@ -32,7 +32,7 @@ test("поиск по тексту ведёт в раздел нужной гл�
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Продолжение/);
 });
 
-test("поиск в этой книге: разделы всех глав по порядку, переход — в нужную главу", async ({ page }) => {
+test("search in this book: sections of all chapters in order, going to the right chapter", async ({ page }) => {
   await open(page, "Книга");
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Основы/);
   await page.keyboard.press("Control+k");
@@ -43,7 +43,7 @@ test("поиск в этой книге: разделы всех глав по �
   await input.fill("итоги");
   const hits = page.locator(".palette-list li[role=option]");
   await expect(page.locator(".palette-group")).toContainText("В книге «Тестовая книга»");
-  // «Итоги» всех трёх глав — по порядку текста (в общем поиске — только лучшие).
+  // "Итоги" of all three chapters in text order (the global search shows only the best).
   const order = ["первой", "второй", "третьей"];
   await expect(hits.filter({ hasText: /Итоги (первой|второй|третьей)/ })).toHaveCount(3);
   const texts = await hits.allTextContents();
@@ -56,11 +56,11 @@ test("поиск в этой книге: разделы всех глав по �
   await expect(page.locator("#Итоги-2")).toBeInViewport();
 });
 
-test("Ctrl+F в заметке: в ней или во всём хранилище (Tab — где искать)", async ({ page }) => {
+test("Ctrl+F in a note: in it or in the whole vault (Tab - where to search)", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await page.keyboard.press("Control+KeyF");
   const scopes = page.locator(".palette-scopes [role=radio]");
-  // У заметки нет глав: заметка и хранилище.
+  // A note has no chapters: the note and the vault.
   await expect(scopes).toHaveText(["Заметка", "Всё хранилище"]);
   await expect(scopes.first()).toHaveAttribute("aria-checked", "true");
   const input = page.locator(".palette input");
@@ -73,7 +73,7 @@ test("Ctrl+F в заметке: в ней или во всём хранилищ�
   await expect(page.locator(".palette-list li[role=option]").first()).toContainText("Тестовая книга");
 });
 
-test("команды: сменить тему из палитры", async ({ page }) => {
+test("commands: change the theme from the palette", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await page.keyboard.press("Control+k");
   await page.locator(".palette input").pressSequentially("тема ночь");
@@ -86,7 +86,7 @@ test("команды: сменить тему из палитры", async ({ pag
   await resetTheme(page);
 });
 
-test("tags: из шапки заметки, страница тега, все теги, палитра", async ({ page }) => {
+test("tags: from the note header, the tag page, all tags, the palette", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await page.locator("#note .k-tags a", { hasText: "сеть" }).click();
   await ready(page);
@@ -102,7 +102,7 @@ test("tags: из шапки заметки, страница тега, все т
   await expect(page.locator("h1")).toHaveText("#фикстура");
 });
 
-test("tags: свои теги главы книги - под её заголовком и на странице тега", async ({ page }) => {
+test("tags: a book chapter's own tags under its heading and on the tag page", async ({ page }) => {
   await open(page, "Книга");
   await page.locator("#note .k-chapter-tags a", { hasText: "определения" }).click();
   await ready(page);
@@ -120,7 +120,7 @@ test("tags: свои теги главы книги - под её заголов
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Продолжение/);
 });
 
-test("превью ссылки при наведении", async ({ page }) => {
+test("link preview on hover", async ({ page }) => {
   await open(page, "Сеть/UFW");
   await page.locator("#note a.k-link", { hasText: "порт мог измениться" }).hover();
   const card = page.locator(".link-preview");
@@ -130,11 +130,11 @@ test("превью ссылки при наведении", async ({ page }) => 
   await expect(card).toBeHidden();
 });
 
-test("папка: страница из пути верхней строки, граф её поддерева", async ({ page }) => {
+test("folder: the page from the top bar path, the graph of its subtree", async ({ page }) => {
   await open(page, "Глубоко/а/б/в/г/Дно");
   const crumbs = page.locator("#crumbs");
   await expect(crumbs).toHaveText("Глубоко / а / б / в / г / Дно");
-  // Ctrl+щелчок - фоновая вкладка, как у ссылок в заметке.
+  // Ctrl+click: a background tab, as for links in a note.
   await crumbs.getByRole("link", { name: "б", exact: true }).click({ modifiers: ["Control"] });
   await expect(page.locator(".tabbar .tab")).toHaveCount(2);
   await expect(title(page)).toHaveText("Дно");
@@ -154,7 +154,7 @@ test("папка: страница из пути верхней строки, г
   await expect(page.locator('.graph-node[data-id="Глубоко/а/б/в/г/Дно"]')).toBeVisible();
 });
 
-test("превью заметки в дереве - справа от строки", async ({ page }) => {
+test("a note preview in the tree is to the right of the row", async ({ page }) => {
   await open(page, "Сеть/UFW");
   const row = page.locator('#tree a[data-id="Сеть/SSH"]');
   await row.hover();
@@ -166,11 +166,11 @@ test("превью заметки в дереве - справа от строк
   await expect(card).toBeHidden();
 });
 
-test("вкладки: Ctrl+клик, переключение, закрытие", async ({ page }) => {
+test("tabs: Ctrl+click, switching, closing", async ({ page }) => {
   await open(page, "Особые случаи/Ссылки");
   await page.locator("#note").getByRole("link", { name: "Дно", exact: true }).click({ modifiers: ["Control"] });
   await ready(page);
-  // в фоне, как в браузере: страница та же
+  // in the background, as in a browser: the page is the same
   const tabs = page.locator(".tabbar .tab");
   await expect(tabs).toHaveCount(2);
   await expect(tabs.nth(0)).toHaveClass(/active/);
@@ -187,13 +187,13 @@ test("вкладки: Ctrl+клик, переключение, закрытие"
   await expect(title(page)).toHaveText("Ссылки");
 });
 
-test("память места: назад и повторное открытие", async ({ page }) => {
-  // Место — это текст вверху окна (прокрутка в пикселях может сдвинуться,
-  // если выше дорисовался рисунок: браузер держит видимый текст на месте).
+test("place memory: back and opening again", async ({ page }) => {
+  // The place is the text at the window top (the pixel scroll may shift if a
+  // figure was drawn above: the browser keeps the visible text in place).
   const topText = () =>
     page.evaluate(() => {
-      // Первый блок от y = 160 вниз: точка может прийтись на промежуток между
-      // блоками (высота строк зависит от шрифтов системы).
+      // The first block from y = 160 down: the point may fall into a gap
+      // between blocks (line heights depend on the system fonts).
       for (let y = 160; y < innerHeight; y += 8) {
         const el = document.elementFromPoint(innerWidth / 2 + 130, y);
         const block = el?.closest("p, li, h2, h3, h4, figure, pre, table, div.k-box");
@@ -203,7 +203,7 @@ test("память места: назад и повторное открытие
     });
   await open(page, "демо/компоненты");
   await page.evaluate(() => document.getElementById("page")!.scrollTo(0, 1500));
-  await page.waitForTimeout(400); // место запоминается по ходу прокрутки
+  await page.waitForTimeout(400); // the place is remembered while scrolling
   const before = await topText();
   expect(before).not.toBe("");
 
@@ -220,7 +220,7 @@ test("память места: назад и повторное открытие
   await expect.poll(topText).toBe(before);
 });
 
-test("клавиши: главы, справка, режим чтения", async ({ page }) => {
+test("keys: chapters, help, reading mode", async ({ page }) => {
   await open(page, "Книга");
   await page.keyboard.press("]");
   await expect(page.locator("#note h2.k-h1")).toHaveText(/Продолжение/);
@@ -236,19 +236,19 @@ test("клавиши: главы, справка, режим чтения", asyn
 
   await page.keyboard.press("f");
   await expect(page.locator("#sidebar")).toBeHidden();
-  // Колонка заметки — во всю доступную ширину, а не в нулевую колонку панели.
+  // The note column takes the whole available width, not the zero-width sidebar column.
   expect((await page.locator("#note").boundingBox())!.width).toBeGreaterThan(500);
   await page.keyboard.press("Escape");
   await expect(page.locator("#sidebar")).toBeVisible();
 });
 
-test("дерево: свёрнутая папка запоминается, путь к открытой заметке раскрывается", async ({ page }) => {
+test("tree: a collapsed folder is remembered, the path to the open note expands", async ({ page }) => {
   await open(page, "Сеть/SSH");
   const folder = page.locator("#tree details", { has: page.locator("summary .tree-name").getByText("Глубоко", { exact: true }) });
   await folder.locator("> summary").click();
   await expect(folder).not.toHaveAttribute("open");
-  // Событие toggle приходит задачей после щелчка: без ожидания reload
-  // изредка успевал раньше, и свёрнутость не запоминалась.
+  // The toggle event comes as a task after the click: without waiting, a
+  // reload sometimes came first and the collapse was not remembered.
   await expect.poll(() => page.evaluate(() => localStorage.getItem("k-collapsed@vault") ?? "")).toContain("Глубоко");
   await page.reload();
   await ready(page);

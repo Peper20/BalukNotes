@@ -1,8 +1,8 @@
-// Интерактивные рисунки baluk: ползунки, координаты, вращение, тема.
+// Interactive baluk figures: sliders, coordinates, rotation, theme.
 import { expect, test } from "@playwright/test";
 import { open, resetTheme } from "./helpers";
 
-test("график: живой вместо кадра, ползунок меняет кривую, координаты под указателем", async ({ page }) => {
+test("plot: live instead of the frame, a slider changes the curve, coordinates under the pointer", async ({ page }) => {
   await open(page, "Рисунки/Интерактив");
   const plot = page.locator(".k-plot").first();
   await expect(plot).toHaveAttribute("data-live", "");
@@ -23,14 +23,14 @@ test("график: живой вместо кадра, ползунок мен�
   await expect(plot.locator(".k-plot-guide")).toHaveCount(0);
 });
 
-test("поверхность: перетаскивание поворачивает, тема перекрашивает", async ({ page }) => {
+test("surface: dragging rotates, a theme recolors", async ({ page }) => {
   await open(page, "Рисунки/Интерактив");
   const canvas = page.locator(".k-plot-canvas");
   await canvas.scrollIntoViewIfNeeded();
   await page.evaluate(async () => void (await document.fonts.ready));
   const frame = () => canvas.evaluate((c: HTMLCanvasElement) => c.toDataURL());
   await expect.poll(async () => (await frame()).length).toBeGreaterThan(5000);
-  // кадр устоялся (подписи перерисованы после загрузки шрифтов)
+  // the frame settled (labels redrawn after the fonts loaded)
   let first = "";
   await expect.poll(async () => first === (first = await frame())).toBe(true);
 
@@ -41,11 +41,11 @@ test("поверхность: перетаскивание поворачива�
   await page.mouse.up();
   await expect.poll(frame).not.toBe(first);
 
-  // двойной щелчок — исходный вид
+  // a double click restores the initial view
   await canvas.dblclick();
   await expect.poll(frame).toBe(first);
 
-  // тема: кривая графика и поверхность в цветах «ночи»
+  // theme: the plot curve and the surface in the "night" colors
   const stroke = () => page.locator(".k-plot-curve").first().evaluate((p) => getComputedStyle(p).stroke);
   const light = await stroke();
   await page.locator("#theme").click();

@@ -1,22 +1,22 @@
-// Узкий экран (телефон): ничего не шире окна, всплывающие панели работают.
+// A narrow screen (a phone): nothing wider than the window, the popup panels work.
 import { expect, test, type Page } from "@playwright/test";
 import { noteUrl, open, ready, vaultUrl } from "./helpers";
 
 test.use({ viewport: { width: 400, height: 800 }, hasTouch: true });
 
-/** Страница не прокручивается вбок (широкое прокручивается внутри себя). */
+/** The page does not scroll sideways (wide things scroll inside themselves). */
 async function noSideScroll(page: Page) {
-  // Ширина формул — после загрузки шрифтов.
+  // Formula widths after the fonts load.
   const overflow = await page.evaluate(async () => {
     await document.fonts.ready;
-    const column = document.getElementById("page"); // прокручивается она, а не документ
+    const column = document.getElementById("page"); // it scrolls, not the document
     const inner = column ? column.scrollWidth - column.clientWidth : 0;
     return Math.max(document.documentElement.scrollWidth - innerWidth, inner);
   });
   expect(overflow).toBeLessThanOrEqual(0);
 }
 
-test("узкий экран: страницы и настройки не шире окна", async ({ page }) => {
+test("narrow screen: pages and settings are not wider than the window", async ({ page }) => {
   for (const url of [vaultUrl("/"), vaultUrl("/tags"), vaultUrl("/graph"), noteUrl("Формулы и теги"), noteUrl("Книга"), noteUrl("Сеть/SSH"), noteUrl("Рисунки/Интерактив"), noteUrl("Рисунки/Кадры")]) {
     await page.goto(url);
     await ready(page);
@@ -25,11 +25,11 @@ test("узкий экран: страницы и настройки не шир�
   await page.locator("#open-settings").click();
   const settings = page.locator("#settings");
   await expect(settings).toBeVisible();
-  // Содержимое диалога не шире его самого (иначе списки уходят за край).
+  // The dialog content is not wider than the dialog (otherwise lists go past the edge).
   expect(await settings.evaluate((d) => d.scrollWidth - d.clientWidth)).toBeLessThanOrEqual(0);
 });
 
-test("узкий экран: оглавление всплывает, ведёт в другую главу и прячется", async ({ page }) => {
+test("narrow screen: the outline pops up, leads to another chapter and hides", async ({ page }) => {
   await open(page, "Книга");
   const toc = page.locator(".toc");
   await expect(toc).not.toHaveClass(/open/);
@@ -41,7 +41,7 @@ test("узкий экран: оглавление всплывает, ведёт
   await expect(toc).not.toHaveClass(/open/);
 });
 
-test("узкий экран: активная вкладка видна целиком, палитра — в окне", async ({ page }) => {
+test("narrow screen: the active tab is fully visible, the palette fits the window", async ({ page }) => {
   await open(page, "Сеть/SSH");
   for (const id of ["Книга", "Формулы и теги"]) {
     await page.keyboard.press("Alt+KeyT");
@@ -62,8 +62,8 @@ test("узкий экран: активная вкладка видна цели
   expect(box.x + box.width).toBeLessThanOrEqual(400);
 });
 
-test("узкий экран: выбор хранилища, меню хранилищ и диалоги не шире окна", async ({ page }) => {
-  // Адрес без хранилища в новом браузере — экран выбора.
+test("narrow screen: the vault picker, the vault menu and dialogs are not wider than the window", async ({ page }) => {
+  // An address without a vault in a new browser: the picker screen.
   await page.goto("/");
   await expect(page.locator("#vault-picker")).toBeVisible();
   await ready(page);
@@ -76,7 +76,7 @@ test("узкий экран: выбор хранилища, меню храни�
   const box = (await menu.boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(400);
-  // Меню — над переключателем внизу панели, в пределах окна.
+  // The menu is above the switcher at the bottom of the panel, within the window.
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.y + box.height).toBeLessThanOrEqual(800);
   await menu.getByRole("menuitem", { name: "Новое хранилище…" }).click();
@@ -87,7 +87,7 @@ test("узкий экран: выбор хранилища, меню храни�
   await noSideScroll(page);
 });
 
-test("телефон: 3D — свайп вверх прокручивает страницу, вбок — поворачивает", async ({ page }) => {
+test("phone: 3D - a swipe up scrolls the page, sideways rotates", async ({ page }) => {
   await open(page, "Рисунки/Интерактив");
   const canvas = page.locator(".k-plot-canvas");
   await canvas.scrollIntoViewIfNeeded();
@@ -96,7 +96,7 @@ test("телефон: 3D — свайп вверх прокручивает ст
   let first = "";
   await expect.poll(async () => first === (first = await frame())).toBe(true);
   const cdp = await page.context().newCDPSession(page);
-  // От середины рисунка там, где он сейчас (прокрутка его сдвигает).
+  // From the middle of the figure where it is now (scrolling moves it).
   const swipe = async (dx: number, dy: number) => {
     const box = (await canvas.boundingBox())!;
     const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];

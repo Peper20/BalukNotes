@@ -1,23 +1,23 @@
 import { fileURLToPath } from "node:url";
 import { expect, type Page } from "@playwright/test";
 
-/** Хранилище сервера e2e — копия tests/vault (см. playwright.config.ts). */
+/** The vault of the e2e server: a copy of tests/vault (see playwright.config.ts). */
 export const VAULT_NAME = "vault";
 export const VAULT = fileURLToPath(new URL(`../../tests/.data/e2e/vaults/${VAULT_NAME}/`, import.meta.url));
-/** Корзина сервера e2e: удалённые заметки — сюда, а не в корзину системы. */
+/** The trash of the e2e server: deleted notes go here, not to the system trash. */
 export const TRASH = fileURLToPath(new URL("../../tests/.data/e2e/trash/", import.meta.url));
 
-/** Адрес клиента в хранилище e2e: `/v/vault<path>`. */
+/** A client address in the e2e vault: `/v/vault<path>`. */
 export const vaultUrl = (path = "/") => `/v/${VAULT_NAME}${path}`;
 
-/** Адрес заметки, как его строит клиент. */
+/** A note address, as the client builds it. */
 export const noteUrl = (id: string, anchor?: string) =>
   vaultUrl(`/n/${id.split("/").map(encodeURIComponent).join("/")}${anchor ? `#${encodeURIComponent(anchor)}` : ""}`);
 
-/** Путь запроса API без хранилища: `/api/vaults/vault/notes/A` → `/api/notes/A`. */
+/** An API request path without the vault: `/api/vaults/vault/notes/A` -> `/api/notes/A`. */
 export const apiPath = (url: URL) => url.pathname.replace(/^\/api\/vaults\/[^/]+\//, "/api/");
 
-/** Клиент дорисовал заметку или главную (<html data-state="ready">). */
+/** The client has drawn a note or home (<html data-state="ready">). */
 export async function ready(page: Page) {
   await expect(page.locator("html")).toHaveAttribute("data-state", "ready");
 }
@@ -27,12 +27,12 @@ export async function open(page: Page, id: string, anchor?: string) {
   await ready(page);
 }
 
-/** Заголовок заметки (h1 титула). */
+/** The note heading (the title h1). */
 export const title = (page: Page) => page.locator("#note .k-title h1");
 
 /**
- * Настройки общие для всех сценариев: вернуть тему «как в системе» — общую
- * и хранилища (тема из интерфейса меняется только для хранилища).
+ * Settings shared by all scenarios: brings the theme back to "auto", the
+ * shared one and the vault's (a theme from the interface changes only for the vault).
  */
 export async function resetTheme(page: Page) {
   for (const [url, value] of [
@@ -40,6 +40,6 @@ export async function resetTheme(page: Page) {
     [`/api/vaults/${VAULT_NAME}/settings`, null],
   ] as const) {
     const res = await page.request.put(url, { data: { "appearance.theme": value } });
-    if (!res.ok()) throw new Error(`тема не сброшена: ${res.status()}`);
+    if (!res.ok()) throw new Error(`theme not reset: ${res.status()}`);
   }
 }

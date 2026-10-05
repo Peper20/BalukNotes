@@ -1,8 +1,8 @@
-// Кадры baluk: ползунок, кнопки, проигрывание, тема.
+// baluk frames: the slider, buttons, playing, theme.
 import { expect, test } from "@playwright/test";
 import { open, resetTheme } from "./helpers";
 
-test("кадры: виден кадр по умолчанию, ползунок и ‹ › переключают, место не прыгает", async ({ page }) => {
+test("frames: the default frame is visible, the slider and ‹ › switch, the place does not jump", async ({ page }) => {
   await open(page, "Рисунки/Кадры");
   const frames = page.locator(".k-frames").first();
   await expect(frames).toHaveAttribute("data-live", "");
@@ -19,16 +19,16 @@ test("кадры: виден кадр по умолчанию, ползунок 
   await frames.locator(".k-frames-prev").click();
   await frames.locator(".k-frames-prev").click();
   await expect(frames.locator(".k-frames-count")).toHaveText("9 / 12");
-  // все кадры в одной клетке: высота рисунка не меняется
+  // all frames in one cell: the figure height does not change
   expect(await frames.evaluate((el) => el.getBoundingClientRect().height)).toBe(height);
-  // видимый кадр — ровно один
+  // exactly one visible frame
   const visible = await frames.locator(".k-frames-item").evaluateAll((els) => els.filter((e) => getComputedStyle(e).visibility === "visible").length);
   expect(visible).toBe(1);
 });
 
-test("кадры: «▶» проигрывает до конца и останавливается, с конца — сначала", async ({ page }) => {
+test("frames: \"▶\" plays to the end and stops, from the end - from the start", async ({ page }) => {
   await open(page, "Рисунки/Кадры");
-  const frames = page.locator(".k-frames").nth(2); // шаги алгоритма: 4 кадра, 2 в секунду
+  const frames = page.locator(".k-frames").nth(2); // algorithm steps: 4 frames, 2 per second
   await frames.scrollIntoViewIfNeeded();
   const count = frames.locator(".k-frames-count");
   await expect(count).toHaveText("1 / 4");
@@ -39,11 +39,11 @@ test("кадры: «▶» проигрывает до конца и остана
   await expect(frames.locator(".k-frames-item[data-current] .k-frames-label")).toHaveText("проход 3");
   await frames.locator(".k-frames-play").click();
   await expect(count).toHaveText(/^[12] \/ 4$/);
-  await frames.locator(".k-frames-play").click(); // пауза
+  await frames.locator(".k-frames-play").click(); // pause
   await expect(frames.locator(".k-frames-play")).toHaveAttribute("aria-label", "проиграть");
 });
 
-test("кадры: тема перекрашивает кадры, ползунок работает с клавиатуры", async ({ page }) => {
+test("frames: a theme recolors the frames, the slider works from the keyboard", async ({ page }) => {
   await open(page, "Рисунки/Кадры");
   const frames = page.locator(".k-frames").first();
   const slider = frames.locator("input[type=range]");
@@ -52,7 +52,7 @@ test("кадры: тема перекрашивает кадры, ползуно
   await expect(frames.locator(".k-frames-count")).toHaveText("5 / 12");
   await expect(slider).toHaveAttribute("aria-valuetext", "n = 5");
 
-  // линия кадра: цвет — переменная темы в общем SVG
+  // the frame line: its color is a theme variable in the shared SVG
   const shown = () =>
     frames.locator(".k-frames-item[data-current] svg").first().evaluate((svg) => {
       const lines = [...svg.querySelectorAll("path")].map((p) => getComputedStyle(p).stroke).filter((c) => c !== "none");

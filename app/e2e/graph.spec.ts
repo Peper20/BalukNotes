@@ -1,4 +1,4 @@
-// Страница графа: масштаб, сдвиг, перестановка узла, фильтры, поиск, соседи заметки.
+// The graph page: zoom, pan, moving a node, filters, search, the neighbours of a note.
 import { expect, test, type Page } from "@playwright/test";
 import { noteUrl, open, ready, title, vaultUrl } from "./helpers";
 
@@ -12,14 +12,14 @@ test.beforeEach(async ({ page }) => {
   await page.evaluate(() => localStorage.removeItem("k-graph@vault"));
 });
 
-test("граф: значок внизу боковой панели открывает граф хранилища", async ({ page }) => {
+test("graph: the icon at the bottom of the sidebar opens the vault graph", async ({ page }) => {
   await open(page, "демо/компоненты");
   await page.locator("#open-graph").click();
   await expect(page).toHaveURL(vaultUrl("/graph"));
   await expect(page.locator(".graph-node")).not.toHaveCount(0);
 });
 
-test("граф: кнопки и колесо масштабируют, узел переставляется, щелчок открывает заметку, Ctrl+щелчок - в фоне", async ({ page }) => {
+test("graph: buttons and the wheel zoom, a node moves, a click opens the note, Ctrl+click - in the background", async ({ page }) => {
   await page.goto(vaultUrl("/graph"));
   await ready(page);
   await expect(page.locator(".graph-node")).not.toHaveCount(0);
@@ -35,7 +35,7 @@ test("граф: кнопки и колесо масштабируют, узел 
   await expect.poll(() => scale(page)).toBeGreaterThan(k0);
   await page.getByRole("button", { name: "вписать" }).click();
 
-  // протянуть узел — переставить, заметка не открывается
+  // dragging a node moves it, the note does not open
   const ssh = page.locator('.graph-node[data-id="Сеть/SSH"] circle');
   const before = await nodeAt(page, "Сеть/SSH");
   const c = (await ssh.boundingBox())!;
@@ -46,7 +46,7 @@ test("граф: кнопки и колесо масштабируют, узел 
   expect(await nodeAt(page, "Сеть/SSH")).not.toBe(before);
   await expect(page).toHaveURL(/\/graph$/);
 
-  // Ctrl+щелчок — заметка в фоновой вкладке, граф остаётся
+  // Ctrl+click: the note in a background tab, the graph stays
   await ssh.click({ modifiers: ["Control"] });
   await expect(page.locator(".tabbar .tab")).toHaveCount(2);
   await expect(page).toHaveURL(/\/graph$/);
@@ -56,7 +56,7 @@ test("граф: кнопки и колесо масштабируют, узел 
   await expect(title(page)).toHaveText("SSH");
 });
 
-test("граф: папки, тег, поиск; фильтры запоминаются", async ({ page }) => {
+test("graph: folders, tag, search; filters are remembered", async ({ page }) => {
   await page.goto(vaultUrl("/graph"));
   await ready(page);
   const nodes = page.locator(".graph-node");
@@ -81,14 +81,14 @@ test("граф: папки, тег, поиск; фильтры запомина�
   await expect(page.locator(".graph-count")).toContainText("найдено 1");
 });
 
-test("граф: книги главами — корень и главы, щелчок по главе открывает книгу на ней; переключатель запоминается", async ({ page }) => {
+test("graph: books as chapters - the root and chapters, a click on a chapter opens the book at it; the switch is remembered", async ({ page }) => {
   await page.goto(vaultUrl("/graph"));
   await ready(page);
   await expect(page.locator('.graph-node[data-id="Книга/.2"]')).toHaveCount(0);
   await page.getByLabel("книги главами").check();
   const chapters = page.locator('.graph-node.chapter[data-id^="Книга/"]');
   await expect(chapters).toHaveCount(3);
-  // Связь «книга - глава» — у каждой главы (ещё одна книга фикстуры — English).
+  // The link "book - chapter" for every chapter (one more book of the fixture is English).
   await expect(page.locator(".graph-edge.chapter")).toHaveCount(await page.locator(".graph-node.chapter").count());
   await expect(page.locator('.graph-node.book[data-id="Книга"]')).toHaveCount(1);
   await page.reload();
@@ -99,7 +99,7 @@ test("граф: книги главами — корень и главы, щел
   await expect.poll(() => decodeURIComponent(new URL(page.url()).pathname + new URL(page.url()).hash)).toBe("/v/vault/n/Книга#Продолжение");
 });
 
-test("граф: соседи заметки — из «Ссылаются сюда», глубина в адресе", async ({ page }) => {
+test("graph: the neighbours of a note from \"Ссылаются сюда\", the depth in the address", async ({ page }) => {
   await open(page, "Сеть/SSH");
   await page.locator("#backlinks").getByRole("link", { name: "на графе" }).click();
   await ready(page);
@@ -113,7 +113,7 @@ test("граф: соседи заметки — из «Ссылаются сюд
   await ready(page);
   await expect(page.locator(".graph-node.center")).toHaveCount(0);
   await expect(page).toHaveURL(/\/graph$/);
-  // вернуться к заметке — по ссылке в заголовке страницы соседей
+  // back to the note by the link in the heading of the neighbours page
   await page.goBack();
   await ready(page);
   await page.locator(".graph-title").getByRole("link", { name: "SSH" }).click();
@@ -121,7 +121,7 @@ test("граф: соседи заметки — из «Ссылаются сюд
   await expect(page).toHaveURL(noteUrl("Сеть/SSH"));
 });
 
-test("граф хранилища в заметке: живой поверх картинки, щелчок открывает заметку", async ({ page }) => {
+test("the vault graph in a note: live over the picture, a click opens the note", async ({ page }) => {
   await open(page, "Рисунки/Граф хранилища");
   const graph = page.locator(".k-graph").first();
   await expect(graph).toHaveAttribute("data-live", "");
@@ -131,7 +131,7 @@ test("граф хранилища в заметке: живой поверх к�
   await expect(page).toHaveURL(noteUrl("Сеть/UFW"));
 });
 
-test("граф в заметке: узел тянет соседей, не уходит за рамку рисунка и не выделяет текст за ней", async ({ page }) => {
+test("the graph in a note: a node pulls its neighbours, does not leave the figure frame and does not select the text behind it", async ({ page }) => {
   await open(page, "Рисунки/Граф хранилища");
   const svg = page.locator(".k-graph .graph-svg").first();
   await expect(svg).toBeVisible();
@@ -153,19 +153,19 @@ test("граф в заметке: узел тянет соседей, не ух�
   await page.mouse.move(c.x + c.width / 2, c.y + c.height / 2);
   await page.mouse.down();
   await page.mouse.move(c.x + 2000, c.y + 1500, { steps: 20 });
-  await expect.poll(() => at(neighbour)).not.toBe(before); // сосед потянулся
+  await expect.poll(() => at(neighbour)).not.toBe(before); // the neighbour followed
   await inside();
-  expect(await page.evaluate(() => getSelection()?.toString() ?? "")).toBe(""); // указатель за рамкой
+  expect(await page.evaluate(() => getSelection()?.toString() ?? "")).toBe(""); // the pointer is outside the frame
   await page.mouse.up();
-  await page.waitForTimeout(1500); // осели
+  await page.waitForTimeout(1500); // settled
   await inside();
-  await expect(page).toHaveURL(noteUrl("Рисунки/Граф хранилища")); // протянуть — не щелчок
+  await expect(page).toHaveURL(noteUrl("Рисунки/Граф хранилища")); // a drag is not a click
 });
 
-test.describe("без движения (prefers-reduced-motion)", () => {
+test.describe("without motion (prefers-reduced-motion)", () => {
   test.use({ reducedMotion: "reduce" });
 
-  test("граф не анимируется, протянутый узел соседей не тянет", async ({ page }) => {
+  test("the graph does not animate, a dragged node does not pull its neighbours", async ({ page }) => {
     await page.goto(vaultUrl("/graph"));
     await ready(page);
     const circle = page.locator('.graph-node[data-id="Сеть/SSH"] circle');
@@ -178,7 +178,7 @@ test.describe("без движения (prefers-reduced-motion)", () => {
     await page.waitForTimeout(200);
     expect(await nodeAt(page, "Сеть/UFW")).toBe(neighbour);
     await page.mouse.up();
-    // смена фильтра — сразу, без угасания: ушедший узел пропал вместе с новым счётчиком
+    // a filter change applies at once, without fading: the gone node vanished together with the new count
     const count = await page.locator(".graph-count").textContent();
     await page.locator(".graph-legend button", { hasText: "Сеть" }).click();
     await expect(page.locator(".graph-count")).not.toHaveText(count!);
@@ -186,7 +186,7 @@ test.describe("без движения (prefers-reduced-motion)", () => {
   });
 });
 
-test("граф: «вернуть раскладку» — узлы плавно, без перелёта, возвращаются на места", async ({ page }) => {
+test("graph: \"вернуть раскладку\" - nodes return to their places smoothly, without overshoot", async ({ page }) => {
   await page.goto(vaultUrl("/graph"));
   await ready(page);
   const restore = page.getByRole("button", { name: "вернуть раскладку" });
@@ -196,7 +196,7 @@ test("граф: «вернуть раскладку» — узлы плавно,
   const ids = await page.locator(".graph-node").evaluateAll((gs) => gs.map((g) => (g as SVGElement).dataset.id!));
   const home = new Map(await Promise.all(ids.map(async (id) => [id, await xy(id)] as const)));
 
-  // Протянуть узел — соседи тянутся за ним, после отпускания возвращаются лишь на четверть.
+  // Dragging a node: the neighbours follow it, after the release they return only a quarter of the way.
   const ssh = page.locator('.graph-node[data-id="Сеть/SSH"] circle');
   const c = (await ssh.boundingBox())!;
   await page.mouse.move(c.x + c.width / 2, c.y + c.height / 2);
@@ -204,7 +204,7 @@ test("граф: «вернуть раскладку» — узлы плавно,
   await page.mouse.move(c.x + 160, c.y + 90, { steps: 10 });
   await page.mouse.up();
   await expect(restore).toBeEnabled();
-  await page.waitForTimeout(1500); // физика осела
+  await page.waitForTimeout(1500); // the physics settled
   const away = async () => {
     let far = 0;
     for (const id of ids) {
@@ -216,7 +216,7 @@ test("граф: «вернуть раскладку» — узлы плавно,
   };
   expect(await away()).toBeGreaterThan(20);
 
-  // Вернуть: расстояние до дома у узла SSH только убывает, в конце — ровно дома.
+  // Restore: the distance of the SSH node to its home only decreases, at the end it is exactly home.
   const track = page.locator('.graph-node[data-id="Сеть/SSH"]').evaluate(
     (g, [hx, hy]) =>
       new Promise<number[]>((done) => {
@@ -240,14 +240,14 @@ test("граф: «вернуть раскладку» — узлы плавно,
   await expect(restore).toBeDisabled();
 });
 
-test("силы графа: выдвижная панель сбоку, «Папки» меняют раскладку, значение запоминается, «По умолчанию» - обратно", async ({ page }) => {
+test("graph forces: a sliding side panel, \"Папки\" changes the layout, the value is remembered, \"По умолчанию\" brings it back", async ({ page }) => {
   try {
     await page.goto(vaultUrl("/graph"));
     await ready(page);
     const before = await nodeAt(page, "Сеть/SSH");
     const panel = page.locator(".graph-forces");
     const toggle = page.getByRole("button", { name: "силы графа", exact: true });
-    await expect(panel).toBeHidden(); // по умолчанию спрятана
+    await expect(panel).toBeHidden(); // hidden by default
     await toggle.click();
     await expect(panel).toBeVisible();
     await page.getByRole("button", { name: "спрятать силы графа" }).click();
@@ -257,8 +257,8 @@ test("силы графа: выдвижная панель сбоку, «Пап�
     await page.keyboard.press("Escape");
     await expect(panel).toBeHidden();
     await toggle.click();
-    await expect.poll(async () => (await panel.boundingBox())?.width).toBeGreaterThan(200); // выехала целиком
-    // Сбоку, а не поверх графа: холст сжимается вместе с выездом панели - ждать конца.
+    await expect.poll(async () => (await panel.boundingBox())?.width).toBeGreaterThan(200); // slid out entirely
+    // Beside, not over the graph: the canvas shrinks while the panel slides out - wait for the end.
     await expect
       .poll(async () => {
         const [canvas, side] = await Promise.all([page.locator(".graph-canvas").boundingBox(), panel.boundingBox()]);
@@ -272,7 +272,7 @@ test("силы графа: выдвижная панель сбоку, «Пап�
 
     await page.reload();
     await ready(page);
-    await expect(panel).toBeHidden(); // после перезагрузки снова спрятана
+    await expect(panel).toBeHidden(); // hidden again after a reload
     await toggle.click();
     await expect(clusters).toHaveValue("300");
     await page.getByRole("button", { name: "По умолчанию" }).click();

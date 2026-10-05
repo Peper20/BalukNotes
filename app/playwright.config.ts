@@ -1,10 +1,11 @@
-// Сквозные тесты интерфейса: настоящий сервер notes на каталоге данных
-// tests/.data/e2e с копией тестового хранилища (vaults/vault — сценарии могут
-// создавать заметки и хранилища, не трогая фикстуры; удалённое — в
-// tests/.data/e2e/trash, не в корзину системы), портом 8433; клиент — сборка app/dist.
-// Браузер — системный chromium, Playwright ничего не скачивает. До сценариев
-// сервер прогревается (e2e/global-setup.ts): все заметки уже собраны, поэтому
-// ожидания короткие; первую сборку проверяет 01-switch (сам меняет файлы).
+// End-to-end interface tests: a real notes server on the data directory
+// tests/.data/e2e with a copy of the test vault (vaults/vault - scenarios may
+// create notes and vaults without touching the fixtures; deleted ones go to
+// tests/.data/e2e/trash, not to the system trash), port 8433; the client is
+// the app/dist build. The browser is the system chromium, Playwright
+// downloads nothing. Before the scenarios the server is warmed
+// (e2e/global-setup.ts): all notes are built, so the waits are short; the
+// first build is checked by 01-switch (it changes the files itself).
 //
 //   npm run build && npm run e2e
 import { defineConfig } from "@playwright/test";

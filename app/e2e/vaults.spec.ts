@@ -1,6 +1,6 @@
-// Хранилища (создать, переключиться — у каждого свои заметки) и удаление
-// заметок и папок из интерфейса: в корзину (у сервера e2e — каталог TRASH), с
-// подтверждением; вкладки удалённой заметки закрываются.
+// Vaults (create, switch - each has its own notes) and deleting notes and
+// folders from the interface: to the trash (the e2e server has the TRASH
+// directory), with a confirmation; the tabs of a deleted note close.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
@@ -8,23 +8,23 @@ import { TRASH, VAULT, noteUrl, open, ready, vaultUrl } from "./helpers";
 
 const head = (title: string) => `#import "/_baluk/lib.typ": *\n#show: note.with(title: [${title}])\n\n`;
 
-test("хранилища: выбор без адреса, новое пустое, переключение — у каждого свои заметки", async ({ page }) => {
+test("vaults: the picker without an address, a new empty one, switching - each has its own notes", async ({ page }) => {
   const study = join(VAULT, "..", "Учёба");
   const work = join(VAULT, "..", "Работа");
   try {
-    // Хранилища по умолчанию нет: новый браузер без адреса — экран выбора.
+    // There is no default vault: a new browser without an address gets the picker screen.
     await page.goto("/");
     await ready(page);
     const picker = page.locator("#vault-picker");
     await expect(picker.getByRole("link", { name: "vault" })).toBeVisible();
-    // Неверное имя — ошибка сервера, ничего не создано.
+    // A wrong name: a server error, nothing created.
     await picker.getByLabel("Новое хранилище").fill("a/b");
     await picker.getByRole("button", { name: "Создать" }).click();
     await expect(picker.getByRole("alert")).toContainText("invalid vault name");
     await picker.getByLabel("Новое хранилище").fill("Учёба");
     await picker.getByLabel("Новое хранилище").press("Enter");
 
-    // Новое хранилище — пустое, со своим адресом.
+    // A new vault is empty, with its own address.
     await expect(page).toHaveURL(`/v/${encodeURIComponent("Учёба")}/`);
     await ready(page);
     await expect(page.locator("#vault-name")).toHaveText("Учёба");
@@ -32,7 +32,7 @@ test("хранилища: выбор без адреса, новое пусто�
     await expect(page.locator("#tree a")).toHaveCount(0);
     expect(existsSync(study)).toBe(true);
 
-    // Меню: переход в другое хранилище — заметки прежние.
+    // The menu: going to another vault - the old notes.
     await page.locator("#vault-switch").click();
     const menu = page.locator("#vault-menu");
     await expect(menu.getByRole("menuitem", { name: "Учёба", exact: true })).toHaveAttribute("aria-current", "true");
@@ -41,7 +41,7 @@ test("хранилища: выбор без адреса, новое пусто�
     await ready(page);
     await expect(page.locator("#tree").getByRole("link", { name: "SSH" })).toBeVisible();
 
-    // Меню: «Новое хранилище…» — диалог.
+    // The menu: "Новое хранилище..." - a dialog.
     await page.locator("#vault-switch").click();
     await page.locator("#vault-menu").getByRole("menuitem", { name: "Новое хранилище…" }).click();
     const dialog = page.locator("#vault-new");
@@ -51,7 +51,7 @@ test("хранилища: выбор без адреса, новое пусто�
     await ready(page);
     expect(existsSync(work)).toBe(true);
 
-    // Адрес без хранилища — в открытое последним.
+    // An address without a vault goes to the one opened last.
     await page.goto(noteUrl("Сеть/SSH"));
     await ready(page);
     await page.goto("/n/Сеть/SSH");
@@ -63,7 +63,7 @@ test("хранилища: выбор без адреса, новое пусто�
   }
 });
 
-test("хранилище: переименовать (вкладки — за ним) и удалить в корзину", async ({ page }) => {
+test("vault: rename (the tabs follow it) and delete to the trash", async ({ page }) => {
   const old = join(VAULT, "..", "Черновики");
   const renamed = join(VAULT, "..", "Черновики 2026");
   mkdirSync(old, { recursive: true });
@@ -76,14 +76,14 @@ test("хранилище: переименовать (вкладки — за н
     await page.locator("#vault-rename").click();
     const dialog = page.locator("#vault-edit");
     await expect(dialog.getByLabel("Название")).toHaveValue("Черновики");
-    // Занятое имя — ошибка сервера, ничего не переименовано.
+    // A taken name: a server error, nothing renamed.
     await dialog.getByLabel("Название").fill("vault");
     await dialog.getByRole("button", { name: "Переименовать" }).click();
     await expect(dialog.getByRole("alert")).toContainText("vault");
     await dialog.getByLabel("Название").fill("Черновики 2026");
     await dialog.getByRole("button", { name: "Переименовать" }).click();
 
-    // Та же заметка — под новым именем хранилища.
+    // The same note under the new vault name.
     await expect(page).toHaveURL(`/v/${encodeURIComponent("Черновики 2026")}/n/${encodeURIComponent("Идея")}`);
     await ready(page);
     await expect(page.locator("#vault-name")).toHaveText("Черновики 2026");
@@ -91,7 +91,7 @@ test("хранилище: переименовать (вкладки — за н
     expect(existsSync(join(renamed, "Идея.typ"))).toBe(true);
     expect(existsSync(old)).toBe(false);
 
-    // Удалить: «Отмена» — по умолчанию; удалённое — в корзине, дальше — выбор хранилища.
+    // Delete: "Отмена" is the default; the deleted one is in the trash, then the vault picker.
     await page.locator("#vault-switch").click();
     await page.locator("#vault-delete").click();
     await expect(dialog).toContainText("Удалить хранилище «Черновики 2026»?");
@@ -110,7 +110,7 @@ test("хранилище: переименовать (вкладки — за н
   }
 });
 
-test("удалить заметку: из дерева и командой — в корзину, с подтверждением", async ({ page }) => {
+test("delete a note: from the tree and by a command, to the trash, with a confirmation", async ({ page }) => {
   const dir = join(VAULT, "Удаление");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "Черновик.typ"), `${head("Черновик")}Текст.\n`);
@@ -120,7 +120,7 @@ test("удалить заметку: из дерева и командой — �
     const link = page.locator("#tree").getByRole("link", { name: "Черновик" });
     const dialog = page.locator("#note-delete");
 
-    // Правый клик в дереве → «Удалить…» → подтверждение; «Отмена» ничего не трогает.
+    // Right click in the tree -> "Удалить..." -> confirmation; "Отмена" touches nothing.
     await link.click({ button: "right" });
     await page.locator("#note-menu").getByRole("menuitem", { name: "Удалить…" }).click();
     await expect(dialog).toBeVisible();
@@ -135,13 +135,13 @@ test("удалить заметку: из дерева и командой — �
     await page.locator("#note-delete-confirm").click();
     await expect(dialog).toBeHidden();
     await expect(link).toHaveCount(0);
-    // Её вкладка закрылась — на месте главная.
+    // Its tab closed: home in its place.
     await expect(page).toHaveURL(vaultUrl("/"));
     await expect(page.locator("#status")).toContainText("в корзине: Черновик");
     expect(existsSync(join(dir, "Черновик.typ"))).toBe(false);
     expect(existsSync(join(TRASH, "Черновик.typ"))).toBe(true);
 
-    // Команда палитры — открытую заметку.
+    // The palette command deletes the open note.
     await open(page, "Удаление/Второй");
     await page.keyboard.press("Control+KeyK");
     await page.locator(".palette input").fill(">Удалить заметку");
@@ -157,7 +157,7 @@ test("удалить заметку: из дерева и командой — �
   }
 });
 
-test("удалить папку: правый клик в дереве — со всем, что в ней, в корзину", async ({ page }) => {
+test("delete a folder: right click in the tree, with everything in it, to the trash", async ({ page }) => {
   const dir = join(VAULT, "Черновики");
   mkdirSync(join(dir, "Старое"), { recursive: true });
   writeFileSync(join(dir, "Первый.typ"), `${head("Первый")}Текст.\n`);
@@ -177,7 +177,7 @@ test("удалить папку: правый клик в дереве — со 
     await page.locator("#note-delete-confirm").click();
     await expect(dialog).toBeHidden();
     await expect(folder).toHaveCount(0);
-    // Вкладка заметки из папки закрылась.
+    // The tab of a note from the folder closed.
     await expect(page).toHaveURL(vaultUrl("/"));
     await expect(page.locator("#status")).toContainText("в корзине: папка Черновики");
     expect(existsSync(dir)).toBe(false);
@@ -190,7 +190,7 @@ test("удалить папку: правый клик в дереве — со 
   }
 });
 
-test("пустая папка — в дереве; переименовать заметку и папку: файл, название, ссылки, вкладка", async ({ page }) => {
+test("an empty folder is in the tree; renaming a note and a folder: file, title, links, tab", async ({ page }) => {
   const empty = join(VAULT, "Пустая");
   const dir = join(VAULT, "Переим");
   mkdirSync(empty, { recursive: true });
@@ -203,9 +203,9 @@ test("пустая папка — в дереве; переименовать з
     await expect(tree.locator("summary", { hasText: "Пустая" })).toContainText("0");
     const dialog = page.locator("#note-rename");
 
-    // Заметка: план по ходу ввода — новый файл и чьи ссылки поправятся.
+    // A note: the plan as you type - the new file and whose links get fixed.
     await tree.getByRole("link", { name: "Старое" }).click({ button: "right" });
-    // Сверху меню - для чего оно.
+    // At the top the menu says what it is for.
     await expect(page.locator("#note-menu .note-menu-head")).toHaveText("Старое");
     await page.locator("#note-menu").getByRole("menuitem", { name: "Переименовать…" }).click();
     const input = dialog.getByLabel("Название");
@@ -221,7 +221,7 @@ test("пустая папка — в дереве; переименовать з
     expect(existsSync(join(dir, "Старое.typ"))).toBe(false);
     expect(readFileSync(join(VAULT, "Ссылка2.typ"), "utf8")).toContain('#see("Переим/Новое имя")');
 
-    // Папка: всё внутри переезжает, открытая заметка — по новому адресу.
+    // A folder: everything inside moves, the open note goes to its new address.
     await tree.locator("summary", { hasText: "Переим" }).click({ button: "right" });
     await page.locator("#note-menu").getByRole("menuitem", { name: "Переименовать…" }).click();
     await input.fill("Готово");
