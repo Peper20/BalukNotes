@@ -1,6 +1,7 @@
-// Сочетания клавиш: «Ctrl+Shift+KeyF» → проверка события и подпись «Ctrl+Shift+F».
-// Буквы и знаки — по физической клавише (event.code): сочетания работают и
-// в русской раскладке. «?» — по символу (на разных раскладках он в разных местах).
+// Shortcuts: "Ctrl+Shift+KeyF" -> an event check and the label
+// "Ctrl+Shift+F". Letters and signs go by the physical key (event.code):
+// shortcuts work in the Russian layout too. "?" goes by the character (it is
+// in different places on different layouts).
 
 export interface Combo {
   label: string;
@@ -34,6 +35,6 @@ export function combo(spec: string): Combo {
   };
 }
 
-/** Ввод текста: одиночные клавиши не должны срабатывать как команды. */
+/** Text input: single keys must not fire as commands. */
 export const typing = (e: KeyboardEvent): boolean =>
   Boolean((e.target as Element | null)?.closest?.("input, select, textarea, [contenteditable]"));

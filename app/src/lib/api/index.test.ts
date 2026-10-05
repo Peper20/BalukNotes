@@ -8,7 +8,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("запрос: адрес и токен из настройки", async () => {
+it("a request: the address and the token from the setting", async () => {
   const fetch = vi.fn(async () => new Response("[]", { status: 200 }));
   vi.stubGlobal("fetch", fetch);
   configure({ base: "http://127.0.0.1:9000", token: "t" });
@@ -23,12 +23,12 @@ it("запрос: адрес и токен из настройки", async () =>
   await api.events(7);
   expect(calls[2]![0]).toBe("http://127.0.0.1:9000/api/vaults/a%20b/events?after=7");
   expect(calls[2]![1].headers).toEqual({ Authorization: "Bearer t" });
-  // Общее — без хранилища.
+  // Shared ones: without a vault.
   await api.vaults();
   expect(calls[3]![0]).toBe("http://127.0.0.1:9000/api/vaults");
 });
 
-it("ошибки сети и сервера — ApiError; отмена — нет", async () => {
+it("network and server errors are ApiError; a cancel is not", async () => {
   setVault("x");
   vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: "нет такой" }), { status: 404 }));
   const notFound = await api.version("x").catch((e: unknown) => e);

@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { plural } from "./plural";
 
-it("слово при числе", () => {
+it("a word with a number", () => {
   const word = (n: number) => plural(n, "заметка", "заметки", "заметок");
   expect([1, 2, 5, 11, 12, 21, 22, 25, 111, 104].map(word)).toEqual([
     "заметка", "заметки", "заметок", "заметок", "заметок", "заметка", "заметки", "заметок", "заметок", "заметки",

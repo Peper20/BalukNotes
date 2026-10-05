@@ -8,7 +8,7 @@ const note = (id: string, kind: "note" | "book" = "note", title?: string): NoteL
   return { id, kind, name, folder: i < 0 ? "" : id.slice(0, i), title: title ?? name, tags: [], chapters: [] };
 };
 
-it("папки по алфавиту, вложенность, заметки в корне", () => {
+it("folders alphabetically, nesting, notes in the root", () => {
   const tree = buildTree([note("Сеть/UFW"), note("Глубоко/а/б/Дно"), note("Книга", "book"), note("Алгоритмы/X")]);
   expect(tree.folders.map((f) => f.name)).toEqual(["Алгоритмы", "Глубоко", "Сеть"]);
   expect(tree.notes.map((n) => n.id)).toEqual(["Книга"]);
@@ -22,12 +22,12 @@ it("папки по алфавиту, вложенность, заметки в 
   expect(findFolder(tree, "Глубоко/нет")).toBeUndefined();
 });
 
-it("путь к заметке — для раскрытия дерева", () => {
+it("the path to a note, to expand the tree", () => {
   expect(ancestors("Глубоко/а/б/Дно")).toEqual(["Глубоко", "Глубоко/а", "Глубоко/а/б"]);
   expect(ancestors("Начало")).toEqual([]);
 });
 
-it("порядок — по названиям, а не по именам файлов; числа — по значению", () => {
+it("order by titles, not file names; numbers by value", () => {
   const titles: Record<string, string> = { Сеть: "Сети и протоколы", Алгоритмы: "Я — последняя" };
   const tree = buildTree(
     [note("Сеть/a", "note", "SSH: основы"), note("Сеть/b", "note", "Шифрование"), note("Алгоритмы/x"), note("Базы/y"), note("г10", "note", "Глава 10"), note("г2", "note", "Глава 2")],
@@ -35,11 +35,11 @@ it("порядок — по названиям, а не по именам фай
   );
   expect(tree.folders.map((f) => f.title)).toEqual(["Базы", "Сети и протоколы", "Я — последняя"]);
   expect(tree.folders[1]!.name).toBe("Сеть");
-  expect(tree.folders[1]!.notes.map((n) => n.title)).toEqual(["Шифрование", "SSH: основы"]); // русский порядок: кириллица раньше латиницы
+  expect(tree.folders[1]!.notes.map((n) => n.title)).toEqual(["Шифрование", "SSH: основы"]); // Russian order: Cyrillic before Latin
   expect(tree.notes.map((n) => n.title)).toEqual(["Глава 2", "Глава 10"]);
 });
 
-it("пустые папки — тоже в дереве, со счётчиком 0", () => {
+it("empty folders are in the tree too, with a count of 0", () => {
   const tree = buildTree([note("Сеть/UFW")], undefined, ["Пустая", "Сеть/Черновики", "Сеть"]);
   expect(tree.folders.map((f) => f.name)).toEqual(["Пустая", "Сеть"]);
   expect(countNotes(tree.folders[0]!)).toBe(0);

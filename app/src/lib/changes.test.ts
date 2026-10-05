@@ -5,7 +5,7 @@ import { changeSource, RETRY_MS, serverEvents, type Poll } from "./changes";
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
-/** Подделка сервера: каждый запрос ждёт, пока тест ответит. */
+/** A fake server: each request waits until the test answers. */
 class FakeServer {
   calls: { after: number | null; signal: AbortSignal; resolve: (r: EventsResponse) => void; reject: (e: unknown) => void }[] = [];
   poll: Poll = (after, signal) => new Promise((resolve, reject) => this.calls.push({ after, signal, resolve, reject }));
@@ -21,7 +21,7 @@ const res = (seq: number, paths: string[] | null = null, watching = true): Event
 });
 const flush = () => vi.advanceTimersByTimeAsync(0);
 
-it("изменения — проверить; следующий запрос — с номером ответа", async () => {
+it("changes - check; the next request carries the response number", async () => {
   const server = new FakeServer();
   const seen = vi.fn();
   const stop = serverEvents(server.poll).start(seen);
@@ -36,7 +36,7 @@ it("изменения — проверить; следующий запрос �
   await flush();
   expect(seen).toHaveBeenCalledTimes(1);
   expect(server.last.after).toBe(3);
-  // Ответ по тайм-ауту — без изменений.
+  // A response by timeout: no changes.
   server.last.resolve(res(3));
   await flush();
   expect(seen).toHaveBeenCalledTimes(1);
@@ -46,7 +46,7 @@ it("изменения — проверить; следующий запрос �
   expect(server.last.signal.aborted).toBe(true);
 });
 
-it("сервер не ответил — повтор через паузу; ответил — одна проверка", async () => {
+it("the server did not answer - a retry after a pause; it answered - one check", async () => {
   const server = new FakeServer();
   const seen = vi.fn();
   serverEvents(server.poll).start(seen);
@@ -66,7 +66,7 @@ it("сервер не ответил — повтор через паузу; о�
   expect(seen).toHaveBeenCalledTimes(1);
 });
 
-it("сервер не следит за файлами — запросов больше нет, только по кнопке", async () => {
+it("the server does not watch files: no more requests, only by the button", async () => {
   const server = new FakeServer();
   const seen = vi.fn();
   serverEvents(server.poll).start(seen);
@@ -77,7 +77,7 @@ it("сервер не следит за файлами — запросов бо
   expect(seen).not.toHaveBeenCalled();
 });
 
-it("настройка: автоматически — события; по кнопке — ни одного запроса", async () => {
+it("setting: automatic - events; by button - no requests at all", async () => {
   const server = new FakeServer();
   changeSource("manual", server.poll).start(vi.fn());
   await flush();

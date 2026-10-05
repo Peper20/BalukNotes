@@ -1,13 +1,14 @@
-// Куда ходит клиент: базовый адрес сервера и токен — одна настройка.
+// Where the client goes: the base address of the server and the token, one setting.
 //
-// По умолчанию — тот же сервер, что отдал страницу, без токена (cookie
-// `notes_token`, если сервер с токеном, браузер шлёт сам). Иначе — объект
-// `globalThis.__NOTES_API__ = { base, token }` до запуска клиента (Tauri:
-// скрипт инициализации окна, `http://127.0.0.1:<порт>` и токен; VPS — свой
-// домен) или `configure(…)`.
+// By default, the same server that served the page, without a token (the
+// cookie `notes_token`, if the server has a token, the browser sends
+// itself). Otherwise, the object `globalThis.__NOTES_API__ = { base, token }`
+// before the client starts (Tauri: the window init script,
+// `http://127.0.0.1:<port>` and the token; a VPS: its own domain) or
+// `configure(...)`.
 
 export interface ApiConfig {
-  /** Адрес сервера без `/` в конце; "" — тот же, что у страницы. */
+  /** Server address without a trailing `/`; "" - the same as the page's. */
   base: string;
   token: string | null;
 }
@@ -27,9 +28,9 @@ export function configure(c: Partial<ApiConfig>): void {
 }
 
 /**
- * Полный адрес пути сервера. `withToken` — для адресов, которые открывает
- * сам браузер (PDF, события, стили): заголовок туда не добавить, поэтому
- * токен — параметром (сервер ответит cookie).
+ * The full address of a server path. `withToken` is for addresses the
+ * browser opens itself (PDF, events, styles): no header can be added there,
+ * so the token goes as a parameter (the server answers with a cookie).
  */
 export function apiUrl(path: string, { withToken = false } = {}): string {
   const url = config.base + path;
@@ -37,10 +38,10 @@ export function apiUrl(path: string, { withToken = false } = {}): string {
   return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(config.token)}`;
 }
 
-/** Заголовки запроса из кода: токен — `Authorization: Bearer`. */
+/** Request headers from code: the token is `Authorization: Bearer`. */
 export const authHeaders = (): Record<string, string> => (config.token ? { Authorization: `Bearer ${config.token}` } : {});
 
-/** Стили с сервера (шрифты, цвета тем, `baluk.css`) — с настроенного адреса. */
+/** Styles from the server (fonts, theme colors, `baluk.css`), from the configured address. */
 export function rebaseStylesheets(root: ParentNode = document): void {
   if (!config.base) return;
   for (const link of root.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"][href^="/"]')) {

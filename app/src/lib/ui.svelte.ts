@@ -1,50 +1,50 @@
-// Состояние интерфейса вокруг заметки: главы книги, оглавление, панели.
+// Interface state around a note: book chapters, the outline, panels.
 
 import type { BookView } from "./api";
 import type { Find } from "./find";
 import { load, save } from "./storage";
 
-/** Что в дереве: заметка (книга) или папка (путь) — для меню и удаления. */
+/** What is in the tree: a note (book) or a folder (path), for the menu and deleting. */
 export type TreeItem = { kind: "note" | "folder"; id: string };
 
 class Ui {
-  /** Показанная книга по главам (список глав и карта якорей — с сервера) или null. */
+  /** The shown book by chapters (the chapter list and the anchor map from the server) or null. */
   book = $state.raw<BookView | null>(null);
   chapter = $state(0);
-  /** id заголовка, который сейчас читают (подсветка в оглавлении). */
+  /** id of the heading being read now (highlighted in the outline). */
   currentHeading = $state<string | null>(null);
-  /** Справа от колонки заметки хватает места для оглавления. */
+  /** There is room for the outline to the right of the note column. */
   tocRoom = $state(false);
   tocWidth = $state(240);
-  /** Всплывающее оглавление (узкий экран или скрытое боковое). */
+  /** The popup outline (a narrow screen or a hidden side one). */
   tocOpen = $state(false);
-  /** Боковая панель: на телефоне — выезжает, на ПК — можно спрятать. */
+  /** The sidebar: slides in on a phone, can be hidden on a PC. */
   sidebarOpen = $state(false);
   sidebarHidden = $state(false);
   settingsOpen = $state(false);
   /**
-   * Палитра: быстрый переход, команды (`>`), поиск (`/`), теги (`#`);
-   * `find` — поиск Ctrl+F из заметки (где искать — `lib/find.ts`).
+   * The palette: quick open, commands (`>`), search (`/`), tags (`#`);
+   * `find` - the Ctrl+F search from a note (where to search - `lib/find.ts`).
    */
   palette = $state<{ query: string; find?: Find | null } | null>(null);
   helpOpen = $state(false);
-  /** Диалог «Новое хранилище». */
+  /** The "Новое хранилище" dialog. */
   vaultNewOpen = $state(false);
-  /** Диалог открытого хранилища: переименовать или удалить. */
+  /** The dialog of the open vault: rename or delete. */
   vaultEdit = $state<"rename" | "delete" | null>(null);
-  /** Заметка или папка, которую спрашивают, удалить ли (диалог подтверждения). */
+  /** The note or folder asked about deleting (a confirmation dialog). */
   deleting = $state<TreeItem | null>(null);
-  /** Заметка или папка, которую переименовывают (диалог). */
+  /** The note or folder being renamed (a dialog). */
   renaming = $state<TreeItem | null>(null);
-  /** Меню заметки или папки в дереве (правый клик, долгое касание): где и какой. */
+  /** The menu of a note or folder in the tree (right click, long tap): where and which. */
   noteMenu = $state<(TreeItem & { x: number; y: number }) | null>(null);
-  /** Режим чтения: только текст — без панелей, вкладок и оглавления. */
+  /** Reading mode: text only, without panels, tabs and the outline. */
   reading = $state(false);
 
-  /** Свёрнутые папки дерева (пути) — запоминаются. */
+  /** Collapsed tree folders (paths), remembered. */
   collapsed = $state<string[]>(load<string[]>("k-collapsed", []));
 
-  /** Папку переименовали: свёрнутые — под новыми путями. */
+  /** A folder was renamed: the collapsed ones move to the new paths. */
   moveCollapsed(moved: (path: string) => string | null): void {
     this.collapsed = this.collapsed.map((p) => moved(p) ?? p);
     save("k-collapsed", this.collapsed);

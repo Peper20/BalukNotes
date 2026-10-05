@@ -1,4 +1,4 @@
-// Описание интерактивного рисунка из `data-k-plot` (пишет baluk/plots.typ).
+// The description of an interactive figure from `data-k-plot` (written by baluk/plots.typ).
 
 import { compile } from "./formula";
 
@@ -12,7 +12,7 @@ export interface Param {
 
 export interface Curve {
   f: string;
-  /** Имя цвета темы: line, second, third, accent. */
+  /** Theme color name: line, second, third, accent. */
   color: string;
   label: string | null;
   dashed: boolean;
@@ -25,7 +25,7 @@ export interface Plot2D {
   y: [number, number];
   params: Param[];
   labels: [string, string];
-  /** Размер поля графика, см. */
+  /** Plot area size, cm. */
   width: number;
   height: number;
 }
@@ -41,15 +41,15 @@ export interface Plot3D {
   n: number;
   style: "shaded" | "wire";
   color: string;
-  /** Начальный вид: поворот и наклон, градусы. */
+  /** Initial view: rotation and tilt, degrees. */
   view: [number, number];
-  /** Размер коробки, см. */
+  /** Box size, cm. */
   size: number;
 }
 
 export type PlotSpec = Plot2D | Plot3D;
 
-/** Описание рисунка из атрибута; не разобралось — null (останется кадр). */
+/** The figure description from the attribute; not parsed - null (the frame stays). */
 export function readSpec(el: Element): PlotSpec | null {
   try {
     const spec = JSON.parse(el.getAttribute("data-k-plot") ?? "") as PlotSpec;
@@ -59,7 +59,7 @@ export function readSpec(el: Element): PlotSpec | null {
   }
 }
 
-/** Разбираются ли все формулы рисунка (иначе клиент оставляет кадр Typst). */
+/** Whether all formulas of the figure parse (otherwise the client keeps the Typst frame). */
 export function formulasOk(spec: PlotSpec): boolean {
   const names = spec.params.map((p) => p.name);
   try {
@@ -71,19 +71,19 @@ export function formulasOk(spec: PlotSpec): boolean {
   }
 }
 
-/** CSS-переменная цвета рисунка по имени цвета темы. */
+/** CSS variable of a figure color by the theme color name. */
 export function colorVar(name: string): string {
   const known = ["line", "second", "third", "face"];
   return name === "accent" ? "--k-accent" : `--k-fig-${known.includes(name) ? name : "line"}`;
 }
 
-/** Начальные значения параметров. */
+/** Initial parameter values. */
 export function defaults(params: Param[]): Record<string, number> {
   return Object.fromEntries(params.map((p) => [p.name, p.value]));
 }
 
-/** см → pt (единица viewBox и кегля подписей, как в кадре Typst). */
+/** cm -> pt (the unit of the viewBox and of the label font size, as in the Typst frame). */
 export const PT_PER_CM = 72 / 2.54;
-/** Кегль основного текста PDF и подписей рисунка, pt (theme.typ). */
+/** Font size of the PDF body text and the figure labels, pt (theme.typ). */
 export const TEXT_PT = 11;
 export const SMALL_PT = 9.2;

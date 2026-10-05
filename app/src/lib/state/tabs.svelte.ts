@@ -1,4 +1,4 @@
-// Вкладки клиента (запоминаются). Переходы между ними — router.
+// Client tabs (remembered). Navigation between them is in router.
 
 import { homeHref } from "../ids";
 import { load, save } from "../storage";
@@ -7,16 +7,16 @@ import { clampActive, closeAt, dropTabs, openAfter, openBehind, type Tab, type T
 class Tabs {
   list = $state<Tab[]>(load<{ tabs: Tab[] }>("k-tabs", { tabs: [] }).tabs);
   active = $state(load<{ active: number }>("k-tabs", { active: 0 }).active);
-  /** Сколько фоновых вкладок открыто из активной (`from`) с её последнего перехода. */
+  /** How many background tabs were opened from the active one (`from`) since its last navigation. */
   #behind = { from: -1, url: "", count: 0 };
 
-  /** После загрузки: хотя бы одна вкладка, активная — в пределах. */
+  /** After loading: at least one tab, the active one within limits. */
   restore(): void {
     if (!this.list.length) this.list = [{ url: homeHref() }];
     this.active = clampActive(this.active, this.list.length);
   }
 
-  /** Адрес активной вкладки — адрес страницы. */
+  /** Address of the active tab, the page address. */
   setUrl(url: string): void {
     const tab = this.list[this.active];
     if (tab) tab.url = url;
@@ -27,7 +27,7 @@ class Tabs {
     this.#set(openAfter(this.#state(), url));
   }
 
-  /** Новая вкладка в фоне; переход в активной или другая активная — новые встают сразу за ней. */
+  /** A new background tab; a navigation in the active one or another active one - new ones go right after it. */
   openBehind(url: string): void {
     const from = this.list[this.active]?.url ?? "";
     if (this.#behind.from !== this.active || this.#behind.url !== from) this.#behind = { from: this.active, url: from, count: 0 };
@@ -35,14 +35,14 @@ class Tabs {
     this.save();
   }
 
-  /** Закрыть; null — последняя вкладка (закрыть нельзя). */
+  /** Closes it; null - the last tab (cannot be closed). */
   close(i: number): { wasActive: boolean } | null {
     const next = closeAt(this.#state(), i);
     if (next) this.#set(next);
     return next;
   }
 
-  /** Убрать вкладки, для которых `drop` — истина; `true` — убрана активная. */
+  /** Removes the tabs for which `drop` is true; `true` - the active one was removed. */
   drop(drop: (tab: Tab) => boolean): boolean {
     const next = dropTabs(this.#state(), drop, homeHref());
     this.#set(next);
@@ -50,7 +50,7 @@ class Tabs {
     return next.activeDropped;
   }
 
-  /** Новые адреса вкладок (`url` → новый или null — тот же). */
+  /** New tab addresses (`url` -> a new one or null - the same). */
   move(url: (url: string) => string | null): void {
     for (const tab of this.list) tab.url = url(tab.url) ?? tab.url;
     this.save();

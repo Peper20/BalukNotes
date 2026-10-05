@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-// Снимок фикстуры: в нём значения, посчитанные baluk (Typst) — эталон.
+// The fixture snapshot: it has the values computed by baluk (Typst), the reference.
 import snapshot from "../../../../tests/snapshots/Рисунки/Интерактив.snap?raw";
 import { compile, FormulaError, parse } from "./formula";
 
@@ -9,8 +9,8 @@ interface Check {
   value: number | null;
 }
 
-describe("формула", () => {
-  it("совпадает с Typst на наборе формул", () => {
+describe("formula", () => {
+  it("matches Typst on a set of formulas", () => {
     const json = /<pre class="k-plot-check">([^<]*)<\/pre>/.exec(snapshot)?.[1];
     expect(json).toBeTruthy();
     const checks = JSON.parse(json!.replaceAll("&quot;", '"')) as Check[];
@@ -22,13 +22,13 @@ describe("формула", () => {
     }
   });
 
-  it("унарный минус сильнее умножения, вычитание — слева направо", () => {
+  it("unary minus binds tighter than multiplication, subtraction goes left to right", () => {
     expect(compile("-x * -2", ["x"])({ x: 3 })).toBe(6);
     expect(compile("10 - 4 - 3", [])({})).toBe(3);
     expect(compile("2 + 3 * 4", [])({})).toBe(14);
   });
 
-  it("понятные ошибки", () => {
+  it("clear errors", () => {
     const err = (s: string) => {
       try {
         parse(s, ["x", "a"]);
@@ -36,7 +36,7 @@ describe("формула", () => {
         expect(e).toBeInstanceOf(FormulaError);
         return (e as Error).message;
       }
-      throw new Error("нет ошибки: " + s);
+      throw new Error("no error: " + s);
     };
     expect(err("x^2")).toContain("calc.pow");
     expect(err("sin(x)")).toContain("неизвестное имя «sin»");

@@ -1,13 +1,13 @@
-// Удобства одного читателя в localStorage: вкладки, недавние, места чтения.
-// Хранилище может быть недоступно (приватное окно, запрет сайта) — тогда
-// всё работает, просто не запоминается.
+// One reader's conveniences in localStorage: tabs, recent notes, reading
+// places. The storage may be unavailable (a private window, the site is
+// blocked) - then everything works, just without remembering.
 //
-// Ключи — свои у каждого хранилища заметок (`k-tabs@Учёба`): вкладки и
-// места чтения одного не видны в другом. Общие для всех — `loadShared`.
+// Keys are per note vault (`k-tabs@Учёба`): the tabs and reading places of
+// one are not seen in another. Shared by all - `loadShared`.
 
 import { vault, vaultBase } from "./vault";
 
-/** Ключ в хранилище заметок, которое показано. */
+/** The key in the shown note vault. */
 const scoped = (key: string): string => {
   const name = vault();
   return name == null ? key : `${key}@${name}`;
@@ -26,25 +26,25 @@ function write(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // не запомнили — не страшно
+    // not remembered: no harm
   }
 }
 
 export const load = <T>(key: string, fallback: T): T => read(scoped(key), fallback);
 export const save = (key: string, value: unknown): void => write(scoped(key), value);
 
-/** Общее для всех хранилищ заметок (какое открыто последним). */
+/** Shared by all note vaults (which one was opened last). */
 export const loadShared = read;
 export const saveShared = write;
 
 /**
- * Хранилище переименовали (`to`) или удалили (`to` = null): его ключи —
- * под новым именем, адреса в них (`/v/<имя>/…`, вкладки) — тоже; удалённого
- * — забыть. Общий ключ `last` (открытое последним) — вслед за ним.
+ * A vault was renamed (`to`) or deleted (`to` = null): its keys move under
+ * the new name, the addresses in them (`/v/<name>/...`, tabs) too; a deleted
+ * one's are forgotten. The shared key `last` (opened last) follows it.
  */
 export function moveVault(from: string, to: string | null, last: string): void {
   try {
-    // Ключ — `<имя ключа>@<хранилище>`; в имени ключа `@` нет, в имени хранилища — может быть.
+    // A key is `<key name>@<vault>`; the key name has no `@`, a vault name may.
     const base = (key: string | null) => (key != null && key.slice(key.indexOf("@") + 1) === from && key.includes("@") ? key.slice(0, key.indexOf("@")) : null);
     const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter((k) => base(k) != null) as string[];
     const [old, now] = [`${vaultBase(from)}/`, to == null ? "" : `${vaultBase(to)}/`];
@@ -59,6 +59,6 @@ export function moveVault(from: string, to: string | null, last: string): void {
       else write(last, to);
     }
   } catch {
-    // не перенесли — вкладки хранилища начнутся заново
+    // not moved: the vault's tabs start anew
   }
 }

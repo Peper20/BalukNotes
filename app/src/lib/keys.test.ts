@@ -3,7 +3,7 @@ import { combo } from "./keys";
 
 const ev = (init: KeyboardEventInit) => new KeyboardEvent("keydown", init);
 
-it("сочетания — по физической клавише, раскладка не важна", () => {
+it("shortcuts go by the physical key, the layout does not matter", () => {
   const r = combo("KeyR");
   expect(r.label).toBe("R");
   expect(r.test(ev({ key: "к", code: "KeyR" }))).toBe(true);
@@ -15,7 +15,7 @@ it("сочетания — по физической клавише, раскл�
   expect(combo("BracketRight").label).toBe("]");
 });
 
-it("«?» — по символу, с любым Shift", () => {
+it("\"?\" goes by the character, with any Shift", () => {
   const q = combo("?");
   expect(q.test(ev({ key: "?", code: "Slash", shiftKey: true }))).toBe(true);
   expect(q.test(ev({ key: "?", code: "Digit7", shiftKey: true }))).toBe(true);

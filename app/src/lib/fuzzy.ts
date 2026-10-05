@@ -1,10 +1,10 @@
-// Нечёткий поиск для быстрого перехода: буквы запроса должны встретиться
-// в строке по порядку (не обязательно подряд). Вес — за начало строки и
-// слов, за буквы подряд; без учёта регистра, «ё» = «е».
+// Fuzzy search for quick open: the query letters must occur in the string in
+// order (not necessarily adjacent). Weight for the start of the string and
+// of words, for adjacent letters; case-insensitive, "ё" = "е".
 
 export interface Match {
   score: number;
-  /** Позиции совпавших символов в строке — для подсветки. */
+  /** Positions of the matched characters in the string, for highlighting. */
   positions: number[];
 }
 
@@ -15,14 +15,14 @@ const fold = (c: string): string => {
 
 const isBoundary = (prev: string | undefined): boolean => prev === undefined || /[\s/_\-.,:(«"]/.test(prev);
 
-/** Совпадение запроса со строкой или null. Пустой запрос совпадает со всем. */
+/** A match of the query with the string, or null. An empty query matches everything. */
 export function fuzzy(query: string, text: string): Match | null {
   const q = [...query.trim()].map(fold).filter((c) => c !== " ");
   if (!q.length) return { score: 0, positions: [] };
   const t = [...text];
   const tf = t.map(fold);
 
-  // Сначала — подстрока целиком: лучший случай, его и берём.
+  // First the whole substring: the best case, we take it.
   const joined = q.join("");
   const at = tf.join("").indexOf(joined);
   if (at >= 0 && t.length === tf.join("").length) {
@@ -30,7 +30,7 @@ export function fuzzy(query: string, text: string): Match | null {
     return { score: 100 + (at === 0 ? 50 : isBoundary(t[at - 1]) ? 30 : 0) - t.length / 10, positions };
   }
 
-  // Иначе — жадно слева направо, предпочитая начала слов.
+  // Otherwise greedily from left to right, preferring word starts.
   const positions: number[] = [];
   let from = 0;
   let score = 0;
@@ -53,7 +53,7 @@ export function fuzzy(query: string, text: string): Match | null {
   return { score: score - t.length / 10, positions };
 }
 
-/** Строка, разбитая на куски для подсветки совпавших символов. */
+/** The string split into pieces to highlight the matched characters. */
 export function highlight(text: string, positions: number[]): { text: string; hit: boolean }[] {
   const chars = [...text];
   const set = new Set(positions);

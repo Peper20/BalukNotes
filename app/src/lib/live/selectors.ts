@@ -1,14 +1,14 @@
-// Селекторы живых блоков — отдельно от их кода: узнать, есть ли на странице
-// живые блоки, можно, не загружая сами блоки.
+// Selectors of live blocks, apart from their code: one can learn whether
+// the page has live blocks without loading the blocks themselves.
 
 export const SELECTORS = {
-  /** Интерактивный рисунок (`baluk/plots.typ`). */
+  /** An interactive figure (`baluk/plots.typ`). */
   plot: ".k-plot[data-k-plot]",
-  /** Кадры (`baluk/frames.typ`). */
+  /** Frames (`baluk/frames.typ`). */
   frames: ".k-frames[data-k-frames]",
-  /** Граф хранилища (`#vault-graph`, `baluk/graph.typ`). */
+  /** The vault graph (`#vault-graph`, `baluk/graph.typ`). */
   graph: ".k-graph[data-k-graph]",
 } as const;
 
-/** Любой живой блок. */
+/** Any live block. */
 export const LIVE_SELECTOR = Object.values(SELECTORS).join(", ");

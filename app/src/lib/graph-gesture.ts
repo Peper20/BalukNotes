@@ -1,12 +1,12 @@
-// Жесты графа без DOM: указатели и что они делают — сдвиг фона, два пальца
-// (масштаб и сдвиг), протянутый узел, щелчок. Координаты — экранные
-// (от угла рисунка); что делать с узлом (физика, открыть) — решает
-// компонент (`Graph.svelte`).
+// Graph gestures without the DOM: pointers and what they do - panning the
+// background, two fingers (zoom and pan), a dragged node, a click.
+// Coordinates are screen ones (from the figure corner); what to do with a
+// node (physics, open it) is up to the component (`Graph.svelte`).
 
 import type { Point } from "./graph-physics";
 import { zoomAt, type View } from "./graph-view";
 
-/** Сдвиг указателя (px), после которого нажатие на узел — перетаскивание, а не щелчок. */
+/** Pointer shift (px) after which pressing a node is a drag, not a click. */
 export const DRAG_START = 4;
 
 export type Gesture =
@@ -14,35 +14,35 @@ export type Gesture =
   | { kind: "node"; id: string; start: Point; grab: Point; far: boolean }
   | { kind: "pinch"; dist: number; mid: Point; view: View };
 
-/** Что сделать после движения указателя. */
+/** What to do after the pointer moved. */
 export type Move = { kind: "none" } | { kind: "view"; view: View; pan: boolean } | { kind: "drag"; id: string; grab: Point; first: boolean };
 
-/** Что сделать, когда указатель отпустили. */
+/** What to do when the pointer is released. */
 export type Up =
   | { kind: "none" }
-  /** Ещё кто-то держит: жест продолжается. */
+  /** Someone else still holds: the gesture goes on. */
   | { kind: "continue" }
-  /** Все отпустили; `gesture` — каким был жест. */
+  /** All released; `gesture` is what the gesture was. */
   | { kind: "end"; gesture: Gesture | null };
 
 const mid = (a: Point, b: Point): Point => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 const dist = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
-/** Вид при двух пальцах `a`, `b`: масштаб у начальной середины и сдвиг вслед за ней. */
+/** The view with two fingers `a`, `b`: zoom at the starting middle and pan after it. */
 export function pinchView(g: Extract<Gesture, { kind: "pinch" }>, a: Point, b: Point): View {
   const m = mid(a, b);
   const v = zoomAt(g.view, dist(a, b) / g.dist, g.mid[0], g.mid[1]);
   return { ...v, x: v.x + m[0] - g.mid[0], y: v.y + m[1] - g.mid[1] };
 }
 
-/** Вид при сдвиге фона до точки `p`. */
+/** The view when panning the background to the point `p`. */
 export const panView = (g: Extract<Gesture, { kind: "pan" }>, p: Point): View => ({
   ...g.view,
   x: g.view.x + p[0] - g.start[0],
   y: g.view.y + p[1] - g.start[1],
 });
 
-/** Указатели на рисунке и текущий жест. */
+/** Pointers on the figure and the current gesture. */
 export class Pointers {
   readonly at = new Map<number, Point>();
   gesture: Gesture | null = null;
@@ -52,9 +52,10 @@ export class Pointers {
   }
 
   /**
-   * Нажали указатель `id` в точке `p`: на узле (`node` — его id и где за
-   * него взялись относительно центра) или на фоне. Второй палец — масштаб
-   * (`"pinch"`: протянутый узел пора отпустить); третий — не жест.
+   * Pointer `id` pressed at the point `p`: on a node (`node` is its id and
+   * where it was grabbed relative to the center) or on the background. A
+   * second finger is zoom (`"pinch"`: time to release the dragged node); a
+   * third is not a gesture.
    */
   down(id: number, p: Point, view: View, node: { id: string; grab: Point } | null): Gesture["kind"] | null {
     this.at.set(id, p);
@@ -68,7 +69,7 @@ export class Pointers {
     return this.gesture.kind;
   }
 
-  /** Указатель `id` сдвинулся в `p`. `canDrag` — есть ли ещё такой узел в графе. */
+  /** Pointer `id` moved to `p`. `canDrag`: whether the graph still has such a node. */
   move(id: number, p: Point, canDrag: (node: string) => boolean = () => true): Move {
     const g = this.gesture;
     if (!this.at.has(id) || !g) return { kind: "none" };
@@ -86,12 +87,12 @@ export class Pointers {
     return { kind: "drag", id: g.id, grab: g.grab, first };
   }
 
-  /** Отпустили указатель `id` (или он пропал). `view` — вид сейчас. */
+  /** Pointer `id` released (or lost). `view` is the view now. */
   up(id: number, view: View): Up {
     if (!this.at.delete(id)) return { kind: "none" };
     const g = this.gesture;
     if (this.at.size === 1 && g?.kind === "pinch") {
-      // Остался один палец — дальше сдвиг от него.
+      // One finger left: pan from it from now on.
       this.gesture = { kind: "pan", start: [...this.at.values()][0]!, view };
       return { kind: "continue" };
     }

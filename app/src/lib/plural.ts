@@ -1,4 +1,4 @@
-// Слово при числе по-русски: 1 заметка, 2 заметки, 5 заметок.
+// A Russian word with a number: 1 заметка, 2 заметки, 5 заметок.
 
 export function plural(n: number, one: string, few: string, many: string): string {
   const m10 = n % 10;

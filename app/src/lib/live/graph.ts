@@ -1,5 +1,5 @@
-// Граф хранилища (`#vault-graph`): те же координаты, что у картинки Typst,
-// плюс наведение и переход к заметке. Картинку прячет CSS (`[data-live]`).
+// The vault graph (`#vault-graph`): the same coordinates as the Typst
+// picture, plus hover and going to a note. CSS hides the picture (`[data-live]`).
 
 import { mount, unmount } from "svelte";
 import Graph from "../../components/Graph.svelte";
@@ -8,7 +8,7 @@ import type { LiveBlock } from "./block";
 import { SELECTORS } from "./selectors";
 
 export const graph: LiveBlock = {
-  name: "граф хранилища",
+  name: "vault graph",
   selector: SELECTORS.graph,
   mount(el, { open }) {
     const layout = JSON.parse(el.dataset.kGraph ?? "") as GraphLayout;

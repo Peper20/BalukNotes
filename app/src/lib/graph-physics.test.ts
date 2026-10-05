@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { extentOf, GRID_FROM, nearPairs, Physics, type PhysicsNode, type Rect } from "./graph-physics";
 
-// Цепочка a — b — c — d по горизонтали и e без связей в стороне.
+// A chain a - b - c - d horizontally and e without links aside.
 const node = (x: number, y: number, name = "узел"): PhysicsNode => ({ x, y, extent: extentOf(6, name, 11, 2) });
 const nodes = () => [node(0, 0), node(70, 0), node(140, 0), node(210, 0), node(100, 120)];
 const edges: [number, number][] = [
@@ -10,21 +10,21 @@ const edges: [number, number][] = [
   [2, 3],
 ];
 
-/** Шагать, пока не осядет (не больше `limit` шагов); возвращает число шагов. */
+/** Steps until it settles (at most `limit` steps); returns the number of steps. */
 function settle(p: Physics, limit = 2000): number {
   for (let i = 1; i <= limit; i++) if (p.settled(p.step())) return i;
   return limit;
 }
 
-describe("физика графа", () => {
-  it("раскладка ядра — покой: нетронутый граф не шевелится", () => {
+describe("graph physics", () => {
+  it("the core layout is rest: an untouched graph does not move", () => {
     const p = new Physics(nodes(), edges);
     const before = p.pos.slice();
     expect(p.settled(p.step())).toBe(true);
     expect([...p.pos]).toEqual([...before]);
   });
 
-  it("соседи тянутся за узлом, дальние — слабее, несвязанный стоит", () => {
+  it("neighbours follow the node, far ones weaker, an unlinked one stands", () => {
     const p = new Physics(nodes(), edges);
     for (let i = 0; i < 60; i++) {
       p.drag(0, -80, 40);
@@ -38,7 +38,7 @@ describe("физика графа", () => {
     expect(p.at(4)).toEqual([100, 120]);
   });
 
-  it("отпустили — узел стоит, соседи плавно отходят немного назад и встают", () => {
+  it("on release the node stands, the neighbours smoothly go a bit back and stop", () => {
     const p = new Physics(nodes(), edges);
     for (let i = 0; i < 60; i++) {
       p.drag(3, 300, 60);
@@ -55,16 +55,16 @@ describe("физика графа", () => {
       xs.push(p.at(2)[0]);
       if (p.settled(f)) break;
     }
-    expect(steps).toBeLessThan(120); // встали за пару секунд
+    expect(steps).toBeLessThan(120); // stopped within a couple of seconds
     const end = xs.at(-1)!;
-    // прошли около четверти пути к прежнему месту (140), без перелёта
+    // went about a quarter of the way to the old place (140), no overshoot
     expect((x2 - end) / (x2 - 140)).toBeGreaterThan(0.1);
     expect((x2 - end) / (x2 - 140)).toBeLessThan(0.4);
     expect(Math.min(...xs)).toBeGreaterThan(end - 0.5);
-    expect(p.at(3)).toEqual(drop); // брошенный не качнулся
+    expect(p.at(3)).toEqual(drop); // the dropped one did not sway
   });
 
-  it("отклик соседей настраивается: сильнее тянутся, не возвращаются", () => {
+  it("the neighbours' response is tunable: they pull harder, do not return", () => {
     const pulled = (pull: number) => {
       const p = new Physics(nodes(), edges);
       p.response = { pull, back: 0 };
@@ -75,29 +75,29 @@ describe("физика графа", () => {
       return p;
     };
     const shift = (p: Physics) => Math.abs(p.at(1)[0] - 70);
-    expect(shift(pulled(0))).toBe(0); // рёбра не тянут
+    expect(shift(pulled(0))).toBe(0); // edges do not pull
     expect(shift(pulled(3))).toBeGreaterThan(shift(pulled(1)));
     const p = pulled(1);
     const at = p.at(1);
     p.release();
     settle(p);
-    expect(p.at(1)[0]).toBeCloseTo(at[0], 0); // назад не пошли
+    expect(p.at(1)[0]).toBeCloseTo(at[0], 0); // did not go back
   });
 
-  it("узел держат на месте — соседи подходят без раскачки", () => {
+  it("a node held in place: the neighbours come without swaying", () => {
     const p = new Physics(nodes(), edges);
     const xs: number[] = [];
     for (let i = 0; i < 200; i++) {
-      p.drag(0, -Math.min(i, 20) * 8, 0); // тянут влево и держат
+      p.drag(0, -Math.min(i, 20) * 8, 0); // pulled left and held
       p.step();
       xs.push(p.at(1)[0]);
     }
     const end = xs.at(-1)!;
-    // сосед едет влево и не проскакивает конечное место
+    // the neighbour moves left and does not overshoot its final place
     expect(Math.min(...xs.slice(20))).toBeGreaterThan(end - 0.5);
   });
 
-  it("детерминированно: одинаковые действия — одинаковые координаты", () => {
+  it("deterministic: the same actions give the same coordinates", () => {
     const run = () => {
       const p = new Physics(nodes(), edges);
       for (let i = 0; i < 40; i++) {
@@ -111,9 +111,9 @@ describe("физика графа", () => {
     expect(run()).toEqual(run());
   });
 
-  it("наехавшие узлы расталкиваются", () => {
+  it("overlapping nodes are pushed apart", () => {
     const p = new Physics(nodes(), edges);
-    p.drag(4, 140, 10); // на c
+    p.drag(4, 140, 10); // onto c
     for (let i = 0; i < 100; i++) p.step();
     const [cx, cy] = p.at(2);
     const box = extentOf(6, "узел", 11, 2);
@@ -121,19 +121,19 @@ describe("физика графа", () => {
     expect(apart).toBe(true);
   });
 
-  it("размеры по экрану крупнее — покой всё равно покой, а наехавшие раздвигаются по ним", () => {
+  it("larger sizes on screen: rest is still rest, and overlapping nodes are pushed apart by them", () => {
     const p = new Physics(nodes(), edges);
     const big = extentOf(6, "очень длинная подпись узла", 14, 2);
     p.setExtents(nodes().map(() => big));
     const before = p.pos.slice();
     expect(p.settled(p.step())).toBe(true);
     expect([...p.pos]).toEqual([...before]);
-    p.drag(4, 100, 0); // между b и c
+    p.drag(4, 100, 0); // between b and c
     for (let i = 0; i < 100; i++) p.step();
     expect(Math.abs(p.at(1)[0] - 100) > 12.76 * 2 || Math.abs(p.at(2)[0] - 100) > 12.76 * 2).toBe(true);
   });
 
-  it("рамка: утащить за край нельзя ни узел, ни соседей", () => {
+  it("frame: neither the node nor its neighbours can be dragged past the edge", () => {
     const frame: Rect = [-20, -20, 230, 150];
     const p = new Physics(nodes(), edges, frame);
     const inside = () => {
@@ -151,14 +151,14 @@ describe("физика графа", () => {
       p.step();
       inside();
     }
-    expect(p.at(1)[0]).toBeLessThan(68); // сосед всё же подтянулся (узел упёрся в угол рамки)
+    expect(p.at(1)[0]).toBeLessThan(68); // the neighbour still came closer (the node hit the frame corner)
     p.release();
     settle(p);
     inside();
   });
 
-  it("у края рамки наехавшие раздвигаются вдоль края", () => {
-    // Узел у верхнего края, под него подсунули другой: вверх некуда — в сторону.
+  it("at the frame edge overlapping nodes go apart along the edge", () => {
+    // A node at the top edge with another slipped under it: no room upwards, so sideways.
     const p = new Physics([node(0, 0), node(100, 0)], [], [-200, -6, 300, 200]);
     for (let i = 0; i < 100; i++) {
       p.drag(1, 0, 12);
@@ -169,14 +169,14 @@ describe("физика графа", () => {
     expect(Math.abs(p.at(0)[0])).toBeGreaterThanOrEqual(2 * e.half - 0.5);
   });
 
-  it("рамка не сдвигает узел, стоящий дома за ней (крупная подпись)", () => {
+  it("the frame does not move a node standing at home outside it (a large label)", () => {
     const p = new Physics(nodes(), edges, [0, 0, 100, 100]);
     expect(p.settled(p.step())).toBe(true);
     expect(p.at(3)).toEqual([210, 0]);
   });
 });
 
-/** Большой граф, как у ядра: узлы по сетке с разбросом, подписи разной длины, ~1,5 ребра на узел. */
+/** A big graph as in the core: nodes on a grid with scatter, labels of different length, ~1.5 edges per node. */
 function bigGraph(n: number): { nodes: PhysicsNode[]; edges: [number, number][] } {
   let seed = 1;
   const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
@@ -190,10 +190,10 @@ function bigGraph(n: number): { nodes: PhysicsNode[]; edges: [number, number][] 
   return { nodes, edges };
 }
 
-describe("физика большого графа", () => {
-  it("решётка находит те же наехавшие пары и в том же порядке", () => {
+describe("physics of a big graph", () => {
+  it("the grid finds the same overlapping pairs in the same order", () => {
     const { nodes } = bigGraph(600);
-    // Сжатая раскладка — наездов много.
+    // A squeezed layout: many overlaps.
     const pos = new Float64Array(nodes.flatMap((p) => [p.x * 0.4, p.y * 0.4]));
     const extents = nodes.map((p) => p.extent);
     const overlapping = (grid: boolean) => {
@@ -217,7 +217,7 @@ describe("физика большого графа", () => {
     expect(overlapping(true)).toEqual(all);
   });
 
-  it(`1000 узлов: шаг меньше 4 мс (решётка с ${GRID_FROM} узлов)`, () => {
+  it(`1000 nodes: a step under 4 ms (grid from ${GRID_FROM} nodes)`, () => {
     const { nodes, edges } = bigGraph(1000);
     const p = new Physics(nodes, edges);
     p.setExtents(nodes.map((n) => n.extent));

@@ -1,16 +1,16 @@
-// Адреса заметок в клиенте: /v/<хранилище>/n/<путь>#<якорь> (хранилище —
-// ./vault.ts; без него — /n/…, так ссылки ставит ядро в HTML заметки).
+// Note addresses in the client: /v/<vault>/n/<path>#<anchor> (the vault -
+// ./vault.ts; without it /n/..., as the core puts links in the note HTML).
 
 import { splitVaultPath, vaultBase, vaultHome } from "./vault";
 
-/** Путь заметки в URL: сегменты кодируются, «/» остаётся. */
+/** Note path in a URL: segments are encoded, "/" stays. */
 export const encodeId = (id: string): string => id.split("/").map(encodeURIComponent).join("/");
 
-/** Адрес заметки (и раздела в ней). */
+/** Address of a note (and a section in it). */
 export const noteHref = (id: string, anchor?: string | null): string =>
   `${vaultBase()}/n/${encodeId(id)}${anchor ? `#${encodeURIComponent(anchor)}` : ""}`;
 
-/** Главная показанного хранилища. */
+/** Home of the shown vault. */
 export const homeHref = (): string => vaultHome();
 
 export type Route =
@@ -20,23 +20,23 @@ export type Route =
   | { kind: "tags"; tag: string | null }
   | { kind: "graph"; around: string | null; depth: number; folder: string | null };
 
-/** Адрес страницы папки (путь от корня хранилища). */
+/** Address of a folder page (path from the vault root). */
 export const folderHref = (path: string): string => `${vaultBase()}/f/${encodeId(path)}`;
 
-/** Адрес страницы тегов (или одного тега). */
+/** Address of the tags page (or of one tag). */
 export const tagHref = (tag?: string | null): string => `${vaultBase()}${tag ? `/tags/${encodeURIComponent(tag)}` : "/tags"}`;
 
-/** Адрес графа: весь или соседи заметки на `depth` шагов. */
+/** Address of the graph: the whole one or the neighbours of a note within `depth` steps. */
 export const graphHref = (around?: string | null, depth = 1): string =>
   `${vaultBase()}/graph${around ? `?around=${encodeURIComponent(around)}${depth === 1 ? "" : `&depth=${depth}`}` : ""}`;
 
-/** Адрес графа папки: её заметки с подпапками. */
+/** Address of a folder graph: its notes with subfolders. */
 export const folderGraphHref = (path: string): string => `${vaultBase()}/graph?folder=${encodeURIComponent(path)}`;
 
 /**
- * Адрес клиента (заметка, теги, граф, главная) — показанного хранилища или
- * без хранилища (ссылки ядра, прежние адреса); адрес другого хранилища —
- * нет: туда — переходом с перезагрузкой.
+ * A client address (a note, tags, the graph, home) of the shown vault or
+ * without a vault (core links, old addresses); an address of another vault
+ * is not: that one goes by a navigation with a reload.
  */
 export function isAppPath(pathname: string): boolean {
   const own = vaultBase();
@@ -56,8 +56,8 @@ export function isAppPath(pathname: string): boolean {
 }
 
 /**
- * Маршрут по адресу страницы (`search` — для графа): хранилище в начале
- * адреса пропускается. Неверное кодирование — главная.
+ * The route by the page address (`search` for the graph): the vault at the
+ * start of the address is skipped. Bad encoding gives home.
  */
 export function parseRoute(pathname: string, search = ""): Route {
   pathname = splitVaultPath(pathname)?.rest ?? pathname;
@@ -79,7 +79,7 @@ export function parseRoute(pathname: string, search = ""): Route {
   return id ? { kind: "note", id } : { kind: "home" };
 }
 
-/** Якорь из `location.hash` без `#`; пустой — null. */
+/** The anchor from `location.hash` without `#`; empty - null. */
 export function hashAnchor(hash: string): string | null {
   if (hash.length < 2) return null;
   try {
@@ -89,7 +89,7 @@ export function hashAnchor(hash: string): string | null {
   }
 }
 
-/** Имя и папка по id: `Сеть/SSH` → { name: "SSH", folder: "Сеть" }. */
+/** Name and folder by id: `Сеть/SSH` -> { name: "SSH", folder: "Сеть" }. */
 export function splitId(id: string): { name: string; folder: string } {
   const i = id.lastIndexOf("/");
   return i < 0 ? { name: id, folder: "" } : { name: id.slice(i + 1), folder: id.slice(0, i) };

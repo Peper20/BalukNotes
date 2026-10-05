@@ -1,13 +1,13 @@
-// Места чтения и недавние заметки — чистая логика (состояние —
+// Reading places and recent notes, pure logic (the state is
 // state/places.svelte.ts).
 
-/** Место чтения: прокрутка и глава книги. */
+/** A reading place: scroll and the book chapter. */
 export interface Place {
   y: number;
   chapter: number | null;
 }
 
-/** Запомнить место заметки: свежие — в конце, старше `max` — забыть. */
+/** Remembers the place of a note: fresh ones at the end, those beyond `max` are forgotten. */
 export function rememberPlace(places: Record<string, Place>, id: string, place: Place, max: number): Record<string, Place> {
   const next = { ...places };
   delete next[id];
@@ -17,10 +17,10 @@ export function rememberPlace(places: Record<string, Place>, id: string, place: 
   return next;
 }
 
-/** Недавние: открытая — первой, без повторов, не больше `max`. */
+/** Recent notes: the opened one first, no repeats, at most `max`. */
 export const pushRecent = (recent: string[], id: string, max: number): string[] => [id, ...recent.filter((r) => r !== id)].slice(0, max);
 
-/** Место из записи истории (для «назад»), если оно там есть. */
+/** The place from a history entry (for "back"), if it has one. */
 export function placeFromHistory(state: unknown): Place | null {
   const s = state as Partial<Place> | null;
   return typeof s?.y === "number" ? { y: s.y, chapter: s.chapter ?? null } : null;

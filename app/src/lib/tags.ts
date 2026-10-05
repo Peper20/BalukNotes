@@ -1,27 +1,27 @@
-// Теги хранилища: у заметки - свои, у книги - корня (`main.typ`, их наследуют
-// все главы) и глав (`chapter.with(tags: ...)`).
+// Vault tags: a note has its own, a book those of its root (`main.typ`, all
+// chapters inherit them) and of its chapters (`chapter.with(tags: ...)`).
 
 import type { NoteListItem, TaggedChapter } from "./api";
 
-/** Где стоит тег: заметка (книга) целиком или глава книги со своим тегом. */
+/** Where a tag is: a whole note (book) or a book chapter with its own tag. */
 export interface TagPlace {
   note: NoteListItem;
   chapter: TaggedChapter | null;
 }
 
-/** Тег и где он стоит; `notes` - сколько заметок и книг с ним (книга - одна, сколько бы глав его ни несли). */
+/** A tag and where it is; `notes` is how many notes and books have it (a book counts once, however many chapters carry it). */
 export interface TagEntry {
   tag: string;
   places: TagPlace[];
   notes: number;
 }
 
-/** Все теги заметки: свои (у книги - корня) и глав, без повторов. */
+/** All tags of a note: its own (of a book - of the root) and of the chapters, without repeats. */
 export const noteTags = (n: NoteListItem): string[] => [...new Set([...n.tags, ...n.chapters.flatMap((c) => c.tags)])];
 
 /**
- * Теги хранилища: больше заметок - выше, затем по алфавиту. Тег корня книги
- * наследуют все главы - книга одной строкой; иначе - главы с этим тегом.
+ * Vault tags: more notes first, then alphabetically. All chapters inherit
+ * a tag of the book root - the book as one line; otherwise the chapters with the tag.
  */
 export function tagIndex(notes: NoteListItem[]): TagEntry[] {
   const byTag = new Map<string, TagEntry>();

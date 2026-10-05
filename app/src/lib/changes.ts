@@ -1,40 +1,41 @@
-// Откуда клиент узнаёт, что файлы заметок могли измениться: события сервера
-// (`GET …/events?after=<seq>` хранилища - долгий опрос: сервер отвечает на
-// изменении или через ~25 с пустым ответом, клиент сразу спрашивает снова).
-// Опроса раз в N секунд нет (решение пользователя): без событий (сервер не
-// следит, режим «только по кнопке») изменения — по кнопке «Обновить».
-// Проверку (сверку версии) делает state/updates — источнику достаточно
-// сказать «проверь». Связь с сервером видит api (`onReach`) по этим же запросам.
+// How the client learns that note files may have changed: server events
+// (`GET .../events?after=<seq>` of a vault - long polling: the server
+// answers on a change or after ~25 s with an empty response, the client asks
+// again at once). There is no polling every N seconds (user's decision):
+// without events (the server does not watch, the "by button only" mode)
+// changes come by the "Обновить" button. The check (comparing versions) is
+// done by state/updates - a source just says "check". The api sees the
+// connection to the server (`onReach`) by the same requests.
 
 import type { EventsResponse } from "./api/types/EventsResponse";
 
 export interface ChangeSource {
-  /** Начать слушать; вернуть «остановить». */
+  /** Starts listening; returns "stop". */
   start(onChange: () => void): () => void;
 }
 
-/** Настройка `refresh.mode`: «автоматически» или «только по кнопке». */
+/** The setting `refresh.mode`: "automatically" or "by button only". */
 export type RefreshMode = "auto" | "manual";
 
-/** Один запрос событий (`api.events`): изменения после `after`. */
+/** One events request (`api.events`): changes after `after`. */
 export type Poll = (after: number | null, signal: AbortSignal) => Promise<EventsResponse>;
 
-/** Пауза перед новым запросом, если сервер не ответил. */
+/** Pause before a new request if the server did not answer. */
 export const RETRY_MS = 3000;
 
-/** Ничего не слушать: изменения — только по кнопке. */
+/** Listen to nothing: changes only by the button. */
 const none: ChangeSource = { start: () => () => {} };
 
-/** Источник изменений по настройке: автоматически — события сервера, по кнопке — никакого. */
+/** The change source by the setting: automatic - server events, by button - none. */
 export function changeSource(mode: RefreshMode, poll: Poll): ChangeSource {
   return mode === "manual" ? none : serverEvents(poll);
 }
 
 /**
- * События сервера: в ответе есть изменения — проверить. Сервер не ответил —
- * новый запрос через `RETRY_MS`; ответил снова — одна проверка: изменения за
- * время разрыва могли потеряться. `watching: false` — сервер не следит за
- * файлами, ждать нечего.
+ * Server events: the response has changes - check. The server did not
+ * answer - a new request after `RETRY_MS`; it answered again - one check:
+ * changes during the break may have been lost. `watching: false` - the
+ * server does not watch the files, nothing to wait for.
  */
 export function serverEvents(poll: Poll): ChangeSource {
   return {

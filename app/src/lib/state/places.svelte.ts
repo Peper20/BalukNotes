@@ -1,4 +1,4 @@
-// Где читали каждую заметку и недавно открытые — удобства одного читателя
+// Where each note was read and recently opened notes: one reader's conveniences
 // (localStorage).
 
 import { load, save } from "../storage";
@@ -8,7 +8,7 @@ const MAX_RECENT = 30;
 const MAX_PLACES = 200;
 
 class Places {
-  /** Недавно открытые заметки, свежие первыми. */
+  /** Recently opened notes, fresh first. */
   recent = $state<string[]>(load<string[]>("k-recent", []));
   #places = load<Record<string, Place>>("k-places", {});
 
@@ -21,7 +21,7 @@ class Places {
     save("k-places", this.#places);
   }
 
-  /** Заметку удалили: не помнить ни места, ни в недавних. */
+  /** A note was deleted: remember neither its place nor it in recent ones. */
   forget(id: string): void {
     const { [id]: _, ...rest } = this.#places;
     this.#places = rest;
@@ -30,7 +30,7 @@ class Places {
     save("k-recent", this.recent);
   }
 
-  /** Заметку (папку) переименовали: места и недавние — под новыми путями. */
+  /** A note (folder) was renamed: places and recent ones move to the new paths. */
   move(moved: (id: string) => string | null): void {
     this.#places = Object.fromEntries(Object.entries(this.#places).map(([id, place]) => [moved(id) ?? id, place]));
     this.recent = this.recent.map((id) => moved(id) ?? id);

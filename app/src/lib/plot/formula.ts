@@ -1,7 +1,8 @@
-// Формула рисунка — строка с кодом Typst из подмножества. Разбор и
-// вычисление повторяют `baluk/plots/formula.typ` (`_parse`, `_eval`) построчно:
-// меняешь одно — меняй и другое. Сверка с Typst — formula.test.ts (читает
-// снимок фикстуры `Рисунки/Интерактив`).
+// A figure formula: a string of Typst code from a subset. Parsing and
+// evaluation repeat `baluk/plots/formula.typ` (`_parse`, `_eval`) line by
+// line: change one, change the other (the error texts too). The check
+// against Typst is formula.test.ts (it reads the snapshot of the fixture
+// `Рисунки/Интерактив`).
 
 export type Node =
   | { k: "n"; v: number }
@@ -20,15 +21,15 @@ const TOKEN = /\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[\p{L}_][\p{L}\p{N}_]*(?:\.[\p{L}_
 
 export class FormulaError extends Error {}
 
-/** Лексемы формулы (пробелы пропускаются). */
+/** Formula tokens (spaces are skipped). */
 export function tokens(s: string): string[] {
   return s.match(TOKEN) ?? [];
 }
 
-/** Разбирает формулу с переменными `names` (x, y, параметры). */
+/** Parses a formula with the variables `names` (x, y, parameters). */
 export function parse(s: string, names: string[]): Node {
   const toks = tokens(s);
-  // Лексема по номеру; за концом — пустая строка.
+  // A token by index; past the end, an empty string.
   const t = (i: number) => toks[i] ?? "";
   const end = toks.length;
   const fail = (msg: string): never => {
@@ -36,8 +37,8 @@ export function parse(s: string, names: string[]): Node {
   };
   if (end === 0) fail("пустая формула");
 
-  // Уровни: 0 — сумма, 1 — произведение, 2 — унарный знак и операнд.
-  // Приоритеты как в Typst: унарный минус сильнее `*` и `/`.
+  // Levels: 0 - sum, 1 - product, 2 - unary sign and operand. Precedence as
+  // in Typst: unary minus binds tighter than `*` and `/`.
   function level(i: number, lv: number): [Node, number] {
     if (lv < 2) {
       const ops = lv === 0 ? ["+", "-"] : ["*", "/"];
@@ -91,14 +92,14 @@ export function parse(s: string, names: string[]): Node {
   return node;
 }
 
-/** Число годно: не NaN и не бесконечность (как `_valid` в Typst). */
+/** A number is valid: not NaN and not infinity (as `_valid` in Typst). */
 const ok = (v: number | null): v is number => v !== null && Math.abs(v) < 1e300;
 
 const frac = (v: number) => v - Math.trunc(v);
 
 /**
- * Значение узла при переменных `vars`. Вне области определения (деление на
- * ноль, корень из отрицательного…) — null: на графике это разрыв.
+ * The value of a node at the variables `vars`. Outside the domain (division
+ * by zero, a root of a negative...) - null: a gap on the plot.
  */
 export function evaluate(u: Node, vars: Record<string, number>): number | null {
   switch (u.k) {
@@ -153,7 +154,7 @@ export function evaluate(u: Node, vars: Record<string, number>): number | null {
   }
 }
 
-/** Разобранная формула как функция переменных. */
+/** A parsed formula as a function of the variables. */
 export function compile(s: string, names: string[]): (vars: Record<string, number>) => number | null {
   const node = parse(s, names);
   return (vars) => evaluate(node, vars);

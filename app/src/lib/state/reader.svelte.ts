@@ -1,8 +1,8 @@
-// Показанная заметка: загрузка с сервера (книга — по главе), статус сборки,
-// прокрутка и место чтения. HTML вставляет NoteView.
+// The shown note: loading from the server (a book by chapter), build status,
+// scroll and the reading place. NoteView inserts the HTML.
 //
-// <html data-state="loading|ready">: заметка или главная дорисована. По нему
-// ждут tools/visual.mjs и e2e-тесты — договорённость для любого клиента.
+// <html data-state="loading|ready">: a note or the home page is drawn.
+// tools/visual.mjs and the e2e tests wait for it - a contract for any client.
 
 import { api, ApiError, type NotePage } from "../api";
 import { scrollToTop, scrollTop } from "../scroll";
@@ -14,44 +14,44 @@ import { places } from "./places.svelte";
 import { router } from "./router.svelte";
 import { settings } from "./settings.svelte";
 
-/** Сколько прежняя заметка стоит на экране, пока грузится новая. */
+/** How long the previous note stays on screen while the new one loads. */
 const STALE_MS = 150;
 
 class Reader {
-  /** Показанная заметка — или null, пока собирается / не загрузилась. */
+  /** The shown note, or null while it builds / failed to load. */
   page = $state.raw<NotePage | null>(null);
-  /** Почему заметку не показать (нет такой, сервер недоступен). */
+  /** Why the note cannot be shown (no such note, the server is unreachable). */
   failure = $state<string | null>(null);
-  /** Заметка, которая сейчас загружается, и с какого момента. */
+  /** The note being loaded now, and since when. */
   pending = $state<{ id: string; since: number } | null>(null);
   status = $state("");
   busy = $state(false);
 
-  /** Прокрутка для следующей показанной заметки (читает NoteView). */
+  /** Scroll for the next shown note (NoteView reads it). */
   scroll: ScrollIntent = { mode: "top" };
-  /** Место, куда вернуться в уже показанной заметке («назад» без якоря). */
+  /** Where to return in the note already shown ("back" without an anchor). */
   restore: Place | null = null;
-  /** Текущая глава книги (ставит NoteView) — для «перезагрузить, не сбив место». */
+  /** The current book chapter (set by NoteView), for "reload without losing the place". */
   chapter: number | null = null;
-  /** Версия показанной заметки (сверяет проверка обновлений). */
+  /** Version of the shown note (the update check compares it). */
   version: string | null = null;
 
-  /** Пункты оглавления: `panels.toc_depth` уровней от верхнего. */
+  /** Outline items: `panels.toc_depth` levels from the top. */
   toc = $derived(tocItems(this.page?.rendered?.headings ?? [], Number(settings.values["panels.toc_depth"] ?? 2)));
 
   #ctrl: AbortController | null = null;
-  /** Соседние главы показанной книги — заранее. */
+  /** Neighbouring chapters of the shown book, in advance. */
   #chapters = new ChapterCache((id, chapter, signal) => api.note(id, signal, { chapter }));
-  /** Место для заметки, которая сейчас загружается (из истории или памяти). */
+  /** Place for the note being loaded now (from the history or memory). */
   #place: Place | null = null;
 
-  /** Показать заметку с места `place` (null — по якорю или с начала). */
+  /** Shows the note from the place `place` (null - by the anchor or from the start). */
   show(id: string, place: Place | null): void {
     this.#place = place;
     void this.load(id);
   }
 
-  /** Заметки нет на экране (главная, граф, теги). */
+  /** No note on screen (home, graph, tags). */
   clear(): void {
     this.#cancel();
     this.page = null;
@@ -68,21 +68,21 @@ class Reader {
   }
 
   /**
-   * Показать заметку. Большая заметка собирается секунды; если за это время
-   * выбрали другую, прежний запрос отменяется, а его ответ (если успел)
-   * отбрасывается — иначе клиент «перепрыгнул» бы назад.
+   * Shows a note. A big note builds for seconds; if another one is chosen
+   * meanwhile, the previous request is cancelled and its response (if it
+   * came) is dropped - otherwise the client would "jump" back.
    *
-   * `chapter` и `scroll` — перейти к главе книги (она уже собрана: ответ —
-   * из кэша сервера) и как её прокрутить.
+   * `chapter` and `scroll`: go to a book chapter (it is already built, the
+   * response comes from the server cache) and how to scroll it.
    */
   async load(id: string, { keepScroll = false, chapter, scroll }: { keepScroll?: boolean; chapter?: number; scroll?: ScrollIntent } = {}): Promise<void> {
     this.#cancel();
     const ctrl = new AbortController();
     this.#ctrl = ctrl;
     if (this.page?.id !== id) {
-      // Другая заметка. Из кэша она придёт за десятки мс — прежняя стоит до
-      // неё, без пустого кадра. Собирается дольше — прежнюю убираем: на
-      // экране не должно быть чужого текста под новым заголовком.
+      // Another note. From the cache it comes in tens of ms, the previous one
+      // stays until then, without an empty frame. If it builds longer, the
+      // previous one goes: no foreign text under a new title on screen.
       const old = this.page;
       this.version = null;
       keepScroll = false;
@@ -101,8 +101,9 @@ class Reader {
     this.#place = null;
     const where = { keepScroll, current: this.chapter, anchor: router.anchor, place };
     const select = chapterSelect(settings.values["books.pages"] === "chapters", { ...where, chapter });
-    // Другая глава показанной книги: сначала дешёвая сверка версии книги —
-    // не изменилась, глава из запаса; изменилась — новая версия с сервера.
+    // Another chapter of the shown book: first a cheap check of the book
+    // version - unchanged, the chapter comes from the stock; changed, a new
+    // version from the server.
     const k = select.chapter ?? (select.anchor != null ? this.page?.book?.anchors[select.anchor] : undefined);
     const shown = this.version;
     const toChapter = !keepScroll && k != null && this.page?.id === id;
@@ -121,13 +122,13 @@ class Reader {
       document.title = `${page.rendered?.title ?? notes.title(id)} — Заметки`;
       this.setStatus(`${updated ? "книга обновлена" : "собрано"} ${new Date().toLocaleTimeString("ru-RU")}`);
     } catch (e) {
-      if (this.#ctrl !== ctrl) return; // отменена или устарела
+      if (this.#ctrl !== ctrl) return; // cancelled or stale
       const offline = e instanceof ApiError && e.offline;
       document.documentElement.dataset.state = "ready";
-      // Нет связи, а заметка уже на экране (обновление, другая глава) — она
-      // остаётся: пусть лучше прежняя, чем пустая страница.
+      // No connection while a note is on screen (an update, another chapter):
+      // it stays, better the previous one than an empty page.
       if (offline && this.page?.id === id) {
-        this.setStatus(""); // «нет связи» показывает метка в Topbar
+        this.setStatus(""); // the label in Topbar shows "нет связи"
         return;
       }
       this.version = null;
@@ -146,20 +147,20 @@ class Reader {
     }
   }
 
-  /** Перейти к главе показанной книги. */
+  /** Goes to a chapter of the shown book. */
   showChapter(chapter: number, scroll: ScrollIntent): void {
     if (router.currentId) void this.load(router.currentId, { chapter, scroll });
   }
 
-  /** Та же заметка заново, не сбив место (правка файла, «обновить»). */
+  /** The same note anew without losing the place (a file edit, "refresh"). */
   reload(): Promise<void> {
     return router.currentId ? this.load(router.currentId, { keepScroll: true }) : Promise.resolve();
   }
 
   /**
-   * Запомнить место в текущей заметке: в записи истории (для «назад») и по
-   * заметке (для нового открытия). Зовётся перед переходом и по ходу
-   * прокрутки: к `popstate` запись истории уже сменилась.
+   * Remembers the place in the current note: in the history entry (for
+   * "back") and per note (for a new opening). Called before a navigation and
+   * while scrolling: by `popstate` the history entry has already changed.
    */
   remember(): void {
     if (!this.page || this.page.id !== router.currentId) return;
