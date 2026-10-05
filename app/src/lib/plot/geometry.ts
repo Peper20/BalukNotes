@@ -1,10 +1,10 @@
-// Геометрия интерактивных рисунков: деления осей, обрезка кривой по полосе,
-// проекция и грани поверхности. Повторяет `baluk/plots/surface.typ` — чтобы
-// живой рисунок в первый момент совпадал с кадром из Typst.
+// Geometry of interactive figures: axis ticks, clipping a curve to a band,
+// projection and faces of a surface. Repeats `baluk/plots/surface.typ` so
+// that the live figure matches the Typst frame at first.
 
 export type Pt = [number, number];
 
-/** Шаг делений: 1, 2 или 5 × 10^k, около пяти делений на диапазон. */
+/** Tick step: 1, 2 or 5 × 10^k, about five ticks per range. */
 export function niceStep(d: number): number {
   const s = d / 5;
   const p = Math.pow(10, Math.floor(Math.log10(s)));
@@ -12,7 +12,7 @@ export function niceStep(d: number): number {
   return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p;
 }
 
-/** Число для подписи: знаков после запятой — как у шага, минус типографский. */
+/** A number for a label: decimals as in the step, a typographic minus. */
 export function formatNumber(v: number, step: number, trim = false): string {
   const digits = Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
   let r = Number(v.toFixed(digits));
@@ -22,14 +22,14 @@ export function formatNumber(v: number, step: number, trim = false): string {
   return (r < 0 ? "−" : "") + s;
 }
 
-/** Деления в [a, b] с шагом `step`. */
+/** Ticks in [a, b] with the step `step`. */
 export function ticks(a: number, b: number, step: number): number[] {
   const out: number[] = [];
   for (let i = Math.ceil(a / step - 1e-9); i <= Math.floor(b / step + 1e-9); i++) out.push(i * step + 0);
   return out;
 }
 
-/** n + 1 точка кривой на [a, b]; вне области определения — null. */
+/** n + 1 points of the curve on [a, b]; outside the domain, null. */
 export function sample(f: (x: number) => number | null, a: number, b: number, n: number): [number, number | null][] {
   const out: [number, number | null][] = [];
   for (let i = 0; i <= n; i++) {
@@ -40,9 +40,9 @@ export function sample(f: (x: number) => number | null, a: number, b: number, n:
 }
 
 /**
- * Участки кривой внутри полосы y ∈ [y0, y1]. Отрезок, пересекающий полосу,
- * обрезается по её краю; отрезок между точками по разные стороны от полосы
- * — разрыв (асимптота, как у tg x).
+ * Parts of the curve inside the band y ∈ [y0, y1]. A segment crossing the
+ * band is clipped at its edge; a segment between points on different sides
+ * of the band is a gap (an asymptote, as for tg x).
  */
 export function clipRuns(pts: [number, number | null][], y0: number, y1: number): Pt[][] {
   const all: Pt[][] = [];
@@ -84,13 +84,13 @@ export function clipRuns(pts: [number, number | null][], y0: number, y1: number)
 }
 
 // ── 3D ──────────────────────────────────────────────────────────────────
-// Поверхность нормируется в коробку [-1, 1]² × [-Z, Z] и рисуется
-// ортогонально: поворот вокруг вертикали (θ), потом наклон (φ).
+// The surface is normalized into the box [-1, 1]² × [-Z, Z] and drawn
+// orthogonally: rotation around the vertical (θ), then tilt (φ).
 
 export const Z = 0.7;
 export type P3 = [number, number, number];
 
-/** Экранные координаты (u вправо, v вверх) и глубина (больше — ближе). */
+/** Screen coordinates (u right, v up) and depth (larger is closer). */
 export function view([x, y, z]: P3, th: number, ph: number): P3 {
   const xr = x * Math.cos(th) - y * Math.sin(th);
   const yr = x * Math.sin(th) + y * Math.cos(th);
@@ -98,15 +98,15 @@ export function view([x, y, z]: P3, th: number, ph: number): P3 {
 }
 
 /**
- * Поворот перетаскиванием на (du, dv) рад (du вправо, dv вниз): ближняя к
- * читателю сторона едет за указателем, наклон — от -10° до 89°.
+ * Rotation by dragging by (du, dv) rad (du right, dv down): the side nearer
+ * to the reader follows the pointer, tilt from -10° to 89°.
  */
 export function turn(th: number, ph: number, du: number, dv: number): [number, number] {
   const deg = Math.PI / 180;
   return [th + du, Math.min(89 * deg, Math.max(-10 * deg, ph + dv))];
 }
 
-/** Освещённость 0..1 грани с нормалью n (в осях экрана); обе стороны — одинаково. */
+/** Lighting 0..1 of a face with the normal n (in screen axes); both sides alike. */
 export function lighting([a, b, c]: P3): number {
   const len = Math.hypot(a, b, c);
   if (len === 0) return 0.5;
@@ -115,15 +115,15 @@ export function lighting([a, b, c]: P3): number {
 
 export interface Face {
   depth: number;
-  /** Вершины на экране (u, v). */
+  /** Vertices on screen (u, v). */
   pts: Pt[];
   light: number;
 }
 
 /**
- * Грани поверхности по значениям в узлах сетки (n + 1) × (n + 1), от
- * дальних к ближним (алгоритм художника). Грань с узлом вне [z0, z1] или
- * вне области определения не рисуется.
+ * Faces of the surface by the values at the grid nodes (n + 1) × (n + 1),
+ * from far to near (the painter's algorithm). A face with a node outside
+ * [z0, z1] or outside the domain is not drawn.
  */
 export function faces(grid: (number | null)[][], z0: number, z1: number, th: number, ph: number): Face[] {
   const n = grid.length - 1;
@@ -146,7 +146,7 @@ export function faces(grid: (number | null)[][], z0: number, z1: number, th: num
   return out.sort((p, q) => p.depth - q.depth);
 }
 
-/** Смесь цветов `#rrggbb[aa]`: k = 0 — a, k = 1 — b. */
+/** A mix of colors `#rrggbb[aa]`: k = 0 - a, k = 1 - b. */
 export function mixHex(a: string, b: string, k: number): string {
   const pa = parseHex(a);
   const pb = parseHex(b);

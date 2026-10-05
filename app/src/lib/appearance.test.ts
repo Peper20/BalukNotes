@@ -7,20 +7,20 @@ const themes = [
   { name: "night", title: "Ночь", dark: true },
 ];
 
-it("тема: явная, по системе, неизвестная", () => {
+it("theme: explicit, by the system, unknown", () => {
   expect(resolveTheme("night", themes, false)).toBe("night");
   expect(resolveTheme("auto", themes, true)).toBe("night");
   expect(resolveTheme("auto", themes, false)).toBe("classic");
   expect(resolveTheme("sepia", themes, true)).toBe("night");
 });
 
-it("тема для первого кадра: выбранная или своя на светлую и тёмную систему", () => {
+it("theme for the first frame: the chosen one or its own for a light and a dark system", () => {
   expect(themeMemo("night", themes)).toEqual({ fixed: "night", light: "classic", dark: "night" });
   expect(themeMemo("auto", themes)).toEqual({ fixed: null, light: "classic", dark: "night" });
   expect(themeMemo("sepia", themes).fixed).toBeNull();
 });
 
-it("кнопка темы: всегда другая на вид", () => {
+it("the theme button: always different in look", () => {
   expect(nextTheme("night", themes)).toBe("classic");
   expect(nextTheme("classic", themes)).toBe("night");
   expect(nextTheme("sepia", themes)).toBe("classic");
@@ -34,19 +34,19 @@ const defs: SettingDef[] = [
   { key: "books.pages", label: "", type: "choice", options: [], default: "chapters" },
 ];
 
-it("настройки — атрибутами и переменными на <html> по схеме", () => {
+it("settings as attributes and variables on <html> by the schema", () => {
   const root = document.createElement("html");
   applyAppearance(root, defs, { "appearance.font_size": 20, "headings.numbering": "all", "header.tags": false, "books.pages": "whole" }, "night");
   expect(root.dataset.theme).toBe("night");
   expect(root.style.getPropertyValue("--k-size")).toBe("20px");
   expect(root.dataset.numbering).toBe("all");
   expect(root.dataset.headerTags).toBe("false");
-  // нет значения — по умолчанию из схемы; без `apply` — не трогается
+  // no value: the default from the schema; without `apply` - untouched
   expect(root.dataset.toc).toBe("true");
   expect(root.getAttributeNames().sort()).toEqual(["data-header-tags", "data-numbering", "data-theme", "data-toc", "style"]);
 });
 
-it("новая настройка вида — только записью в схеме (без правок TS)", () => {
+it("a new view setting only by a schema entry (no TS changes)", () => {
   const root = document.createElement("html");
   const fresh: SettingDef = { key: "appearance.line", label: "", type: "number", min: 1, max: 2, step: 0.1, default: 1.5, apply: { to: "var", name: "--k-line-height", unit: "" } };
   applyAppearance(root, [...defs, fresh], {}, "classic");

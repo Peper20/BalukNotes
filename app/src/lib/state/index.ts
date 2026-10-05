@@ -1,15 +1,15 @@
-// Состояние клиента — модули-хранилища с узкими связями:
+// Client state: store modules with narrow links:
 //
-// - settings — настройки и темы;
-// - notes — список заметок;
-// - tabs, places — вкладки, места чтения и недавние (localStorage);
-// - router — адрес страницы → что показать, переходы;
-// - reader — показанная заметка: загрузка, статус, прокрутка;
-// - updates — проверка изменений;
-// - connection — связь с сервером («нет связи» и возврат).
+// - settings: settings and themes;
+// - notes: the note list;
+// - tabs, places: tabs, reading places and recent notes (localStorage);
+// - router: page address -> what to show, navigation;
+// - reader: the shown note - loading, status, scroll;
+// - updates: the change check;
+// - connection: the connection to the server ("нет связи" and back).
 //
-// Чистая логика — в ../tabs.ts, ../places.ts, ../reading.ts (с Vitest).
-// Интерфейс вокруг заметки (панели, глава, оглавление) — ../ui.svelte.ts.
+// Pure logic is in ../tabs.ts, ../places.ts, ../reading.ts (with Vitest).
+// The interface around a note (panels, chapter, outline) is ../ui.svelte.ts.
 
 import { api, rebaseStylesheets } from "../api";
 import { rememberVault } from "../boot";
@@ -25,19 +25,19 @@ import { updates } from "./updates.svelte";
 
 export { connection, notes, places, reader, router, settings, tabs, updates };
 
-/** Запуск клиента: настройки и список заметок с сервера, маршрут, прогрев. */
+/** Client start: settings and the note list from the server, the route, warming. */
 export async function start(): Promise<void> {
   rebaseStylesheets();
   connection.start();
-  // Список заметок — после настроек: вид (кегль) меняет ширину названий
-  // вкладок, а полоса вкладок прокручивается к активной по списку заметок.
+  // The note list after the settings: the look (font size) changes the width
+  // of tab titles, and the tab bar scrolls to the active tab by the note list.
   await Promise.all([settings.load(), notes.load()]);
   rememberVault();
   updates.start();
   history.scrollRestoration = "manual";
   tabs.restore();
   router.sync();
-  // Сервер собирает все заметки заранее — сначала те, что во вкладках и недавние.
+  // The server builds all notes in advance, first those in tabs and recent ones.
   const tabIds = tabs.list.map((t) => parseRoute(new URL(t.url, location.href).pathname)).flatMap((r) => (r.kind === "note" ? [r.id] : []));
   void api.warm({ ids: [...new Set([...tabIds, ...places.recent])] }).catch(() => {});
   addEventListener("popstate", () => router.sync({ pop: true }));

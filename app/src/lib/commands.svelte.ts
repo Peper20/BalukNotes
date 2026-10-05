@@ -1,5 +1,5 @@
-// Команды приложения — одно место для палитры (Ctrl+K), горячих клавиш и
-// справки (?). Новая возможность интерфейса = команда здесь.
+// App commands: one place for the palette (Ctrl+K), shortcuts and the help
+// (?). A new interface feature = a command here.
 
 import { api } from "./api";
 import { notes, places, reader, router, settings, tabs, updates } from "./state";
@@ -12,11 +12,11 @@ export interface Command {
   id: string;
   title: string;
   group: string;
-  /** Сочетания клавиш; первое показывается в палитре и справке. */
+  /** Shortcuts; the first one is shown in the palette and the help. */
   keys?: Combo[];
-  /** Доступна ли сейчас (например, только у открытой заметки). */
+  /** Whether it is available now (e.g. only with an open note). */
   available?: () => boolean;
-  /** Работают ли сейчас клавиши (иначе они — браузеру); по умолчанию — `available`. */
+  /** Whether the keys work now (otherwise they go to the browser); `available` by default. */
   keysAvailable?: () => boolean;
   run: () => void;
 }
@@ -25,7 +25,7 @@ const keys = (...specs: string[]) => specs.map(combo);
 const hasNote = () => reader.page != null;
 const hasBook = () => ui.book != null;
 
-/** Перейти к главе книги — через якорь её заголовка (попадает в историю). */
+/** Go to a book chapter via the anchor of its heading (gets into the history). */
 function chapter(delta: number) {
   const book = ui.book;
   const target = book?.chapters[ui.chapter + delta];
@@ -49,14 +49,14 @@ function toggleSidebar() {
   else ui.sidebarHidden = !ui.sidebarHidden;
 }
 
-/** § — на широком экране прячет/показывает боковое оглавление, на узком — всплывающее. */
+/** §: on a wide screen hides/shows the side outline, on a narrow one the popup one. */
 export function toggleToc() {
   if (!reader.toc.length) return;
   if (ui.tocRoom && !ui.tocOpen) void settings.save({ "panels.toc": !settings.values["panels.toc"] });
   else ui.tocOpen = !ui.tocOpen;
 }
 
-/** Все команды; темы — по списку тем сервера. */
+/** All commands; the themes follow the server's theme list. */
 export function commands(): Command[] {
   const list: Command[] = [
     { id: "open", group: "Переход", title: "Быстрый переход к заметке", keys: keys("Ctrl+KeyO", "Ctrl+KeyP"), run: () => ui.openPalette("") },
@@ -65,9 +65,9 @@ export function commands(): Command[] {
       id: "find",
       group: "Переход",
       title: "Поиск в этой заметке или книге",
-      // Книгу показывают по главам: Ctrl+F браузера видит одну главу — вместо
-      // него поиск по заметке, главе или хранилищу (повторное Ctrl+F — поиск
-      // браузера, Palette).
+      // A book is shown by chapters: the browser's Ctrl+F sees one chapter, so
+      // instead search the note, the chapter or the vault (a second Ctrl+F is
+      // the browser's search, Palette).
       keys: keys("Ctrl+KeyF"),
       available: () => router.currentId != null,
       run: () => ui.openPalette("", { note: router.currentId!, scope: "note" }),
@@ -116,9 +116,9 @@ export function commands(): Command[] {
 }
 
 /**
- * Удалить заметку (книгу — папкой) в корзину системы: закрыть её вкладки,
- * забыть место чтения, обновить список; была открыта — показать соседнюю
- * вкладку (или главную).
+ * Deletes a note (a book as a folder) to the system trash: closes its tabs,
+ * forgets the reading place, refreshes the list; if it was open, shows the
+ * neighbouring tab (or home).
  */
 export async function deleteNote(id: string): Promise<void> {
   const title = notes.title(id);
@@ -137,8 +137,8 @@ export async function deleteNote(id: string): Promise<void> {
 }
 
 /**
- * Удалить папку со всем, что в ней, в корзину системы: как `deleteNote`, но
- * для всех заметок папки.
+ * Deletes a folder with everything in it to the system trash: like
+ * `deleteNote`, but for all notes of the folder.
  */
 export async function deleteFolder(path: string): Promise<void> {
   const title = notes.folderTitle(path);
@@ -159,9 +159,9 @@ export async function deleteFolder(path: string): Promise<void> {
 }
 
 /**
- * Переименовать заметку или папку (название, имя файла, ссылки — сервер):
- * вкладки, места чтения и свёрнутые папки — под новыми путями; открытая —
- * по новому адресу.
+ * Renames a note or a folder (the title, the file name and the links - the
+ * server): tabs, reading places and collapsed folders move to the new paths;
+ * an open one goes to its new address.
  */
 export async function renameItem(kind: "note" | "folder", id: string, title: string): Promise<void> {
   const plan = await api.rename({ kind, id, title, apply: true });
@@ -182,5 +182,5 @@ export async function renameItem(kind: "note" | "folder", id: string, title: str
   reader.status = `переименовано: ${plan.title}`;
 }
 
-/** Открыть заметку из палитры или списка: Ctrl — в новой вкладке. */
+/** Opens a note from the palette or a list: with Ctrl, in a new tab. */
 export const openNote = (id: string, anchor: string | null, newTab: boolean) => router.go(noteHref(id, anchor), { newTab });

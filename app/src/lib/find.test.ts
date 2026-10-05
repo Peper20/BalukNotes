@@ -13,14 +13,14 @@ const book = (chapter: number): BookView => ({
   anchors: { г1: 0, "итоги": 0, г2: 1, "итоги-2": 1 },
 });
 
-it("глава — только у книги по главам", () => {
+it("a chapter scope only for a book by chapters", () => {
   expect(scopes(true)).toEqual(["chapter", "note", "vault"]);
   expect(scopes(false)).toEqual(["note", "vault"]);
   expect(scopeLabel("note", true)).toBe("Книга");
   expect(scopeLabel("note", false)).toBe("Заметка");
 });
 
-it("области по кругу; главы нет — с заметки", () => {
+it("scopes in a circle; no chapter - from the note", () => {
   expect(nextScope("note", true, 1)).toBe("vault");
   expect(nextScope("vault", true, 1)).toBe("chapter");
   expect(nextScope("chapter", true, -1)).toBe("vault");
@@ -28,7 +28,7 @@ it("области по кругу; главы нет — с заметки", ()
   expect(nextScope("chapter", false, 1)).toBe("vault");
 });
 
-it("в главе — её разделы; начало книги — в первой главе", () => {
+it("in a chapter, its sections; the start of the book is in the first chapter", () => {
   const hits = [hit(null), hit("итоги"), hit("г2"), hit("итоги-2"), hit("нет-такого")];
   expect(inChapter(hits, book(0)).map((h) => h.anchor)).toEqual([null, "итоги"]);
   expect(inChapter(hits, book(1)).map((h) => h.anchor)).toEqual(["г2", "итоги-2"]);

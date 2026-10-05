@@ -3,14 +3,14 @@ import { apiConfig, apiUrl, authHeaders, configure, rebaseStylesheets } from "./
 
 afterEach(() => configure({ base: "", token: null }));
 
-it("по умолчанию — тот же сервер, без токена", () => {
+it("by default the same server, without a token", () => {
   expect(apiConfig()).toEqual({ base: "", token: null });
   expect(apiUrl("/api/notes")).toBe("/api/notes");
   expect(apiUrl("/api/pdf/a", { withToken: true })).toBe("/api/pdf/a");
   expect(authHeaders()).toEqual({});
 });
 
-it("базовый адрес и токен — одной настройкой", () => {
+it("the base address and the token are one setting", () => {
   configure({ base: "http://127.0.0.1:9000/", token: "s3 cret" });
   expect(apiUrl("/api/notes")).toBe("http://127.0.0.1:9000/api/notes");
   expect(apiUrl("/api/pdf/a?theme=night", { withToken: true })).toBe("http://127.0.0.1:9000/api/pdf/a?theme=night&token=s3%20cret");
@@ -20,8 +20,8 @@ it("базовый адрес и токен — одной настройкой"
   expect(apiConfig()).toEqual({ base: "http://127.0.0.1:9000", token: null });
 });
 
-it("стили — с настроенного сервера", () => {
-  // В <template> стили не загружаются.
+it("styles come from the configured server", () => {
+  // Styles do not load in a <template>.
   const tpl = document.createElement("template");
   tpl.innerHTML = '<link rel="stylesheet" href="/api/fonts.css"><link rel="stylesheet" href="https://x.test/a.css">';
   const doc = tpl.content;

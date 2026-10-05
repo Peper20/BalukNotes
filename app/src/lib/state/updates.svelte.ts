@@ -1,9 +1,9 @@
-// Обновление: изменились файлы показанной заметки — перезагрузить её.
-// Проверка — сверка версии (…/version/… — дёшево: сервер ничего не
-// компилирует, если файлы не менялись) по кнопке «Обновить» и, если
-// настройка `refresh.mode` — «автоматически», при возврате в окно и по
-// событию сервера (../changes.ts). Связь вернулась — проверка (а заметку,
-// которая не открылась без связи, — загрузить).
+// Updates: the files of the shown note changed - reload it. The check is a
+// version comparison (.../version/... - cheap: the server compiles nothing
+// if the files did not change) on the "Обновить" button and, if the setting
+// `refresh.mode` is "automatically", on returning to the window and on a
+// server event (../changes.ts). The connection is back - a check (and a note
+// that did not open without the connection gets loaded).
 
 import { api } from "../api";
 import { changeSource, type RefreshMode } from "../changes";
@@ -27,7 +27,7 @@ class Updates {
     return settings.values["refresh.mode"] === "manual" ? "manual" : "auto";
   }
 
-  /** Изменились ли файлы заметки — и если да, перезагрузить её. */
+  /** Whether the note files changed, and if so, reloads it. */
   async check({ force = false } = {}): Promise<void> {
     void notes.refresh();
     const id = router.currentId;
@@ -35,10 +35,10 @@ class Updates {
     if (force) return reader.reload();
     try {
       const { version } = await api.version(id);
-      // Пока ждали ответ, могли перейти на другую заметку.
+      // Another note may have been opened while waiting for the response.
       if (router.currentId === id && !reader.pending && version !== reader.version) await reader.reload();
     } catch {
-      // сервер недоступен — проверим, когда связь вернётся
+      // the server is unreachable: we will check when the connection is back
     }
   }
 
@@ -49,8 +49,8 @@ class Updates {
 
   #settingsSaved(keys: string[]): void {
     if (keys.includes("refresh.mode")) this.#schedule();
-    // Настройки отрисовки (figures.*) меняют версию страницы на сервере,
-    // вид книги (books.*) — раскладку уже полученной страницы.
+    // Rendering settings (figures.*) change the page version on the server,
+    // the book look (books.*) the layout of an already received page.
     if (keys.some((k) => k.startsWith("figures."))) void this.check();
     else if (keys.some((k) => k.startsWith("books."))) void reader.reload();
   }

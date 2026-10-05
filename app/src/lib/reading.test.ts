@@ -3,7 +3,7 @@ import { chapterSelect, scrollIntent, tocItems } from "./reading";
 
 const none = { keepScroll: false, current: null, anchor: null, place: null };
 
-it("глава: только если книга по главам", () => {
+it("chapter: only if the book is by chapters", () => {
   expect(chapterSelect(false, { ...none, chapter: 3 })).toEqual({});
   expect(chapterSelect(true, { ...none, chapter: 3 })).toEqual({ chapter: 3 });
   expect(chapterSelect(true, { ...none, keepScroll: true, current: 2 })).toEqual({ chapter: 2 });
@@ -12,7 +12,7 @@ it("глава: только если книга по главам", () => {
   expect(chapterSelect(true, none)).toEqual({ chapter: 0 });
 });
 
-it("прокрутка после загрузки", () => {
+it("scroll after loading", () => {
   const base = { ...none, y: 120 };
   expect(scrollIntent({ mode: "top" }, { ...base, keepScroll: true })).toEqual({ mode: "top" });
   expect(scrollIntent(undefined, { ...base, keepScroll: true, current: 1 })).toEqual({ mode: "keep", y: 120, chapter: 1 });
@@ -21,7 +21,7 @@ it("прокрутка после загрузки", () => {
   expect(scrollIntent(undefined, base)).toEqual({ mode: "top" });
 });
 
-it("оглавление: уровни от верхнего, меньше двух пунктов — нет", () => {
+it("outline: levels from the top, fewer than two items - none", () => {
   const h = (level: number, id: string) => ({ level, id, anchor: id, text: id });
   const heads = [h(2, "a"), h(3, "b"), h(4, "c"), h(2, "d")];
   expect(tocItems(heads, 2).map((x) => [x.id, x.depth])).toEqual([["a", 0], ["b", 1], ["d", 0]]);

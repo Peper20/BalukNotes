@@ -1,13 +1,13 @@
-// Показ заметки — чистая логика: какую главу просить, как прокрутить,
-// что в оглавлении (состояние — state/reader.svelte.ts).
+// Showing a note, pure logic: which chapter to request, how to scroll, what
+// is in the outline (the state is state/reader.svelte.ts).
 
 import type { ChapterSelect, Heading } from "./api";
 import type { Place } from "./places";
 
-/** Как прокрутить только что показанную заметку. */
+/** How to scroll a note just shown. */
 export type ScrollIntent = { mode: "top" } | { mode: "anchor" } | ({ mode: "keep" } & Place);
 
-/** Какую главу просить у сервера (не по главам — сервер отдаст целиком). */
+/** Which chapter to request from the server (not by chapters - the server gives it whole). */
 export function chapterSelect(
   byChapters: boolean,
   { chapter, keepScroll, current, anchor, place }: { chapter?: number; keepScroll: boolean; current: number | null; anchor: string | null; place: Place | null },
@@ -19,7 +19,7 @@ export function chapterSelect(
   return { chapter: place?.chapter ?? 0 };
 }
 
-/** Прокрутка после загрузки: явная, «как было», к якорю, к месту или к началу. */
+/** Scroll after loading: explicit, "as it was", to the anchor, to the place or to the start. */
 export function scrollIntent(
   explicit: ScrollIntent | undefined,
   { keepScroll, y, current, anchor, place }: { keepScroll: boolean; y: number; current: number | null; anchor: string | null; place: Place | null },
@@ -32,7 +32,7 @@ export function scrollIntent(
 
 export type TocItem = Heading & { depth: number };
 
-/** Пункты оглавления: `depth` уровней от верхнего; меньше двух — оглавления нет. */
+/** Outline items: `depth` levels from the top; fewer than two - no outline. */
 export function tocItems(headings: Heading[], depth: number): TocItem[] {
   const top = Math.min(...headings.map((h) => h.level));
   const shown = headings.filter((h) => h.level - top < depth).map((h) => ({ ...h, depth: h.level - top }));

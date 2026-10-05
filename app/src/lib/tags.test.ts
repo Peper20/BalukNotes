@@ -12,18 +12,18 @@ const note = (id: string, tags: string[], chapters: NoteListItem["chapters"] = [
   chapters,
 });
 
-describe("теги", () => {
+describe("tags", () => {
   const book = note("Матан", ["матан"], [
     { title: "Пределы", anchor: "Пределы", tags: ["пределы", "матан"] },
     { title: "Ряды", anchor: "гл-ряды", tags: ["ряды", "пределы"] },
   ]);
   const notes = [note("Предел", ["пределы"]), book, note("SSH", [])];
 
-  it("у книги - теги корня и глав без повторов", () => {
+  it("a book has the tags of its root and chapters without repeats", () => {
     expect(noteTags(book)).toEqual(["матан", "пределы", "ряды"]);
   });
 
-  it("тег корня - книга одной строкой, тег глав - главы; книга считается один раз", () => {
+  it("a root tag gives the book as one line, a chapter tag the chapters; a book counts once", () => {
     const index = tagIndex(notes);
     expect(index.map((e) => [e.tag, e.notes])).toEqual([["пределы", 2], ["матан", 1], ["ряды", 1]]);
     const places = (tag: string) => index.find((e) => e.tag === tag)!.places.map((p) => [p.note.id, p.chapter?.anchor ?? null]);

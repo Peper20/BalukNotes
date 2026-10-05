@@ -1,12 +1,13 @@
-// Связь с сервером. Пропала — запрос не дошёл (в том числе ждущий запрос событий):
-// интерфейс показывает «нет связи» (метка в Topbar), показанная заметка
-// остаётся на месте. Пока связи нет — пробный запрос раз в `PROBE_MS`
-// (это проверка связи, а не изменений: опроса изменений нет); связь вернулась —
-// подписчики `onBack` проверяют изменения и догружают то, что не открылось.
+// The connection to the server. Lost - a request did not get through (the
+// waiting events request too): the interface shows "нет связи" (a label in
+// Topbar), the shown note stays. While there is no connection, a probe
+// request every `PROBE_MS` (a connection check, not a change check: there is
+// no change polling); back - the `onBack` subscribers check for changes and
+// load what did not open.
 
 import { api, onReach } from "../api";
 
-/** Как часто пробовать связь, пока её нет. */
+/** How often to probe the connection while it is lost. */
 export const PROBE_MS = 3000;
 
 class Connection {
@@ -18,7 +19,7 @@ class Connection {
     onReach((ok) => (ok ? this.reached() : this.lost()));
   }
 
-  /** Вызвать `fn`, когда связь вернётся. */
+  /** Calls `fn` when the connection is back. */
   onBack(fn: () => void): void {
     this.#back.push(fn);
   }
@@ -36,7 +37,7 @@ class Connection {
     for (const fn of this.#back) fn();
   }
 
-  /** Попробовать сейчас (кнопка «Повторить»). */
+  /** Tries now (the "Повторить" button). */
   retry(): void {
     clearTimeout(this.#timer);
     void api.vaults().catch(() => this.#probe());

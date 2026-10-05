@@ -1,25 +1,26 @@
-// Соседние главы книги — заранее: переход «следующая / предыдущая глава»
-// без ожидания сервера (на медленной сети — заметная пауза). Держим только
-// показанную главу и её соседей той же версии книги. Перед переходом —
-// сверка версии книги (`fresh`): показанная глава могла устареть (событие
-// ещё не дошло, режим «по кнопке»), а главы разных версий не смешиваются —
-// номера, ссылки и счётчики у книги общие.
+// Neighbouring chapters of a book in advance: "next / previous chapter"
+// without waiting for the server (a noticeable pause on a slow network). We
+// keep only the shown chapter and its neighbours of the same book version.
+// Before a navigation the book version is checked (`fresh`): the shown
+// chapter may be stale (the event has not arrived yet, the "by button"
+// mode), and chapters of different versions do not mix - numbers, links
+// and counters are shared by the book.
 
 import type { BookView, Chapter, NotePage } from "./api";
 
 export type FetchChapter = (id: string, chapter: number, signal: AbortSignal) => Promise<NotePage>;
 
-/** Глава, в которой раздел `anchor` (результат поиска по книге), — `null`, если не знаем. */
+/** The chapter that has the section `anchor` (a book search result), `null` if unknown. */
 export function chapterOf(book: BookView | null, anchor: string | null): Chapter | null {
   if (!book || anchor == null) return null;
   const k = book.anchors[anchor];
   return k == null ? null : (book.chapters[k] ?? null);
 }
 
-/** Подпись главы в результатах поиска: «гл. 2», у главы без номера — её название. */
+/** Chapter label in search results: "гл. 2", for a chapter without a number its title. */
 export const chapterLabel = (c: Chapter): string => (c.num ? `гл. ${c.num}` : c.title);
 
-/** Соседи главы `k` из `count` глав. */
+/** Neighbours of chapter `k` of `count` chapters. */
 export const neighbours = (k: number, count: number): number[] => [k - 1, k + 1].filter((c) => c >= 0 && c < count);
 
 export class ChapterCache {
@@ -29,22 +30,23 @@ export class ChapterCache {
   #ctrl: AbortController | null = null;
   #timer: ReturnType<typeof setTimeout> | undefined;
 
-  /** `delay` — пауза перед загрузкой соседей: сначала — всё для показанной главы. */
+  /** `delay` is the pause before loading the neighbours: first everything for the shown chapter. */
   constructor(
     private readonly fetch: FetchChapter,
     private readonly delay = 300,
   ) {}
 
-  /** Глава из запаса — если она той же версии книги, что показанная. */
+  /** A chapter from the stock if it is of the same book version as the shown one. */
   get(id: string, chapter: number, version: string | null): NotePage | null {
     if (id !== this.#id || version == null || version !== this.#version) return null;
     return this.#pages.get(chapter) ?? null;
   }
 
   /**
-   * Глава из запаса для перехода, если книга не изменилась: `current` —
-   * версия книги сейчас (сверка с сервером), `null` — сверить не вышло
-   * (берём запас). Изменилась — запас выброшен, глава — с сервера.
+   * A chapter from the stock for a navigation if the book did not change:
+   * `current` is the book version now (checked with the server), `null` -
+   * the check failed (we take the stock). Changed - the stock is dropped,
+   * the chapter comes from the server.
    */
   fresh(id: string, chapter: number, shown: string | null, current: string | null): NotePage | null {
     if (current != null && current !== shown) {
@@ -54,7 +56,7 @@ export class ChapterCache {
     return this.get(id, chapter, shown);
   }
 
-  /** Показана глава `page`: её и соседей — держать, остальных — забыть, недостающих соседей — загрузить. */
+  /** Chapter `page` is shown: keep it and its neighbours, forget the rest, load the missing neighbours. */
   shown(page: NotePage): void {
     const book = page.book;
     if (!book) return this.clear();
@@ -75,11 +77,11 @@ export class ChapterCache {
       for (const k of missing) {
         try {
           const got = await this.fetch(id, k, ctrl.signal);
-          // Пока грузили, книгу пересобрали или ушли с неё — не держать.
+          // The book was rebuilt or left while loading: do not keep it.
           if (ctrl.signal.aborted || got.version !== this.#version || got.book?.chapter !== k) return;
           this.#pages.set(k, got);
         } catch {
-          return; // отменено или сервер недоступен — перейдём обычным запросом
+          return; // cancelled or the server is unreachable: we will go with a normal request
         }
       }
     }, this.delay);
@@ -93,7 +95,7 @@ export class ChapterCache {
     this.#id = this.#version = null;
   }
 
-  /** Какие главы в запасе (для тестов). */
+  /** Which chapters are in stock (for tests). */
   get held(): number[] {
     return [...this.#pages.keys()].sort((a, b) => a - b);
   }

@@ -1,9 +1,9 @@
-// Раскрытые <details> («Ответы» и т. п.) при пересборке заметки: ключ —
-// якорь ближайшего раздела выше и текст <summary> (и порядковый номер среди
-// одинаковых в разделе), а не номер по всей заметке — блок, добавленный
-// выше, не раскроет чужой.
+// Open <details> ("Ответы" etc.) across a note rebuild: the key is the
+// anchor of the nearest section above and the <summary> text (and the index
+// among equal ones in the section), not the index in the whole note - a
+// block added above does not open someone else's.
 
-/** Ключи всех <details> в `root` по порядку документа. */
+/** Keys of all <details> in `root` in document order. */
 export function detailsKeys(root: ParentNode): string[] {
   const keys: string[] = [];
   const seen = new Map<string, number>();
@@ -22,13 +22,13 @@ export function detailsKeys(root: ParentNode): string[] {
   return keys;
 }
 
-/** Ключи раскрытых <details>. */
+/** Keys of the open <details>. */
 export function openDetails(root: ParentNode): Set<string> {
   const keys = detailsKeys(root);
   return new Set([...root.querySelectorAll("details")].flatMap((d, i) => (d.open ? [keys[i]!] : [])));
 }
 
-/** Раскрыть <details> с ключами из `open`. */
+/** Opens the <details> with keys from `open`. */
 export function restoreDetails(root: ParentNode, open: Set<string>): void {
   if (!open.size) return;
   const keys = detailsKeys(root);

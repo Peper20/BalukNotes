@@ -1,5 +1,5 @@
-// Интерактивный рисунок встаёт рядом с кадром Typst, кадр прячет CSS
-// (`[data-live]`). Формула не разобралась — остаётся кадр.
+// An interactive figure goes next to the Typst frame, CSS hides the frame
+// (`[data-live]`). A formula did not parse - the frame stays.
 
 import { mount, unmount } from "svelte";
 import Plot from "../../components/Plot.svelte";
@@ -8,7 +8,7 @@ import type { LiveBlock } from "./block";
 import { SELECTORS } from "./selectors";
 
 export const plot: LiveBlock = {
-  name: "интерактивный рисунок",
+  name: "interactive figure",
   selector: SELECTORS.plot,
   mount(el) {
     const spec = readSpec(el);

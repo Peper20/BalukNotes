@@ -3,8 +3,8 @@ import { DRAG_START, Pointers } from "./graph-gesture";
 
 const view = { x: 0, y: 0, k: 1 };
 
-describe("жесты графа", () => {
-  it("фон: сдвиг вслед за указателем", () => {
+describe("graph gestures", () => {
+  it("background: pans after the pointer", () => {
     const p = new Pointers();
     expect(p.down(1, [10, 10], view, null)).toBe("pan");
     expect(p.move(1, [30, 5])).toEqual({ kind: "view", view: { x: 20, y: -5, k: 1 }, pan: true });
@@ -12,7 +12,7 @@ describe("жесты графа", () => {
     expect(p.gesture).toBeNull();
   });
 
-  it("узел: мелкое движение — ещё щелчок, дальше — перетаскивание", () => {
+  it("node: a small move is still a click, beyond - a drag", () => {
     const p = new Pointers();
     expect(p.down(1, [100, 100], view, { id: "a", grab: [1, 2] })).toBe("node");
     expect(p.move(1, [100 + DRAG_START - 1, 100])).toEqual({ kind: "none" });
@@ -21,25 +21,25 @@ describe("жесты графа", () => {
     expect(p.up(1, view)).toEqual({ kind: "end", gesture: { kind: "node", id: "a", start: [100, 100], grab: [1, 2], far: true } });
   });
 
-  it("щелчок по узлу — жест без перетаскивания", () => {
+  it("a click on a node is a gesture without a drag", () => {
     const p = new Pointers();
     p.down(1, [0, 0], view, { id: "a", grab: [0, 0] });
     p.move(1, [1, 1]);
     expect(p.up(1, view)).toMatchObject({ kind: "end", gesture: { kind: "node", far: false } });
   });
 
-  it("узла уже нет в графе — не тянуть", () => {
+  it("the node is no longer in the graph: do not drag", () => {
     const p = new Pointers();
     p.down(1, [0, 0], view, { id: "a", grab: [0, 0] });
     expect(p.move(1, [50, 0], () => false)).toEqual({ kind: "none" });
     expect(p.up(1, view)).toMatchObject({ gesture: { far: false } });
   });
 
-  it("два пальца: масштаб у середины, сдвиг вслед за ней; один отпустили — сдвиг", () => {
+  it("two fingers: zoom at the middle, pan after it; one released - pan", () => {
     const p = new Pointers();
     p.down(1, [0, 0], view, { id: "a", grab: [0, 0] });
     expect(p.down(2, [100, 0], view, null)).toBe("pinch");
-    // Раздвинули вдвое симметрично: середина та же, масштаб ×2 у (50, 0).
+    // Spread twice symmetrically: the middle is the same, zoom ×2 at (50, 0).
     const zoom = p.move(2, [150, 0]);
     expect(p.move(1, [-50, 0])).toEqual({ kind: "view", view: { x: -50, y: 0, k: 2 }, pan: false });
     expect(zoom.kind).toBe("view");
@@ -49,7 +49,7 @@ describe("жесты графа", () => {
     expect(p.move(1, [-40, 5])).toEqual({ kind: "view", view: { x: -40, y: 5, k: 2 }, pan: true });
   });
 
-  it("чужой указатель и третий палец — не жест", () => {
+  it("a foreign pointer and a third finger are not a gesture", () => {
     const p = new Pointers();
     expect(p.move(9, [1, 1])).toEqual({ kind: "none" });
     expect(p.up(9, view)).toEqual({ kind: "none" });

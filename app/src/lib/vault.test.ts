@@ -3,7 +3,7 @@ import { chooseVault, inVault, setVault, splitVaultPath, vaultBase, vaultHome } 
 
 afterEach(() => setVault(null));
 
-it("адрес хранилища: имя кодируется, читается обратно", () => {
+it("vault address: the name is encoded and read back", () => {
   expect(vaultBase("Учёба 2026")).toBe(`/v/${encodeURIComponent("Учёба 2026")}`);
   expect(vaultHome(null)).toBe("/");
   const path = new URL(`${vaultBase("C++ и C#")}/n/A`, "http://x").pathname;
@@ -14,7 +14,7 @@ it("адрес хранилища: имя кодируется, читается
   expect(splitVaultPath("/v/%E0%A4%A/")).toBeNull();
 });
 
-it("адреса без хранилища — в показанное", () => {
+it("addresses without a vault go to the shown one", () => {
   expect(inVault("/n/A")).toBe("/n/A");
   setVault("Учёба");
   const base = vaultBase();
@@ -25,7 +25,7 @@ it("адреса без хранилища — в показанное", () => {
   expect(inVault("#якорь")).toBe("#якорь");
 });
 
-it("какое хранилище открыть без имени в адресе: только открытое последним", () => {
+it("which vault to open without a name in the address: only the one opened last", () => {
   expect(chooseVault(["А", "Б"], "Б")).toBe("Б");
   expect(chooseVault(["А", "Б"], "удалённое")).toBeNull();
   expect(chooseVault(["А"], null)).toBeNull();

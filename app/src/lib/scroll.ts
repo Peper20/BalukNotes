@@ -1,24 +1,24 @@
-// Прокручивается не документ, а колонка страницы под верхней панелью
-// (`#page`): боковая и верхняя панели, оглавление стоят на месте. В окне
-// (WebKitGTK) при прокрутке документа неподвижные слои ставятся заново на
-// каждом кадре и при дробном масштабе экрана дрожат на пиксель.
+// Not the document scrolls but the page column under the top bar (`#page`):
+// the sidebar, the top bar and the outline stay in place. In the window
+// (WebKitGTK) scrolling the document re-lays the fixed layers on every frame,
+// and with fractional screen scaling they jitter by a pixel.
 
-/** Колонка, которая прокручивается; до её появления (экран выбора хранилища) — документ. */
+/** The column that scrolls; before it appears (the vault picker screen), the document. */
 export function scroller(): HTMLElement {
   return document.getElementById("page") ?? document.documentElement;
 }
 
-/** Прокрутка колонки сверху, px. */
+/** Column scroll from the top, px. */
 export function scrollTop(): number {
   return scroller().scrollTop;
 }
 
-/** Прокрутить колонку к `y` (мгновенно). */
+/** Scrolls the column to `y` (instantly). */
 export function scrollToTop(y: number): void {
   scroller().scrollTo(0, y);
 }
 
-/** Докручено до конца (последние разделы до верха уже не доедут). */
+/** Scrolled to the end (the last sections will not reach the top anymore). */
 export function atBottom(): boolean {
   const s = scroller();
   return s.clientHeight + s.scrollTop >= s.scrollHeight - 2;

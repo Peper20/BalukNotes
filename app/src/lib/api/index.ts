@@ -1,5 +1,6 @@
-// Запросы к серверу notes. Типы ответов — из Rust (types/, `npm run types`).
-// Адрес сервера и токен — config.ts; ошибки сети и сервера — ApiError.
+// Requests to the notes server. Response types come from Rust (types/,
+// `npm run types`). Server address and token - config.ts; network and
+// server errors - ApiError.
 
 import { encodeId } from "../ids";
 import { vault } from "../vault";
@@ -52,19 +53,19 @@ export type { Theme } from "./types/Theme";
 export type { VaultsResponse } from "./types/VaultsResponse";
 export type { VaultSettingsResponse } from "./types/VaultSettingsResponse";
 
-/** Какую главу книги запросить: по номеру или ту, где якорь. */
+/** Which book chapter to request: by number or the one with the anchor. */
 export interface ChapterSelect {
   chapter?: number | null;
   anchor?: string | null;
 }
 
-/** Значения настроек: ключ → число, строка или флаг. */
+/** Setting values: key -> number, string or flag. */
 export type SettingValues = SettingsResponse["values"];
 
 /**
- * Ошибка запроса — одним типом для сети и сервера: `status` — код ответа,
- * 0 — сервер недоступен (сеть). Отмена запроса (`AbortSignal`) — не
- * ApiError, а обычный `AbortError`.
+ * A request error, one type for the network and the server: `status` is the
+ * response code, 0 - the server is unreachable (network). A cancelled request
+ * (`AbortSignal`) is not an ApiError but a plain `AbortError`.
  */
 export class ApiError extends Error {
   constructor(
@@ -75,16 +76,16 @@ export class ApiError extends Error {
     super(message);
   }
 
-  /** Сервер не ответил (нет сети, сервер остановлен). */
+  /** The server did not answer (no network, the server is stopped). */
   get offline(): boolean {
     return this.status === 0;
   }
 }
 
-/** Кто следит за связью с сервером (state/connection): ответил ли он на запрос. */
+/** Who watches the connection to the server (state/connection): whether it answered a request. */
 let reached: (ok: boolean) => void = () => {};
 
-/** Сообщать `fn`, ответил ли сервер на очередной запрос (ответ с ошибкой — тоже ответ). */
+/** Tells `fn` whether the server answered the next request (an error response is an answer too). */
 export function onReach(fn: (ok: boolean) => void): void {
   reached = fn;
 }
@@ -109,41 +110,41 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 const json = (method: string, data: unknown): RequestInit => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
 
-/** Путь API показанного хранилища: `/api/vaults/<имя><path>`. */
+/** API path of the shown vault: `/api/vaults/<name><path>`. */
 const inVault = (path: string): string => {
   const name = vault();
-  if (name == null) throw new Error("хранилище не выбрано");
+  if (name == null) throw new Error("no vault chosen");
   return `/api/vaults/${encodeURIComponent(name)}${path}`;
 };
 
 export const api = {
-  /** Хранилища и какое открыть по умолчанию. */
+  /** Vaults and which one to open by default. */
   vaults: () => request<VaultsResponse>("/api/vaults"),
-  /** Новое пустое хранилище; ответ — список хранилищ. */
+  /** A new empty vault; the response is the vault list. */
   createVault: (name: string) => request<VaultsResponse>("/api/vaults", json("POST", { name })),
-  /** Переименовать хранилище (папку); ответ — список хранилищ. */
+  /** Renames a vault (its folder); the response is the vault list. */
   renameVault: (from: string, name: string) => request<VaultsResponse>(`/api/vaults/${encodeURIComponent(from)}`, json("PATCH", { name })),
-  /** Хранилище целиком — в корзину системы; ответ — список хранилищ. */
+  /** Moves a whole vault to the system trash; the response is the vault list. */
   deleteVault: (name: string) => request<VaultsResponse>(`/api/vaults/${encodeURIComponent(name)}`, { method: "DELETE" }),
   notes: () => request<NoteListItem[]>(inVault("/notes")),
   folders: () => request<FolderListItem[]>(inVault("/folders")),
-  /** Заметка; с `chapter` или `anchor` книга приходит одной главой. */
+  /** A note; with `chapter` or `anchor` a book comes as one chapter. */
   note: (id: string, signal?: AbortSignal, select: ChapterSelect = {}) => {
     const q = select.chapter != null ? `?chapter=${select.chapter}` : select.anchor != null ? `?anchor=${encodeURIComponent(select.anchor)}` : "";
     return request<NotePage>(inVault(`/notes/${encodeId(id)}${q}`), { signal });
   },
-  /** Удалить заметку (книгу — папкой) — в корзину системы. */
+  /** Deletes a note (a book as a folder) to the system trash. */
   deleteNote: (id: string) => request<unknown>(inVault(`/notes/${encodeId(id)}`), { method: "DELETE" }).then(() => {}),
-  /** Переименовать заметку (книгу) или папку; без `apply` — только план. */
+  /** Renames a note (book) or a folder; without `apply`, only the plan. */
   rename: (r: RenameRequest, signal?: AbortSignal) => request<RenamePlan>(inVault("/rename"), { ...json("POST", r), signal }),
-  /** Удалить папку со всем, что в ней, — в корзину системы. */
+  /** Deletes a folder with everything in it to the system trash. */
   deleteFolder: (path: string) => request<unknown>(inVault(`/folders/${encodeId(path)}`), { method: "DELETE" }).then(() => {}),
   version: (id: string) => request<VersionResponse>(inVault(`/version/${encodeId(id)}`)),
   links: (id: string) => request<LinksResponse>(inVault(`/links/${encodeId(id)}`)),
   graph: () => request<Graph>(inVault("/graph")),
-  /** Граф по фильтру, уже разложенный (фильтр и раскладка — в ядре). */
+  /** The graph by the filter, already laid out (filter and layout are in the core). */
   graphLayout: (filter: Partial<GraphFilter> = {}) => request<GraphLayout>(inVault("/graph/layout"), json("POST", filter)),
-  /** Поиск по тексту всех заметок; с `note` — только в ней (все разделы по порядку). */
+  /** Full-text search over all notes; with `note`, only in it (all sections in order). */
   search: (q: string, signal?: AbortSignal, limit = 30, note?: string | null) =>
     request<SearchHit[]>(inVault(`/search?q=${encodeURIComponent(q)}&limit=${limit}${note ? `&note=${encodeURIComponent(note)}` : ""}`), { signal }),
   preview: (id: string, anchor?: string | null, signal?: AbortSignal) =>
@@ -151,16 +152,16 @@ export const api = {
   themes: () => request<Theme[]>("/api/themes"),
   settings: () => request<SettingsResponse>("/api/settings"),
   saveSettings: (patch: SettingValues) => request<SettingValues>("/api/settings", json("PUT", patch)),
-  /** Настройки показанного хранилища: итог, общие и заданные в нём. */
+  /** Settings of the shown vault: the result, the shared ones and those set in it. */
   vaultSettings: () => request<VaultSettingsResponse>(inVault("/settings")),
-  /** Задать настройки только для показанного хранилища; `null` — снова общая. */
+  /** Sets settings only for the shown vault; `null` makes one shared again. */
   saveVaultSettings: (patch: Record<string, number | string | boolean | null>) =>
     request<VaultSettingsResponse>(inVault("/settings"), json("PUT", patch)),
-  /** Подсказать серверу, что собрать заранее первым (ответ не нужен). */
+  /** Tells the server what to build in advance first (no response needed). */
   warm: (req: WarmRequest) => request<unknown>(inVault("/warm"), json("POST", req)).then(() => {}),
-  /** Адрес PDF — его открывает браузер (новая вкладка), токен — в адресе. */
+  /** PDF address: the browser opens it (a new tab), the token is in the address. */
   pdfUrl: (id: string, theme: string) => apiUrl(inVault(`/pdf/${encodeId(id)}?theme=${encodeURIComponent(theme)}`), { withToken: true }),
-  /** Изменения хранилища после `after` (долгий опрос: ответ — на изменении или через ~25 с). */
+  /** Vault changes after `after` (long polling: the response comes on a change or after ~25 s). */
   events: (after: number | null, signal?: AbortSignal) =>
     request<EventsResponse>(inVault(`/events${after == null ? "" : `?after=${after}`}`), { signal }),
 };

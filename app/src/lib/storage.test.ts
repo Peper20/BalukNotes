@@ -7,7 +7,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-it("переименованное хранилище уносит свои ключи и адреса вкладок", () => {
+it("a renamed vault takes its keys and tab addresses along", () => {
   setVault("Учёба");
   save("k-tabs", [{ url: `${vaultBase("Учёба")}/n/A` }]);
   save("k-places", { A: 1 });

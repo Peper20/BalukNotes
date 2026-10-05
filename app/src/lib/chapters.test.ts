@@ -15,14 +15,14 @@ const page = (chapter: number, version = "v1", id = "Книга"): NotePage => (
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
-it("соседи главы — в пределах книги", () => {
+it("the neighbours of a chapter stay within the book", () => {
   expect(neighbours(0, 4)).toEqual([1]);
   expect(neighbours(2, 4)).toEqual([1, 3]);
   expect(neighbours(3, 4)).toEqual([2]);
   expect(neighbours(0, 1)).toEqual([]);
 });
 
-it("показанная глава — и её соседи заранее, той же версии", async () => {
+it("the shown chapter and its neighbours in advance, of the same version", async () => {
   const fetch = vi.fn(async (_id: string, k: number) => page(k));
   const cache = new ChapterCache(fetch, 100);
   cache.shown(page(1));
@@ -34,7 +34,7 @@ it("показанная глава — и её соседи заранее, т�
   expect(cache.get("Книга", 2, "v2")).toBeNull();
   expect(cache.get("Другая", 2, "v1")).toBeNull();
 
-  // Дальше вперёд: 0 забыта, 1 и 2 уже есть, догружается только 3.
+  // Further forward: 0 is forgotten, 1 and 2 are there, only 3 is loaded.
   cache.shown(page(2));
   expect(cache.held).toEqual([1, 2]);
   await vi.advanceTimersByTimeAsync(100);
@@ -42,11 +42,11 @@ it("показанная глава — и её соседи заранее, т�
   expect(cache.held).toEqual([1, 2, 3]);
 });
 
-it("новая версия книги — запас заново; устаревший ответ не держим", async () => {
+it("a new book version: the stock anew; a stale response is not kept", async () => {
   let version = "v1";
   const cache = new ChapterCache(async (_id, k) => page(k, version), 0);
   cache.shown(page(0));
-  version = "v2"; // книгу пересобрали, пока грузили соседа
+  version = "v2"; // the book was rebuilt while the neighbour was loading
   await vi.advanceTimersByTimeAsync(0);
   expect(cache.held).toEqual([0]);
   cache.shown(page(0, "v2"));
@@ -56,7 +56,7 @@ it("новая версия книги — запас заново; устаре
   expect(cache.held).toEqual([]);
 });
 
-it("переход к главе: книга изменилась — запас выброшен; сверить не вышло — запас", async () => {
+it("going to a chapter: the book changed - the stock is dropped; the check failed - the stock", async () => {
   const cache = new ChapterCache(async (_id, k) => page(k), 0);
   cache.shown(page(0));
   await vi.advanceTimersByTimeAsync(0);
@@ -66,7 +66,7 @@ it("переход к главе: книга изменилась — запас
   expect(cache.held).toEqual([]);
 });
 
-it("глава раздела для результатов поиска по книге", () => {
+it("the chapter of a section for book search results", () => {
   const book = { chapter: 0, chapters: [{ id: "г0", num: "1", title: "Основы" }, { id: "г1", num: "", title: "Приложение" }], anchors: { Итоги: 0, "Итоги-2": 1 } };
   expect(chapterOf(book, "Итоги")).toEqual(book.chapters[0]);
   expect(chapterOf(book, "Итоги-2")).toEqual(book.chapters[1]);

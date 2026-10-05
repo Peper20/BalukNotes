@@ -1,5 +1,5 @@
-// Маршрут: адрес страницы → что показать (заметка, главная, граф, теги).
-// Переходы внутри клиента, вкладки, «назад» к месту чтения.
+// Routing: page address -> what to show (a note, home, the graph, tags).
+// Navigation inside the client, tabs, "back" to the reading place.
 
 import { hashAnchor, homeHref, noteHref, parseRoute, type Route } from "../ids";
 import { inVault } from "../vault";
@@ -11,18 +11,18 @@ import { tabs } from "./tabs.svelte";
 
 class Router {
   route = $state.raw<Route>({ kind: "home" });
-  /** Якорь адреса; `anchorSeq` растёт при переходе по якорю в той же заметке. */
+  /** The address anchor; `anchorSeq` grows on an anchor navigation within the same note. */
   anchor = $state<string | null>(null);
   anchorSeq = $state(0);
 
   currentId = $derived(this.route.kind === "note" ? this.route.id : null);
-  /** Открытая страница папки (путь). */
+  /** The open folder page (path). */
   currentFolder = $derived(this.route.kind === "folder" ? this.route.path : null);
   currentNote = $derived(notes.byId(this.currentId));
 
   /**
-   * Перейти внутри клиента (как по ссылке); `newTab` — в новой вкладке.
-   * Адрес без хранилища (`/n/…` из HTML заметки) — в показанном хранилище.
+   * Navigates inside the client (as by a link); `newTab` - in a new tab. An
+   * address without a vault (`/n/...` from the note HTML) goes to the shown vault.
    */
   go(url: string | URL, { replace = false, newTab = false } = {}): void {
     url = inVault(String(url));
@@ -33,13 +33,13 @@ class Router {
     this.sync();
   }
 
-  /** Заметка; `background` — в новой вкладке в фоне (Ctrl+щелчок). */
+  /** A note; `background` - in a new background tab (Ctrl+click). */
   open(id: string, anchor?: string | null, { background = false } = {}): void {
     if (background) this.behind(noteHref(id, anchor));
     else this.go(noteHref(id, anchor));
   }
 
-  /** Открыть в новой вкладке в фоне: страница и активная вкладка не меняются. */
+  /** Opens in a new background tab: the page and the active tab do not change. */
   behind(url: string | URL): void {
     tabs.openBehind(inVault(String(url)));
   }
@@ -66,13 +66,13 @@ class Router {
     tabs.save();
   }
 
-  /** Маршрут по адресу страницы: та же заметка — только якорь. */
+  /** The route by the page address: the same note - only the anchor. */
   sync({ pop = false } = {}): void {
     const route = parseRoute(location.pathname, location.search);
     this.anchor = hashAnchor(location.hash);
     tabs.setUrl(location.pathname + location.search + location.hash);
-    // «Назад» — туда, где были в этой записи истории; иначе — где читали
-    // эту заметку в прошлый раз (если адрес без якоря).
+    // "Back" goes where we were in this history entry; otherwise where this
+    // note was read last time (if the address has no anchor).
     const fromHistory = pop ? placeFromHistory(history.state) : null;
     if (route.kind === "note" && route.id === this.currentId && !reader.pending) {
       reader.restore = this.anchor ? null : fromHistory;

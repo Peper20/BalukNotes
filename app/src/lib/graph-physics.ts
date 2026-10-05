@@ -1,26 +1,27 @@
-// Живой граф: физика, пока с графом что-то делают. Раскладка ядра
-// (`notes-core::vault_graph`) — состояние покоя: каждый узел держится за
-// своё место («дом») слабой пружиной, рёбра — пружины длиной как в
-// раскладке, наехавшие прямоугольники узлов с подписями раздвигаются (как
-// в ядре). В покое все силы — ноль: нетронутый граф не шевелится, PDF и
-// приложение показывают одну картинку.
+// The live graph: physics while something is done to the graph. The core
+// layout (`notes-core::vault_graph`) is the state of rest: each node holds
+// to its place ("home") with a weak spring, edges are springs as long as in
+// the layout, overlapping node rectangles with labels are pushed apart (as
+// in the core). At rest all forces are zero: an untouched graph does not
+// move, PDF and the app show one picture.
 //
-// Протянули узел — соседи тянутся за ним по рёбрам, их соседи — слабее;
-// затухание сильное — без раскачки. Отпустили — узел остаётся, где его
-// бросили, а соседи плавно проходят немного назад (`RETURN` пути к прежним
-// местам) и встают: полный возврат пружинами «встряхивал» граф, а совсем
-// без движения граф замирал мёртво. Рамка (`frame`) — узлы вместе с
-// подписью не выходят за неё.
+// Drag a node and its neighbours follow it along the edges, their
+// neighbours weaker; strong damping, no swaying. Release it and the node
+// stays where it was dropped, while the neighbours smoothly go a bit back
+// (`RETURN` of the way to their old places) and stop: a full return by the
+// springs "shook" the graph, and no motion at all made it freeze dead. The
+// frame (`frame`): nodes with their labels do not leave it.
 //
-// Раздвигание сравнивает пары узлов: у большого графа (от `GRID_FROM`
-// узлов) — только соседей по решётке (`nearPairs`), иначе на тысяче узлов
-// кадр шёл бы десятки миллисекунд. Порядок пар тот же, что и перебором.
+// Pushing apart compares pairs of nodes: in a big graph (from `GRID_FROM`
+// nodes) only grid neighbours (`nearPairs`), otherwise a frame would take
+// tens of milliseconds on a thousand nodes. The order of pairs is the same
+// as when trying all.
 
 export type Point = [number, number];
-/** Прямоугольник `[x0, y0, x1, y1]`. */
+/** A rectangle `[x0, y0, x1, y1]`. */
 export type Rect = [number, number, number, number];
 
-/** Размер узла вокруг его центра: полуширина (кружок или подпись), верх и низ (с подписью). */
+/** Node size around its center: half width (circle or label), top and bottom (with the label). */
 export interface Extent {
   half: number;
   top: number;
@@ -30,21 +31,22 @@ export interface Extent {
 export interface PhysicsNode {
   x: number;
   y: number;
-  /** Размер для раздвигания — как в ядре (подпись кеглем раскладки), иначе покой не был бы покоем. */
+  /** Size for pushing apart, as in the core (the label in the layout font size), otherwise rest would not be rest. */
   extent: Extent;
 }
 
-/** Жёсткость пружины к дому и рёбер, затухание скорости за шаг. */
+/** Stiffness of the home spring and of the edges, velocity damping per step. */
 const HOME = 0.05;
 const SPRING = 0.07;
 const DAMPING = 0.3;
-/** Какую долю пути к прежнему месту соседи проходят после отпускания. */
+/** Which part of the way to the old place the neighbours go after a release. */
 const RETURN = 0.25;
 
 /**
- * Отклик соседей на перетаскивание (настройки графа): `pull` — во сколько
- * раз сильнее обычного рёбра тянут соседей за узлом (0 — стоят), `back` —
- * какую долю пути к прежним местам они проходят, когда узел отпустили.
+ * Neighbours' response to dragging (graph settings): `pull` - how many times
+ * stronger than usual the edges pull the neighbours after the node (0 - they
+ * stay), `back` - which part of the way to their old places they go when
+ * the node is released.
  */
 export interface Drag {
   pull: number;
@@ -52,16 +54,16 @@ export interface Drag {
 }
 export const DRAG: Drag = { pull: 1, back: RETURN };
 
-/** Сдвиг (единиц раскладки за шаг), ниже которого граф считается осевшим. */
+/** Shift (layout units per step) below which the graph is settled. */
 const REST = 0.02;
-/** С какого числа узлов пары для раздвигания — по решётке, а не все. */
+/** From how many nodes the pairs for pushing apart come from a grid, not all. */
 export const GRID_FROM = 200;
 
 /**
- * Пары узлов `i < j`, чьи прямоугольники (`extents` вокруг точек `pos`)
- * могут пересекаться, — в порядке перебора (по `i`, затем по `j`). До
- * `GRID_FROM` узлов — все пары; дальше — решётка с клеткой в самый большой
- * прямоугольник: пересекаются только узлы из соседних клеток.
+ * Pairs of nodes `i < j` whose rectangles (`extents` around the points `pos`)
+ * may overlap, in the order of trying all (by `i`, then by `j`). Up to
+ * `GRID_FROM` nodes all pairs; beyond, a grid with the cell of the largest
+ * rectangle: only nodes from neighbouring cells overlap.
  */
 export function nearPairs(pos: Float64Array, extents: Extent[], visit: (i: number, j: number) => void, grid = extents.length >= GRID_FROM): void {
   const n = extents.length;
@@ -112,11 +114,11 @@ export class Physics {
   private readonly hi: Float64Array;
   private frame: Rect | null = null;
   private frameExtents: Extent[];
-  /** Узел под указателем. */
+  /** The node under the pointer. */
   private held = -1;
-  /** Брошенный узел: стоит, пока соседи оседают (иначе их пружины его качнут). */
+  /** A dropped node: it stands while the neighbours settle (otherwise their springs would sway it). */
   private dropped = -1;
-  /** Отклик соседей — можно менять на ходу. */
+  /** Neighbours' response, can change on the fly. */
   response: Drag = DRAG;
 
   constructor(nodes: PhysicsNode[], edges: [number, number][], frame: Rect | null = null) {
@@ -133,9 +135,9 @@ export class Physics {
   }
 
   /**
-   * Размеры для раздвигания — по подписям на экране (они бывают крупнее,
-   * чем считало ядро), но ужатые ровно настолько, чтобы дома не наезжали:
-   * покой остаётся покоем. Ужимаются только узлы, которые наезжают дома.
+   * Sizes for pushing apart, by the labels on screen (they can be larger
+   * than the core assumed), but shrunk just enough for the homes not to
+   * overlap: rest stays rest. Only nodes whose homes overlap are shrunk.
    */
   setExtents(extents: Extent[]) {
     const s = new Array<number>(this.n).fill(1);
@@ -153,16 +155,16 @@ export class Physics {
     this.extents = extents.map((e, i) => ({ half: e.half * s[i]!, top: e.top * s[i]!, bottom: e.bottom * s[i]! }));
   }
 
-  /** Расстояние между домами узлов. */
+  /** Distance between the homes of nodes. */
   private span(a: number, b: number): number {
     return Math.hypot(this.home[2 * a]! - this.home[2 * b]!, this.home[2 * a + 1]! - this.home[2 * b + 1]!);
   }
 
   /**
-   * Рамка, за которую узлы (с подписью размером `extents`, по умолчанию —
-   * как при раздвигании) не выходят; `null` — без рамки. Узел, чей дом
-   * уже за рамкой (подпись на экране крупнее, чем считало ядро), может
-   * стоять дома — рамка для него расширяется до дома.
+   * The frame nodes (with a label of size `extents`, by default as when
+   * pushing apart) do not leave; `null` - no frame. A node whose home is
+   * already outside the frame (the label on screen is larger than the core
+   * assumed) may stay home: the frame widens to its home.
    */
   setFrame(frame: Rect | null, extents: Extent[] = this.extents) {
     this.frame = frame;
@@ -186,7 +188,7 @@ export class Physics {
     return [this.pos[2 * i]!, this.pos[2 * i + 1]!];
   }
 
-  /** Держать узел `i` в точке (с учётом рамки). */
+  /** Holds node `i` at a point (within the frame). */
   drag(i: number, x: number, y: number) {
     this.held = i;
     this.dropped = -1;
@@ -195,7 +197,7 @@ export class Physics {
     this.vel[2 * i] = this.vel[2 * i + 1] = 0;
   }
 
-  /** Отпустить узел: он остаётся, остальные немного отходят к прежним местам (новый покой). */
+  /** Releases the node: it stays, the others go a bit back to their old places (a new rest). */
   release() {
     const i = this.held;
     if (i < 0) return;
@@ -218,7 +220,7 @@ export class Physics {
   }
 
 
-  /** Один шаг; возвращает наибольший сдвиг узла за шаг — для [`settled`]. */
+  /** One step; returns the largest node shift in the step, for [`settled`]. */
   step(): number {
     const { n, pos, vel, home, extents } = this;
     const before = pos.slice();
@@ -242,8 +244,8 @@ export class Physics {
         pos[k]! += vel[k]!;
       }
     }
-    // Наехавшие прямоугольники — врозь по оси с меньшим перекрытием, сразу
-    // (не силой: иначе пружины вдавливают узлы друг в друга).
+    // Overlapping rectangles go apart along the axis with the smaller
+    // overlap, at once (not by a force: springs would press nodes together).
     nearPairs(pos, extents, (i, j) => {
       const [ei, ej] = [extents[i]!, extents[j]!];
       const dx = pos[2 * j]! - pos[2 * i]!;
@@ -253,7 +255,7 @@ export class Physics {
       const oy = (dy >= 0 ? ei.bottom + ej.top : ei.top + ej.bottom) - Math.abs(dy);
       if (oy <= 0) return;
       const [fi, fj] = [this.fixed(i), this.fixed(j)];
-      // По оси с меньшим перекрытием; упёрлись там в рамку — по другой.
+      // Along the axis with the smaller overlap; if it hits the frame there, along the other.
       const axes: [number, number, number][] = [
         [0, dx, ox],
         [1, dy, oy],
@@ -282,14 +284,14 @@ export class Physics {
     return fastest;
   }
 
-  /** Сколько узел `i` может сдвинуться по оси `k` на `delta` (держимый — нисколько, рамка — до края). */
+  /** How far node `i` can move along axis `k` by `delta` (a held one - not at all, the frame - up to its edge). */
   private room(i: number, k: number, delta: number): number {
     if (this.fixed(i) || delta === 0) return 0;
     const at = this.pos[2 * i + k]!;
     return clamp(at + delta, this.lo[2 * i + k]!, this.hi[2 * i + k]!) - at;
   }
 
-  /** Осел: никого не держат и все почти стоят. */
+  /** Settled: nobody is held and all nearly stand. */
   settled(fastest: number): boolean {
     const done = this.held < 0 && fastest < REST;
     if (done) this.dropped = -1;
@@ -299,10 +301,10 @@ export class Physics {
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-/** Ширина подписи — по числу знаков, как в ядре (`vault_graph::label_width`). */
+/** Label width by the number of characters, as in the core (`vault_graph::label_width`). */
 export const labelWidth = (text: string, size: number) => [...text].length * size * 0.58;
 
-/** Размер узла с подписью под кружком (`vault_graph::box_rect`). */
+/** Size of a node with the label under the circle (`vault_graph::box_rect`). */
 export function extentOf(r: number, name: string, size: number, gap: number): Extent {
   return { half: Math.max(r, labelWidth(name, size) / 2), top: r, bottom: r + gap + size * 1.2 };
 }

@@ -1,6 +1,6 @@
-// Живой блок заметки: селектор разметки библиотеки и оживление одного элемента.
+// A live block of a note: a selector of the library markup and the activation of one element.
 
-/** Открыть заметку по щелчку на узле графа (без перезагрузки страницы). */
+/** Opens a note on a click on a graph node (without reloading the page). */
 export type OpenNote = (id: string, background: boolean) => void;
 
 export interface LiveContext {
@@ -8,13 +8,13 @@ export interface LiveContext {
 }
 
 export interface LiveBlock {
-  /** Имя для сообщений об ошибках. */
+  /** Name for error messages (console). */
   name: string;
-  /** Элементы блока (`selectors.ts`). */
+  /** The block's elements (`selectors.ts`). */
   selector: string;
   /**
-   * Оживить элемент: вернуть уборку или `null` — разметка не подошла, остаётся
-   * запасной вид. Исключение — то же, что `null` (с предупреждением).
+   * Activates an element: returns the cleanup or `null` - the markup did not
+   * fit, the fallback look stays. An exception is the same as `null` (with a warning).
    */
   mount(el: HTMLElement, ctx: LiveContext): (() => void) | null;
 }
