@@ -2,21 +2,24 @@
 import type { ChapterOf } from "./ChapterOf";
 import type { NoteKind } from "./NoteKind";
 
+/**
+ * A graph node: a note, a book, a book chapter or a missing note.
+ */
 export type Node = { 
 /**
- * Путь заметки; у главы книги — `<книга>/.<номер>` (сегмент на `.` в
- * пути заметки невозможен).
+ * Note path; for a book chapter `<book>/.<number>` (a segment starting
+ * with `.` is impossible in a note path).
  */
 id: string, 
 /**
- * `None` — заметки нет (на неё ссылаются, но её не написали).
+ * `None`: the note does not exist (it is linked to but not written).
  */
 kind: NoteKind | null, 
 /**
- * Название ([`Snapshot::title`]); у главы — её заголовок.
+ * Title ([`Snapshot::title`]); for a chapter, its heading.
  */
 title: string, 
 /**
- * Глава книги (граф с главами, [`Snapshot::graph_of`]).
+ * A book chapter (the graph with chapters, [`Snapshot::graph_of`]).
  */
 chapter: ChapterOf | null, };

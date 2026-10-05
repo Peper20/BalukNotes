@@ -26,7 +26,7 @@ fn package_outside_whitelist_is_an_error_and_policy_versions_only_its_users() {
     let opts = FigureOptions::default();
     let page = notes.page(&foreign, opts).unwrap();
     let errors: Vec<String> = page.errors.iter().map(ToString::to_string).collect();
-    assert!(errors.iter().any(|e| e.contains("пакет @preview/fletcher:0.5.8 не из белого списка")), "{errors:?}");
+    assert!(errors.iter().any(|e| e.contains("package @preview/fletcher:0.5.8 is not whitelisted")), "{errors:?}");
     let before = (notes.version(&foreign, opts).unwrap(), notes.version(&own, opts).unwrap());
 
     // Another package allowed (no network needed): the note with packages is stale, the one without is not.

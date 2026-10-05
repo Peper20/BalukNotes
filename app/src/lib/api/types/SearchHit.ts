@@ -3,16 +3,35 @@ import type { Fragment } from "./Fragment";
 import type { NoteId } from "./NoteId";
 import type { NoteKind } from "./NoteKind";
 
-export type SearchHit = { id: NoteId, kind: NoteKind, 
 /**
- * Название заметки (или имя файла).
+ * A search result: a section of a note.
+ */
+export type SearchHit = { 
+/**
+ * The note.
+ */
+id: NoteId, 
+/**
+ * Note or book.
+ */
+kind: NoteKind, 
+/**
+ * Note title (or file name).
  */
 title: string, 
 /**
- * Раздел, где нашлось; `None` — начало заметки.
+ * The section where it was found; `None` - the start of the note.
  */
 heading: string | null, 
 /**
- * Якорь раздела для ссылки (`#…`).
+ * Section anchor for the link (`#...`).
  */
-anchor: string | null, snippet: Array<Fragment>, score: number, };
+anchor: string | null, 
+/**
+ * Text around the matches.
+ */
+snippet: Array<Fragment>, 
+/**
+ * Weight: higher is better.
+ */
+score: number, };

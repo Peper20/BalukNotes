@@ -3,14 +3,30 @@ import type { NoteId } from "./NoteId";
 import type { NoteKind } from "./NoteKind";
 
 /**
- * Превью заметки для подсказки при наведении на ссылку.
+ * Preview of a note for the tooltip over a link.
  */
-export type Preview = { id: NoteId, kind: NoteKind, title: string, 
+export type Preview = { 
 /**
- * Раздел, на который ведёт ссылка (если якорь нашёлся).
+ * The note.
+ */
+id: NoteId, 
+/**
+ * Note or book.
+ */
+kind: NoteKind, 
+/**
+ * Note title (or file name).
+ */
+title: string, 
+/**
+ * The section the link leads to (if the anchor was found).
  */
 heading: string | null, 
 /**
- * Начало текста раздела (или заметки), до `PREVIEW` символов.
+ * The start of the section (or note) text, up to `PREVIEW` characters.
  */
-text: string, tags: Array<string>, };
+text: string, 
+/**
+ * Tags of the note.
+ */
+tags: Array<string>, };

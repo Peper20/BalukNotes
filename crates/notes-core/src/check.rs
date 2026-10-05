@@ -1,8 +1,8 @@
-//! Проверка хранилища: ошибки компиляции, битые ссылки (с якорями) и
-//! ошибки в файлах папок `_folder.toml`.
+//! Vault check: compile errors, broken links (with anchors) and errors in
+//! the folder files `_folder.toml`.
 //!
-//! Obsidian не проверял якоря `[[Заметка#Заголовок]]` — здесь ссылка
-//! считается целой, только если есть и заметка, и раздел в ней.
+//! Obsidian did not check anchors `[[Note#Heading]]`; here a link is whole
+//! only if both the note and the section in it exist.
 
 use serde::Serialize;
 
@@ -13,21 +13,23 @@ use crate::render::{LinkRef, slug};
 use crate::vault::NoteId;
 use crate::{Error, Result};
 
+/// Result of a check: notes and folders with problems.
 #[derive(Debug, Serialize)]
 pub struct Report {
     pub notes: Vec<NoteReport>,
-    /// Папки с ошибкой в `_folder.toml`.
+    /// Folders with an error in `_folder.toml`.
     pub folders: Vec<FolderProblem>,
 }
 
-/// Ошибка в файле папки: папка показывается своим именем.
+/// An error in a folder file: the folder is shown by its own name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FolderProblem {
-    /// Файл от корня хранилища: `Сеть/_folder.toml`.
+    /// File from the vault root: `Сеть/_folder.toml`.
     pub file: String,
     pub error: String,
 }
 
+/// Problems of one note.
 #[derive(Debug, Serialize)]
 pub struct NoteReport {
     pub id: NoteId,
@@ -36,6 +38,7 @@ pub struct NoteReport {
     pub broken_links: Vec<BrokenLink>,
 }
 
+/// A link to a missing note or section.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct BrokenLink {
     pub target: String,
@@ -44,19 +47,19 @@ pub struct BrokenLink {
 }
 
 impl Report {
-    /// Нет ошибок компиляции, битых ссылок и ошибок папок (предупреждения
-    /// допустимы).
+    /// No compile errors, broken links or folder errors (warnings are
+    /// allowed).
     pub fn is_clean(&self) -> bool {
         self.folders.is_empty() && self.notes.iter().all(|n| n.errors.is_empty() && n.broken_links.is_empty())
     }
 
-    /// Итог одной строкой: `заметок: 19, ошибок: 1, предупреждений: 2, битых ссылок: 3`
-    /// (ошибки папок — в числе ошибок). Его печатает `notes check`;
-    /// ожидаемый итог фикстуры — в `tests/vault/README.md`.
+    /// The total in one line: `notes: 19, errors: 1, warnings: 2, broken links: 3`
+    /// (folder errors count as errors). `notes check` prints it; the
+    /// expected total of the fixture is in `tests/vault/README.md`.
     pub fn summary(&self) -> String {
         let count = |f: fn(&NoteReport) -> usize| self.notes.iter().map(f).sum::<usize>();
         format!(
-            "заметок: {}, ошибок: {}, предупреждений: {}, битых ссылок: {}",
+            "notes: {}, errors: {}, warnings: {}, broken links: {}",
             self.notes.len(),
             count(|n| n.errors.len()) + self.folders.len(),
             count(|n| n.warnings.len()),
@@ -65,18 +68,15 @@ impl Report {
     }
 }
 
-/// Проверка всего хранилища.
+/// Checks the whole vault.
 pub fn check(notes: &Notes) -> Result<Report> {
-    let mut out = Vec::new();
-    for entry in notes.entries()? {
-        out.push(note_report(notes, entry.id)?);
-    }
-    Ok(Report { notes: out, folders: folder_problems(notes, |_| true)? })
+    let reports = notes.entries()?.into_iter().map(|entry| note_report(notes, entry.id)).collect::<Result<_>>()?;
+    Ok(Report { notes: reports, folders: folder_problems(notes, |_| true)? })
 }
 
-/// Проверка одной заметки или книги (ссылки — по всему хранилищу).
+/// Checks one note or book (links against the whole vault).
 pub fn check_note(notes: &Notes, id: &NoteId) -> Result<Report> {
-    // Папки на пути к заметке — их названия она показывает в дереве.
+    // Folders on the way to the note: the tree shows their names for it.
     let mine: Vec<&str> = crate::folders::ancestors(id.as_str()).collect();
     Ok(Report { notes: vec![note_report(notes, id.clone())?], folders: folder_problems(notes, |p| mine.contains(&p))? })
 }
@@ -95,9 +95,9 @@ fn folder_problems(notes: &Notes, wanted: impl Fn(&str) -> bool) -> Result<Vec<F
 
 fn note_report(notes: &Notes, id: NoteId) -> Result<NoteReport> {
     let page = notes.page(&id, FigureOptions::default())?;
-    // Собралась — ссылки собранной страницы (с вычисляемыми путями);
-    // нет — из индекса исходников (буквальные `#see` и ссылки прошлой
-    // удачной сборки): ссылки проверяются и у несобравшейся заметки.
+    // Built: the links of the built page (with computed paths); not built:
+    // from the source index (literal `#see` and the links of the last
+    // successful build), so a failed note gets its links checked too.
     let links: Vec<LinkRef> = match &page.rendered {
         Some(rendered) if page.errors.is_empty() => rendered.links.clone(),
         _ => notes.index()?.outgoing(&id).to_vec(),
@@ -111,21 +111,21 @@ fn note_report(notes: &Notes, id: NoteId) -> Result<NoteReport> {
     Ok(NoteReport { id, errors: page.errors.clone(), warnings: page.warnings.clone(), broken_links: broken })
 }
 
-/// Что не так со ссылкой, или `None`, если всё в порядке.
+/// What is wrong with the link, or `None` if it is fine.
 fn link_problem(notes: &Notes, target: &str, anchor: Option<&str>) -> Result<Option<String>> {
     let Ok(id) = NoteId::new(target) else {
-        return Ok(Some("недопустимый путь".into()));
+        return Ok(Some("invalid path".into()));
     };
     let page = match notes.page(&id, FigureOptions::default()) {
         Ok(page) => page,
-        Err(Error::NotFound(_)) => return Ok(Some("нет такой заметки".into())),
+        Err(Error::NotFound(_)) => return Ok(Some("no such note".into())),
         Err(e) => return Err(e),
     };
     let Some(anchor) = anchor else { return Ok(None) };
     let Some(rendered) = &page.rendered else {
-        return Ok(Some("заметка-цель не собирается — якорь не проверить".into()));
+        return Ok(Some("the target note does not build, the anchor cannot be checked".into()));
     };
     let wanted = slug(anchor);
     let found = rendered.headings.iter().any(|h| h.anchor == wanted || h.id == anchor);
-    Ok((!found).then(|| format!("в «{target}» нет раздела «{anchor}»")))
+    Ok((!found).then(|| format!("\"{target}\" has no section \"{anchor}\"")))
 }

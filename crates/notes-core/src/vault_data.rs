@@ -1,17 +1,17 @@
-//! Данные хранилища для заметок: виртуальные файлы `/_vault/<префикс>/…`.
+//! Vault data for notes: virtual files `/_vault/<prefix>/...`.
 //!
-//! Заметка читает их как обычные файлы (`read("/_vault/graph/….json")`), а
-//! содержимое на лету считает ядро. Реестр [`VaultData`] отображает префикс
-//! (первый сегмент пути) на поставщика ([`DataProvider`]); граф
-//! (`graph/<фильтр>.json`, [`crate::vault_graph`]) — первый из них. Новый
-//! вид данных (теги, обратные ссылки заметки, список заметок папки) — новый
-//! поставщик и одна строка регистрации, без правок компилятора
-//! ([`crate::world`]).
+//! A note reads them as ordinary files (`read("/_vault/graph/....json")`),
+//! the core computes the content on the fly. The registry [`VaultData`]
+//! maps a prefix (the first path segment) to a provider ([`DataProvider`]);
+//! the graph (`graph/<filter>.json`, [`crate::vault_graph`]) is the first of
+//! them. A new kind of data (tags, backlinks of a note, the notes of a
+//! folder) is a new provider and one registration line, without changes to
+//! the compiler ([`crate::world`]).
 //!
-//! Версия заметки учитывает **только прочитанные ею файлы**: у каждого —
-//! свой отпечаток ([`DataProvider::token`]). По умолчанию это хэш
-//! содержимого: данные не изменились — заметка свежая, даже если хранилище
-//! правили.
+//! The version of a note includes **only the files it read**: each has its
+//! own fingerprint ([`DataProvider::token`]). By default it is a hash of
+//! the content: the data did not change - the note is fresh, even if the
+//! vault was edited.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -19,20 +19,20 @@ use std::sync::Arc;
 
 use crate::version::{StableHasher, Token};
 
-/// Поставщик файлов одного префикса.
+/// Provider of the files of one prefix.
 pub trait DataProvider: Send + Sync {
-    /// Содержимое файла; `path` — путь после префикса и `/`
-    /// (`graph/x.json` → `x.json`). Ошибка — текст для читателя.
+    /// File content; `path` is the path after the prefix and `/`
+    /// (`graph/x.json` -> `x.json`). The error is text for the reader.
     fn read(&self, path: &str) -> Result<Vec<u8>, String>;
 
-    /// Отпечаток файла для версии заметки: сменился — заметка, читавшая
-    /// файл, устарела. По умолчанию — хэш содержимого.
+    /// Fingerprint of the file for the note version: when it changes, a
+    /// note that read the file is stale. By default, a hash of the content.
     fn token(&self, path: &str) -> Token {
         content_token(&self.read(path))
     }
 }
 
-/// Отпечаток по содержимому (или ошибке).
+/// Fingerprint of the content (or of the error).
 pub fn content_token(content: &Result<Vec<u8>, String>) -> Token {
     let mut h = StableHasher::new();
     match content {
@@ -42,7 +42,7 @@ pub fn content_token(content: &Result<Vec<u8>, String>) -> Token {
     h.finish()
 }
 
-/// Реестр поставщиков: префикс → поставщик. Клонируется дёшево.
+/// Registry of providers: prefix -> provider. Cheap to clone.
 #[derive(Clone, Default)]
 pub struct VaultData {
     providers: Arc<BTreeMap<String, Arc<dyn DataProvider>>>,
@@ -55,35 +55,36 @@ impl fmt::Debug for VaultData {
 }
 
 impl VaultData {
+    /// An empty registry.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Добавить поставщика префикса (`graph` → файлы `/_vault/graph/…`).
+    /// Adds the provider of a prefix (`graph` -> files `/_vault/graph/...`).
     #[must_use]
     pub fn with(mut self, prefix: &str, provider: impl DataProvider + 'static) -> Self {
         Arc::make_mut(&mut self.providers).insert(prefix.to_owned(), Arc::new(provider));
         self
     }
 
-    /// Поставщик и путь внутри него.
+    /// The provider and the path inside it.
     fn route<'a>(&self, path: &'a str) -> Result<(&dyn DataProvider, &'a str), String> {
         let (prefix, rest) = path.split_once('/').unwrap_or((path, ""));
         if let Some(p) = self.providers.get(prefix) {
             return Ok((p.as_ref(), rest));
         }
-        let known: Vec<String> = self.providers.keys().map(|k| format!("{k}/…")).collect();
-        let known = if known.is_empty() { "никаких".to_owned() } else { known.join(", ") };
-        Err(format!("нет данных хранилища «{path}» (есть только {known})"))
+        let known: Vec<String> = self.providers.keys().map(|k| format!("{k}/...")).collect();
+        let known = if known.is_empty() { "none".to_owned() } else { known.join(", ") };
+        Err(format!("no vault data \"{path}\" (there is only {known})"))
     }
 
-    /// Файл `/_vault/<path>` (путь без `/_vault/`).
+    /// File `/_vault/<path>` (the path without `/_vault/`).
     pub fn read(&self, path: &str) -> Result<Vec<u8>, String> {
         let (provider, rest) = self.route(path)?;
         provider.read(rest)
     }
 
-    /// Отпечаток файла `/_vault/<path>`. Нет поставщика — отпечаток ошибки.
+    /// Fingerprint of the file `/_vault/<path>`. No provider: the fingerprint of the error.
     pub fn token(&self, path: &str) -> Token {
         match self.route(path) {
             Ok((provider, rest)) => provider.token(rest),
@@ -92,7 +93,7 @@ impl VaultData {
     }
 }
 
-/// Поставщик из замыкания (отпечаток — по содержимому).
+/// Provider from a closure (fingerprint by content).
 pub struct FnProvider<F>(pub F);
 
 impl<F> fmt::Debug for FnProvider<F> {
@@ -116,7 +117,7 @@ mod tests {
 
     use super::*;
 
-    /// Заглушка: отдаёт путь и счётчик; отпечаток — свой.
+    /// Stub: returns the path and the counter; its own fingerprint.
     struct Counter(Arc<AtomicU64>);
 
     impl DataProvider for Counter {
@@ -139,11 +140,11 @@ mod tests {
         assert_eq!(data.read("echo/x").unwrap(), b"x");
         assert_eq!(data.token("count/a"), 7);
         n.store(8, Ordering::SeqCst);
-        assert_eq!(data.token("count/a"), 8, "свой отпечаток поставщика");
+        assert_eq!(data.token("count/a"), 8, "the provider's own fingerprint");
 
         let err = data.read("tags/all.json").unwrap_err();
-        assert!(err.contains("count/…, echo/…"), "{err}");
-        assert_eq!(data.token("tags/x"), data.token("tags/x"), "нет поставщика — отпечаток постоянный");
+        assert!(err.contains("count/..., echo/..."), "{err}");
+        assert_eq!(data.token("tags/x"), data.token("tags/x"), "no provider: a constant fingerprint");
     }
 
     #[test]

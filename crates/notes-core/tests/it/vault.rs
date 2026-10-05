@@ -163,7 +163,7 @@ fn book_headings_are_unique_and_labels_are_ids() {
 #[test]
 fn swallowed_semicolon_is_a_warning() {
     let page = NOTES.page(&id("Особые случаи/Предупреждение"), OPTS).unwrap();
-    let lint = page.warnings.iter().find(|w| w.message.contains("«;»")).expect("предупреждение о «;»");
+    let lint = page.warnings.iter().find(|w| w.message.contains("\";\" after")).expect("the warning about \";\"");
     assert_eq!(lint.file.as_deref(), Some("/Особые случаи/Предупреждение.typ"));
     assert_eq!(lint.line, Some(15));
 }
@@ -171,7 +171,7 @@ fn swallowed_semicolon_is_a_warning() {
 #[test]
 fn lang_without_dictionary_is_a_warning() {
     let page = NOTES.page(&id("Особые случаи/Предупреждение"), OPTS).unwrap();
-    let lint = page.warnings.iter().find(|w| w.message.contains("нет слов оформления")).expect("the language warning");
+    let lint = page.warnings.iter().find(|w| w.message.contains("no styling words")).expect("the language warning");
     assert_eq!((lint.line, lint.column), (Some(3), Some(18)), "the place is the lang: argument");
     // Own words are not a warning.
     let own = NOTES.page(&id("Особые случаи/Свои слова"), OPTS).unwrap();

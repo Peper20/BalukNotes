@@ -1,20 +1,24 @@
-//! Проверки исходников заметок, которых нет в Typst: то, что компилируется
-//! без ошибок, но выглядит не так, как задумано. Результат — предупреждения
-//! в `NotePage::warnings` (видны в приложении и в `notes check`).
+//! Checks of note sources that Typst does not make: things that compile
+//! without errors but do not look as intended. The result is warnings in
+//! `NotePage::warnings` (shown in the app and in `notes check`).
 
 use typst::syntax::ast;
 use typst::syntax::{LinkedNode, SyntaxKind};
 
-/// Предупреждение в исходнике: место — байтовое смещение.
+/// A warning in a source: the place is a byte offset.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Lint {
+    /// Byte offset in the source.
     pub offset: usize,
+    /// What is wrong.
     pub message: &'static str,
+    /// How to fix it.
     pub hint: &'static str,
 }
 
-/// Все предупреждения для текста одного файла. `languages` — языки словарей
-/// оформления библиотеки (`ThemeSet::languages`); пусто — язык не проверяется.
+/// All warnings for the text of one file. `languages` are the languages of
+/// the library's styling dictionaries (`ThemeSet::languages`); empty - the
+/// language is not checked.
 pub fn lint(text: &str, languages: &[String]) -> Vec<Lint> {
     let root = typst::syntax::parse(text);
     let mut out = Vec::new();
@@ -33,9 +37,10 @@ fn visit(node: &LinkedNode, languages: &[String], out: &mut Vec<Lint>) {
     }
 }
 
-/// `#see("A"); дальше` — в разметке `;` сразу после `#выражения` завершает
-/// выражение и исчезает из текста. Для `#let x = 1;` это задумано, для
-/// вызовов посреди фразы — потерянный знак препинания.
+/// `#see("A"); and on`: in markup `;` right after `#expression` ends the
+/// expression and vanishes from the text. For `#let x = 1;` this is
+/// intended, for calls in the middle of a sentence it is a lost punctuation
+/// mark.
 fn swallowed_semicolon(node: &LinkedNode, out: &mut Vec<Lint>) {
     if node.kind() == SyntaxKind::Semicolon
         && node.parent_kind() == Some(SyntaxKind::Markup)
@@ -43,15 +48,15 @@ fn swallowed_semicolon(node: &LinkedNode, out: &mut Vec<Lint>) {
     {
         out.push(Lint {
             offset: node.offset(),
-            message: "«;» после #выражения не попадёт в текст: Typst считает его концом выражения",
-            hint: "если это знак препинания, напишите \\;",
+            message: "\";\" after #expression does not get into the text: Typst takes it as the end of the expression",
+            hint: "if it is punctuation, write \\;",
         });
     }
 }
 
-/// `note.with(lang: "de")` (или `book`, или вызов без `.with`) с языком, для
-/// которого в библиотеке нет слов оформления, и без своих `words:` — слова
-/// оформления будут английскими («Definition», «Fig.», «Chapter»).
+/// `note.with(lang: "de")` (or `book`, or a call without `.with`) with a
+/// language the library has no styling words for, and without own `words:`:
+/// the styling words will be English ("Definition", "Fig.", "Chapter").
 fn lang_without_words(node: &LinkedNode, languages: &[String], out: &mut Vec<Lint>) {
     if languages.is_empty() {
         return;
@@ -85,7 +90,7 @@ fn lang_without_words(node: &LinkedNode, languages: &[String], out: &mut Vec<Lin
     if languages.iter().any(|l| *l == lang.as_str()) {
         return;
     }
-    // Место — аргумент `lang:`.
+    // The place is the `lang:` argument.
     let is_lang = |n: &LinkedNode| n.cast::<ast::Named>().is_some_and(|named| named.name().as_str() == "lang");
     let offset = node
         .children()
@@ -94,16 +99,16 @@ fn lang_without_words(node: &LinkedNode, languages: &[String], out: &mut Vec<Lin
         .map_or(node.offset(), |n| n.offset());
     out.push(Lint {
         offset,
-        message: "для этого языка в библиотеке нет слов оформления: «Definition», «Fig.», «Chapter» будут английскими",
-        hint: "дайте свои слова: words: (definition: \"…\", figure: \"…\", …) — ключи в baluk/i18n.typ",
+        message: "the library has no styling words for this language: \"Definition\", \"Fig.\", \"Chapter\" will be English",
+        hint: "give your own words: words: (definition: \"...\", figure: \"...\", ...), keys in baluk/i18n.typ",
     });
 }
 
-/// `$0,5$` — запятая между цифрами без пробелов: Typst напечатает «0, 5».
-/// Десятичная дробь — `dc("0,5")` (`baluk/math.typ`). Не дробь — скобки,
-/// в которых только числа через запятую: кортеж, отрезок, множество,
-/// аргументы и индексы (`(3,6)`, `[0,1]`, `{1,2}`, `N(0,1)`, `x_(1,2)`,
-/// `\{2,3\}`).
+/// `$0,5$`: a comma between digits without spaces; Typst prints "0, 5".
+/// A decimal fraction is `dc("0,5")` (`baluk/math.typ`). Not a fraction:
+/// brackets holding only comma-separated numbers - a tuple, an interval, a
+/// set, arguments and indices (`(3,6)`, `[0,1]`, `{1,2}`, `N(0,1)`,
+/// `x_(1,2)`, `\{2,3\}`).
 fn raw_decimal_comma(node: &LinkedNode, out: &mut Vec<Lint>) {
     if node.kind() != SyntaxKind::MathText || node.leaf_text() != "," {
         return;
@@ -125,8 +130,8 @@ fn raw_decimal_comma(node: &LinkedNode, out: &mut Vec<Lint>) {
     }
     out.push(Lint {
         offset: prev.offset(),
-        message: "запятая между цифрами в формуле: Typst напечатает «0, 5», а не десятичную дробь",
-        hint: "десятичная дробь — $dc(\"0,5\")$; перечисление — через пробел: $0, 5$",
+        message: "a comma between digits in a formula: Typst prints \"0, 5\", not a decimal fraction",
+        hint: "a decimal fraction is $dc(\"0,5\")$; for a list put a space: $0, 5$",
     });
 }
 
@@ -134,8 +139,8 @@ fn is_number(node: &LinkedNode) -> bool {
     node.kind() == SyntaxKind::MathText && node.leaf_text().bytes().all(|b| b.is_ascii_digit())
 }
 
-/// Первый сосед (вперёд или назад), который не число, не запятая и не
-/// пробел; `None` — перечисление дошло до края группы.
+/// The first neighbour (forward or back) that is not a number, a comma or
+/// a space; `None` if the list reaches the edge of the group.
 fn list_edge<'a>(node: &LinkedNode<'a>, forward: bool) -> Option<LinkedNode<'a>> {
     let mut current = node.clone();
     loop {
@@ -147,7 +152,7 @@ fn list_edge<'a>(node: &LinkedNode<'a>, forward: bool) -> Option<LinkedNode<'a>>
     }
 }
 
-/// `{,}` из LaTeX: в Typst фигурные скобки выводятся буквально.
+/// `{,}` from LaTeX: Typst prints curly braces literally.
 fn latex_decimal_comma(node: &LinkedNode, out: &mut Vec<Lint>) {
     if node.kind() != SyntaxKind::MathDelimited {
         return;
@@ -163,22 +168,22 @@ fn latex_decimal_comma(node: &LinkedNode, out: &mut Vec<Lint>) {
     {
         out.push(Lint {
             offset: node.offset(),
-            message: "{,} из LaTeX: в Typst скобки напечатаются как есть",
-            hint: "десятичная дробь — $dc(\"0,5\")$",
+            message: "{,} from LaTeX: Typst prints the braces as they are",
+            hint: "a decimal fraction is $dc(\"0,5\")$",
         });
     }
 }
 
-/// `smallcaps(…)` у шрифтов оформления без кириллической капители: Typst
-/// молча напечатает строчные.
+/// `smallcaps(...)` with styling fonts that have no Cyrillic small caps:
+/// Typst silently prints lowercase.
 fn smallcaps_call(node: &LinkedNode, out: &mut Vec<Lint>) {
     if let Some(call) = node.cast::<ast::FuncCall>()
         && matches!(call.callee(), ast::Expr::Ident(id) if id.as_str() == "smallcaps")
     {
         out.push(Lint {
             offset: node.offset(),
-            message: "smallcaps не работает с кириллицей: у шрифтов нет капители, выйдут строчные",
-            hint: "капитель из библиотеки — small-caps(…)",
+            message: "smallcaps does not work with Cyrillic: the fonts have no small caps, you get lowercase",
+            hint: "small caps from the library: small-caps(...)",
         });
     }
 }
@@ -201,7 +206,7 @@ fn is_statement(kind: SyntaxKind) -> bool {
     )
 }
 
-/// Строка и столбец (с единицы, столбец — в символах) по байтовому смещению.
+/// Line and column (from one, the column in characters) of a byte offset.
 pub fn line_column(text: &str, offset: usize) -> (usize, usize) {
     let before = &text[..offset.min(text.len())];
     let line = before.matches('\n').count() + 1;
@@ -227,11 +232,11 @@ mod tests {
         assert_eq!(lang_lints("#show: note.with(title: [A], lang: \"de\")\n"), vec![(1, 30)]);
         assert_eq!(lang_lints("#show: book.with(lang: \"uk\")\n").len(), 1);
         assert_eq!(lang_lints("#show: doc => note(lang: \"de\", doc)\n").len(), 1);
-        assert!(lang_lints("#show: note.with(lang: \"en\")\n").is_empty(), "есть словарь");
-        assert!(lang_lints("#show: note.with(lang: \"de\", words: (figure: \"Abb.\"))\n").is_empty(), "свои слова");
-        assert!(lang_lints("#show: note.with(title: [A])\n").is_empty(), "язык по умолчанию");
-        assert!(lang_lints("#set text(lang: \"de\")\n#other.with(lang: \"de\")\n").is_empty(), "не шаблон");
-        assert!(lint("#show: note.with(lang: \"de\")", &[]).is_empty(), "языки неизвестны — не проверяем");
+        assert!(lang_lints("#show: note.with(lang: \"en\")\n").is_empty(), "has a dictionary");
+        assert!(lang_lints("#show: note.with(lang: \"de\", words: (figure: \"Abb.\"))\n").is_empty(), "own words");
+        assert!(lang_lints("#show: note.with(title: [A])\n").is_empty(), "default language");
+        assert!(lang_lints("#set text(lang: \"de\")\n#other.with(lang: \"de\")\n").is_empty(), "not a template");
+        assert!(lint("#show: note.with(lang: \"de\")", &[]).is_empty(), "unknown languages: no check");
     }
 
     #[test]
@@ -248,8 +253,8 @@ mod tests {
         let found = |text: &str| offsets(text).len();
         assert_eq!(found("$0,5$"), 1);
         assert_eq!(found("$x = 1,25 + y$ и $(0,5 + 1)$"), 2);
-        assert_eq!(found("$dc(\"0,5\")$ $0, 5$ $a,b$ 0,5 в тексте"), 0, "не дробь");
-        assert_eq!(found("$(3,6) + [0,1] + {1,2,3} + N(0,1) + x_(1,2) + A = \\{2,3\\}$"), 0, "перечисления");
+        assert_eq!(found("$dc(\"0,5\")$ $0, 5$ $a,b$ 0,5 в тексте"), 0, "not a fraction");
+        assert_eq!(found("$(3,6) + [0,1] + {1,2,3} + N(0,1) + x_(1,2) + A = \\{2,3\\}$"), 0, "lists");
         assert_eq!(found("// $0,5$ в комментарии\n"), 0);
     }
 
@@ -264,7 +269,7 @@ mod tests {
     fn statements_and_escapes_are_fine() {
         assert!(offsets("#let x = 1;\n#set text(red);\n#import \"a.typ\": *;\n").is_empty());
         assert!(offsets("#let x = 1; текст").is_empty());
-        assert!(offsets("#see(\"A\")\\; дальше; и ещё").is_empty(), "\\; и ; в тексте — обычный текст");
-        assert!(offsets("#{ let a = 1; a }").is_empty(), "; внутри кода — не в разметке");
+        assert!(offsets("#see(\"A\")\\; дальше; и ещё").is_empty(), "\\; and ; in text are plain text");
+        assert!(offsets("#{ let a = 1; a }").is_empty(), "; inside code is not in markup");
     }
 }

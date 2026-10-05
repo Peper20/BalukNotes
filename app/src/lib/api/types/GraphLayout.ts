@@ -3,18 +3,26 @@ import type { Edge } from "./Edge";
 import type { PlacedNode } from "./PlacedNode";
 
 /**
- * Граф, готовый к рисованию.
+ * A graph ready to draw.
  */
-export type GraphLayout = { nodes: Array<PlacedNode>, edges: Array<Edge>, 
+export type GraphLayout = { 
 /**
- * Все группы хранилища по порядку — для цветов: фильтр не перекрашивает узлы.
+ * Placed nodes.
+ */
+nodes: Array<PlacedNode>, 
+/**
+ * Edges between them.
+ */
+edges: Array<Edge>, 
+/**
+ * All groups of the vault in order, for colors: a filter does not recolor nodes.
  */
 groups: Array<string>, 
 /**
- * Границы нарисованного с подписями: `[x0, y0, x1, y1]`.
+ * Bounds of the drawing with labels: `[x0, y0, x1, y1]`.
  */
 bounds: [number, number, number, number], 
 /**
- * Заметка в центре («соседи заметки»).
+ * The note in the center ("neighbours of a note").
  */
 center: string | null, };

@@ -310,7 +310,7 @@ test("настройки: пакеты сверх белого списка — 
     await expect(row.locator(".setting-warning")).toContainText("чужой код");
     await input.fill("fletcher");
     await input.dispatchEvent("change");
-    await expect(page.locator(".settings-error")).toContainText("@пространство/имя:версия");
+    await expect(page.locator(".settings-error")).toContainText("@namespace/name:version");
     await input.fill("@preview/fletcher:0.5.8,  @preview/tablem:0.2.0");
     await input.dispatchEvent("change");
     await expect(row.locator(".setting-badge")).toHaveText("изменено на этом устройстве");

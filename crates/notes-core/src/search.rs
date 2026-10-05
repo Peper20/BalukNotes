@@ -1,15 +1,15 @@
-//! Поиск по тексту всех заметок — по индексу исходников ([`crate::outline`]),
-//! без компиляции.
+//! Full-text search over all notes, by the source index
+//! ([`crate::outline`]), without compiling.
 //!
-//! Запрос — слова через пробел; раздел подходит, если каждое слово есть в
-//! его тексте, заголовке или в названии/пути заметки (подстрокой, без учёта
-//! регистра, «ё» = «е»). Вес: название > заголовок раздела > число вхождений в
-//! тексте. Результат — раздел заметки (ссылка ведёт к нему) и фрагмент текста
-//! с отмеченными совпадениями.
+//! A query is words separated by spaces; a section matches if every word is
+//! in its text, its heading or the title/path of the note (as a substring,
+//! case-insensitive, "ё" = "е"). Weight: title > section heading > number of
+//! occurrences in the text. A result is a section of a note (the link leads
+//! to it) and a text fragment with the matches marked.
 //!
-//! Поиск в одной заметке ([`search_in`], «в этой книге» палитры) — все
-//! подходящие разделы по порядку текста: браузерный Ctrl+F видит только
-//! показанную главу книги.
+//! Search in one note ([`search_in`], "in this book" of the palette) gives
+//! all matching sections in text order: the browser's Ctrl+F sees only the
+//! shown chapter of a book.
 
 use std::collections::HashSet;
 
@@ -20,36 +20,44 @@ use crate::outline::{Outline, Section};
 use crate::render::{slug, unique};
 use crate::vault::{NoteId, NoteKind};
 
-/// Сколько разделов одной заметки показывать.
+/// How many sections of one note to show.
 const PER_NOTE: usize = 3;
-/// Длина фрагмента в символах.
+/// Fragment length in characters.
 const SNIPPET: usize = 160;
-/// Сколько символов показать до первого совпадения.
+/// How many characters to show before the first match.
 const BEFORE: usize = 40;
 
+/// A search result: a section of a note.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SearchHit {
+    /// The note.
     pub id: NoteId,
+    /// Note or book.
     pub kind: NoteKind,
-    /// Название заметки (или имя файла).
+    /// Note title (or file name).
     pub title: String,
-    /// Раздел, где нашлось; `None` — начало заметки.
+    /// The section where it was found; `None` - the start of the note.
     pub heading: Option<String>,
-    /// Якорь раздела для ссылки (`#…`).
+    /// Section anchor for the link (`#...`).
     pub anchor: Option<String>,
+    /// Text around the matches.
     pub snippet: Vec<Fragment>,
+    /// Weight: higher is better.
     pub score: u32,
 }
 
-/// Кусок фрагмента: совпадение или текст между совпадениями.
+/// A piece of a fragment: a match or the text between matches.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Fragment {
+    /// The text.
     pub text: String,
+    /// Whether it is a match.
     pub hit: bool,
 }
 
+/// Search over all notes: the best sections first.
 pub fn search(snap: &Snapshot, query: &str, limit: usize) -> Vec<SearchHit> {
     let mut hits = scoped(snap, query, None);
     hits.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.title.cmp(&b.title)));
@@ -57,15 +65,15 @@ pub fn search(snap: &Snapshot, query: &str, limit: usize) -> Vec<SearchHit> {
     hits
 }
 
-/// Поиск в одной заметке (книге): все подходящие разделы по порядку текста.
+/// Search in one note (book): all matching sections in text order.
 pub fn search_in(snap: &Snapshot, id: &NoteId, query: &str, limit: usize) -> Vec<SearchHit> {
     let mut hits = scoped(snap, query, Some(id));
     hits.truncate(limit);
     hits
 }
 
-/// Разделы, где нашлись все слова: у каждой заметки — лучшие [`PER_NOTE`];
-/// с `only` — только она, все разделы по порядку.
+/// Sections where all words were found: the best [`PER_NOTE`] of each note;
+/// with `only` - just that note, all sections in order.
 fn scoped(snap: &Snapshot, query: &str, only: Option<&NoteId>) -> Vec<SearchHit> {
     let words: Vec<Vec<char>> = query.split_whitespace().map(|w| w.chars().map(fold).collect()).collect();
     if words.is_empty() {
@@ -85,7 +93,7 @@ fn scoped(snap: &Snapshot, query: &str, only: Option<&NoteId>) -> Vec<SearchHit>
                 own.push(hit);
             }
         }
-        // Совпало только название — одна строка на заметку, а не по разделу.
+        // Only the title matched: one line per note, not per section.
         if own.iter().all(|h| h.snippet.iter().all(|f| !f.hit)) {
             own.truncate(1);
         }
@@ -128,28 +136,32 @@ fn match_section(
     })
 }
 
-/// Превью заметки для подсказки при наведении на ссылку.
+/// Preview of a note for the tooltip over a link.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct Preview {
+    /// The note.
     pub id: NoteId,
+    /// Note or book.
     pub kind: NoteKind,
+    /// Note title (or file name).
     pub title: String,
-    /// Раздел, на который ведёт ссылка (если якорь нашёлся).
+    /// The section the link leads to (if the anchor was found).
     pub heading: Option<String>,
-    /// Начало текста раздела (или заметки), до `PREVIEW` символов.
+    /// The start of the section (or note) text, up to `PREVIEW` characters.
     pub text: String,
+    /// Tags of the note.
     pub tags: Vec<String>,
 }
 
-/// Длина текста превью в символах.
+/// Preview text length in characters.
 const PREVIEW: usize = 420;
 
-/// Превью заметки `id`; якорь — `id` раздела, его метка или текст заголовка.
+/// Preview of the note `id`; the anchor is a section `id`, its label or the heading text.
 pub fn preview(snap: &Snapshot, id: &NoteId, anchor: Option<&str>) -> Option<Preview> {
     let (entry, outline) = snap.outlines().find(|(e, _)| e.id == *id)?;
     let at = anchor.and_then(|a| section_at(outline, a)).map(|(i, _)| i);
-    // Без якоря — начало заметки: первый раздел с текстом.
+    // No anchor: the start of the note, the first section with text.
     let section = match at {
         Some(i) => &outline.sections[i],
         None => outline.sections.iter().find(|s| !s.text.is_empty())?,
@@ -171,18 +183,19 @@ pub fn preview(snap: &Snapshot, id: &NoteId, anchor: Option<&str>) -> Option<Pre
     })
 }
 
-/// Глава книги со своими тегами — для списка заметок и страницы тегов.
+/// A book chapter with its own tags, for the note list and the tags page.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct TaggedChapter {
+    /// Chapter heading.
     pub title: String,
-    /// `id` заголовка главы: ссылка `…/n/<книга>#<anchor>` открывает главу.
+    /// `id` of the chapter heading: the link `.../n/<book>#<anchor>` opens the chapter.
     pub anchor: String,
-    /// Свои теги главы; теги корня книги (`Outline::tags`) она наследует.
+    /// Own tags of the chapter; it inherits the tags of the book root (`Outline::tags`).
     pub tags: Vec<String>,
 }
 
-/// Главы со своими тегами (`chapter.with(tags: …)`), по порядку.
+/// Chapters with their own tags (`chapter.with(tags: ...)`), in order.
 pub fn tagged_chapters(outline: &Outline) -> Vec<TaggedChapter> {
     outline
         .sections
@@ -195,8 +208,9 @@ pub fn tagged_chapters(outline: &Outline) -> Vec<TaggedChapter> {
         .collect()
 }
 
-/// Раздел по якорю ссылки (`#see(…, anchor: …)`): `id` раздела (метка) или
-/// текст заголовка — как находит ссылка на странице. Номер раздела и его `id`.
+/// A section by a link anchor (`#see(..., anchor: ...)`): a section `id`
+/// (label) or the heading text, as the link on the page finds it. Returns
+/// the section number and its `id`.
 pub fn section_at(outline: &Outline, anchor: &str) -> Option<(usize, String)> {
     let wanted = slug(anchor);
     outline.sections.iter().zip(section_ids(outline)).enumerate().find_map(|(i, (s, sid))| {
@@ -205,9 +219,9 @@ pub fn section_at(outline: &Outline, anchor: &str) -> Option<(usize, String)> {
     })
 }
 
-/// `id` разделов — по тем же правилам, что у отрисовки (`render.rs`): метка,
-/// иначе слаг текста с `-2`, `-3` у повторов. Слаг одинаковых заголовков
-/// («Итоги» в каждой главе) привёл бы к первому из них.
+/// Section `id`s by the same rules as rendering (`render.rs`): the label,
+/// otherwise the slug of the text with `-2`, `-3` on repeats. A slug of
+/// equal headings ("Итоги" in every chapter) would lead to the first of them.
 pub(crate) fn section_ids(outline: &Outline) -> Vec<Option<String>> {
     let mut used = HashSet::new();
     outline
@@ -220,8 +234,8 @@ pub(crate) fn section_ids(outline: &Outline) -> Vec<Option<String>> {
         .collect()
 }
 
-/// Сравнение без регистра и «ё»; один символ → один символ, чтобы позиции
-/// в свёрнутом тексте совпадали с исходным.
+/// Comparison ignoring case and "ё"; one character to one character, so
+/// that positions in the folded text match the original.
 fn fold(c: char) -> char {
     let l = c.to_lowercase().next().unwrap_or(c);
     if l == 'ё' { 'е' } else { l }
@@ -244,7 +258,7 @@ fn count(hay: &[char], needle: &[char]) -> usize {
     n
 }
 
-/// Окно вокруг первого совпадения, по границам слов, с отмеченными словами.
+/// A window around the first match, at word boundaries, with the words marked.
 fn snippet(original: &[char], text: &[char], words: &[Vec<char>]) -> Vec<Fragment> {
     let first = words.iter().filter_map(|w| find(text, w, 0)).min();
     let len = original.len();
@@ -256,7 +270,7 @@ fn snippet(original: &[char], text: &[char], words: &[Vec<char>]) -> Vec<Fragmen
     if end < len {
         end = (start..end).rev().find(|&i| original[i] == ' ').filter(|&i| i > start).unwrap_or(end);
     }
-    // Отметки совпадений в окне: [начало, конец) с объединением пересечений.
+    // Match marks in the window: [start, end), overlaps merged.
     let mut marks: Vec<(usize, usize)> = Vec::new();
     for w in words {
         let mut i = start;
