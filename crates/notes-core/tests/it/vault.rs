@@ -1,5 +1,5 @@
 //! End-to-end check on the test vault `tests/vault` (the catalogue of cases:
-//! `tests/vault/README.md`): real Typst compiling with the `baluk/` library.
+//! `.claude/rules/tests-vault.md`): real Typst compiling with the `baluk/` library.
 //! Needs the package cetz 0.4.2 in the Typst cache (or the network: it gets
 //! downloaded).
 
@@ -128,13 +128,13 @@ fn check_finds_exactly_the_planted_problems() {
     assert_eq!(warned, ["Особые случаи/Предупреждение"]);
     let folders: Vec<_> = report.folders.iter().map(|f| f.file.as_str()).collect();
     assert_eq!(folders, ["Глубоко/а/б/_folder.toml"]);
-    assert_eq!(report.summary(), expected_summary(), "the summary in tests/vault/README.md");
+    assert_eq!(report.summary(), expected_summary(), "the summary in .claude/rules/tests-vault.md");
 }
 
 /// The expected `notes check` summary: the line "Итог: `...`" in
-/// `tests/vault/README.md` (`tools/check.sh` checks it too).
+/// `.claude/rules/tests-vault.md` (`tools/check.sh` checks it too).
 fn expected_summary() -> String {
-    let readme = std::fs::read_to_string(repo().join("tests/vault/README.md")).unwrap();
+    let readme = std::fs::read_to_string(repo().join(".claude/rules/tests-vault.md")).unwrap();
     let line = readme.lines().find_map(|l| l.strip_prefix("Итог: `")).expect("the line \"Итог: `...`\" in the README");
     line.trim_end_matches('`').to_owned()
 }

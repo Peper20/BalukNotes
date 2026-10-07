@@ -361,7 +361,7 @@ fn chapter_is_checked() {
 
 /// The texts of the `/baluk-note` skill (`SKILL.md`, `reference.md`, examples)
 /// are for a model: English and plain Markdown without typography
-/// (`skills/README.md`). Cyrillic and `« » — …` are allowed only in inline
+/// (`.claude/rules/skills.md`). Cyrillic and `« » — …` are allowed only in inline
 /// `code` (verbatim `notes` messages, Russian design words) and in
 /// `argument-hint` (a person sees it).
 #[test]
