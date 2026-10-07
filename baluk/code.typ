@@ -1,15 +1,15 @@
-// Листинги: подсветка в цветах темы, номера строк, выделение строк,
-// метки-выноски ①②③, на которые текст ссылается через #callout(n).
+// Listings: highlighting in theme colors, line numbers, highlighted lines,
+// callout marks ①②③ the text refers to via #callout(n).
 //
-// Правило конспекта: листинг идёт ПОСЛЕ объяснения идеи и короче 25 строк.
-// Длинный код — в файл рядом с главой (см. `code-from-file`), в текст — только
-// ключевой фрагмент.
+// Notes rule: a listing goes AFTER the idea is explained and is under 25
+// lines. Long code goes to a file next to the chapter (see `code-from-file`),
+// the text gets only the key fragment.
 
 #import "theme.typ": current-theme, box-bg
 #import "web.typ": is-web, elem
 #import "i18n.typ": word
 
-// ── Тема подсветки (tmTheme) генерируется из палитры ──────────────────────
+// ── The highlighting theme (tmTheme) is generated from the palette ────────
 #let _hex(c) = c.to-hex()
 
 #let _rule(scope, color, style: "") = (
@@ -35,28 +35,28 @@
     + "</array></dict></plist>",
 )
 
-// ── Опорные цвета подсветки для HTML ──────────────────────────────────────
-// В HTML Typst вшивает цвет подсветки в style="color: #…". Чтобы код
-// перекрашивался вместе с темой, в HTML-режиме подсветка идёт этими
-// условными цветами, а приложение заменяет их на CSS-переменные
-// (--k-code-<ключ>). Значения не должны встречаться в настоящих темах.
+// ── Reference highlighting colors for HTML ────────────────────────────────
+// In HTML Typst bakes the highlighting color into style="color: #...". For
+// code to recolor with the theme, HTML mode highlights with these stand-in
+// colors, and the app replaces them with CSS variables (--k-code-<key>).
+// The values must not occur in real themes.
 #let code-ref-colors = (
   text: rgb("#010100"), keyword: rgb("#010101"), type: rgb("#010102"),
   string: rgb("#010103"), number: rgb("#010104"), comment: rgb("#010105"),
   function: rgb("#010106"), highlight: rgb("#010107"),
 )
 
-/// Тема подсветки для текущего режима: в HTML — опорные цвета.
+/// The highlighting theme for the current mode: reference colors in HTML.
 #let code-theme(theme) = if is-web() { code-ref-colors } else { theme.color.code }
 
-// ── Метка-выноска ─────────────────────────────────────────────────────────
-/// Кружок с номером. В листинге ставится параметром `callouts`, в тексте —
-/// `#callout(2)`, чтобы сослаться на строку.
+// ── Callout mark ──────────────────────────────────────────────────────────
+/// A numbered circle. In a listing it is set by the `callouts` parameter, in
+/// text - `#callout(2)`, to refer to a line.
 #let callout(n) = context {
   let theme = current-theme()
   if is-web() { return elem("span", "k-mark", str(n)) }
-  // Коробка высотой с x-высоту, кружок поверх неё: метка не раздвигает
-  // интерлиньяж строки, в которой стоит.
+  // A box as tall as the x-height, the circle over it: the mark does not
+  // widen the line spacing of its line.
   box(width: 1.05em, height: 0.5em, place(center + horizon, circle(
     radius: 0.5em, fill: theme.color.accent, stroke: none,
     align(center + horizon, text(
@@ -71,14 +71,14 @@
   typ: "Typst", hs: "Haskell", kt: "Kotlin",
 ).at(lg, default: upper(lg))
 
-// ── Листинг ───────────────────────────────────────────────────────────────
-/// - src: строка или raw-блок (```cpp ... ```);
-/// - lang: если код передан строкой;
-/// - caption: заголовок над листингом (имя функции, что делает);
-/// - highlight: номера строк для подсветки фоном, например (4, 5);
-/// - callouts: словарь «номер строки → номер метки», например ("4": 1, "7": 2);
-/// - line-numbers: печатать номера строк;
-/// - complexity: необязательная плашка под листингом, например [$O(n m)$ / $O(1)$].
+// ── Listing ───────────────────────────────────────────────────────────────
+/// - src: a string or a raw block (```cpp ... ```);
+/// - lang: if the code is passed as a string;
+/// - caption: the title above the listing (function name, what it does);
+/// - highlight: line numbers to highlight with a background, e.g. (4, 5);
+/// - callouts: a dictionary "line number -> mark number", e.g. ("4": 1, "7": 2);
+/// - line-numbers: print line numbers;
+/// - complexity: an optional badge under the listing, e.g. [$O(n m)$ / $O(1)$].
 #let listing(
   src,
   lang: "cpp",
@@ -134,13 +134,13 @@
     )
   }
   set raw(theme: tm-theme(theme.color.code))
-  // Лигатуры выключены: «<=» не должно превращаться в «≤» — в листинге
-  // читатель видит то, что надо набрать.
+  // Ligatures are off: "<=" must not turn into "≤" - in a listing the reader
+  // sees what to type.
   set text(font: theme.font.code, size: theme.size.code, ligatures: false, features: ("calt": 0))
   set par(justify: false, leading: 0.62em)
 
-  // Короткий листинг (до 15 строк) не рвём между страницами: половина
-  // функции внизу страницы хуже, чем пустое место.
+  // A short listing (up to 15 lines) is not split between pages: half a
+  // function at the bottom of a page is worse than empty space.
   let can-break = total > 15
   let body = block(
     width: 100%,
@@ -168,13 +168,13 @@
   })
 }
 
-/// Листинг из файла по региону:
-///   // region: имя
+/// A listing from a file by region:
+///   // region: name
 ///   ...
-///   // endregion: имя
-/// ВАЖНО: путь — от корня проекта (начинается с «/»), и сборка идёт с --root:
+///   // endregion: name
+/// IMPORTANT: the path is from the project root (starts with "/"), and the build runs with --root:
 ///   #code-from-file("/code/prefix.cpp", region: "build")
-/// Так код лежит в настоящем .cpp, который компилируется и тестируется.
+/// This way the code lives in a real .cpp that is compiled and tested.
 #let code-from-file(file-path, region: none, ..rest) = {
   let whole = read(file-path)
   let txt = if region == none { whole } else {
@@ -182,9 +182,9 @@
     let end-marker = "// endregion: " + region
     let lines = whole.split("\n")
     let i = lines.position(s => s.trim() == begin-marker)
-    assert(i != none, message: "регион «" + region + "» не найден в " + file-path)
+    assert(i != none, message: "region \"" + region + "\" not found in " + file-path)
     let j = lines.slice(i + 1).position(s => s.trim() == end-marker)
-    assert(j != none, message: "нет конца региона «" + region + "» в " + file-path)
+    assert(j != none, message: "no end of region \"" + region + "\" in " + file-path)
     lines.slice(i + 1, i + 1 + j).join("\n")
   }
   let lg = file-path.split(".").last()

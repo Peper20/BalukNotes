@@ -1,28 +1,29 @@
-// Интерактивные рисунки: график с ползунками и поверхность с вращением.
+// Interactive figures: a plot with sliders and a rotatable surface.
 //
 //   #fig(interactive-plot("a * calc.sin(b * x)", -5, 5,
 //     params: (a: (from: 0, to: 3, value: 1), b: (from: 0.5, to: 4, step: 0.1, value: 1)),
-//     y: (-3, 3)), [Амплитуда и частота синусоиды])
+//     y: (-3, 3)), [Sine amplitude and frequency])
 //
-// Формула — строка с кодом Typst из подмножества (`plots/formula.typ`): её считает
-// и Typst (кадр для PDF и для страницы без JS), и клиент приложения
-// (`app/src/lib/plot/`) — разбор и вычисление там повторяют здешние
-// ПОСТРОЧНО. Меняешь одно — меняй и другое; сверка — фикстура
-// `tests/vault/Рисунки/Интерактив.typ` (её снимок читает Vitest).
+// A formula is a string of Typst code from a subset (`plots/formula.typ`):
+// both Typst (the frame for PDF and for a page without JS) and the app client
+// (`app/src/lib/plot/`) evaluate it - parsing and evaluation there repeat
+// these LINE BY LINE. Change one - change the other; the cross-check is the
+// fixture `tests/vault/Рисунки/Интерактив.typ` (Vitest reads its snapshot).
 //
-// В HTML рисунок — `div.k-plot` с `data-k-plot` (JSON: формулы, диапазоны,
-// параметры) и обычным кадром `canvas` внутри; клиент прячет кадр и рисует
-// живой рисунок. В PDF — кадр при значениях по умолчанию и подпись с ними.
+// In HTML a figure is `div.k-plot` with `data-k-plot` (JSON: formulas,
+// ranges, parameters) and a plain `canvas` frame inside; the client hides
+// the frame and draws a live figure. In PDF - the frame at default values
+// and a caption with them.
 //
-// Свой разбор, а не `eval`: `eval` падает с ошибкой сборки на делении на
-// ноль, `calc.sqrt` от отрицательного и т. п. — а на графике это просто
-// разрыв кривой.
+// Our own parser, not `eval`: `eval` fails the build on division by zero,
+// `calc.sqrt` of a negative and so on - on a plot that is just a gap in the
+// curve.
 //
-// Части — в `plots/`:
-//   formula.typ  разбор и вычисление формулы (построчно как formula.ts клиента)
-//   common.typ   параметры, деления осей, числа, обёртка рисунка
-//   plot.typ     interactive-plot — график с ползунками
-//   surface.typ  interactive-surface — поверхность с вращением
+// Parts in `plots/`:
+//   formula.typ  formula parsing and evaluation (line by line as the client's formula.ts)
+//   common.typ   parameters, axis ticks, numbers, the figure wrapper
+//   plot.typ     interactive-plot - a plot with sliders
+//   surface.typ  interactive-surface - a rotatable surface
 
 #import "plots/formula.typ": *
 #import "plots/common.typ": *

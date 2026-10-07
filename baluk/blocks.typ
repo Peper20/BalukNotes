@@ -1,19 +1,19 @@
-// Смысловые блоки конспекта: определения, теоремы, примеры, замечания и т.д.
+// Semantic blocks of notes: definitions, theorems, examples, remarks and so on.
 //
-// Словарь врезок сознательно маленький. Если хочется новый тип — сначала
-// проверь, не подходит ли существующий: пять цветов на странице — это шум,
-// а не структура (главная ошибка конспекта по БД).
+// The set of boxes is deliberately small. If you want a new kind, first check
+// whether an existing one fits: five colors on a page are noise, not
+// structure (the main mistake of the databases notes).
 
 #import "theme.typ": current-theme, _doc-kind, box-bg, is-dark
 #import "web.typ": is-web, elem
 #import "i18n.typ": word
 
-// Нумеруются только те врезки, на которые ссылаются: определения и теоремы
-// (общий счётчик), примеры (свой). Номер — «глава.n», сброс в начале главы.
+// Only boxes that are referred to are numbered: definitions and theorems
+// (a shared counter), examples (their own). The number is "chapter.n", reset at a chapter start.
 #let _counter(kind) = if kind in ("definition", "theorem") { counter("k-stmt") } else if kind == "example" { counter("k-example") } else { none }
 #let _steps = counter("k-step")
 
-// Классы врезок в HTML: цвет каждой — CSS-переменная темы.
+// Box classes in HTML: the color of each is a theme CSS variable.
 #let _box-classes = (
   definition: "def", theorem: "thm", example: "example", remark: "remark",
   pitfall: "pitfall", idea: "idea", algorithm: "algo",
@@ -27,9 +27,9 @@
   [#ch.#ctr.get().first()]
 }
 
-// ── Подпись врезки ────────────────────────────────────────────────────────
-// Капитель «вручную»: у шрифтов может не быть кириллических капителей, и
-// smallcaps() молча печатает строчные. Прописные поменьше + разрядка.
+// ── Box caption ───────────────────────────────────────────────────────────
+// Small caps "by hand": fonts may lack Cyrillic small caps, and smallcaps()
+// silently prints lowercase. Smaller capitals + letter spacing.
 #let small-caps(s) = context if is-web() { elem("span", "k-caps", upper(s)) } else { text(size: 0.8em, tracking: 0.07em, upper(s)) }
 
 #let _box-label(kind, title, number, color) = {
@@ -38,7 +38,7 @@
   [ ]
 }
 
-// ── Общий каркас ──────────────────────────────────────────────────────────
+// ── Common frame ──────────────────────────────────────────────────────────
 #let _box(kind, title, body) = {
   let ctr = _counter(kind)
   if ctr != none { ctr.step() }
@@ -47,7 +47,7 @@
     let theme = current-theme()
     let color = theme.color.boxes.at(kind)
     let number = _number(kind)
-    // Определения и теоремы короткие — их не рвём между страницами.
+    // Definitions and theorems are short - they are not split between pages.
     let can-break = kind not in ("definition", "theorem")
 
     if is-web() {
@@ -64,7 +64,7 @@
   }
 }
 
-// ── Публичные врезки ──────────────────────────────────────────────────────
+// ── Public boxes ──────────────────────────────────────────────────────────
 #let definition(title: none, body) = _box("definition", title, body)
 #let theorem(title: none, body) = _box("theorem", title, body)
 #let example(title: none, body) = _box("example", title, body)
@@ -73,8 +73,8 @@
 #let idea(title: none, body) = _box("idea", title, body)
 #let algorithm(title: none, body) = _box("algorithm", title, body)
 
-/// Шаг решения внутри примера: «Шаг 1. Рисунок.» Нумерация — своя
-/// в каждом примере.
+/// A solution step inside an example: "Step 1. Drawing." The numbering is
+/// separate in each example.
 #let step(name) = {
   _steps.step()
   context {
@@ -85,7 +85,7 @@
   }
 }
 
-/// Ответ в рамке, прижат вправо.
+/// An answer in a frame, flush right.
 #let answer(body) = context {
   let theme = current-theme()
   if is-web() { return elem("div", "k-answer", [#elem("span", "k-answer-label")[#word("answer"):] #body]) }
@@ -96,7 +96,7 @@
   ))
 }
 
-/// Эскиз доказательства: мельче, с тонкой линией, заканчивается ∎.
+/// A proof sketch: smaller, with a thin rule, ends with ∎.
 #let proof(body) = context {
   let theme = current-theme()
   if is-web() {
@@ -111,8 +111,8 @@
   ]
 }
 
-// ── Ключевая формула ──────────────────────────────────────────────────────
-/// То, что надо запомнить. Одна-две на раздел, не больше, иначе теряет смысл.
+// ── Key formula ───────────────────────────────────────────────────────────
+/// What must be remembered. One or two per section, no more, or it loses its point.
 #let formula(label: none, body) = context {
   let theme = current-theme()
   if is-web() {
@@ -128,9 +128,9 @@
     { if display-text != none { block(below: 3pt, display-text) }; align(center, body) })
 }
 
-// ── Заметка сбоку ─────────────────────────────────────────────────────────
-/// Мелкая заметка сбоку от мысли: то, что полезно знать, но что прервало бы
-/// рассказ. Не чаще одной на полстраницы.
+// ── Margin note ───────────────────────────────────────────────────────────
+/// A small note beside a thought: useful to know, but it would interrupt the
+/// story. No more than one per half page.
 #let margin-note(body) = context {
   let theme = current-theme()
   if is-web() { return elem("aside", "k-aside", body) }
@@ -142,8 +142,8 @@
     })
 }
 
-/// Текст и небольшой рисунок рядом, в две колонки.
-///   #side-by-side[абзац][#fig(canvas(...), [подпись])]
+/// Text and a small figure side by side, in two columns.
+///   #side-by-side[paragraph][#fig(canvas(...), [caption])]
 #let side-by-side(main, side, width: 40%, gap: 1.2em) = context if is-web() {
   elem("div", "k-side", style: "--k-side-w: " + repr(width), {
     elem("div", "k-side-text", main)
@@ -153,8 +153,8 @@
   grid(columns: (1fr, width), column-gutter: gap, align: (top, horizon), main, side)
 }
 
-// ── Вводная часть главы ───────────────────────────────────────────────────
-/// Лид: 2–4 предложения — зачем эта глава и на что опирается.
+// ── Chapter intro ─────────────────────────────────────────────────────────
+/// A lead: 2-4 sentences - why this chapter and what it builds on.
 #let lead(body) = context {
   let theme = current-theme()
   if is-web() { return elem("div", "k-lead", body) }
@@ -165,7 +165,7 @@
   })
 }
 
-/// «В этой главе» («В этой заметке»): что читатель научится делать (глаголами).
+/// "In this chapter" ("In this note"): what the reader will learn to do (in verbs).
 #let plan(..items) = context {
   let theme = current-theme()
   let acc = theme.color.accent
@@ -184,8 +184,8 @@
     stroke: (top: 0.5pt + theme.color.line, bottom: 0.5pt + theme.color.line), inset: (y: 9pt), body)
 }
 
-// ── Итог главы, самопроверка, ошибки ──────────────────────────────────────
-/// Итог: 3–6 пунктов, которые должны остаться в голове после главы.
+// ── Chapter summary, self-check, mistakes ─────────────────────────────────
+/// A summary: 3-6 points that should stay in mind after the chapter.
 #let summary(..items) = context {
   let theme = current-theme()
   let acc = theme.color.accent
@@ -207,13 +207,13 @@
     stroke: (top: 1.5pt + acc), inset: 12pt, { block(below: 8pt, title); entries })
 }
 
-/// Вопросы для самопроверки: пары (вопрос, ответ). Ответы печатаются
-/// отдельно внизу блока мелко — чтобы сначала подумать.
+/// Self-check questions: pairs (question, answer). The answers are printed
+/// separately at the bottom of the block in small type - to think first.
 #let quiz(..pairs) = context {
   let theme = current-theme()
   let acc = theme.color.boxes.idea
   let items = pairs.pos()
-  // В HTML ответы спрятаны в <details>: сначала подумать, потом раскрыть.
+  // In HTML the answers are hidden in <details>: think first, then open.
   if is-web() {
     return elem("div", "k-quiz", {
       elem("div", "k-quiz-head", word("quiz"))
@@ -241,12 +241,12 @@
     })
 }
 
-/// Таблица с шапкой и подсветкой клеток — для трассировок алгоритмов и
-/// сравнений. Клетки идут подряд, как у обычного #table.
-/// - highlight: словарь «"строка,столбец" → цвет»; строки и столбцы с 1,
-///   строка 0 — шапка. Можно "2,*" (вся строка) и "*,3" (весь столбец).
-///   Цвета — имена темы ("line", "second", "third", "accent") или color.
-///   #data-table((auto, 1fr, auto), header: ([шаг], [l], [r]),
+/// A table with a header and highlighted cells - for algorithm traces and
+/// comparisons. Cells go in sequence, as in a plain #table.
+/// - highlight: a dictionary "row,column" -> color; rows and columns from 1,
+///   row 0 is the header. "2,*" (a whole row) and "*,3" (a whole column) are allowed.
+///   Colors are theme names ("line", "second", "third", "accent") or color.
+///   #data-table((auto, 1fr, auto), header: ([step], [l], [r]),
 ///     highlight: ("3,*": "third"), [1], [0], [6], ...)
 #let data-table(cols, ..cells, header: none, highlight: (:), cell-align: auto) = context {
   let theme = current-theme()
@@ -292,7 +292,7 @@
   )
 }
 
-/// Таблица типичных ошибок: пары (ошибка, как избежать).
+/// A table of common mistakes: pairs (mistake, how to avoid).
 #let pitfalls(..pairs) = context {
   let theme = current-theme()
   let bad-color = theme.color.boxes.pitfall

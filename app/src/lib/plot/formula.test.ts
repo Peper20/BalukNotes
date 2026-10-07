@@ -39,11 +39,11 @@ describe("formula", () => {
       throw new Error("no error: " + s);
     };
     expect(err("x^2")).toContain("calc.pow");
-    expect(err("sin(x)")).toContain("неизвестное имя «sin»");
-    expect(err("calc.foo(x)")).toContain("нет функции");
-    expect(err("calc.pow(x)")).toContain("аргументов: 2");
-    expect(err("(x + 1")).toContain("«)»");
-    expect(err("x x")).toContain("лишнее");
-    expect(err("")).toContain("пустая");
+    expect(err("sin(x)")).toContain("unknown name `sin`");
+    expect(err("calc.foo(x)")).toContain("no function");
+    expect(err("calc.pow(x)")).toContain("arguments: 2");
+    expect(err("(x + 1")).toContain("`)`");
+    expect(err("x x")).toContain("extra");
+    expect(err("")).toContain("empty");
   });
 });

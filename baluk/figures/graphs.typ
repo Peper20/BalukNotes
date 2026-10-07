@@ -1,24 +1,24 @@
-// Графы и деревья: рисунок графа и раскладки вершин.
+// Graphs and trees: drawing a graph and vertex layouts.
 
 #import "@preview/cetz:0.4.2"
 #import "../theme.typ": current-theme
 #import "canvas.typ": _draw
 
 // ═════════════════════════════════════════════════════════════════════════
-// Графы (ось y вверх)
+// Graphs (y axis up)
 // ═════════════════════════════════════════════════════════════════════════
 
-/// Граф.
-/// - vertices: словарь имя → (x, y);
-/// - edges: массив (u, v) | (u, v, стиль) | (u, v, стиль, подпись);
-///   стили: "normal", "bold", "second", "dim", "dashed";
-/// - highlight: имена вершин с заливкой акцентом; тусклые: приглушённые;
-/// - labels: словарь имя → содержимое (по умолчанию — само имя);
-/// - marks: словарь имя → (содержимое, якорь) — пометка рядом с вершиной;
-/// - shape: "circle" или "rect" (для узлов с двумя строками —
-///   ключ и приоритет декартова дерева, состояние автомата и т. п.);
-///   размер прямоугольника — `size: (width, height)`.
-/// Встречные рёбра u→v и v→u в ориентированном графе разводятся сами.
+/// A graph.
+/// - vertices: a dictionary name -> (x, y);
+/// - edges: an array of (u, v) | (u, v, style) | (u, v, style, label);
+///   styles: "normal", "bold", "second", "dim", "dashed";
+/// - highlight: names of vertices filled with the accent; dimmed: muted ones;
+/// - labels: a dictionary name -> content (the name itself by default);
+/// - marks: a dictionary name -> (content, anchor) - a mark next to a vertex;
+/// - shape: "circle" or "rect" (for nodes with two lines - the key and
+///   priority of a treap, an automaton state and so on);
+///   the rectangle size is `size: (width, height)`.
+/// Opposite edges u->v and v->u in a directed graph are separated automatically.
 #let graph(
   vertices, edges, directed: false, radius: 0.27, highlight: (),
   dimmed: (), labels: (:), marks: (:), shape: "circle", size: (0.72, 0.46),
@@ -31,21 +31,21 @@
     let (u, v) = (e.at(0), e.at(1))
     let style = e.at(2, default: "normal")
     let label = e.at(3, default: none)
-    // Подпись ребра: сторона от направления u → v и место вдоль ребра (0 — у u, 1 — у v).
+    // Edge label: the side relative to the direction u -> v and the place along the edge (0 - at u, 1 - at v).
     let opts = e.at(4, default: (:))
-    assert(type(opts) == dictionary, message: "graph: пятый элемент ребра — словарь (side: \"left\"/\"right\", at: 0…1)")
+    assert(type(opts) == dictionary, message: "graph: the fifth edge element is a dictionary (side: \"left\"/\"right\", at: 0..1)")
     let side = opts.at("side", default: "left")
-    assert(side in ("left", "right"), message: "graph: side — \"left\" или \"right\"")
+    assert(side in ("left", "right"), message: "graph: side is \"left\" or \"right\"")
     let at = opts.at("at", default: 0.5)
     let (x1, y1) = vertices.at(u)
     let (x2, y2) = vertices.at(v)
     let (dx, dy) = (x2 - x1, y2 - y1)
     let d = calc.sqrt(dx * dx + dy * dy)
     let (ux, uy) = (dx / d, dy / d)
-    // сдвиг встречных рёбер
+    // offset of opposite edges
     let s = if directed and (v, u) in pairs { 0.09 } else { 0 }
     let (ox, oy) = (-uy * s, ux * s)
-    // до края узла: у круга — радиус, у прямоугольника — пересечение со стороной
+    // to the node edge: the radius for a circle, the intersection with a side for a rectangle
     let edge = if shape == "rect" {
       let (a, b) = (size.at(0) / 2, size.at(1) / 2)
       calc.min(
@@ -87,8 +87,8 @@
   }
 })
 
-/// Раскладка дерева по уровням: корень сверху, дети — ниже. Каждому
-/// поддереву выделяется полоса по его ширине — соседи не наезжают.
+/// A tree layout by levels: the root on top, children below. Each subtree
+/// gets a strip of its own width - neighbors do not overlap.
 #let tree-layout(edges, root, dx: 0.9, dy: 0.95) = {
   let children = (:)
   for e in edges {
@@ -115,14 +115,14 @@
   cell-pos
 }
 
-/// Раскладка бинарного дерева: x — порядок обхода «слева направо»
-/// (in-order), y — глубина. Именно так рисуют деревья поиска, декартовы
-/// деревья (treap) и деревья отрезков: ключи идут слева направо.
-/// children: словарь имя → (левый, right) — `none` там, где ребёнка нет.
+/// A binary tree layout: x is the left-to-right traversal order (in-order),
+/// y is the depth. This is how search trees, treaps and segment trees are
+/// drawn: keys go left to right.
+/// children: a dictionary name -> (left, right) - `none` where there is no child.
 #let binary-layout(children, root, dx: 0.85, dy: 0.95) = {
-  // in-order: сначала левое поддерево, потом сам, потом правое.
-  // Счётчик передаётся и возвращается — замыкания в typst не меняют
-  // переменные внешней области.
+  // in-order: the left subtree first, then the node, then the right one.
+  // The counter is passed in and returned - closures in typst do not change
+  // variables of the outer scope.
   let visit(v, depth, i) = {
     if v == none { return ((), i) }
     let (cur, prm) = children.at(v, default: (none, none))
@@ -137,7 +137,7 @@
   cell-pos
 }
 
-/// Рёбра бинарного дерева по словарю детей — в том виде, который ждёт `graph`.
+/// Binary tree edges from the children dictionary - in the form `graph` expects.
 #let binary-edges(children, style: "normal") = {
   let edges = ()
   for (v, (cur, prm)) in children {
@@ -147,7 +147,7 @@
   edges
 }
 
-/// Раскладка по окружности (первая вершина сверху, дальше по часовой).
+/// A circle layout (the first vertex on top, then clockwise).
 #let circle-layout(names, radius: 1.3, start-angle: 90deg) = {
   let n = names.len()
   let cell-pos = (:)

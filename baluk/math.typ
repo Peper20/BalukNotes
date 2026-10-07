@@ -1,7 +1,7 @@
-// Математика в русской традиции.
+// Math in the Russian tradition.
 //
-// Typst не знает tg/ctg/arctg/sh/ch — без этих определений `tg x`
-// набирается как произведение переменных t·g·x.
+// Typst does not know tg/ctg/arctg/sh/ch - without these definitions `tg x`
+// is set as the product of variables t*g*x.
 
 #let tg = math.op("tg")
 #let ctg = math.op("ctg")
@@ -15,16 +15,16 @@
 #let grad = math.op("grad")
 #let const = math.op("const")
 
-/// Дифференциал прямым шрифтом: $dd(x)$ → d x. (В Typst есть и `dif`.)
+/// An upright differential: $dd(x)$ -> d x. (Typst also has `dif`.)
 #let dd(x) = $dif #x$
 
-/// «Равно по определению».
+/// "Equal by definition".
 #let defeq = $:=$
 
-/// Десятичная дробь с запятой: $dc("0,5")$.
+/// A decimal with a comma: $dc("0,5")$.
 ///
-/// ВАЖНО: запятая в матрежиме Typst — разделитель, после неё ставится
-/// пробел, поэтому `$0,5$` печатается как «0, 5». Приём из LaTeX `0{,}5`
-/// тоже не работает — скобки выводятся буквально. Компилятор молчит, ошибку
-/// видно только на странице; её ловит `notes check` (`notes-core::lint`).
+/// IMPORTANT: in Typst math mode a comma is a separator followed by a space,
+/// so `$0,5$` prints as "0, 5". The LaTeX trick `0{,}5` does not work either -
+/// the braces print literally. The compiler is silent, the mistake shows
+/// only on the page; `notes check` catches it (`notes-core::lint`).
 #let dc(s) = math.text(s)

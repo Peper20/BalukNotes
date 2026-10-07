@@ -1,15 +1,15 @@
-// 2D: оси через начало координат, функции, параметрические кривые,
-// заливки, спицы, точки, линии уровня. Ось y смотрит вверх.
+// 2D: axes through the origin, functions, parametric curves, fills, spokes,
+// points, contour lines. The y axis points up.
 
 #import "@preview/cetz:0.4.2"
 #import "../theme.typ": current-theme
 #import "canvas.typ": _draw, _color
 
-// Сколько единиц холста в 1pt: размеры засечек, точек и отступов подписей
-// задаём в pt, чтобы они не росли вместе с масштабом холста.
+// How many canvas units in 1pt: tick, point and label offset sizes are in pt
+// so they do not grow with the canvas scale.
 #let _pt(ctx) = 1pt / ctx.length
 
-/// Оси координат со стрелками и подписями.
+/// Coordinate axes with arrows and labels.
 #let axes(x: (-0.5, 4), y: (-0.5, 3), labels: ($x$, $y$), origin: $O$) = _draw.get-ctx(ctx => {
   let fc = current-theme().color.fig
   let u = _pt(ctx)
@@ -23,7 +23,7 @@
   if origin != none { content((-1 * u, -1 * u), anchor: "north-east", text(size: 0.85em, origin)) }
 })
 
-/// Засечка на оси x с подписью и (необязательно) пунктиром вверх до высоты `to`.
+/// A tick on the x axis with a label and (optionally) a dashed line up to height `to`.
 #let tick(x, label, up-to: none) = _draw.get-ctx(ctx => {
   let fc = current-theme().color.fig
   let u = _pt(ctx)
@@ -35,10 +35,10 @@
   content((x, -3 * u), anchor: "north", label)
 })
 
-/// График y = f(x) на [a, b]. цвет: "line" | "second" | "third" | color.
-/// Подпись ставится у правого конца кривой или, если задан `label-x`,
-/// у точки (подпись-x, f(подпись-x)) — так разводят подписи кривых,
-/// сходящихся в одной точке.
+/// The plot of y = f(x) on [a, b]. color: "line" | "second" | "third" | color.
+/// The label goes at the right end of the curve or, if `label-x` is given, at
+/// the point (label-x, f(label-x)) - this separates labels of curves meeting
+/// at one point.
 #let plot(f, a, b, n: 80, color: auto, thickness: 1.1pt, dashed: false, label: none, label-anchor: "south-west", label-x: none) = _draw.get-ctx(ctx => {
   let theme = current-theme()
   let col = _color(theme, color)
@@ -51,7 +51,7 @@
   }
 })
 
-/// Параметрическая кривая t ↦ (x(t), y(t)).
+/// A parametric curve t ↦ (x(t), y(t)).
 #let parametric(fx, fy, t0, t1, n: 90, color: auto, thickness: 1.1pt, closed: false, fill-color: none) = _draw.get-ctx(ctx => {
   let theme = current-theme()
   import cetz.draw: *
@@ -60,7 +60,7 @@
     stroke: (paint: _color(theme, color), thickness: thickness, join: "round"))
 })
 
-/// Заливка области a ≤ x ≤ b, низ(x) ≤ y ≤ верх(x).
+/// A fill of the region a ≤ x ≤ b, lo(x) ≤ y ≤ hi(x).
 #let fill-between(lo, hi, a, b, n: 60, color: auto) = _draw.get-ctx(ctx => {
   let theme = current-theme()
   import cetz.draw: *
@@ -70,8 +70,8 @@
     fill: if color == auto { theme.color.fig.fill } else { _color(theme, color) })
 })
 
-/// «Спица» — двусторонняя стрелка: вертикальная (x, y0 → y1) или,
-/// с гориз: true, горизонтальная (y, x0 → x1).
+/// A "spoke" - a double-headed arrow: vertical (x, y0 -> y1) or, with
+/// horizontal: true, horizontal (y, x0 -> x1).
 #let spoke(c, from, to, horizontal: false, color: "second") = _draw.get-ctx(ctx => {
   let theme = current-theme()
   let col = _color(theme, color)
@@ -80,7 +80,7 @@
   line(p, q, stroke: 1.1pt + col, mark: (start: "stealth", end: "stealth", fill: col, stroke: 0pt, scale: 0.5))
 })
 
-/// Точка с подписью.
+/// A point with a label.
 #let point(p, label: none, label-anchor: "south-west", color: "line", radius: 1.9pt) = _draw.get-ctx(ctx => {
   let theme = current-theme()
   let col = _color(theme, color)
@@ -89,8 +89,8 @@
   if label != none { content(p, anchor: label-anchor, label, padding: 3pt) }
 })
 
-/// Линии уровня f(x, y) = c методом marching squares: та самая картинка,
-/// по которой студент понимает форму поверхности, глядя сверху.
+/// Contour lines f(x, y) = c by marching squares: the very picture from which
+/// a student grasps the shape of a surface looking from above.
 #let contours(f, levels, xr: (-2, 2), yr: (-2, 2), n: 40, color: auto) = _draw.get-ctx(ctx => {
   let theme = current-theme()
   let col = _color(theme, color)
