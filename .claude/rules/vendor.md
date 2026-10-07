@@ -1,3 +1,8 @@
+---
+paths:
+  - "vendor/**"
+---
+
 # Копии чужих крейтов с правками
 
 Подключены через `[patch.crates-io]` корневого `Cargo.toml`; в workspace не

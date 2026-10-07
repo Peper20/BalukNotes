@@ -1,3 +1,8 @@
+---
+paths:
+  - "app/**"
+---
+
 # app - клиент
 
 Svelte 5 (руны) + TypeScript + Vite, без SvelteKit. Как клиент связан с ядром -

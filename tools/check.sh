@@ -79,12 +79,12 @@ skip() {
 }
 
 # notes check на tests/vault: ровно намеренные проблемы. Ожидаемый итог —
-# строка «Итог: `…`» в tests/vault/README.md (её же сверяет тест ядра).
+# строка «Итог: `…`» в .claude/rules/tests-vault.md (её же сверяет тест ядра).
 vault_check() {
   local expected actual
-  expected=$(sed -n 's/^Итог: `\(.*\)`$/\1/p' tests/vault/README.md)
+  expected=$(sed -n 's/^Итог: `\(.*\)`$/\1/p' .claude/rules/tests-vault.md)
   if [[ -z $expected ]]; then
-    echo "в tests/vault/README.md нет строки «Итог: \`…\`»"
+    echo "в .claude/rules/tests-vault.md нет строки «Итог: \`…\`»"
     return 1
   fi
   # Код выхода 1 — ожидаем: в фикстуре есть намеренные ошибки.
@@ -108,7 +108,7 @@ api_types() {
   fi
 }
 
-# Копии чужих крейтов с правками (vendor/README.md) — их собственные тесты.
+# Копии чужих крейтов с правками (.claude/rules/vendor.md) — их собственные тесты.
 vendor_tests() {
   CARGO_TARGET_DIR=target/vendor cargo test -q --manifest-path vendor/comemo/Cargo.toml --features testing || return 1
   rm -f vendor/comemo/Cargo.lock

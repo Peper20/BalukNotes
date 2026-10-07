@@ -10,7 +10,7 @@ __pycache__/
 /app/dist/
 /app/test-results/
 /app/playwright-report/
-# Отдельный прогон тестов копии (vendor/README.md)
+# Отдельный прогон тестов копии (.claude/rules/vendor.md)
 /vendor/*/Cargo.lock
 # Claude Code: личные настройки и рабочие копии (навыки .claude/skills - в git)
 /.claude/settings.local.json

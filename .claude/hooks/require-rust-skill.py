@@ -73,7 +73,7 @@ def main() -> None:
                     "permissionDecision": "deny",
                     "permissionDecisionReason": (
                         f"Rust edits need the {SKILL} skill loaded (again after a context compaction): "
-                        f'call Skill "{SKILL}" and read crates/README.md (project rules), then retry the edit.'
+                        f'call Skill "{SKILL}" and read .claude/rules/crates.md (project rules), then retry the edit.'
                     ),
                 }
             }

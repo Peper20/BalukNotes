@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-# Copies of foreign crates with patches (vendor/README.md), not workspace members.
+# Copies of foreign crates with patches (.claude/rules/vendor.md), not workspace members.
 exclude = ["vendor"]
 
 [workspace.package]
@@ -91,7 +91,7 @@ missing_panics_doc = "allow"
 doc_markdown = "allow"
 non_ascii_literal = "allow"
 # Panic outside tests only through an `expect` under
-# `#[expect(clippy::expect_used, reason = "...")]` (crates/README.md).
+# `#[expect(clippy::expect_used, reason = "...")]` (.claude/rules/crates.md).
 unwrap_used = "warn"
 expect_used = "warn"
 
@@ -105,6 +105,6 @@ opt-level = 2
 debug = "line-tables-only"
 
 # comemo with a patch: after a full cache clear (`evict(0)`) memory is given
-# back instead of staying as the capacity of structures - vendor/README.md.
+# back instead of staying as the capacity of structures - .claude/rules/vendor.md.
 [patch.crates-io]
 comemo = { path = "vendor/comemo" }

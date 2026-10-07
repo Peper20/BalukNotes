@@ -55,7 +55,7 @@ impl Report {
 
     /// The total in one line: `notes: 19, errors: 1, warnings: 2, broken links: 3`
     /// (folder errors count as errors). `notes check` prints it; the
-    /// expected total of the fixture is in `tests/vault/README.md`.
+    /// expected total of the fixture is in `.claude/rules/tests-vault.md`.
     pub fn summary(&self) -> String {
         let count = |f: fn(&NoteReport) -> usize| self.notes.iter().map(f).sum::<usize>();
         format!(
