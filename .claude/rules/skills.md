@@ -3,121 +3,125 @@ paths:
   - "skills/**"
 ---
 
-# Навыки BalukNotes
+# BalukNotes skills
 
-Навыки Claude Code, которые ставятся вместе с программой: `tools/install.sh`
-кладёт каждый в `~/.claude/skills/<имя>` одной версией с `notes`. Этот файл -
-принципы любого навыка.
+Claude Code skills installed together with the program: `tools/install.sh`
+puts each into `~/.claude/skills/<name>` in one version with `notes`. This
+file - the principles of any skill.
 
-| Навык | Что делает |
+| Skill | What it does |
 |---|---|
-| `baluk-note/` | `/baluk-note`: новая заметка или книга, глава, правка, переименование |
+| `baluk-note/` | `/baluk-note`: a new note or book, a chapter, an edit, a rename |
 
-## Для кого пишем
+## Who we write for
 
-- **Читатель - модель**, в основном сильная (Sonnet, Opus); слабая тоже должна
-  справляться, её контекст - от ~64k токенов. Поэтому правила даются **с
-  причинами** (по причине сильная модель решает непредусмотренный случай), а
-  образцы и справочник страхуют слабую.
-- **Жёстко - только процесс**: пути, команды, проверка, шапка файла, границы.
-  В содержании - свобода: образец - отправная точка, а не предел.
-- Тон спокойный: без NEVER, капса и лишних выделений - они вызывают
-  перестраховку (лишние вопросы, отказ от разумной инициативы).
+- **The reader is a model**, mostly a strong one (Sonnet, Opus); a weak one
+  must cope too, its context starts at ~64k tokens. So rules come **with
+  reasons** (with a reason a strong model handles an unforeseen case), and
+  samples and the reference back up a weak one.
+- **Strict - only the process**: paths, commands, checks, the file header,
+  boundaries. Content is free: a sample is a starting point, not a limit.
+- A calm tone: no NEVER, caps or extra emphasis - they cause overcaution
+  (extra questions, dropping reasonable initiative).
 
-## Самодостаточность
+## Self-sufficiency
 
-- Навык вызывают **из любой папки**, обычно из той, где лежат исходники
-  (лекции, задачи). Всё нужное - в каталоге навыка: `SKILL.md`, образцы,
-  справочник; исходники BalukNotes и документация в сети не нужны, и навык
-  прямо это говорит.
-- Работа - только через **публичную команду `notes`** и правку файлов
-  заметок. Не хватает возможности - сначала команда в CLI, потом навык.
-- `allowed-tools` - только нужные команды `notes` и чтение файлов.
+- The skill is called **from any folder**, usually the one with the sources
+  (lectures, problems). Everything needed is in the skill directory:
+  `SKILL.md`, samples, the reference; BalukNotes sources and online docs are
+  not needed, and the skill says so directly.
+- Work goes only through the **public `notes` command** and editing note
+  files. A capability is missing - first a CLI command, then the skill.
+- `allowed-tools` - only the needed `notes` commands and reading files.
 
-## Данные пользователя
+## User data
 
-- Хранилище - собственные записи пользователя. Навык работает **только в
-  выбранном хранилище**. Хранилища по умолчанию нет: не назвал - спросить
-  (даже если хранилище одно); сам навык хранилищ не создаёт.
-- Создаётся и меняется только то, о чём задача; повод поменять что-то ещё
-  (ссылку в другой заметке, опечатку) - сначала спросить.
-- Исходники пользователя - только читать, в их папках ничего не создавать.
-  Временные файлы (PDF, снимки) - во временной папке сессии.
+- A vault holds the user's own notes. The skill works **only in the chosen
+  vault**. There is no default vault: not named - ask (even if there is one
+  vault); the skill itself does not create vaults.
+- Only what the task is about is created and changed; a reason to change
+  something else (a link in another note, a typo) - ask first.
+- The user's sources are read only, nothing is created in their folders.
+  Temporary files (PDF, screenshots) go to the session's temporary folder.
 
-## Язык и оформление
+## Language and style
 
-- Тексты для модели (`SKILL.md`, справочник, образцы) - **по-английски**:
-  меньше токенов и двусмысленности.
-- В начале и в конце `SKILL.md` - пункт о языке: ответ и заметка - на языке
-  запроса (при правке - на языке заметки); русский запрос - русская заметка,
-  хотя инструкции английские.
-- Сообщения `notes` (пока по-русски) цитировать **дословно**: модель ищет их в
-  выводе.
-- **Простой Markdown** без типографики: `"`, `-`, `->`, `...`. Таблицы - где
-  без них хуже.
-- Для людей - только `argument-hint` (подсказка в интерфейсе), он по-русски.
+- Texts for the model (`SKILL.md`, the reference, samples) are **in English**:
+  fewer tokens and less ambiguity.
+- At the start and at the end of `SKILL.md` - a point about language: the
+  answer and the note are in the language of the request (for an edit - the
+  note's language); a Russian request - a Russian note, although the
+  instructions are English.
+- Quote `notes` and library messages **verbatim**: the model looks for them in
+  the output.
+- **Plain Markdown** without typography: `"`, `-`, `->`, `...`. Tables -
+  where things are worse without them.
+- For people - only `argument-hint` (a hint in the interface), it is in
+  Russian.
 
-## Токены
+## Tokens
 
-- Размер меряем `tiktoken` (`o200k_base`) до и после правки - приблизительно
-  (у Claude свой токенизатор), но быстро и локально:
+- Measure size with `tiktoken` (`o200k_base`) before and after an edit -
+  approximate (Claude has its own tokenizer), but fast and local:
 
   ```sh
   python3 -c 'import sys, tiktoken; e = tiktoken.get_encoding("o200k_base"); [print(len(e.encode(open(f).read())), f) for f in sys.argv[1:]]' skills/baluk-note/SKILL.md
   ```
 
-- Без воды и повторов, но **причины правил и полнота важнее экономии**.
-- Число токенов в текст навыка не писать: модели оно ни к чему и устареет.
-- Большое и не всегда нужное - в отдельный файл, который `SKILL.md` велит
-  прочитать, когда нужно.
+- No filler or repeats, but **reasons for rules and completeness matter more
+  than savings**.
+- Do not write token counts into the skill text: the model does not need them
+  and they go stale.
+- Large and not always needed content goes into a separate file that
+  `SKILL.md` asks to read when needed.
 
-## Устройство навыка
+## Skill layout
 
 ```
-<имя>/
-  SKILL.md       порядок работы, правила с причинами, частые ошибки
-  reference.md   полные сигнатуры и допустимые значения (если есть API)
-  examples/      образцы: целые файлы, которые собираются без ошибок
+<name>/
+  SKILL.md       the workflow, rules with reasons, common mistakes
+  reference.md   full signatures and allowed values (if there is an API)
+  examples/      samples: whole files that build without errors
 ```
 
 `SKILL.md`:
-- шапка: `name`, `description` (по-английски), `disable-model-invocation:
-  true` (навык зовёт пользователь), `argument-hint`, `allowed-tools`;
-- просьба пользователя - `$ARGUMENTS` в тегах `<request>` (отдельными
-  строками) в начале и ещё раз в конце: модель отделяет задачу от
-  инструкций, в длинном промпте задача не теряется. `$` с цифрой не писать:
-  оболочка заменит `$0` словом из вызова;
-- шапку о ходе работы (цель, план, что дальше) пишет модель по навыку, а не
-  заготовка `notes new` (решение пользователя);
-- порядок: язык, контекст (что за программа, где результат), выбор задачи,
-  шаги, справка (пути, синтаксис, ошибки CLI), правила качества, частые
-  вызовы, указатель образцов.
+- the header: `name`, `description` (in English), `disable-model-invocation:
+  true` (the user calls the skill), `argument-hint`, `allowed-tools`;
+- the user's request is `$ARGUMENTS` in `<request>` tags (on separate lines)
+  at the start and once more at the end: the model separates the task from the
+  instructions, and the task is not lost in a long prompt. Do not write `$`
+  with a digit: the shell replaces `$0` with a word of the call;
+- the progress header (goal, plan, what next) is written by the model per the
+  skill, not by the `notes new` template (user's decision);
+- order: language, context (what the program is, where the result goes),
+  choosing the task, steps, reference (paths, syntax, CLI errors), quality
+  rules, common calls, an index of samples.
 
-Образцы вместе используют **каждое** публичное имя библиотеки; комментарии
-говорят, что вызов делает и зачем (параметры - в справочнике). Модель читает
-их целиком до плана, чтобы знать возможности библиотеки.
+Together the samples use **every** public library name; comments say what a
+call does and why (parameters are in the reference). The model reads them in
+full before planning, to know what the library can do.
 
-## Проверка
+## Checks
 
 `tools/check.sh --rust`:
 
-- шаг `baluk-note`: заготовки `notes new`, все образцы и блок "Common calls"
-  из `SKILL.md` собираются во временном хранилище без ошибок, предупреждений
-  и битых ссылок;
-- `cargo test -p notes-core --test it library::`: вызовы `#имя` в `SKILL.md` -
-  публичные имена; каждое имя есть в образцах; справочник совпадает с
-  исходниками по именованным параметрам и значениям по умолчанию; есть
-  `<request>` с `$ARGUMENTS` и нет `$цифра`; в текстах навыка нет кириллицы
-  и типографики (кроме `код` в строке и `argument-hint`); размер навыка в
-  знаках вырос не больше чем на 10 % от `tests/snapshots/skill-size.txt`
-  (рост задуман - `UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test
+- the `baluk-note` step: `notes new` templates, all samples and the "Common
+  calls" block of `SKILL.md` build in a temporary vault without errors,
+  warnings or broken links;
+- `cargo test -p notes-core --test it library::`: `#name` calls in `SKILL.md`
+  are public names; every name is in the samples; the reference matches the
+  sources in named parameters and defaults; there is `<request>` with
+  `$ARGUMENTS` and no `$digit`; the skill texts have no Cyrillic or typography
+  (except inline `code` and `argument-hint`); the skill size in characters
+  grew by no more than 10 % over `tests/snapshots/skill-size.txt` (an
+  intended growth - `UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test
   library`).
 
-## Новый навык
+## A new skill
 
-1. Каталог `skills/<имя>/` с `SKILL.md` по разделам выше.
-2. Установка - в `tools/install.sh` (целиком заменить копией, как
+1. A directory `skills/<name>/` with `SKILL.md` per the sections above.
+2. Installation - in `tools/install.sh` (replace entirely with a copy, as
    `baluk-note`).
-3. Сборка образцов - шаг в `tools/check.sh`, проверки текста - тест рядом с
-   `library.rs`.
-4. Строка в таблицу выше.
+3. Building the samples - a step in `tools/check.sh`, text checks - a test
+   next to `library.rs`.
+4. A row in the table above.

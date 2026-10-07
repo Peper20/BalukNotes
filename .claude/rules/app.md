@@ -3,64 +3,68 @@ paths:
   - "app/**"
 ---
 
-# app - клиент
+# app - the client
 
-Svelte 5 (руны) + TypeScript + Vite, без SvelteKit. Как клиент связан с ядром -
-`docs/architecture.md`.
+Svelte 5 (runes) + TypeScript + Vite, no SvelteKit. How the client is tied to
+the core - `docs/architecture.md`.
 
 ```sh
-npm run dev     # горячая замена: :5173, API - прокси на :8432 (tools/test-env.sh)
-npm run build   # app/dist: отладочный notes serve берёт его с диска - достаточно перезагрузить страницу
-npm run types   # типы API из Rust
-npm test        # Vitest; ещё check, e2e
+npm run dev     # hot reload: :5173, the API is proxied to :8432 (tools/test-env.sh)
+npm run build   # app/dist: a debug notes serve takes it from disk - reloading the page is enough
+npm run types   # API types from Rust
+npm test        # Vitest; also check, e2e
 ```
 
-- Состояние - модули `src/lib/state/` (запуск - `start()` в `index.ts`) и
-  `ui.svelte.ts` (панели, глава, оглавление); новое состояние - свой модуль, не
-  поле в чужом. Чистая логика - `src/lib/*.ts` с Vitest рядом (`*.test.ts`);
-  компоненты - `src/components/`.
-- Сервер - только через `src/lib/api/` (адрес и токен - `api/config.ts`, ошибки
-  - `ApiError`), без `fetch` в компонентах. Источник изменений - `changes.ts`
-  (долгий опрос `GET .../events?after=`, опроса раз в N секунд нет); связь с сервером -
-  `state/connection.svelte.ts` (ответил ли он - `api.onReach`).
-- **Типы API - из Rust** (`ts-rs`, фича `ts`): `npm run types` выгружает их в
-  `src/lib/api/types/` (в git). Поменял структуру ответа - выгрузи и закоммить;
-  руками не править.
-- Хранилище - в адресе (`/v/<имя>/...`, `lib/vault.ts`), выбирается до загрузки
-  состояния (`lib/boot.ts`). Адреса - только через `lib/ids.ts` (`noteHref`,
-  `homeHref`...), не строкой `"/"`/`"/n/..."`; `localStorage` - через
-  `lib/storage.ts` (ключи свои у каждого хранилища).
-- Читателю - название, а не имя файла: `notes.title(id)`,
+- State - modules in `src/lib/state/` (startup - `start()` in `index.ts`) and
+  `ui.svelte.ts` (panels, chapter, contents); new state is its own module, not
+  a field in someone else's. Pure logic - `src/lib/*.ts` with Vitest next to it
+  (`*.test.ts`); components - `src/components/`.
+- The server only through `src/lib/api/` (address and token - `api/config.ts`,
+  errors - `ApiError`), no `fetch` in components. The source of changes is
+  `changes.ts` (long polling `GET .../events?after=`, no polling every N
+  seconds); the server connection is `state/connection.svelte.ts` (whether it
+  answered - `api.onReach`).
+- **API types come from Rust** (`ts-rs`, feature `ts`): `npm run types`
+  exports them to `src/lib/api/types/` (in git). Changed a response structure -
+  export and commit; do not edit by hand.
+- The vault is in the address (`/v/<name>/...`, `lib/vault.ts`), chosen before
+  the state loads (`lib/boot.ts`). Addresses only through `lib/ids.ts`
+  (`noteHref`, `homeHref`...), not as a string `"/"`/`"/n/..."`;
+  `localStorage` through `lib/storage.ts` (each vault has its own keys).
+- The reader sees the title, not the file name: `notes.title(id)`,
   `notes.folderTitle(path)` (`lib/state/notes.svelte.ts`).
-- HTML заметки вставляется в DOM напрямую (`NoteView.svelte`), не шаблоном.
-- Настройка вида = запись в `notes-core::settings::Schema` (`.attr("data-...")`
-  или `.var("--...", "px")`) + правило CSS; `appearance.ts` применяет её по
-  схеме.
-- Стили заметки - только внутри `.k-note { ... }`: блоки `src/baluk-css/`
-  (порядок - `@import` в `baluk.css`), склеиваются в `assets/baluk.css` и
-  проходят lightningcss (префиксы: окно приложения - WebKit, ему нужен
-  `-webkit-user-select`; браузеры - `TARGETS` в `bundle.ts`).
-  Интерфейс - `src/app.css`.
-- Живые блоки (интерактивные рисунки, кадры, граф) - реестр `src/lib/live/`:
-  модуль с `LiveBlock` + селектор в `selectors.ts` + строка в `BLOCKS`.
-- Значки - `@lucide/svelte` (`import X from "@lucide/svelte/icons/x"`), не
-  текстовые глифы. Панель кадров - "тихий" вид: контурные значки без фона и
-  рамки (решение пользователя).
-- Классы интерфейса - уникальные по смыслу: общий `.help` у подсказки настройки
-  и диалога справки однажды растянул настройки за край экрана.
-- Тема на `<html>` - до клиента (`public/assets/theme.js`, ключ `k-theme`);
-  `settings.apply` не трогает `<html>`, пока настройки не пришли: иначе
-  первый кадр - белый.
-- Другая заметка: прежняя стоит на экране, пока грузится новая, но не дольше
-  `STALE_MS` (`reader.svelte.ts`) - из кэша переход без пустого кадра.
-- `<html data-state="loading|ready">`: инструменты и e2e ждут `ready` - новый
-  экран или состояние соблюдает то же.
-- Граф рисует готовую раскладку ядра (`POST /api/graph/layout`): вид -
-  `graph-view.ts`, жесты - `graph-gesture.ts`, переезды - `graph-motion.ts`,
-  физика - `graph-physics.ts` (раскладка ядра - покой). `RETURN = 0.25` и
-  `DAMPING = 0.3` подобрал пользователь (соседи возвращаются на четверть пути):
-  не менять без него.
-- e2e - `e2e/*.spec.ts`: Playwright на системном chromium, сервер на копии
-  `tests/vault` в `tests/.data/e2e`, прогретый заранее. Новая возможность
-  интерфейса - новый сценарий; телефон - `mobile.spec.ts` (400x800: страница не
-  шире окна, замер после `document.fonts.ready`).
+- Note HTML is inserted into the DOM directly (`NoteView.svelte`), not by a
+  template.
+- A view setting = an entry in `notes-core::settings::Schema`
+  (`.attr("data-...")` or `.var("--...", "px")`) + a CSS rule; `appearance.ts`
+  applies it by the schema.
+- Note styles only inside `.k-note { ... }`: blocks in `src/baluk-css/`
+  (order - `@import` in `baluk.css`) are joined into `assets/baluk.css` and go
+  through lightningcss (prefixes: the app window is WebKit, it needs
+  `-webkit-user-select`; browsers - `TARGETS` in `bundle.ts`). The interface -
+  `src/app.css`.
+- Live blocks (interactive figures, frames, the graph) - the registry
+  `src/lib/live/`: a module with `LiveBlock` + a selector in `selectors.ts` + a
+  line in `BLOCKS`.
+- Icons - `@lucide/svelte` (`import X from "@lucide/svelte/icons/x"`), not
+  text glyphs. The frames panel has a "quiet" look: outline icons without
+  background or border (user's decision).
+- Interface classes are unique by meaning: a shared `.help` of a setting hint
+  and the help dialog once stretched the settings past the screen edge.
+- The theme on `<html>` is set before the client (`public/assets/theme.js`,
+  key `k-theme`); `settings.apply` does not touch `<html>` until settings
+  arrive: otherwise the first frame is white.
+- Another note: the previous one stays on screen while the new one loads, but
+  no longer than `STALE_MS` (`reader.svelte.ts`) - from the cache the switch has
+  no empty frame.
+- `<html data-state="loading|ready">`: tools and e2e wait for `ready` - a new
+  screen or state follows the same.
+- The graph draws the core's ready layout (`POST /api/graph/layout`): view -
+  `graph-view.ts`, gestures - `graph-gesture.ts`, moves - `graph-motion.ts`,
+  physics - `graph-physics.ts` (the core layout is the rest state).
+  `RETURN = 0.25` and `DAMPING = 0.3` were tuned by the user (neighbors come back
+  a quarter of the way): do not change without them.
+- e2e - `e2e/*.spec.ts`: Playwright on the system chromium, a server on a copy
+  of `tests/vault` in `tests/.data/e2e`, warmed up beforehand. A new interface
+  feature - a new scenario; phone - `mobile.spec.ts` (400x800: the page is not
+  wider than the window, measured after `document.fonts.ready`).

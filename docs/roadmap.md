@@ -1,276 +1,275 @@
-# План
+# Plan
 
-Отметки: `[x]` сделано, `[~]` в работе, `[ ]` не начато. Сделанное - одной
-строкой (как устроено - `docs/architecture.md`), открытые вопросы -
+Marks: `[x]` done, `[~]` in progress, `[ ]` not started. What is done - one
+line (how it works - `docs/architecture.md`), open questions -
 `docs/questions.md`.
 
-## Приоритетное
+## Priority
 
-- [x] Сервер отпускает память после сборок (решение пользователя): релиз
-      по простою 5 с, `comemo` отпускает акселераторы, аллокатор `notes` -
-      jemalloc. `notes serve` в простое после прогрева `tests/vault` - 361
-      МБ (с glibc было 633, до релиза ~1,17 ГБ); числа - `docs/research/E5.md`
-- [x] Автозапуск `notes serve`: `notes service install | remove | status` -
-      служба systemd пользователя (без root, при входе в систему, после
-      падения - перезапуск, лог - journald); `tools/install.sh` её
-      перезапускает
-- [x] Rust по навыку `rust-best-practices` (решение пользователя): весь код
-      `crates/` - под навык и правила проекта (`.claude/rules/crates.md`): паники -
-      линты `clippy::unwrap_used`/`expect_used`, `expect` вне тестов - под
-      `#[expect]`, паника Typst при сборке - ошибка сборки заметки;
-      `#[allow]` -> `#[expect]`; код, логи, ошибки API и вывод `notes` -
-      по-английски, тексты интерфейса в ядре - русские
-- [~] Весь проект - по-английски, кроме интерфейса клиента (решение
-      пользователя): код (имена, комментарии, документация в коде), логи и
-      сообщения (вывод `notes`, ошибки ядра, предупреждения `lint`, логи
-      сервера, `panic`/`assert` библиотеки), `docs/`, все README и
-      правила `.claude/rules/`, сообщения коммитов и PR (уже сейчас); корневой README - ещё
-      и русская версия (`README.ru.md`, ссылки между ними). Код и тексты читают модели: английский дешевле по
-      токенам, навыку не придётся цитировать русские строки. Порядок (решение
-      пользователя): `crates/` - вместе с задачей "Rust по навыку" (сделано);
-      затем код `app/` (кроме текстов интерфейса; сделано), `baluk/` (вместе
-      с ошибками формул клиента `plot/formula.ts`; сделано), инструменты (`tools/`;
-      сделано, кроме строки "Итог" - вместе с правилами фикстуры), `docs/`, README, `.claude/rules/` (правило о языке в
-      `project.md`), навык (таблица ошибок), тесты текста
-      сообщений. Отдельного режима вывода для моделей нет: обычный вывод
-      короткий (одна проблема - одна строка), структура - `--json`
+- [x] The server releases memory after builds (user's decision): a release
+      after 5 s of idle, `comemo` frees the accelerators, the `notes`
+      allocator is jemalloc. `notes serve` idle after warming `tests/vault` -
+      361 MB (633 with glibc, ~1.17 GB before the release); numbers -
+      `docs/research/E5.md`
+- [x] Autostart of `notes serve`: `notes service install | remove | status` -
+      a systemd user service (no root, at login, restart after a crash, log -
+      journald); `tools/install.sh` restarts it
+- [x] Rust per the `rust-best-practices` skill (user's decision): all code in
+      `crates/` follows the skill and the project rules
+      (`.claude/rules/crates.md`): panics - lints
+      `clippy::unwrap_used`/`expect_used`, `expect` outside tests - under
+      `#[expect]`, a Typst panic during a build - a build error of the note;
+      `#[allow]` -> `#[expect]`
+- [x] The whole project in English except the client interface (user's
+      decision): code, comments, logs and messages, `docs/`, all README and
+      the rules `.claude/rules/`, commit messages and PRs; the root README
+      also has a Russian copy (`README.ru.md`). Models read the code and
+      texts: English is cheaper in tokens, the skill does not quote Russian
+      strings. There is no separate output mode for models: normal output is
+      short (one problem - one line), structure - `--json`
 
-## M0. Библиотека оформления в HTML
+## M0. The layout library in HTML
 
-- [x] `baluk/`: HTML- и PDF-ветка у каждого блока, публичный API по-английски
-      только через `lib.typ` (снимок имён - тест)
-- [x] Темы `classic` и `night`
-- [x] Язык заметки `lang:` и свои слова `words:`; словари `ru` и `en` с
-      одинаковыми ключами (тест)
+- [x] `baluk/`: HTML and PDF branches for every block, the public API in
+      English only through `lib.typ` (a test snapshots the names)
+- [x] Themes `classic` and `night`
+- [x] The note language `lang:` and own words `words:`; dictionaries `ru` and
+      `en` with the same keys (test)
 
-## M1. Ядро и CLI
+## M1. Core and CLI
 
-- [x] Компилятор поверх хранилища: виртуальная `/_baluk/`, встроенные
-      шрифты, пакеты из кэша или сети; заметка и книга
-- [x] Цепочка проходов HTML; рисунки - один SVG на темы, общие глифы,
-      округление ("Матан" 3,7 -> 1,7 МБ, по сети 0,2 МБ)
-- [x] Кэш в памяти и на диске, прогрев, параллельные сборки, наблюдатель
-- [x] Индекс ссылок, обратные ссылки, граф, поиск по тексту
-- [x] `notes` из любой папки: `serve`, `new`, `list`, `tags`, `check`, `pdf`,
-      `docs`, `info`, `vaults`; установка - `tools/install.sh`
-- [x] Навык `/baluk-note`: всё нужное - в навыке (порядок работы, справочник,
-      образцы на каждое публичное имя), только команды `notes`
-- [x] Якоря со знаками: `C++`, `C#`, `a=b` остаются в `id`
-- [x] Характеристики книги: корень `main.typ` (`book.with` - общее для всех
-      глав), своё у главы - `chapter.with` (название, теги, метка); теги глав -
-      в `notes list`/`tags`, на странице тега и в фильтре графа
-- [x] `notes rename`: как в приложении (название, имя файла, ссылки
-      `#see`), навык - через неё
-- [ ] `notes png`: страница заметки картинкой, как в PDF (`typst-render` той
-      же версии, что Typst) - для моделей, которые не читают PDF (решение
-      пользователя)
-- [x] Браузеру - и запасные шрифты тем (New Computer Modern, DejaVu Sans
-      Mono): знак, которого нет в основном шрифте, выглядит как в PDF; части -
-      только со знаками страницы (NCM - переведённый в TrueType)
+- [x] A compiler over the vault: virtual `/_baluk/`, embedded fonts, packages
+      from the cache or network; note and book
+- [x] A chain of HTML passes; figures - one SVG for all themes, shared glyphs,
+      rounding ("Матан" 3.7 -> 1.7 MB, 0.2 MB over the network)
+- [x] Memory and disk cache, warm-up, parallel builds, a watcher
+- [x] Link index, backlinks, graph, full-text search
+- [x] `notes` from any folder: `serve`, `new`, `list`, `tags`, `check`, `pdf`,
+      `docs`, `info`, `vaults`; installation - `tools/install.sh`
+- [x] The `/baluk-note` skill: everything needed is in the skill (workflow,
+      reference, samples for every public name), only `notes` commands
+- [x] Anchors with symbols: `C++`, `C#`, `a=b` stay in the `id`
+- [x] Book properties: the root `main.typ` (`book.with` - shared by all
+      chapters), a chapter's own - `chapter.with` (title, tags, label);
+      chapter tags in `notes list`/`tags`, on the tag page and in the graph
+      filter
+- [x] `notes rename`: as in the app (title, file name, `#see` links), the
+      skill uses it
+- [ ] `notes png`: a note page as a picture, as in the PDF (`typst-render` of
+      the same version as Typst) - for models that do not read PDF (user's
+      decision)
+- [x] The browser also gets the theme fallback fonts (New Computer Modern,
+      DejaVu Sans Mono): a glyph missing from the main font looks as in the
+      PDF; parts only with the page's glyphs (NCM converted to TrueType)
 
-## M2. Клиент `app/`
+## M2. The client `app/`
 
-- [x] Дерево, вкладки, история, палитра Ctrl+K и переход Ctrl+O, поиск (и по
-      книге), теги, превью ссылок, оглавление, "Ссылаются сюда", горячие
-      клавиши, режим чтения, настройки по схеме ядра, узкий экран
-- [x] Обновление по событиям сервера; `refresh.mode`
-- [x] Главы книги заранее, со сверкой версии книги
-- [x] Несколько хранилищ (экран выбора), удаление заметок в корзину, названия
-      вместо имён файлов
-- [x] Ctrl+F в заметке и книге: где искать - глава, заметка или книга, всё
-      хранилище (Tab); повторное Ctrl+F - поиск браузера
-- [x] Переключатель хранилищ внизу боковой панели (как в Obsidian);
-      переименовать и удалить открытое хранилище (в корзину системы, с
-      подтверждением)
-- [x] Настройки хранилища `<хранилище>/.baluk/settings.json` поверх общих;
-      изменение из интерфейса - для хранилища, тема и кегль - для всех
-      ("только для этого хранилища" - по выбору); окно настроек показывает,
-      откуда значение
-- [x] Связь с сервером: метка "нет связи" в верхней строке (заметка
-      остаётся, возврат сам), опроса изменений нет
-- [x] Формулы в названии - текстом исходника ("Ряд sum 1/n^2") в дереве,
-      вкладках и графе; "Ссылаются сюда" - заголовок раздела как в оглавлении
-- [x] Общее книги (название, теги корня) вверху оглавления в любой главе
-- [x] Удалить папку из дерева (правый клик, в корзину со всем, что в ней);
-      тема с первого кадра (без белой вспышки); переход между заметками без
-      пустого кадра; поворот 3D - ближняя сторона едет за указателем
-- [x] Пустые папки - в дереве; переименовать заметку, книгу или папку (правый
-      клик): название, имя файла из него, ссылки `#see` на неё - с планом в
-      диалоге (какие заметки поправятся)
-- [x] 3D на телефоне: свайп вверх-вниз - прокрутка страницы, начатый вбок -
-      вращение
-- [x] Верхняя строка и вкладки - одна закреплённая панель (общий фон, без
-      щели)
-- [x] Превью заметки при наведении и в дереве (карточка - справа от
-      строки); меню дерева (правый клик) сверху называет, для чего оно
-- [x] Страница папки (`/f/<путь>`, решение пользователя): подпапки и
-      заметки, ссылка на граф папки (`/graph?folder=`, заметки с
-      подпапками); путь в верхней строке - ссылки на папки
-- [ ] `__NOTES_API__` - только адрес (`base`): поле `token`, заголовок
-      `Authorization` и `?token=` (`apiUrl(..., { withToken })`) убрать вместе
-      с общим токеном сервера (M4)
+- [x] Tree, tabs, history, the Ctrl+K palette and Ctrl+O switching, search
+      (also in a book), tags, link previews, contents, "Ссылаются сюда",
+      hotkeys, reading mode, settings by the core schema, a narrow screen
+- [x] Updates on server events; `refresh.mode`
+- [x] Book chapters ahead of time, with a check of the book version
+- [x] Several vaults (a choice screen), deleting notes to the trash, titles
+      instead of file names
+- [x] Ctrl+F in a note and a book: where to search - the chapter, the note or
+      book, the whole vault (Tab); a second Ctrl+F - the browser search
+- [x] A vault switcher at the bottom of the sidebar (as in Obsidian); rename
+      and delete the open vault (to the system trash, with confirmation)
+- [x] Vault settings `<vault>/.baluk/settings.json` over the shared ones;
+      a change from the interface - for the vault, theme and font size - for
+      all ("only for this vault" - optional); the settings window shows where
+      a value comes from
+- [x] Server connection: a "нет связи" mark in the top bar (the note stays,
+      it comes back by itself), no change polling
+- [x] Formulas in a title - as source text ("Ряд sum 1/n^2") in the tree,
+      tabs and graph; "Ссылаются сюда" - the section heading as in the
+      contents
+- [x] What the book shares (title, root tags) at the top of the contents in
+      any chapter
+- [x] Delete a folder from the tree (right click, to the trash with
+      everything in it); the theme from the first frame (no white flash);
+      switching notes without an empty frame; 3D rotation - the near side
+      follows the pointer
+- [x] Empty folders in the tree; rename a note, book or folder (right click):
+      the title, the file name from it, `#see` links to it - with a plan in
+      the dialog (which notes get fixed)
+- [x] 3D on a phone: a vertical swipe scrolls the page, one started sideways
+      rotates
+- [x] The top bar and tabs are one pinned panel (shared background, no gap)
+- [x] A note preview on hover and in the tree (the card is to the right of
+      the row); the tree menu (right click) names at the top what it is for
+- [x] A folder page (`/f/<path>`, user's decision): subfolders and notes, a
+      link to the folder graph (`/graph?folder=`, notes with subfolders); the
+      path in the top bar - links to folders
+- [ ] `__NOTES_API__` - only the address (`base`): remove the `token` field,
+      the `Authorization` header and `?token=` (`apiUrl(..., { withToken })`)
+      together with the server's shared token (M4)
 
-## M3. Граф и интерактив
+## M3. Graph and interactivity
 
-- [x] Вход в граф хранилища: значок внизу боковой панели, рядом с
-      "Главной"; значок - своя "звезда" из 4 вершин (выбор пользователя)
-- [x] Протяжка узла графа: указатель за пределами графа не выделяет текст
-      страницы (жест графа отменяет действие мыши по умолчанию)
+- [x] The entry to the vault graph: an icon at the bottom of the sidebar, next
+      to "Главная"; the icon is an own "star" of 4 vertices (user's choice)
+- [x] Dragging a graph node: a pointer outside the graph does not select page
+      text (the graph gesture cancels the default mouse action)
+- [x] The `/graph` page and the live graph; a graph in a note `#vault-graph`
+- [x] `interactive-plot`, `interactive-surface`, `frames`
+- [x] The core layout is Barnes-Hut, 5-10 times faster (`docs/research/E6.md`;
+      the look is approved by the user); Ctrl+click on a node and a link - a
+      background tab
+- [x] A book on the graph: the "книги главами" checkbox on `/graph` - the book
+      root and chapters as a cluster around it; a link into a section goes to
+      its chapter. The look (user's choice): a chapter is a hollow circle
+      smaller than any note, the link is solid and pale; the checkbox is in
+      the filter row; not yet on the home page and in `#vault-graph`
+- [x] Graph forces are sliders (user's decision): folders, repulsion, center,
+      links (the core layout, `Forces` in the filter), neighbors while
+      dragging (client physics); a slide-out panel at the side of the graph
+      (user's choice; hidden by default, Esc hides it), settings `graph.*`
+      for all vaults
 
-- [x] Страница `/graph` и живой граф; граф в заметке `#vault-graph`
-- [x] `interactive-plot`, `interactive-surface`, кадры `frames`
-- [x] Раскладка ядра - Барнс - Хат, в 5-10 раз быстрее (`docs/research/E6.md`;
-      вид одобрен пользователем); Ctrl+щелчок по узлу и ссылке - фоновая
-      вкладка
-- [x] Книга на графе: флажок "книги главами" на `/graph` - корень книги и
-      главы кластером вокруг него; ссылка в раздел - к его главе. Вид (выбор
-      пользователя): глава - полый кружок меньше любой заметки, связь -
-      сплошная бледная; флажок - в строке фильтров; на главной и в
-      `#vault-graph` - пока нет
-- [x] Силы графа - ползунки (решение пользователя): папки, отталкивание,
-      центр, связи (раскладка ядра, `Forces` в фильтре), соседи при
-      перетаскивании (физика клиента); выдвижная панель сбоку графа (выбор
-      пользователя; по умолчанию спрятана, Esc - спрятать), настройки
-      `graph.*` для всех хранилищ
+## The core on the device, the server is storage
 
-## Ядро на устройстве, сервер - хранилище
+User's decision (architecture §1, §9). The priority is **desktop** (M5): notes
+are written on a computer (Claude Code), other devices almost always read. The
+desktop works without a server too, sync joins with M4. Research E4 (WASM) -
+before M7 starts.
 
-Решение пользователя (architecture §1, §9). Приоритет - **десктоп** (M5):
-заметки пишутся на компьютере (Claude Code), остальные устройства почти всегда
-читают. Десктоп работает и без сервера, синхронизация подключится с M4.
-Исследование E4 (WASM) - до начала M7.
+## Device settings - before M5-M6
 
-## Настройки устройства - до M5-M6
+- [x] The group "Это устройство" (`device.*`): warm-up (the whole vault / only
+      the open one / none; a phone - none), simultaneous builds (2), Typst
+      memory (10 builds), pages in memory (64 MB), disk cache (512 MB), the
+      lifetime of a foreign cache (14 days); a gentle warm-up
+- [ ] Phone defaults (memory 32 MB, disk 256 MB, Typst memory 3) are guessed:
+      tune them by measurement in M6
 
-- [x] Группа "Это устройство" (`device.*`): прогрев (всё хранилище / только
-      открытое / нет; телефон - нет), сборок одновременно (2), память Typst (10
-      сборок), страницы в памяти (64 МБ), кэш на диске (512 МБ), срок чужого
-      кэша (14 дней); прогрев бережный
-- [ ] Значения по умолчанию для телефона (память 32 МБ, диск 256 МБ, память
-      Typst 3) - на глаз: подобрать замером в M6
+## M4. Storage server and sign-in
 
-## M4. Сервер-хранилище и вход
+- [ ] Sign-in instead of the shared token (architecture §9): the session
+      lifetime is a server parameter; token hashes on disk, later a KV
+      database (to choose); slow down password guessing (a pause after a
+      failure); a sign-in screen on 401 (the look - variants to choose from)
+- [x] **A vault from the server is untrusted**: HTML is sanitized by an
+      allowlist (allowed tags and attributes), `on*`, dangerous URLs and SVG
+      `foreignObject`/`use` pointing outside are removed. The client is served
+      with a CSP: `script-src 'self'`, `object-src 'none'`, `base-uri 'none'`,
+      `img-src 'self' data: blob:`, `style-src 'self' 'unsafe-inline'`,
+      `font-src 'self'`, `connect-src 'self'`, `frame-ancestors 'self'`. The
+      Vite dev server is not involved. `notes check` warns with one line if
+      something was removed; notes have no JS of their own
+- [x] Typst packages - a whitelist with versions (`notes-core::packages`):
+      another package is a build error; beyond the list - the device setting
+      `device.packages` with a warning (user's decision). Review and extend
+      the list regularly: the beauty of notes matters more; the same rules
+      apply to sync
+- [ ] A server without Typst, `notes-hub` (architecture §1): storage, file
+      versions, events, sessions; for it the core splits into a light crate
+      (storage, paths, settings, watcher) and a crate with Typst
+- [ ] Sync: a copy on the device, file versions, changes on events; the
+      computer writes first, the others receive (user's decision); locking -
+      groundwork
+- [ ] HTTPS (the server itself or a reverse proxy - to decide), a service on
+      a VPS
+- [ ] Client: a clear "sign-in needed" screen (the "нет связи" look - M2)
 
-- [ ] Вход вместо общего токена (architecture §9): срок сессии - параметр
-      сервера; хэши токенов на диске, позже KV-база (выбрать); перебор пароля
-      замедлять (пауза после неудачи); экран входа по 401 (вид - варианты на
-      выбор)
-- [x] **Хранилище с сервера - недоверенное**: HTML очищается по allowlist
-      (разрешённые теги и атрибуты), удаляются `on*`, опасные URL и SVG
-      `foreignObject`/`use` наружу. Клиент отвечает с CSP: `script-src 'self'`,
-      `object-src 'none'`, `base-uri 'none'`, `img-src 'self' data: blob:`,
-      `style-src 'self' 'unsafe-inline'`, `font-src 'self'`, `connect-src 'self'`,
-      `frame-ancestors 'self'`. Dev сервер Vite не задействован. `notes check`
-      предупреждает одной строкой, если что-то очищено; своего JS у заметок нет
-- [x] Пакеты Typst - белый список с версиями (`notes-core::packages`): другой
-      пакет - ошибка сборки; сверх списка - настройка устройства
-      `device.packages` с предупреждением (решение пользователя). Список
-      регулярно пересматривать и расширять: красота заметок важнее; те же
-      правила - при синхронизации
-- [ ] Сервер без Typst `notes-hub` (architecture §1): хранилище, версии
-      файлов, события, сессии; для него ядро делится на лёгкий крейт
-      (хранилище, пути, настройки, наблюдатель) и крейт с Typst
-- [ ] Синхронизация: копия на устройстве, версии файлов, изменения по событию;
-      сначала пишет компьютер, остальные получают (решение пользователя);
-      блокировка - задел
-- [ ] HTTPS (сам сервер или обратный прокси - решить), служба на VPS
-- [ ] Клиент: понятный экран "нужен вход" (вид "нет связи" - M2)
+## M5. Desktop - Tauri with the core inside
 
-## M5. Десктоп - Tauri с ядром внутри
+- [x] Research E7 (`docs/research/E7.md`): WebKitGTK renders notes like
+      Chromium (small differences - below), the interface through the
+      `notes://` scheme and the same `Router` works fully; SSE through the
+      scheme is impossible
+- [x] Parts (user's decision, architecture §1): the thin `notes` calls
+      `notes-typst` (all current commands) from its folder and passes the
+      version; light commands move into `notes` with the core split (M4)
+- [x] Events by long polling instead of SSE (one way for the browser and the
+      window); `notes serve --socket` - a Unix socket without a token, the
+      service listens on it too
+- [x] `notes-app`: a Tauri 2 window without Typst, its own address scheme ->
+      the core socket; the core is already running (service) - connect, if
+      not - start its own (closing the window and SIGTERM stop it); external
+      links and PDF go to system programs
+- [ ] Desktop instead of the browser (user's decision); the console `notes`
+      works alongside; in the browser - a separate web version; `notes serve`
+      stays for self-hosting (architecture §1). The window exists and is
+      installed in the menu; what is left (decide with the user): the root
+      README ("сейчас `notes serve` и браузер"), `docs/writing.md` and the
+      `/baluk-note` skill point to `http://127.0.0.1:8421/...` in a browser -
+      move them to the window; there is no way to open a note in the window
+      from the console (`notes new` prints a browser address;
+      `NOTES_APP_START` is for debugging only) - a command or link like
+      `notes app <note>` is needed, and a second launch must go to the window
+      already open (item "Windows"); the role of the `notes service` service
+      with the window - to decide (a window without the service starts its own
+      core; the skill needs a server to check the page - item "The skill
+      without the service"; tech debt "Autostart")
+- [ ] The skill without the service (user's decision): it looks at the page
+      in the app by starting `notes serve` for the check, otherwise - the PDF
+- [ ] Windows (user's decision): one window; a setting "another vault - in
+      this window or a new one" (this one by default); right click on a vault
+      - "in this window" and "in a new window" with any setting; Ctrl+click -
+      a new window; a vault already open in another window - switch to it
+- [x] A `WebKitWebProcess` crash when closing the window (user's task): the
+      window kills its WebKit process before exit (tech debt "WebKitGTK in
+      the window")
+- [x] Page jitter in the window (touchpad, screen scale 1.25): the document
+      does not scroll, the page column does (`lib/scroll.ts`) - panels and
+      the contents stay in place
+- [x] The window opens maximized or fullscreen if it was so when closed
+      (user's task; `tauri-plugin-window-state`, size and position are not
+      remembered)
+- [ ] WebKitGTK differences (E7): no gap after ∑ and ∫ with limits; the
+      `/graph` filter row wraps (a GTK-styled `<select>` is wider). Done:
+      `baluk.css` goes through lightningcss with prefixes (without
+      `-webkit-user-select` dragging a node selected the whole graph); no
+      elastic page bounce for the mouse and touchpad
+- [x] Installation - `tools/install.sh` (parts, a menu entry and icon; the
+      default service unit has the socket), later a PKGBUILD (user's decision)
+- [x] The app icon (user's choice of 7 variants): an italic "b" and lines of
+      text; it is also the site favicon
+- [ ] A vault copy + sync (M4); the server address and sign-in in settings
 
-- [x] Исследование E7 (`docs/research/E7.md`): WebKitGTK рисует заметки как
-      Chromium (мелкие отличия - ниже), интерфейс через схему `notes://` и
-      тот же `Router` работает целиком; SSE через схему нельзя
-- [x] Части (решение пользователя, architecture §1): тонкий `notes` вызывает
-      `notes-typst` (все нынешние команды) из своей папки и передаёт версию;
-      лёгкие команды переедут в `notes` с разделением ядра (M4)
-- [x] События - долгим опросом вместо SSE (один способ для браузера и окна);
-      `notes serve --socket` - сокет Unix без токена, служба слушает и его
-- [x] `notes-app`: окно Tauri 2 без Typst, своя схема адресов -> сокет ядра;
-      ядро уже запущено (служба) - подключиться, нет - запустить своё (выход
-      окна и SIGTERM его останавливают); внешние ссылки и PDF - программам
-      системы
-- [ ] Десктоп вместо браузера (решение пользователя); консольный `notes`
-      работает рядом; в браузере - отдельная web-версия; `notes serve`
-      остаётся для self-hosted (architecture §1). Окно есть и ставится в
-      меню; что осталось (решить с пользователем): корневой README ("сейчас
-      `notes serve` и браузер"), `docs/writing.md` и навык `/baluk-note`
-      ведут на `http://127.0.0.1:8421/...` в браузере - перевести на окно;
-      открыть заметку в окне из консоли нечем (`notes new` печатает адрес
-      браузера; `NOTES_APP_START` - только для отладки) - нужна команда или
-      ссылка вроде `notes app <заметка>`, и второй запуск должен идти в уже
-      открытое окно (пункт "Окна"); роль службы `notes service` при окне -
-      решить (окно без службы поднимает своё ядро; навыку для проверки
-      страницы нужен сервер - пункт "Навык без службы"; техдолг
-      "Автозапуск")
-- [ ] Навык без службы (решение пользователя): страницу в приложении
-      смотрит, подняв `notes serve` на время проверки, иначе - PDF
-- [ ] Окна (решение пользователя): одно окно; настройка "другое хранилище -
-      в этом окне или в новом" (по умолчанию в этом); правый клик по
-      хранилищу - "в этом окне" и "в новом окне" при любой настройке;
-      Ctrl+щелчок - новое окно; хранилище уже открыто в другом окне -
-      переход к нему
-- [x] Падение `WebKitWebProcess` при закрытии окна (задача пользователя):
-      окно перед выходом убивает свой процесс WebKit (техдолг "WebKitGTK в
-      окне")
-- [x] Дрожь страницы в окне (тачпад, масштаб экрана 1,25): документ не
-      прокручивается, прокручивается колонка страницы (`lib/scroll.ts`) -
-      панели и оглавление стоят на месте
-- [x] Окно открывается развёрнутым или на весь экран, если было так при
-      закрытии (задача пользователя; `tauri-plugin-window-state`, размер и
-      место не запоминаются)
-- [ ] Отличия WebKitGTK (E7): нет зазора после ∑ и ∫ с пределами; строка
-      фильтров `/graph` переносится (`<select>` в виде GTK шире). Сделано:
-      `baluk.css` - через lightningcss с префиксами (без
-      `-webkit-user-select` протяжка узла выделяла весь граф); без упругого
-      отскока страницы для мыши и тачпада
-- [x] Установка - `tools/install.sh` (части, ярлык в меню и значок; юнит
-      службы по умолчанию - с сокетом), потом PKGBUILD (решение пользователя)
-- [x] Значок приложения (выбор пользователя из 7 вариантов): "b" курсивом и
-      строки текста; он же - favicon сайта
-- [ ] Копия хранилища + синхронизация (M4); адрес сервера и вход - в настройках
+## M6. Android - Tauri with the core inside
 
-## M6. Android - Tauri с ядром внутри
+- [ ] The same app on Android; tabs and the graph on a phone (tapping a node -
+      the user decides)
+- [ ] Speed on a phone: first the theme being read, the second after showing
+      (E1); the warm-up does not disturb reading
 
-- [ ] То же приложение под Android; вкладки и граф на телефоне (касание узла -
-      решает пользователь)
-- [ ] Скорость на телефоне: сначала тема, которую читают, вторая - после показа
-      (E1); прогрев не мешает чтению
+## M7. Browser - the core in WASM
 
-## M7. Браузер - ядро в WASM
+- [ ] Research E4: `notes-core` for `wasm32` (no threads, `notify`, `std::fs` -
+      `Storage` in OPFS/IndexedDB), build time and memory of the demo and a
+      large book in Chromium and on a phone, the weight of fonts and packages;
+      report - `docs/research/E4.md`
+- [ ] The core in a Web Worker, the API transport - messages to the worker
 
-- [ ] Исследование E4: `notes-core` под `wasm32` (без потоков, `notify`,
-      `std::fs` - `Storage` в OPFS/IndexedDB), время и память сборки демо и
-      большой книги в Chromium и на телефоне, вес шрифтов и пакетов; отчёт -
-      `docs/research/E4.md`
-- [ ] Ядро в Web Worker, транспорт API - сообщения воркеру
+## Later
 
-## Потом
-
-- Публичные заметки (продумать): заметка открывается по ссылке всем, в
-  полноценном клиенте (не статический сайт); видно, какие публичные. Кто
-  собирает HTML для читателя без приложения - решить (сервер без Typst; ядро
-  владельца или WASM у читателя). Скачать - PDF
-- Много пользователей: аккаунты, хранилище на каждого, база данных за `Storage`
-- История версий, бекапы, анимация алгоритмов, запуск кода, шифрование, iOS
-- Алфавит имён файлов (решение пользователя; механизм - переименование из
-  интерфейса, `notes-core::rename`):
-  допустимые знаки - латиница, кириллица, часть спецзнаков; некоторые
-  спецзнаки в имени файла заменяются словами, а в названии остаются как
-  есть. Какие знаки и какими словами - решить с пользователем; длина до 80
-  букв и "Имя 2" для занятого - как сейчас. Алфавит - правило для всех путей
-  (решение пользователя): вместе с ним - разовая миграция, существующие
-  файлы и папки хранилищ с другими знаками переименовываются тем же
-  механизмом, что и переименование (ссылки `#see` переписываются, со списком
-  и подтверждением); после неё `NoteId` другие имена не принимает. Фикстуры
-  `tests/vault/Имена/` (`C++ и C#`, `50% готово`) - переделать под правило
-- Настоящие формулы в названии (как в оглавлении) в дереве, вкладках, графе -
-  если понадобится: нужны собранные названия всех заметок
-- Пределы сборки (лимит времени и памяти: зависшая заметка - ошибка, а не
-  зависшее устройство) - отложено (решение пользователя: ни один вариант не
-  понравился). Typst не умеет прерывать сборку; рассмотрены: проверки внутри
-  Typst (копии двух его крейтов), сборка в отдельном процессе (теряется кэш
-  Typst, нет на Android и в WASM), сторож без правок Typst (сборка дожигает
-  процессор, перерасход памяти - перезапуск сервера). Пока страхуют встроенные
-  пределы Typst: `while` - 10 000 шагов, глубина вызовов - 80
-- Встроенный редактор - очень низкий приоритет
+- Public notes (to think through): a note opens by a link for everyone, in the
+  full client (not a static site); it is visible which ones are public. Who
+  builds HTML for a reader without the app - to decide (a server without
+  Typst; the owner's core or WASM at the reader). Download - PDF
+- Many users: accounts, a vault per user, a database behind `Storage`
+- Version history, backups, algorithm animation, running code, encryption,
+  iOS
+- An alphabet of file names (user's decision; the mechanism is renaming from
+  the interface, `notes-core::rename`): allowed characters - Latin, Cyrillic,
+  some special characters; some special characters in a file name are
+  replaced by words, but stay as they are in the title. Which characters and
+  which words - decide with the user; length up to 80 letters and "Name 2"
+  for a taken one - as now. The alphabet is a rule for all paths (user's
+  decision): together with it - a one-time migration, existing files and
+  folders of vaults with other characters are renamed by the same mechanism
+  as renaming (`#see` links are rewritten, with a list and confirmation);
+  after it `NoteId` accepts no other names. The fixtures `tests/vault/Имена/`
+  (`C++ и C#`, `50% готово`) - redo under the rule
+- Real formulas in titles (as in the contents) in the tree, tabs, graph - if
+  needed: requires built titles of all notes
+- Build limits (time and memory limits: a hanging note is an error, not a
+  hanging device) - postponed (user's decision: no option was liked). Typst
+  cannot interrupt a build; considered: checks inside Typst (copies of two of
+  its crates), building in a separate process (the Typst cache is lost, not
+  possible on Android and in WASM), a watchdog without Typst changes (the
+  build keeps burning CPU, overspent memory - a server restart). For now
+  Typst's built-in limits cover it: `while` - 10 000 steps, call depth - 80
+- A built-in editor - very low priority

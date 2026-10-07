@@ -3,74 +3,79 @@ paths:
   - "tools/**"
 ---
 
-# tools - проверка, снимки, установка
+# tools - checks, screenshots, installation
 
-| Файл | Что |
+| File | What |
 |---|---|
-| `check.sh` | полная проверка |
-| `install.sh` | `notes` и части (`notes-typst`, окно `notes-app` с ярлыком и значком) в `~/.local/bin` и навык в `~/.claude/skills` одной версией, служба `notes service` - перезапуск; после изменений - снова |
-| `test-env.sh` | сервер на `tests/vault` (данные `tests/.data`, порт 8432) |
-| `visual.mjs`, `shot.mjs` | снимки фикстур и страниц (браузер - `lib/browser.mjs`) |
+| `check.sh` | the full check |
+| `install.sh` | `notes` and its parts (`notes-typst`, the `notes-app` window with a menu entry and icon) into `~/.local/bin` and the skill into `~/.claude/skills` in one version, the `notes service` service is restarted; run again after changes |
+| `test-env.sh` | a server on `tests/vault` (data `tests/.data`, port 8432) |
+| `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 
-## Проверка
+## Checks
 
-Тесты не трогают данные пользователя: хранилище-фикстура `tests/vault/`
-(каталог случаев - `.claude/rules/tests-vault.md`), данные тестов - `tests/.data/` (не в git,
-можно удалять).
+Tests do not touch the user's data: the fixture vault `tests/vault/` (the case
+catalog - `.claude/rules/tests-vault.md`), test data - `tests/.data/` (not in
+git, can be deleted).
 
 ```sh
-tools/check.sh          # полная, перед коммитом и PR (~4 мин)
-tools/check.sh --fast   # без сборки клиента и e2e; ещё --rust, --app
+tools/check.sh          # full, before a commit and a PR (~4 min)
+tools/check.sh --fast   # without the client build and e2e; also --rust, --app
 ```
 
-`check.sh` и `install.sh` идут с приоритетом ниже обычного
-(`nice` 2 и 1, `ionice` 5): компьютер не подлагивает. Шаги: cargo test, clippy (`-D warnings`), fmt; `notes check` на `tests/vault`
-(итог сверяется со строкой "Итог" в `.claude/rules/tests-vault.md`); заготовки `notes new` и
-навык (`.claude/rules/skills.md`); выгруженные типы API совпадают с закоммиченными
-(незакоммиченные - тоже "упал"); клиент - check, Vitest, build, e2e. В конце -
-таблица шагов со временем, код возврата ненулевой при любой ошибке, логи -
-`tests/.data/check/`. Для e2e нужен системный Chromium (`/usr/bin/chromium`,
-другой - `CHROMIUM=...`). Окно `notes-app` собирается, если есть WebKitGTK
-(`pkg-config webkit2gtk-4.1`), иначе - исключается из шагов cargo (облако).
-Перед шагами: `target/` больше 30 ГБ
-(`TARGET_LIMIT_GB`) - `cargo clean`, cargo сам старые сборки не удаляет; при
-своём `CARGO_TARGET_DIR` (общий для worktree) - не чистит.
+`check.sh` and `install.sh` run with lower than normal priority (`nice` 2 and
+1, `ionice` 5): the computer does not lag. Steps: cargo test, clippy
+(`-D warnings`), fmt; `notes check` on `tests/vault` (the total is compared
+with the "Total" line in `.claude/rules/tests-vault.md`); `notes new`
+templates and the skill (`.claude/rules/skills.md`); exported API types match
+the committed ones (uncommitted ones also count as "failed"); the client -
+check, Vitest, build, e2e. At the end - a table of steps with times, a
+non-zero exit code on any failure, logs in `tests/.data/check/`. e2e needs a
+system Chromium (`/usr/bin/chromium`, another one - `CHROMIUM=...`). The
+`notes-app` window is built if WebKitGTK is present (`pkg-config
+webkit2gtk-4.1`), otherwise it is excluded from the cargo steps (cloud).
+Before the steps: `target/` over 30 GB (`TARGET_LIMIT_GB`) - `cargo clean`,
+cargo does not remove old builds itself; with an own `CARGO_TARGET_DIR`
+(shared by worktrees) - no cleaning.
 
-**Эталонные снимки** `tests/snapshots/`: HTML каждой фикстуры (`*.snap`),
-публичные имена библиотеки, эталон поиска. Тест упал - прочитать
-`git diff tests/snapshots`; изменение задумано -
+**Reference snapshots** `tests/snapshots/`: the HTML of every fixture
+(`*.snap`), the public library names, the search reference. A test failed -
+read `git diff tests/snapshots`; the change is intended -
 `UPDATE_SNAPSHOTS=1 cargo test -p notes-core`.
 
-## Посмотреть глазами
+## Look by eye
 
-После правок библиотеки, CSS или клиента - обе темы и узкий экран. Снимки - в
-scratchpad или `tests/.data/`, не в репозиторий; PNG открывать Read.
+After edits of the library, CSS or client - both themes and a narrow screen.
+Screenshots go to the scratchpad or `tests/.data/`, not to the repository;
+open PNG files with Read.
 
 ```sh
-tools/test-env.sh [--fresh] &          # сервер на tests/vault, порт 8432
-tools/visual.mjs [--only Книга]         # фикстуры x (light, dark, narrow) -> tests/.data/visual/index.html
+tools/test-env.sh [--fresh] &          # a server on tests/vault, port 8432
+tools/visual.mjs [--only Книга]         # fixtures x (light, dark, narrow) -> tests/.data/visual/index.html
 tools/shot.mjs "http://127.0.0.1:8432/v/vault/n/демо/компоненты" out.png [--dark] [--size 400x800] [--full]
-tools/shot.mjs URL out.png --print 'document.getElementById("page").scrollTop'  # замер в странице (прокручивается колонка #page)
+tools/shot.mjs URL out.png --print 'document.getElementById("page").scrollTop'  # a measurement in the page (the #page column scrolls)
 ```
 
-- `chromium --screenshot` не использовать: он рисует страницу с нуля без
-  прокрутки - якоря и липкие панели на снимке ломаются. `shot.mjs` не
-  эмулирует телефон (с эмуляцией замеры врут): узкий экран - шириной.
-- Отладочная сборка берёт `baluk/` и `app/dist` с диска; правки Rust - после
-  перезапуска `notes serve`.
-- Остановить тестовый сервер - по порту: `fuser -k -TERM 8432/tcp`. Не
-  `pgrep -x notes-typst`: так находится и служба пользователя `notes serve`
-  (порт 8421). Не `pkill -f ...` и не ждать процесс через `pgrep -f ...`:
-  шаблон совпадает с командной строкой самой оболочки (убивает её или ждёт
-  вечно).
+- Do not use `chromium --screenshot`: it draws the page from scratch without
+  scrolling - anchors and sticky panels break in the screenshot. `shot.mjs`
+  does not emulate a phone (with emulation measurements lie): a narrow screen
+  is set by width.
+- A debug build takes `baluk/` and `app/dist` from disk; Rust edits need a
+  restart of `notes serve`.
+- Stop the test server by port: `fuser -k -TERM 8432/tcp`. Not
+  `pgrep -x notes-typst`: it also finds the user's `notes serve` service
+  (port 8421). Not `pkill -f ...`, and do not wait for a process via
+  `pgrep -f ...`: the pattern matches the command line of the shell itself
+  (it kills it or waits forever).
 
-## Облачное окружение
+## Cloud environment
 
-- Chromium - обёртка `/usr/local/bin/chromium` с `--no-sandbox` (ставит setup
-  script окружения); шрифты встроены; `packages.typst.org` разрешён (CeTZ).
-  Хранилища пользователя нет - работать на `tests/vault`.
-- Диск мал: собирать с `CARGO_PROFILE_DEV_DEBUG=line-tables-only` (полная
-  отладочная информация - десятки ГБ); кончилось место - `cargo clean`.
-- Время: сборка Rust с нуля ~8 мин, `cargo test` ~1 мин, e2e ~1,5 мин.
-- Не для облака (нужны пользователь или его машина): приложения Tauri и
-  Android, авторизация, замена файлов шрифтов, обновление Typst.
+- Chromium is the wrapper `/usr/local/bin/chromium` with `--no-sandbox`
+  (installed by the environment setup script); fonts are embedded;
+  `packages.typst.org` is allowed (CeTZ). There is no user vault - work on
+  `tests/vault`.
+- The disk is small: build with `CARGO_PROFILE_DEV_DEBUG=line-tables-only`
+  (full debug info is tens of GB); out of space - `cargo clean`.
+- Time: a Rust build from scratch ~8 min, `cargo test` ~1 min, e2e ~1.5 min.
+- Not for the cloud (needs the user or their machine): the Tauri and Android
+  apps, authorization, replacing font files, updating Typst.

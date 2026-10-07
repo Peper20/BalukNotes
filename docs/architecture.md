@@ -1,426 +1,450 @@
-# Архитектура
+# Architecture
 
-Заметки на Typst в стиле печатного конспекта, всё лучшее из Obsidian (ссылки,
-граф, быстрый переход, поиск) и интерактив, которого нет в PDF. Платформы:
-браузер, десктоп, Android (iOS - по остаточному принципу).
+Notes on Typst in the style of printed lecture notes, the best of Obsidian
+(links, a graph, quick switching, search) and interactivity a PDF does not
+have. Platforms: browser, desktop, Android (iOS - if there is time left).
 
-## Приоритеты
+## Priorities
 
-1. **Отрисовка** Typst-заметок в HTML так же красиво, как в PDF.
-2. Навигация: дерево, вкладки, быстрый переход, поиск, обратные ссылки, граф.
-3. Интерактив: 2D/3D графический калькулятор, анимации, ползунки.
-4. Сервер в сети - хранилище и синхронизация (HTTPS, вход); ядро на
-   устройствах: десктоп и Android (Tauri), браузер (WASM).
-5. Когда-нибудь: встроенный редактор, история версий, бекапы, шифрование.
+1. **Rendering** of Typst notes in HTML as beautiful as in PDF.
+2. Navigation: tree, tabs, quick switching, search, backlinks, graph.
+3. Interactivity: a 2D/3D graphing calculator, animations, sliders.
+4. A server online - storage and sync (HTTPS, sign-in); the core on devices:
+   desktop and Android (Tauri), browser (WASM).
+5. Some day: a built-in editor, version history, backups, encryption.
 
-Заметки пишет в основном Claude Code, приложение их **показывает**: файлы на
-диске - источник правды.
+Notes are written mostly by Claude Code, the app **shows** them: files on disk
+are the source of truth.
 
-## Решения
+## Decisions
 
-### 1. Typst компилирует устройство, сервер - хранилище
+### 1. Typst compiles on the device, the server is storage
 
-Решение пользователя: VPS слабый (1 ядро, 2 ГБ), Typst там не собрать.
+User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
 
-- **Ядро (`notes-core`: компиляция, кэш, индекс ссылок, граф, поиск) работает
-  на устройстве**, рядом с интерфейсом `app/`, и отвечает ему по HTTP API
-  (`notes-server`); слой `app/src/lib/api/` знает только адрес.
-  - Компьютер: `notes serve` и браузер (есть сейчас); в фоне - служба systemd
-    пользователя (`notes service`, юнит пишет CLI, без root).
-  - Десктоп - окно Tauri 2 без Typst (`notes-app`): ядро - процесс
-    `notes-typst serve`, к которому окно подключается через сокет Unix
-    (`0600` в `$XDG_RUNTIME_DIR`), или запускает его само. Интерфейс ходит
-    своей схемой адресов Tauri, окно передаёт запрос в сокет. Порта нет:
-    страницы браузера и чужие пользователи до ядра не достучатся, токен не
-    нужен. Typst на диске один раз, ядро одно на окно, навык и службу.
-  - Android - то же окно, ядро внутри приложения (консоли там нет): схема
-    обслуживается тем же `Router` в процессе (`docs/research/E7.md`).
-  - Отдельного API на IPC Tauri нет. Ответ схемы - только целиком, поэтому
-    события - долгим опросом, а не SSE.
-  - Браузер без установки - ядро в WASM (Web Worker), транспорт API -
-    сообщения воркеру. Самое трудное (скорость и память Typst на телефоне,
-    шрифты и пакеты в браузере) - сначала исследование E4.
-- **Сервер в сети** - файлы хранилища, их версии, события об изменениях,
-  сессии; без Typst.
-- **Self-hosted и web-версия** (решение пользователя): `notes serve` с Typst -
-  на своей машине или домашнем сервере; на слабом VPS - сервер без Typst,
-  заметки собирает устройство или WASM в браузере. Web-версия - тот же
-  клиент, его раздаёт сервер.
-- **Части ставятся по отдельности** (решение пользователя). `notes` - тонкий:
-  справка, лёгкие команды и вызов частей из своей папки (`notes app` ->
-  `notes-app`), с проверкой версии; нет части - сообщение, какой. Части:
-  `notes-typst` (сборка, `check`, `pdf`, `serve`), `notes-app` (окно, без
-  Typst), `notes-hub` (сервер хранилища, без Typst). Typst - только в
-  `notes-typst`.
-- **На каждом устройстве - копия хранилища** с синхронизацией (§9): заметки
-  читаются без сети, Claude Code пишет в копию на компьютере.
-- Typst - библиотека Rust в ядре с закреплённой версией: HTML-экспорт не
-  ломается от обновления системного `typst`.
-- Интерфейс один на все платформы - Svelte 5 + TypeScript + Vite: оболочка
-  вокруг готового HTML заметок, самый маленький рантайм (Android WebView),
-  изоляция стилей. Типы API - из Rust.
-- **Хранилище - в адресе**: клиент - `/v/<хранилище>/n/<путь>`, API -
-  `/api/vaults/<хранилище>/...`; темы и шрифты - общие, без хранилища
-  (настройки - общие и свои у хранилища, §6). Одна вкладка браузера - одно хранилище (как окно Obsidian):
-  другое открывается переходом с перезагрузкой, а выбирается раньше загрузки
-  состояния, поэтому вкладки и места чтения в `localStorage` у каждого свои.
-  Адрес без хранилища (`/`, прежние `/n/...`) - последнее открытое в этом
-  браузере, иначе экран выбора (`VaultPicker`: список и создание). Ссылки
-  `#see` ядро ставит без хранилища (`/n/...`, HTML один на все адреса),
-  клиент дописывает `/v/<хранилище>`. Сервер открывает хранилище при первом
-  обращении (своё ядро `Notes` у каждого; шрифты и темы - общие с ядром без
-  хранилища, библиотека одна) и прогревает только активное - открытое
-  последним или подсказавшее прогрев. Неактивное без запросов и потоков
-  событий 10 минут сервер закрывает, следующий запрос откроет заново. Темы и
-  шрифты отдаёт ядро без хранилища, поэтому сервер работает и без хранилищ.
-  Переключатель хранилищ
-  - внизу боковой панели: переход, новое, переименовать и удалить открытое
-  (папку - в корзину системы). Открытое хранилище перед этим закрывается
-  (`Notes::close`: прогрев и наблюдатель - стоп); вкладки и места чтения в
-  этом браузере переезжают за ним (`storage.ts: moveVault`).
-- Адрес ядра - одна настройка клиента (`app/src/lib/api/config.ts`:
-  `globalThis.__NOTES_API__` или `configure`), по умолчанию - сервер,
-  отдавший страницу. Там же пока токен (`notes serve --token`: заголовок,
-  `?token=` -> cookie `notes_token`); его заменит вход с сессией (§9).
+- **The core (`notes-core`: compiling, cache, link index, graph, search) runs
+  on the device**, next to the `app/` interface, and answers it over an HTTP
+  API (`notes-server`); the layer `app/src/lib/api/` knows only the address.
+  - Computer: `notes serve` and a browser (exists now); in the background - a
+    systemd user service (`notes service`, the CLI writes the unit, no root).
+  - Desktop - a Tauri 2 window without Typst (`notes-app`): the core is a
+    `notes-typst serve` process the window connects to over a Unix socket
+    (`0600` in `$XDG_RUNTIME_DIR`), or starts itself. The interface uses its
+    own Tauri address scheme, the window passes a request to the socket. No
+    port: browser pages and other users cannot reach the core, no token is
+    needed. Typst is on disk once, one core for the window, the skill and the
+    service.
+  - Android - the same window, the core inside the app (there is no console):
+    the scheme is served by the same `Router` in-process
+    (`docs/research/E7.md`).
+  - There is no separate API over Tauri IPC. A scheme response is only whole,
+    so events use long polling, not SSE.
+  - A browser without installation - the core in WASM (a Web Worker), the API
+    transport is messages to the worker. The hardest parts (Typst speed and
+    memory on a phone, fonts and packages in the browser) - research E4 first.
+- **The server online** - vault files, their versions, change events,
+  sessions; without Typst.
+- **Self-hosted and web version** (user's decision): `notes serve` with Typst
+  - on one's own machine or home server; on a weak VPS - a server without
+  Typst, the device or WASM in the browser builds notes. The web version is the
+  same client, served by the server.
+- **Parts are installed separately** (user's decision). `notes` is thin: help,
+  light commands and calling the parts in its folder (`notes app` ->
+  `notes-app`), with a version check; a missing part - a message which one.
+  Parts: `notes-typst` (building, `check`, `pdf`, `serve`), `notes-app` (the
+  window, without Typst), `notes-hub` (the storage server, without Typst).
+  Typst only in `notes-typst`.
+- **Every device has a copy of the vault** with sync (§9): notes are read
+  without a network, Claude Code writes to the copy on the computer.
+- Typst is a Rust library in the core with a pinned version: the HTML export
+  does not break with an update of the system `typst`.
+- One interface for all platforms - Svelte 5 + TypeScript + Vite: a shell
+  around ready note HTML, the smallest runtime (Android WebView), style
+  isolation. API types come from Rust.
+- **The vault is in the address**: the client - `/v/<vault>/n/<path>`, the
+  API - `/api/vaults/<vault>/...`; themes and fonts are shared, without a
+  vault (settings - shared and per vault, §6). One browser tab - one vault (as
+  an Obsidian window): another opens by navigating with a reload, and is
+  chosen before the state loads, so tabs and reading positions in
+  `localStorage` are separate for each. An address without a vault (`/`, the
+  former `/n/...`) - the last one opened in this browser, otherwise the choice
+  screen (`VaultPicker`: list and creation). The core sets `#see` links
+  without a vault (`/n/...`, one HTML for all addresses), the client adds
+  `/v/<vault>`. The server opens a vault on the first request (each has its
+  own `Notes` core; fonts and themes are shared with the vault-less core, the
+  library is one) and warms only the active one - the last opened or the one
+  that hinted the warm-up. An inactive vault without requests or event
+  streams for 10 minutes is closed by the server, the next request opens it
+  again. The vault-less core serves themes and fonts, so the server works
+  without vaults too. The vault switcher is at the bottom of the sidebar:
+  switch, new, rename and delete the open one (the folder - to the system
+  trash). The open vault is closed before that (`Notes::close`: warm-up and
+  watcher stop); tabs and reading positions in this browser move with it
+  (`storage.ts: moveVault`).
+- The core address is one client setting (`app/src/lib/api/config.ts`:
+  `globalThis.__NOTES_API__` or `configure`), the server that served the page
+  by default. The token lives there for now (`notes serve --token`: a header,
+  `?token=` -> the cookie `notes_token`); sign-in with a session replaces it
+  (§9).
 
 ```
-   компьютер             десктоп / Android (Tauri)     браузер (план)
-   браузер: app/         WebView: app/                 app/
-      | HTTP localhost      | своя схема адресов          | сообщения
-   notes serve           сокет -> notes-typst serve    ядро в WASM (воркер)
-                         (Android - ядро в процессе)
+   computer              desktop / Android (Tauri)     browser (plan)
+   browser: app/         WebView: app/                 app/
+      | HTTP localhost      | own address scheme          | messages
+   notes serve           socket -> notes-typst serve   core in WASM (worker)
+                         (Android - core in-process)
    notes-core            notes-core                    notes-core
-   копия хранилища       копия хранилища               копия хранилища
+   vault copy            vault copy                    vault copy
       +--------------------------+-----------------------------+
-                                 | HTTPS: вход, файлы, версии, события
+                                 | HTTPS: sign-in, files, versions, events
                        +---------+----------+
-                       | сервер (VPS)       |  хранилище, синхронизация, сессии
-                       | без Typst          |  1 ядро, 2 ГБ
+                       | server (VPS)       |  storage, sync, sessions
+                       | without Typst      |  1 core, 2 GB
                        +--------------------+
 ```
 
-### 2. Хранилище - папка с `.typ`, один Typst-проект
+### 2. A vault is a folder of `.typ` files, one Typst project
 
-- **Каталог данных** - вне репозитория: `--data` / `NOTES_DATA`, иначе `data`
-  из `~/.config/baluk-notes/config.toml`, иначе `~/.local/share/baluk-notes`
-  (`notes info` - где). В нём `vaults/<имя>/` - хранилища, `settings.json`,
-  `cache/` (можно удалять). `notes` работает из любой папки: библиотека,
-  клиент и шрифты встроены. Код ходит к данным только через `notes-core`, ядро
-  к файлам - через `trait Storage` (`DirStorage`, в тестах `MemStorage`):
-  замена на базу данных затронет одно место.
-- **Хранилищ несколько**, как в Obsidian: имя - имя папки в `vaults/`
-  (`notes-core::vaults::VaultName`: без `/`, знаков, запрещённых в Windows, и
-  служебных `_`/`.`). У каждого свои заметки, ссылки, граф, кэш, вкладки и
-  места чтения. **Хранилища по умолчанию нет** (решение пользователя): даже
-  первое создаёт и называет пользователь (в приложении или `notes vaults
-  new`); программа сама хранилищ не создаёт и не переносит. Команды заметок -
-  всегда `--vault <имя>` (без него - ошибка со списком); папка вне каталога
-  данных - путём (`--vault tests/vault`). Настройки хранилища, когда появятся,
-  - в `<хранилище>/.baluk/` (переезжают с папкой); настройки устройства - в
-  каталоге данных.
-- **Удаление заметки и папки** - только из интерфейса, с подтверждением, в
-  корзину системы (`Storage::trash`, крейт `trash`; книга - папкой, папка -
-  со всем, что в ней).
-- **Переименование** - из интерфейса, по плану в диалоге (`notes-core::rename`):
-  название в файле (`title:` шаблона, у папки - `_folder.toml`), имя файла из
-  него (как у `notes new`), буквальные `#see` на неё во всех заметках.
-- **Папки в дереве** - с заметками и пустые (`Vault::folders`); каталог только
-  с файлами не заметок (`code/`, `img/` рядом с заметкой) - не папка. Тесты и e2e
-  передают свою корзину (`--trash`, `NotesConfig::trash`).
-- Корень хранилища - корень Typst-проекта; заметки лежат по папкам-областям.
-- Библиотека подключается **виртуально**: ядро отдаёт `/_baluk/...` из
-  `baluk/` приложения, в релизе - встроенной в бинарник; версия всегда равна
-  версии приложения. Обычный `typst compile` хранилище не соберёт - PDF делает
-  приложение (`notes pdf`, кнопка в клиенте). Тема приходит из
+- **The data directory** is outside the repository: `--data` / `NOTES_DATA`,
+  otherwise `data` from `~/.config/baluk-notes/config.toml`, otherwise
+  `~/.local/share/baluk-notes` (`notes info` - where). It holds
+  `vaults/<name>/` - vaults, `settings.json`, `cache/` (can be deleted).
+  `notes` works from any folder: the library, client and fonts are embedded.
+  Code reaches data only through `notes-core`, the core reaches files through
+  `trait Storage` (`DirStorage`, `MemStorage` in tests): replacing it with a
+  database touches one place.
+- **There are several vaults**, as in Obsidian: the name is the folder name
+  in `vaults/` (`notes-core::vaults::VaultName`: no `/`, characters forbidden
+  on Windows, or internal `_`/`.`). Each has its own notes, links, graph,
+  cache, tabs and reading positions. **There is no default vault** (user's
+  decision): even the first one is created and named by the user (in the app
+  or `notes vaults new`); the program never creates or moves vaults itself.
+  Note commands always take `--vault <name>` (without it - an error with the
+  list); a folder outside the data directory - by path (`--vault
+  tests/vault`). Vault settings live in `<vault>/.baluk/` (they move with the
+  folder); device settings - in the data directory.
+- **Deleting a note or folder** - only from the interface, with confirmation,
+  to the system trash (`Storage::trash`, the `trash` crate; a book - as a
+  folder, a folder - with everything in it).
+- **Renaming** - from the interface, by a plan in a dialog
+  (`notes-core::rename`): the title in the file (the template's `title:`, for
+  a folder - `_folder.toml`), the file name from it (as in `notes new`),
+  literal `#see` to it in all notes.
+- **Folders in the tree** - with notes and empty ones (`Vault::folders`); a
+  directory with only non-note files (`code/`, `img/` next to a note) is not a
+  folder. Tests and e2e pass their own trash (`--trash`, `NotesConfig::trash`).
+- The vault root is the Typst project root; notes lie in folders by area.
+- The library is attached **virtually**: the core serves `/_baluk/...` from
+  the app's `baluk/`, in release - embedded in the binary; its version always
+  equals the app version. A plain `typst compile` cannot build the vault - the
+  app makes PDF (`notes pdf`, a button in the client). The theme comes from
   `sys.inputs.theme`.
-- **Заметка** - один `.typ`, собирается отдельно: быстро, и сломанная не валит
-  остальные. **Книга** (большой конспект) - папка с `main.typ` и главами,
-  чтобы главы не считались заметками; `=` у неё - глава с номером.
-- **Характеристики книги**: `main.typ` - корень (решение пользователя:
-  отдельный файл, не первая глава); `book.with` - общее для всех глав (язык, слова,
-  теги), глава его наследует. Своё у главы - `chapter.with` (название, теги,
-  метка): ставит заголовок главы и `ul.k-tags.k-chapter-tags`. Книга
-  собирается целиком, поэтому язык и тема у глав одни; теги главы - в индексе
-  исходников (`Section::tags`: глава - раздел первого уровня со своими
-  тегами), страница - только теги корня (`passes/tags.rs`). Тег книги в
-  фильтре графа и `notes tags` - у корня или любой главы; список заметок
-  отдаёт главы со своими тегами (`search::TaggedChapter`, якорь - как `id`
-  заголовка), страница тега показывает их отдельными строками.
-- **Название и путь - разное** (решение пользователя). Название - `title:`
-  шаблона (у книги - в `main.typ`), любой текст; путь - только адрес: по нему
-  ссылки, проверка, PDF, URL. Интерфейс показывает названия (без `title:` -
-  имя файла). Индекс исходников берёт название без компиляции
-  (`graph::Snapshot::title`). Название папки - `_folder.toml` в ней
-  (`title = "..."`, `notes-core::folders`; неизвестный ключ - ошибка `notes
-  check`). `notes new --title` делает имя файла из названия
-  (`new_note::file_name`: без знаков, запрещённых в Windows, служебных `_`/`.`
-  в начале, имён устройств и `main`; занятое без учёта регистра - с номером).
-  `#see` без подписи берёт название цели из `/_vault/title/<путь>`
-  (`graph::TitleData`), поэтому версия ссылающейся заметки включает название
-  цели.
-- **Ссылки** - `#see("Сеть/SSH", anchor: "Туннели")`, в HTML
-  `<a class="k-link" data-k-target data-k-anchor>`, адрес ставит ядро. Якорь -
-  текст заголовка или метка; `id` заголовку без метки ядро выдаёт само:
-  пробелы и обычная пунктуация -> `-`, остальные знаки остаются (`C++`, `C#`,
-  в адресе `%23`). `notes check` проверяет ссылки по собранным страницам (у
-  несобравшейся - по индексу). Обратные ссылки и граф - по **индексу из
-  исходников** (`notes-core::graph`: парсер Typst находит `#see` с буквальной
-  строкой, файл разбирается заново, только если изменился) плюс ссылки
-  последней удачной сборки (вычисляемые пути).
-- **Граф - модуль ядра** (`notes-core::vault_graph`): фильтр (папки, тег,
-  ненаписанные, без связей, соседи заметки) и детерминированная раскладка
-  (силовая модель: отталкивание по Барнсу - Хату, притяжение к центру на
-  постоянную площадь на узел, начало - узлы по порядку путей вдоль кривой
-  Гильберта; затем раздвигание прямоугольников "узел + подпись"; кэш
-  `Layouts`) - одни для всех. Силы раскладки (`Forces`: папки, отталкивание,
-  центр, связи) - в фильтре: страница графа передаёт настройки `graph.*`,
-  граф в заметке - по умолчанию (PDF не зависит от устройства). Клиент рисует готовый граф (`POST .../graph/layout`) на главной и на `/graph`; заметка вставляет
-  его через `#vault-graph(...)`, который читает `/_vault/graph/<фильтр>.json`
-  (реестр данных хранилища `vault_data`), рисует CeTZ (PDF, HTML без JS), а
-  клиент оживляет по тем же координатам. Версия такой заметки включает хэш
-  ответа графа: правка, не изменившая граф, её не пересобирает. Раскладка ядра
-  - покой: движение (перетаскивание с соседями, переезды, появление) только в
-  браузере, нетронутый граф совпадает с картинкой PDF, "вернуть раскладку" на
-  `/graph` - плавный переезд к ней.
-- **Книги главами** (`GraphFilter::chapters`, флажок на `/graph`): книга -
-  корень и вершины глав (`<книга>/.<номер>`, разделы первого уровня) с
-  рёбрами "книга - глава" - короче и жёстче ссылок, поэтому глава держится у
-  корня. Ссылка из главы - от её вершины (ссылки разделов - из содержания,
-  `outline::Section::links`), ссылка в раздел книги (`anchor`) - к главе
-  этого раздела; без якоря и до первой главы - корень. Щелчок по главе -
-  книга на её заголовке. Глава - полый кружок меньше любой заметки
-  (`CHAPTER_R`), связь "книга - глава" - бледная линия.
-- **Язык заметки** - `lang:` шаблона: слова оформления из словаря
-  `baluk/i18n.typ` (свои - `words:`), в HTML - `lang` у `<article>`. Языки
-  словарей библиотека выгружает в `css.typ` (`<k-langs>`), и `notes check`
-  предупреждает о `lang:` без словаря и без `words:`.
+- **A note** is one `.typ`, built separately: fast, and a broken one does not
+  break the others. **A book** (large notes) is a folder with `main.typ` and
+  chapters, so chapters do not count as notes; its `=` is a numbered chapter.
+- **Book properties**: `main.typ` is the root (user's decision: a separate
+  file, not the first chapter); `book.with` - shared by all chapters
+  (language, words, tags), a chapter inherits it. A chapter's own -
+  `chapter.with` (title, tags, label): it sets the chapter heading and
+  `ul.k-tags.k-chapter-tags`. A book is built whole, so its chapters share the
+  language and theme; chapter tags are in the source index (`Section::tags`: a
+  chapter is a first-level section with its own tags), the page has only the
+  root tags (`passes/tags.rs`). A book tag in the graph filter and `notes tags`
+  belongs to the root or any chapter; the note list returns chapters with
+  their own tags (`search::TaggedChapter`, the anchor is the heading `id`),
+  the tag page shows them as separate rows.
+- **Title and path differ** (user's decision). The title is the template's
+  `title:` (for a book - in `main.typ`), any text; the path is only an
+  address: links, checks, PDF, URL use it. The interface shows titles
+  (without `title:` - the file name). The source index takes the title without
+  compiling (`graph::Snapshot::title`). A folder title is `_folder.toml` in it
+  (`title = "..."`, `notes-core::folders`; an unknown key is a `notes check`
+  error). `notes new --title` makes the file name from the title
+  (`new_note::file_name`: without characters forbidden on Windows, internal
+  `_`/`.` at the start, device names and `main`; a taken one, ignoring case,
+  gets a number). A `#see` without text takes the target title from
+  `/_vault/title/<path>` (`graph::TitleData`), so the version of the linking
+  note includes the target title.
+- **Links** - `#see("Сеть/SSH", anchor: "Туннели")`, in HTML
+  `<a class="k-link" data-k-target data-k-anchor>`, the core sets the address.
+  The anchor is a heading text or a label; the core gives an `id` to a heading
+  without a label: spaces and common punctuation -> `-`, other characters stay
+  (`C++`, `C#`, `%23` in the address). `notes check` checks links against the
+  built pages (for a failed one - against the index). Backlinks and the graph
+  come from the **source index** (`notes-core::graph`: the Typst parser finds
+  `#see` with a literal string, a file is parsed again only if it changed)
+  plus the links of the last successful build (computed paths).
+- **The graph is a core module** (`notes-core::vault_graph`): a filter
+  (folders, tag, unwritten, unlinked, neighbors of a note) and a deterministic
+  layout (a force model: Barnes-Hut repulsion, attraction to the center for a
+  constant area per node, the start - nodes in path order along a Hilbert
+  curve; then spreading the "node + label" rectangles; the `Layouts` cache) -
+  the same for everyone. The layout forces (`Forces`: folders, repulsion,
+  center, links) are in the filter: the graph page passes the `graph.*`
+  settings, a graph in a note uses the defaults (the PDF does not depend on
+  the device). The client draws the ready graph (`POST .../graph/layout`) on
+  the home page and on `/graph`; a note inserts it via `#vault-graph(...)`,
+  which reads `/_vault/graph/<filter>.json` (the vault data registry
+  `vault_data`), draws with CeTZ (PDF, HTML without JS), and the client brings
+  it to life at the same coordinates. The version of such a note includes a
+  hash of the graph response: an edit that did not change the graph does not
+  rebuild it. The core layout is the rest state: motion (dragging with
+  neighbors, moves, appearing) happens only in the browser, an untouched graph
+  matches the PDF picture, "restore the layout" on `/graph` - a smooth move to
+  it.
+- **Books as chapters** (`GraphFilter::chapters`, a checkbox on `/graph`): a
+  book is the root and chapter vertices (`<book>/.<number>`, first-level
+  sections) with "book - chapter" edges - shorter and stiffer than links, so a
+  chapter stays near the root. A link from a chapter starts at its vertex
+  (section links come from the outline, `outline::Section::links`), a link
+  into a book section (`anchor`) goes to the chapter of that section; without
+  an anchor and before the first chapter - the root. A click on a chapter -
+  the book at its heading. A chapter is a hollow circle smaller than any note
+  (`CHAPTER_R`), the "book - chapter" link is a pale line.
+- **The note language** is the template's `lang:`: layout words from the
+  dictionary `baluk/i18n.typ` (own ones - `words:`), in HTML - `lang` on
+  `<article>`. The library exports the dictionary languages in `css.typ`
+  (`<k-langs>`), and `notes check` warns about a `lang:` without a dictionary
+  and without `words:`.
 
-### 3. Отрисовка - HTML-экспорт Typst
+### 3. Rendering - the Typst HTML export
 
-- Текст - настоящий HTML: перенос под ширину экрана, поиск, выделение, якоря.
-  Формулы - MathML. Рисунки CeTZ - `html.frame`, то есть SVG как в PDF.
-- В HTML-режиме библиотека выдаёт элементы с классами (`<div class="k-box
-  k-def">`), вид задаёт CSS (`app/src/baluk-css/`); что HTML-экспорт
-  выбрасывает и чем шаблон страхует - `.claude/rules/baluk.md`.
-- Из того же исходника собирается PDF (печать, экзамен).
+- Text is real HTML: wrapping to the screen width, search, selection,
+  anchors. Formulas - MathML. CeTZ figures - `html.frame`, i.e. SVG as in the
+  PDF.
+- In HTML mode the library emits elements with classes (`<div class="k-box
+  k-def">`), CSS sets the look (`app/src/baluk-css/`); what the HTML export
+  drops and how the template covers it - `.claude/rules/baluk.md`.
+- The PDF is built from the same source (printing, an exam).
 
-### 4. Темы: минимум две, переключение без перезагрузки
+### 4. Themes: at least two, switching without a reload
 
-- Цвета текста, врезок и заголовков - CSS-переменные, `[data-theme=...]`;
-  у темы и `color-scheme` (полосы прокрутки, поля). Первый кадр страницы -
-  уже в теме: её ставит `app/public/assets/theme.js` до стилей и клиента (по
-  памяти прошлого запуска), тему ещё не запоминали - цвета окна по системе.
-- **Рисунки** (SVG) содержат вшитые цвета, а производные (`lighten`,
-  `transparentize`) переменными не заменить. Поэтому заметка компилируется по
-  разу на тему, ядро склеивает: текст - из первой компиляции, у каждого
-  рисунка - вариант на тему (порядок рисунков одинаков).
-- **Обработка HTML - цепочка проходов**: по дереву `typst-html` (темы, якоря,
-  ссылки, скобки формул, теги), по тексту сырой страницы (цвета кода) и после
-  кэша под настройки читателя (рисунки, общие части кадров); как добавить -
-  `.claude/rules/crates.md`.
-- **Вес рисунков** (`notes-core::figures`, по готовому SVG): варианты,
-  различающиеся только цветами, сливаются в один SVG с переменными `--kfN` по
-  темам (`<style>` страницы, метка `data-k-figs`); глифы подписей - один
-  общий `<svg class="k-glyphs">`; координаты округляются (настройка "Рисунки
-  -> точность", по умолчанию 0,01 pt) без накопления ошибки. Не слилось
-  (другая геометрия, градиенты) - варианты остаются, CSS показывает нужный.
-  "Матан": 3,7 МБ -> 1,66 МБ, по сети с brotli 0,21 МБ.
-- Обработка рисунков зависит от настроек, поэтому кэшируется сырая отрисовка,
-  а в памяти - одна обработанная копия: смена точности не перекомпилирует
-  заметку, настройки входят в версию страницы.
-- Подсветка кода: в HTML-режиме тема подсветки из "опорных" цветов, ядро
-  заменяет их на CSS-переменные.
+- Colors of text, boxes and headings are CSS variables, `[data-theme=...]`;
+  a theme also has `color-scheme` (scrollbars, inputs). The first frame of a
+  page is already in the theme: `app/public/assets/theme.js` sets it before
+  styles and the client (from the memory of the last run), a theme not yet
+  remembered - window colors follow the system.
+- **Figures** (SVG) contain baked-in colors, and derived ones (`lighten`,
+  `transparentize`) cannot be replaced with variables. So a note is compiled
+  once per theme and the core merges them: text from the first compilation,
+  each figure has a variant per theme (the figure order is the same).
+- **HTML processing is a chain of passes**: over the `typst-html` tree
+  (themes, anchors, links, formula brackets, tags), over the text of the raw
+  page (code colors) and after the cache for the reader's settings (figures,
+  shared frame parts); how to add one - `.claude/rules/crates.md`.
+- **Figure weight** (`notes-core::figures`, over the ready SVG): variants that
+  differ only in colors are merged into one SVG with `--kfN` variables per
+  theme (the page `<style>`, the tag `data-k-figs`); label glyphs - one shared
+  `<svg class="k-glyphs">`; coordinates are rounded (the setting "Рисунки ->
+  точность", 0.01 pt by default) without accumulating error. Not merged
+  (different geometry, gradients) - the variants stay, CSS shows the right
+  one. "Матан": 3.7 MB -> 1.66 MB, 0.21 MB over the network with brotli.
+- Figure processing depends on settings, so the raw rendering is cached, and
+  memory holds one processed copy: changing the precision does not recompile
+  the note, settings are part of the page version.
+- Code highlighting: in HTML mode the highlighting theme uses "reference"
+  colors, the core replaces them with CSS variables.
 
-### 5. Интерактив - веб-компоненты
+### 5. Interactivity - web components
 
-- **Интерактивные рисунки** (`baluk/plots.typ`) выдают `div.k-plot` с JSON в
-  `data-k-plot` (формулы строкой, диапазоны, параметры) и обычным `canvas`
-  внутри - его видят PDF и браузер без JS. Клиент монтирует на `.k-plot`
-  компонент `Plot` (SVG для 2D, canvas для 3D, ползунки) и прячет кадр.
-  Формулу считают и Typst, и клиент - свой разборщик одного подмножества
-  (`eval` падал бы на делении на ноль). Цвета - переменные темы `--k-fig-*`.
-- **Кадры** (`baluk/frames.typ`): рисунок с параметром компилируется для N
-  значений (до 60) в `div.k-frames` с N `div.k-frames-item`, каждый - обычный
-  `canvas`. Кадры в одной клетке CSS-сетки (место - по самому большому); без JS
-  виден кадр по умолчанию. Повторяющиеся части SVG (оси, рамка, подписи) ядро
-  выносит в скрытый `svg.k-frames-defs` группы (`notes-core::frames`, `<use>`
-  на их месте). Клиент (`Frames.svelte`) добавляет ползунок, кнопки и
-  проигрывание и переключает `data-current` без перерисовки. Считает всё
-  Typst - стиль библиотеки сохраняется. В PDF - кадр по умолчанию или ряд
-  (`pdf: (1, 4, 8)`).
-- Дальше (когда-нибудь): анимация алгоритмов и запуск кода.
+- **Interactive figures** (`baluk/plots.typ`) emit `div.k-plot` with JSON in
+  `data-k-plot` (formulas as strings, ranges, parameters) and a plain `canvas`
+  inside - the PDF and a browser without JS see it. The client mounts the
+  `Plot` component on `.k-plot` (SVG for 2D, canvas for 3D, sliders) and
+  hides the frame. Both Typst and the client evaluate the formula - our own
+  parser of one subset (`eval` would fail on division by zero). Colors are
+  the theme variables `--k-fig-*`.
+- **Frames** (`baluk/frames.typ`): a figure with a parameter is compiled for N
+  values (up to 60) into `div.k-frames` with N `div.k-frames-item`, each a
+  plain `canvas`. Frames sit in one cell of a CSS grid (the space is that of
+  the largest); without JS the default frame is visible. Repeated SVG parts
+  (axes, frame, labels) are moved by the core into a hidden group
+  `svg.k-frames-defs` (`notes-core::frames`, `<use>` in their place). The
+  client (`Frames.svelte`) adds a slider, buttons and playback and switches
+  `data-current` without redrawing. Typst computes everything - the library
+  style is kept. In PDF - the default frame or a row (`pdf: (1, 4, 8)`).
+- Later (some day): algorithm animation and running code.
 
-### 6. Настройки - в клиенте, схема - в ядре
+### 6. Settings - in the client, the schema - in the core
 
-- Схема (`notes-core::settings`: ключ, группа, подпись, тип, границы,
-  значение по умолчанию, **как применить** - атрибут `data-...` или
-  CSS-переменная на `<html>`); клиент рисует форму и применяет вид по схеме.
-- Значения - в `settings.json` каталога данных, сервер проверяет их по схеме.
-- **Настройки хранилища** (решение пользователя, как настройки проекта в VS
-  Code): любую, кроме настроек устройства, можно задать только для
-  хранилища - `<хранилище>/.baluk/settings.json` (переезжает с папкой);
-  не задана - общая. Изменение из интерфейса - для открытого хранилища
-  (`/api/vaults/<хранилище>/settings`, `null` - снова общая), у темы и
-  кегля (`SettingDef::shared`) - для всех, если у хранилища нет своего
-  значения. У настройки - "для всех хранилищ" (записать общим) и у темы и
-  кегля - "только для этого хранилища"; окно настроек показывает, откуда
-  значение (только это хранилище, изменено для всех, по умолчанию). Сервер берёт для
-  хранилища итог (рисунки: `figures.*`).
-- **Настройки устройства** (группа `device`): прогрев, сборок одновременно,
-  память Typst, пределы кэша - свои у каждого устройства, значения по
-  умолчанию по платформе (компьютер или телефон), при синхронизации не
-  переносятся; вид - общий. Ядро применяет их на ходу (при запуске сервера и
-  после `PUT /api/settings`).
-- Настройки вида (шапка, нумерация, стиль глав, кегль, ширина колонки, тема)
-  - CSS-атрибуты на `<html>`, без перекомпиляции. Поэтому библиотека выдаёт
-  разметку с запасом (номера в `span.k-num` всегда), а прячет их клиент.
+- The schema (`notes-core::settings`: key, group, label, type, bounds,
+  default, **how to apply** - a `data-...` attribute or a CSS variable on
+  `<html>`); the client draws the form and applies the look by the schema.
+- Values live in `settings.json` of the data directory, the server checks
+  them against the schema.
+- **Vault settings** (user's decision, like project settings in VS Code): any
+  setting except device ones can be set only for a vault -
+  `<vault>/.baluk/settings.json` (moves with the folder); not set - the shared
+  one. A change from the interface applies to the open vault
+  (`/api/vaults/<vault>/settings`, `null` - shared again), for theme and font
+  size (`SettingDef::shared`) - to all, if the vault has no own value. A
+  setting has "for all vaults" (write it as shared), theme and font size -
+  "only for this vault"; the settings window shows where a value comes from
+  (only this vault, changed for all, default). The server takes the result for
+  a vault (figures: `figures.*`).
+- **Device settings** (group `device`): warm-up, simultaneous builds, Typst
+  memory, cache limits - each device has its own, defaults by platform
+  (computer or phone), not carried over by sync; the look is shared. The core
+  applies them on the fly (at server start and after `PUT /api/settings`).
+- View settings (header, numbering, chapter style, font size, column width,
+  theme) are CSS attributes on `<html>`, without recompiling. So the library
+  emits markup with a margin (numbers in `span.k-num` always), and the client
+  hides them.
 
-### 7. Скорость открытия
+### 7. Opening speed
 
-- Темы одной заметки собираются параллельно (поток на тему, кэш файлов
-  общий); разные заметки - тоже (у сборки свой кэш файлов из пула, число -
-  настройка устройства, по умолчанию 2): заметку можно открыть, пока
-  собирается книга. Сборка прогрева - темы по очереди в одном потоке с
-  пониженным приоритетом.
-- Ядро - слои (`notes-core`): `storage` -> `pipeline` (компиляция по темам ->
-  отрисовка -> рисунки; за `trait Pipeline`) -> `page_cache` (память + диск
-  `cache.rs`) -> `pages` (страница по запросу: сборка заметки одна, ошибка
-  поверх прежней отрисовки) -> `warm` (прогрев) -> `notes` (фасад для сервера
-  и CLI). Каждый слой проверяется без Typst.
-- Кэш в памяти - страницы в LRU с пределом по байтам (64 МБ) плюс маленькие
-  записи о каждой заметке (версия, файлы, ошибки, время сборки): версия и
-  "собрана ли" - без чтения страниц.
-- **Кэш на диске** (`<данные>/cache/pages/<хранилище>/`, `notes-core::cache`):
-  запись заметки (версия и файлы, ошибки, время сборки) и сырая отрисовка
-  отдельным файлом. Годен при том же коде отрисовки (метка: версия формата,
-  хэш исходников из `build.rs`, встроенная библиотека, набор шрифтов) и тех же
-  файлах: после перезапуска книга открывается за десятки миллисекунд. Ошибки
-  сборки тоже кэшируются. Чистка - при запуске прогрева: удалённые заметки,
-  чужие записи старше 14 дней, предел 512 МБ.
-- **Книга по главам** (настройка): собирается целиком (счётчики, ссылки между
-  главами), а `GET .../notes/{id}?chapter=N` (или `?anchor=`) отдаёт одну
-  главу - нарезку готового HTML (`notes-core::book`, миллисекунды) со списком
-  глав и картой "якорь -> глава". Соседние главы клиент берёт заранее
-  (`chapters.ts`; перед переходом сверяет версию книги). Глава "Матана" по
-  сети - ~0,2 МБ вместо 1,7 МБ, и телефону не верстать всю книгу. Ctrl+F в
-  заметке - поиск палитры (`lib/find.ts`): по заметке или всей книге
-  (`.../search?note=`, номер главы - по карте якорей), по показанной главе
-  (те же результаты, отобранные по карте якорей) или по хранилищу; повторное
-  Ctrl+F - поиск браузера. Общее книги (название, теги корня) - вверху
-  оглавления в любой главе (`BookInfo.svelte`, выбор пользователя).
+- The themes of one note are built in parallel (a thread per theme, a shared
+  file cache); different notes too (a build has its own file cache from a
+  pool, the number is a device setting, 2 by default): a note can be opened
+  while a book is building. A warm-up build does themes in turn in one thread
+  with lowered priority.
+- The core is layers (`notes-core`): `storage` -> `pipeline` (compiling per
+  theme -> rendering -> figures; behind `trait Pipeline`) -> `page_cache`
+  (memory + disk `cache.rs`) -> `pages` (a page on request: one build per
+  note, an error over the previous rendering) -> `warm` (warm-up) -> `notes`
+  (the facade for the server and CLI). Each layer is tested without Typst.
+- The memory cache is pages in an LRU limited by bytes (64 MB) plus small
+  records for every note (version, files, errors, build time): the version and
+  "is it built" without reading pages.
+- **The disk cache** (`<data>/cache/pages/<vault>/`, `notes-core::cache`): a
+  note record (version and files, errors, build time) and the raw rendering
+  in a separate file. Valid with the same rendering code (the tag: format
+  version, the hash of sources from `build.rs`, the embedded library, the font
+  set) and the same files: after a restart a book opens in tens of
+  milliseconds. Build errors are cached too. Cleaning happens when the warm-up
+  starts: deleted notes, foreign records older than 14 days, a 512 MB limit.
+- **A book by chapters** (a setting): it is built whole (counters, links
+  between chapters), and `GET .../notes/{id}?chapter=N` (or `?anchor=`)
+  returns one chapter - a cut of the ready HTML (`notes-core::book`,
+  milliseconds) with the chapter list and an "anchor -> chapter" map. The
+  client fetches neighboring chapters ahead of time (`chapters.ts`; it checks
+  the book version before switching). A "Матан" chapter over the network is
+  ~0.2 MB instead of 1.7 MB, and a phone does not lay out the whole book.
+  Ctrl+F in a note is the palette search (`lib/find.ts`): in the note or the
+  whole book (`.../search?note=`, the chapter number from the anchor map), in
+  the shown chapter (the same results, filtered by the anchor map) or in the
+  vault; a second Ctrl+F is the browser search. What the book shares (title,
+  root tags) is at the top of the contents in any chapter (`BookInfo.svelte`,
+  user's choice).
 
-### 8. Обновление - по запросу; наблюдатель файлов - только ускорение
+### 8. Updates on request; the file watcher is only a speedup
 
-- Компиляция ленивая: заметка собирается по запросу и кэшируется со списком
-  прочитанных файлов.
-- Версия заметки - хэш времён изменения и размеров этих файлов (`stat`),
-  снятых **в момент чтения**: файл поправили во время сборки - она сразу
-  устарела. Хэш стабильный (SipHash, `notes-core::version`). Клиент сверяет
-  версию по кнопке "Обновить", а в режиме "автоматически" (`refresh.mode`) -
-  и по событию сервера, и при возврате в окно.
-- **Наблюдатель** (`notes-core::watch`, у сервера): `notify` следит за
-  хранилищем (`Storage::watch`) и библиотекой, если она с диска; изменения -
-  пачкой после паузы 100 мс. Пока ничего не менялось, индекс ссылок не
-  обходит хранилище (но не реже раза в 10 минут), `DirStorage` помнит список
-  файлов, прогрев просыпается от изменения, клиент узнаёт о пачке долгим
-  опросом (`/api/vaults/<хранилище>/events?after=<seq>`: ответ на изменении
-  или через 25 с пустой; у хранилища - журнал последних 64 пачек, потерянные
-  - "проверь всё"). Опроса раз в N секунд нет (решение пользователя): сервер
-  не следит или режим "только по кнопке" - изменения по кнопке "Обновить".
-- **Нет связи с сервером** (`state/connection`): запрос не дошёл (и ждущий
-  запрос событий) - метка "нет связи" в верхней строке (выбор
-  пользователя; нажать - проверить сразу), показанная заметка остаётся; пробный запрос раз в 3 с (связь, не
-  изменения). Связь вернулась - проверка изменений, не открывшаяся заметка
-  догружается.
-- Наблюдатель - ускорение, а не источник правды: версии - по-прежнему `stat`,
-  сломался наблюдатель - всё работает обходом. Ошибка компиляции
-  показывается поверх последней удачной версии.
-- **Прогрев** (`notes-core::warm`): все заметки собираются заранее в кэш на
-  диске (в памяти не держатся, рисунки обрабатываются при открытии) -
-  сначала подсказанные клиентом (`POST /api/warm`: вкладки, недавние), затем
-  несобиравшиеся (маленькие первыми), затем остальные по времени прошлой
-  сборки, новые книги последними; собранное (и с ошибкой) пропускается;
-  запрос пользователя - вне очереди. Режим - настройка устройства (всё,
-  только подсказанное, выключен). После большого прохода память Typst
-  освобождается; кроме того, после серии сборок и простоя 5 с память
-  выпускается и при обычных пересборках, чтобы idle RSS возвращался к уровню
-  с готовым кэшем. Релиз по простою срабатывает один раз на период простоя,
-  только если после прошлого релиза были новые сборки. Проход - при запуске, по
-  подсказке, по изменению файлов и раз в 10 минут (без наблюдателя - раз в
-  минуту).
+- Compiling is lazy: a note is built on request and cached with the list of
+  files it read.
+- The note version is a hash of the modification times and sizes of those
+  files (`stat`), taken **at read time**: a file edited during a build makes
+  it stale at once. The hash is stable (SipHash, `notes-core::version`). The
+  client checks the version on the "Обновить" button, and in the "automatic"
+  mode (`refresh.mode`) - also on a server event and when returning to the
+  window.
+- **The watcher** (`notes-core::watch`, in the server): `notify` watches the
+  vault (`Storage::watch`) and the library if it is on disk; changes come as
+  a batch after a 100 ms pause. While nothing changes, the link index does not
+  walk the vault (but at least once in 10 minutes), `DirStorage` remembers the
+  file list, the warm-up wakes up on a change, the client learns about a batch
+  by long polling (`/api/vaults/<vault>/events?after=<seq>`: an answer on a
+  change or an empty one after 25 s; a vault keeps a log of the last 64
+  batches, lost ones - "check everything"). There is no polling every N
+  seconds (user's decision): the server does not watch or the mode is "by
+  button only" - changes come by the "Обновить" button.
+- **No connection to the server** (`state/connection`): a request did not get
+  through (including a waiting event request) - a "нет связи" mark in the top
+  bar (user's choice; click - check at once), the shown note stays; a probe
+  request every 3 s (connection, not changes). The connection is back - a
+  change check, a note that did not open loads.
+- The watcher is a speedup, not the source of truth: versions still come from
+  `stat`, a broken watcher - everything works by walking. A compile error is
+  shown over the last successful version.
+- **Warm-up** (`notes-core::warm`): all notes are built ahead of time into the
+  disk cache (not kept in memory, figures are processed on opening) - first
+  those hinted by the client (`POST /api/warm`: tabs, recent), then never
+  built ones (small first), then the rest by the time of the last build, new
+  books last; what is built (also with an error) is skipped; a user request
+  goes out of turn. The mode is a device setting (all, only hinted, off).
+  After a large pass Typst memory is freed; also, after a series of builds and
+  5 s of idle memory is released after ordinary rebuilds too, so idle RSS
+  returns to the level with a ready cache. The idle release fires once per
+  idle period, only if there were new builds since the last release. A pass
+  runs at startup, on a hint, on file changes and every 10 minutes (without a
+  watcher - every minute).
 
-### 9. Сервер в сети: хранилище, синхронизация, вход
+### 9. The server online: storage, sync, sign-in
 
-Пока не сделано (roadmap, M4); решения:
+Not done yet (roadmap, M4); the decisions:
 
-- **Без Typst**: хранит файлы и их версии, отдаёт изменения, пускает по
-  сессии. Хранилище - за `trait Storage` (каталог, позже база данных; при
-  нескольких пользователях - хранилище на каждого).
-- **Синхронизация** - версии файлов + блокировка на редактирование, без CRDT.
-  Устройство держит копию и тянет изменения по событию сервера. Сначала "один
-  пишет" (компьютер с Claude Code), блокировка - задел.
-- **Вход** (решение пользователя): `POST /api/login` с паролем -> сессия в
-  cookie (`HttpOnly`, `SameSite=Strict`, за HTTPS `Secure`). Токен в адресе
-  не передаётся никогда. Сессия живёт 30 дней без обращений, каждое продлевает;
-  истекла - вход заново; хэши сессий - на диске сервера. Токен один, без
-  refresh. `POST /api/logout` закрывает сессию. Ядро устройства входит так же;
-  интерфейс показывает вход по ответу 401.
-- **Хранилище с сервера - недоверенное**: HTML заметки очищается, клиент ставит
-  строгий CSP. См. раздел ниже.
-- История версий и бекапы - на сервере. Шифрование - далеко.
+- **Without Typst**: stores files and their versions, serves changes, lets in
+  by session. Storage is behind `trait Storage` (a directory, later a
+  database; with several users - a vault per user).
+- **Sync** - file versions + an edit lock, no CRDT. A device keeps a copy and
+  pulls changes on a server event. First "one writer" (the computer with
+  Claude Code), the lock is groundwork.
+- **Sign-in** (user's decision): `POST /api/login` with a password -> a
+  session in a cookie (`HttpOnly`, `SameSite=Strict`, `Secure` behind HTTPS).
+  A token is never passed in the address. A session lives 30 days without
+  requests, each one extends it; expired - sign in again; session hashes are
+  on the server disk. One token, no refresh. `POST /api/logout` closes the
+  session. The device core signs in the same way; the interface shows the
+  sign-in on a 401 response.
+- **A vault from the server is untrusted**: note HTML is sanitized, the client
+  sets a strict CSP. See the section below.
+- Version history and backups - on the server. Encryption - far away.
 
-### 10. Шрифты
+### 10. Fonts
 
-Шрифты оформления (`fonts/README.md`) встроены в бинарник вместе со шрифтами
-Typst и заслоняют системные: отрисовка не зависит от машины. Браузеру - WOFF2
-частями с `unicode-range` (`notes-core::webfonts`: подмножество - `fontcull`,
-WOFF2 - `ttf2woff2` с преобразованием `glyf` для TrueType, для CFF - свой
-кодировщик): странице на русском нужны латиница и кириллица, ~35 КБ на
-начертание вместо ~0,9 МБ. Математический шрифт (CFF + `MATH`) не режется,
-только WOFF2 (1,3 -> 0,66 МБ). Сервер сжимает части в фоне при запуске
-(готовые - в `<данные>/cache/fonts`). Браузеру нужны все шрифты тем,
-основные и запасные (знак, которого нет в основном, - как в PDF):
-`baluk/css.typ` выгружает их вместе с цветами (шрифты формул - отдельным
-списком). Часть запасного шрифта браузер качает, только если на странице есть
-её знак, которого нет в основном. Текстовый шрифт CFF (New Computer Modern)
-сначала переводится в TrueType (`webfonts::cff_to_truetype`: контуры -
-квадратичные, без хинтов и `MATH`, ~30 мс на начертание): Chrome отвергает
-его CFF целиком (OTS: хинты), а TrueType ещё и режется. Шрифт формул -
-целиком, но тоже с `unicode-range` по своим знакам.
-### Пакеты Typst
+The layout fonts (`fonts/README.md`) are embedded in the binary together with
+the Typst fonts and shadow system ones: rendering does not depend on the
+machine. The browser gets WOFF2 in parts with `unicode-range`
+(`notes-core::webfonts`: subsetting - `fontcull`, WOFF2 - `ttf2woff2` with the
+`glyf` transform for TrueType, for CFF - our own encoder): a Russian page needs
+Latin and Cyrillic, ~35 KB per style instead of ~0.9 MB. The math font (CFF +
+`MATH`) is not subset, only WOFF2 (1.3 -> 0.66 MB). The server compresses the
+parts in the background at startup (ready ones in `<data>/cache/fonts`). The
+browser needs all theme fonts, main and fallback (a glyph missing from the
+main one looks as in the PDF): `baluk/css.typ` exports them together with the
+colors (formula fonts as a separate list). The browser downloads a part of a
+fallback font only if the page has a glyph of it missing from the main font.
+The CFF text font (New Computer Modern) is first converted to TrueType
+(`webfonts::cff_to_truetype`: quadratic outlines, no hints and no `MATH`, ~30
+ms per style): Chrome rejects its CFF entirely (OTS: hints), and TrueType can
+also be subset. The formula font is whole, but also with `unicode-range` by its
+own glyphs.
 
-Заметка берёт только пакеты белого списка с версиями
-(`notes-core::packages::ALLOWED`: CeTZ и его зависимость) и разрешённые
-пользователем сверх него (`device.packages`, с предупреждением: это чужой
-код). Другой пакет - ошибка сборки, он даже не скачивается (`world::Loader`).
-Версия страницы, читавшей пакет, учитывает список разрешённых (данные
-хранилища `/_vault/packages/policy`): его смена пересобирает заметки с
-пакетами - с библиотекой это почти все.
+### Typst packages
 
-### Безопасность HTML
+A note takes only packages from the whitelist with versions
+(`notes-core::packages::ALLOWED`: CeTZ and its dependency) and those the user
+allowed beyond it (`device.packages`, with a warning: it is foreign code).
+Another package is a build error, it is not even downloaded
+(`world::Loader`). The version of a page that read a package includes the list
+of allowed ones (vault data `/_vault/packages/policy`): changing it rebuilds
+notes with packages - with the library that is almost all of them.
 
-- Очищаем HTML страницы перед сериализацией (первый tree-pass в `passes::TREE`):
-  разрешаем только allowlist тегов и атрибутов из реального вывода библиотеки,
-  pass-ов и Typst (HTML, MathML, SVG), остальное удаляется.
-- Всегда удаляются теги `script`, `iframe`, `object`, `embed`, `frame`, `base`,
-  `form` и элементы форм. `meta` и `link` сохраняются только в `<head>`
-  (служебные теги Typst), вне `<head>` удаляются.
-- Для SVG удаляются `foreignObject`, `animate`/`set`/`animateTransform` с
-  `attributeName`, указывающим на `href`/`xlink:href` или `on*`, и `<use>` с
-  внешним `href` (разрешены только локальные `#...`).
-- Все атрибуты `on*` удаляются.
-- В `href`/`src`/`xlink:href`/`action`/`formaction` запрещены `javascript:` и
-  `vbscript:`. `data:` разрешено только как `image/*`.
-- Перед проверкой URL нормализуются: регистр, пробелы/control-символы и HTML
-  entities (`jav&#x61;script:` и `JaVa\nScRiPt:` блокируются).
-- `style` атрибут и `<style>` разрешены только без `expression(` и опасных
-  `url(...)` (по тем же правилам URL).
-- `data-*` и `aria-*` (в том числе `data-k-*`) сохраняются.
-- Если что-то удалено, `notes check` выдаёт предупреждение одной строкой:
-  сколько удалено тегов, атрибутов и опасных URL у этой заметки. Файлы заметки
-  не меняются.
-- Клиент (`notes serve`) отвечает с CSP: `default-src 'self'`, `script-src
-  'self'` (без `unsafe-inline` и `unsafe-eval`), `object-src 'none'`, `base-uri
-  'none'`, `img-src 'self' data: blob:`, `style-src 'self' 'unsafe-inline'`,
-  `font-src 'self'`, `connect-src 'self'`, `frame-ancestors 'self'`. В dev
-  режиме (Vite) CSP не задействована, так как страницу отдаёт dev-сервер.
+### HTML security
+
+- The page HTML is sanitized before serialization (the first tree pass in
+  `passes::TREE`): only an allowlist of tags and attributes from the real
+  output of the library, the passes and Typst (HTML, MathML, SVG) is allowed,
+  the rest is removed.
+- Always removed: the tags `script`, `iframe`, `object`, `embed`, `frame`,
+  `base`, `form` and form elements. `meta` and `link` are kept only in
+  `<head>` (Typst's service tags), outside `<head>` they are removed.
+- For SVG, removed are `foreignObject`, `animate`/`set`/`animateTransform`
+  with an `attributeName` pointing to `href`/`xlink:href` or `on*`, and `<use>`
+  with an external `href` (only local `#...` are allowed).
+- All `on*` attributes are removed.
+- In `href`/`src`/`xlink:href`/`action`/`formaction` `javascript:` and
+  `vbscript:` are forbidden. `data:` is allowed only as `image/*`.
+- URLs are normalized before the check: case, spaces/control characters and
+  HTML entities (`jav&#x61;script:` and `JaVa\nScRiPt:` are blocked).
+- The `style` attribute and `<style>` are allowed only without `expression(`
+  and dangerous `url(...)` (by the same URL rules).
+- `data-*` and `aria-*` (including `data-k-*`) are kept.
+- If something was removed, `notes check` warns with one line: how many tags,
+  attributes and dangerous URLs were removed in this note. Note files do not
+  change.
+- The client (`notes serve`) is served with a CSP: `default-src 'self'`,
+  `script-src 'self'` (without `unsafe-inline` and `unsafe-eval`),
+  `object-src 'none'`, `base-uri 'none'`, `img-src 'self' data: blob:`,
+  `style-src 'self' 'unsafe-inline'`, `font-src 'self'`, `connect-src 'self'`,
+  `frame-ancestors 'self'`. In dev mode (Vite) the CSP is not applied, since
+  the dev server serves the page.

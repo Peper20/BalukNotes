@@ -1,59 +1,70 @@
-# baluk notes - правила для агента
+# baluk notes - rules for the agent
 
-Приложение для заметок на Typst: ядро на Rust собирает хранилище `.typ` в HTML
-и PDF, клиент на Svelte показывает заметки.
+A notes app on Typst: a Rust core builds a vault of `.typ` files into HTML and
+PDF, a Svelte client shows the notes.
 
-## Где что искать
+## Where to find what
 
-| Что | Где |
+| What | Where |
 |---|---|
-| что это, установка, команды `notes` | `README.md` |
-| устройство и причины решений | `docs/architecture.md` |
-| план и решения пользователя по нему | `docs/roadmap.md` |
-| техдолг: что упрощено, чем грозит, как закрыть | `docs/tech-debt.md` |
-| открытые вопросы к пользователю | `docs/questions.md` |
-| как писать заметки | `docs/writing.md` (= `notes docs writing`) |
-| замеры исследований | `docs/research/` |
-| API библиотеки оформления | `baluk/README.md` (= `notes docs library`) |
-| шрифты и их лицензии | `fonts/README.md` |
+| what it is, installation, `notes` commands | `README.md` (Russian copy - `README.ru.md`) |
+| how it works and why | `docs/architecture.md` |
+| the plan and the user's decisions on it | `docs/roadmap.md` |
+| tech debt: what is simplified, the risk, how to close it | `docs/tech-debt.md` |
+| open questions to the user | `docs/questions.md` |
+| how to write notes | `docs/writing.md` (= `notes docs writing`) |
+| research measurements | `docs/research/` |
+| the layout library API | `baluk/README.md` (= `notes docs library`) |
+| fonts and their licenses | `fonts/README.md` |
 
-Правила каталогов - `.claude/rules/<имя>.md`, Claude Code подгружает их сам
-при работе с файлами каталога (поле `paths`): `crates` (ядро, сервер, CLI),
-`app` (клиент), `baluk` (правка библиотеки), `skills` (навыки), `tools`
-(проверка, снимки, облачное окружение), `tests-vault` (хранилище-фикстура),
-`vendor` (копии чужих крейтов). Нужны правила другого каталога - прочитай файл.
+Directory rules - `.claude/rules/<name>.md`, Claude Code loads them itself when
+working with files of the directory (the `paths` field): `crates` (core,
+server, CLI), `app` (client), `baluk` (editing the library), `skills`
+(skills), `tools` (checks, screenshots, cloud environment), `tests-vault` (the
+fixture vault), `vendor` (copies of foreign crates). Need the rules of another
+directory - read the file.
 
-## Главное
+## Essentials
 
-- Приоритет - отрисовка: заметка в HTML выглядит как её PDF.
-- Файлы заметок - источник правды; приложение их молча не меняет.
-- Оптимизация сейчас не задача (решение пользователя): мелочи (< 1 МБ,
-  десятки мс) не оптимизировать. Слабые места - знать и записывать в техдолг.
-- Хранилища пользователя - в каталоге данных (`notes info`): там копии его
-  конспектов, их можно править. Оригиналы (`~/Documents/abstract/...`) не
-  трогать никогда.
-- Спорное (вид интерфейса, поведение для пользователя, публичный API
-  библиотеки) без пользователя не решать: вариант по умолчанию + вопрос в
+- Rendering comes first: a note in HTML looks like its PDF.
+- Note files are the source of truth; the app does not change them silently.
+- Optimization is not a goal now (user's decision): do not optimize small
+  things (< 1 MB, tens of ms). Know the weak spots and record them as tech
+  debt.
+- The user's vaults are in the data directory (`notes info`): copies of their
+  notes, they may be edited. Never touch the originals
+  (`~/Documents/abstract/...`).
+- Do not decide disputable things (interface look, behavior for the user, the
+  public library API) without the user: a default option + a question in
   `docs/questions.md`.
 
-## Итерация
+## Iteration
 
-- Перед коммитом и PR - `tools/check.sh`. Сообщения коммитов, названия и
-  описания PR - только по-английски.
-- Поменял публичный API библиотеки, шаблоны `note`/`book`
-  (`notes-core::new_note`), команды `notes` или правила путей (`NoteId`) - в
-  том же изменении поправь `docs/writing.md` и навык `/baluk-note`
-  (`SKILL.md`, `examples/`, `reference.md`; что сверяют тесты -
-  `.claude/rules/skills.md`), затем `tools/install.sh`.
-- В конце: отметить сделанное в roadmap, дописать техдолг, закрытое удалить.
+- Before a commit and a PR - `tools/check.sh`.
+- Changed the public library API, the `note`/`book` templates
+  (`notes-core::new_note`), `notes` commands or path rules (`NoteId`) - in the
+  same change fix `docs/writing.md` and the `/baluk-note` skill (`SKILL.md`,
+  `examples/`, `reference.md`; what the tests check -
+  `.claude/rules/skills.md`), then `tools/install.sh`.
+- At the end: mark what is done in the roadmap, add tech debt, delete what is
+  closed.
 
-## Документы
+## Language
 
-- Инструкции (`.claude/rules/`, `docs/`, README) - по-русски, простым Markdown без
-  типографики: `"`, `-`, `->`, `...` вместо кавычек-ёлочек, тире, стрелок и
-  многоточия. Тексты навыков - по-английски (`.claude/rules/skills.md`).
-- Каждый факт - в одном месте, остальные ссылаются. Сделанное описывается
-  как устроено, без истории (она - в git).
-- Размер меряй `tiktoken` (команда - `.claude/rules/skills.md`): не раздувать.
-- Этот файл - только карта и общие правила, подробности - в правилах
-  каталогов (`.claude/rules/`). Правки этого файла согласуй с пользователем.
+- English: code, comments, logs, messages, docs (`.claude/rules/`, `docs/`,
+  README), skill texts, commit messages and PR titles and descriptions.
+- Russian: the client interface, interface texts in the core
+  (`.claude/rules/crates.md`), library captions (`i18n.typ`) and theme
+  titles, `README.ru.md` (a copy of the root README, they link to each other;
+  edit both).
+
+## Documents
+
+- Plain Markdown without typography: `"`, `-`, `->`, `...` instead of curly
+  quotes, dashes, arrows and ellipses.
+- Every fact in one place, the others refer to it. What is done is described
+  as it works, without history (that is in git).
+- Measure size with `tiktoken` (the command - `.claude/rules/skills.md`): do
+  not bloat.
+- This file is only a map and general rules, details are in the directory
+  rules (`.claude/rules/`). Agree edits of this file with the user.

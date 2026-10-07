@@ -1,404 +1,420 @@
-# Технический долг
+# Tech debt
 
-Что отложено или упрощено: **что** - почему так - чем грозит - как закрыть.
-Пополняется в конце каждой итерации, закрытое удаляется.
+What is postponed or simplified: **what** - why so - the risk - how to close
+it. Extended at the end of every iteration, closed items are deleted.
 
-## Отрисовка
+## Rendering
 
-- **Обработка рисунков разбирает текст SVG** (`figures.rs`, `frames.rs`), а не
-  дерево: SVG есть только как вывод `typst-svg`, опора - его формат (тег за
-  тегом, относительные команды пути `m l h v c q a Z`). Непонятное остаётся
-  как есть, но новая версия Typst может молча выключить сжатие. Как закрыть:
-  при обновлении следить за тестом числа слитых рисунков; в идеале - свой
-  вывод кадров.
-- **Метка `data-k-figs` - хэш таблицы цветов**: тело заметки без `<style>` из
-  `styles` останется без цветов рисунков. Клиенту - всегда вставлять `styles`
-  вместе с `body`.
-- **Каждая тема - полная компиляция** (параллельно): вдвое больше работы
-  процессора. По E1 95-99 % времени - рисунки, их по темам собирать всё
-  равно; "текст один раз" не делаем. На телефоне параллельность не спасёт -
-  ленивая вторая тема (roadmap, M6).
-- **Первая сборка большой книги - секунды** ("Матан" 7,4 с в релизе, почти всё
-  - рисунки CeTZ). После перезапуска - кэш на диске; после правки главы
-  неизменившиеся рисунки берёт memo Typst (0,05-0,17 с вместо 2,6-6,8 с, E2).
-  Медленно остаётся правка, пока сервер не работал, и после 10 сборок других
-  заметок (`comemo::evict(10)` в `world.rs`). Как закрыть: вытеснять memo
-  бережнее (по памяти, дольше хранить открытую заметку), число сборок -
-  настройка устройства.
-- **Главы книги режутся по тексту HTML** (`book.rs`): после обработки рисунков
-  дерева нет. Опора - `typst-html` закрывает теги и экранирует `<`; непонятное
-  - книга целиком.
-- **Поиск браузера и печать видят одну главу книги**: Ctrl+F - поиск палитры
-  (по книге, главе, хранилищу), браузера - повторное Ctrl+F; печать - через
-  PDF.
-- **HTML заголовка для оглавления вырезается из текста страницы**
-  (`passes/heading_html.rs`): `typst-html` не сериализует отдельный элемент.
-  Опора - вид `<hN ... id="...">`; ссылки и рисунки в заголовке становятся
-  текстом; при смене формата оглавление молча вернётся к тексту. Как закрыть:
-  сериализация поддерева, если Typst её откроет.
-- **Скобки в формулах - эвристика**: `stretchy="false"`, если между скобками
-  нет дробей, корней, пределов, матриц (`passes/fences.rs`, `TALL`). Высокое не
-  из списка получит нерастянутые скобки. Как закрыть: дополнять список; в
-  идеале - исправление в Typst.
-- **Разделители якоря - список** (`render::SEPARATORS`: пробелы и обычная
-  пунктуация); остальное остаётся в `id`, в том числе редкая пунктуация и
-  знаки формул в заголовке. Как закрыть: дополнять список.
-- **Класс `k-h` - и у заголовков baluk, и у отступа `#h`** (`span.k-h`):
-  правила отступа - только для `span.k-h`. Переименовать отступ - разом
-  (библиотека, CSS, снимки).
-- **`h`/`v` в HTML - только абсолютные**: `pt`, `em` и сумма - пустой
-  `span.k-h`/`div.k-v`; `1fr` и проценты пропадают с предупреждением,
-  `weak: true` не учитывается. Формулы страховка узнаёт по математическому
-  шрифту темы: свой шрифт математики - и `quad` станет `span` внутри MathML.
-- **Дерево typst-html меняется после интроспекции** (typst#7951): ссылки внутри
-  перенесённых вариантов рисунков разрешаются по базовому документу. Внутри
-  рисунков ссылок пока нет.
-- **Проходы - три списка** (`passes::TREE`, `passes::TEXT`, `finish::FINISH`):
-  зависимости между ними не проверяются (сейчас их нет); каждый проход по
-  дереву - отдельный обход (доли миллисекунды).
-- **Общие части кадров - только целые поддеревья SVG** длиннее 96 байт,
-  встреченные в группе дважды. По сети выигрыша почти нет (gzip сжимал
-  повторы), выигрыш - в памяти и разборе браузером.
+- **Figure processing parses SVG text** (`figures.rs`, `frames.rs`), not a
+  tree: SVG exists only as `typst-svg` output, the code relies on its format
+  (tag by tag, relative path commands `m l h v c q a Z`). Anything unclear is
+  left as is, but a new Typst version may silently turn off the compression.
+  How to close: on updates watch the test of the number of merged figures;
+  ideally - our own frame output.
+- **The `data-k-figs` tag is a hash of the color table**: a note body without
+  the `<style>` from `styles` is left without figure colors. The client must
+  always insert `styles` together with `body`.
+- **Every theme is a full compilation** (in parallel): twice the CPU work. By
+  E1 95-99 % of the time is figures, they have to be built per theme anyway;
+  "text once" is not done. On a phone parallelism will not help - a lazy
+  second theme (roadmap, M6).
+- **The first build of a large book takes seconds** ("Матан" 7.4 s in
+  release, almost all of it CeTZ figures). After a restart - the disk cache;
+  after a chapter edit the Typst memo provides unchanged figures (0.05-0.17 s
+  instead of 2.6-6.8 s, E2). Slow remains an edit while the server was not
+  running, and after 10 builds of other notes (`comemo::evict(10)` in
+  `world.rs`). How to close: evict the memo more gently (by memory, keep the
+  open note longer), the number of builds as a device setting.
+- **Book chapters are cut from the HTML text** (`book.rs`): there is no tree
+  after figure processing. The code relies on `typst-html` closing tags and
+  escaping `<`; anything unclear - the whole book.
+- **Browser search and printing see one chapter of a book**: Ctrl+F is the
+  palette search (by book, chapter, vault), the browser one is a second
+  Ctrl+F; printing - via PDF.
+- **The heading HTML for the contents is cut from the page text**
+  (`passes/heading_html.rs`): `typst-html` does not serialize a single element.
+  The code relies on the form `<hN ... id="...">`; links and figures in a
+  heading become text; if the format changes the contents silently fall back
+  to text. How to close: subtree serialization if Typst exposes it.
+- **Brackets in formulas are a heuristic**: `stretchy="false"` if there are
+  no fractions, roots, limits, matrices between them (`passes/fences.rs`,
+  `TALL`). Something tall not on the list gets unstretched brackets. How to
+  close: extend the list; ideally - a fix in Typst.
+- **Anchor separators are a list** (`render::SEPARATORS`: spaces and common
+  punctuation); the rest stays in the `id`, including rare punctuation and
+  formula symbols in a heading. How to close: extend the list.
+- **The class `k-h` is used by both baluk headings and the `#h` spacing**
+  (`span.k-h`): spacing rules apply only to `span.k-h`. Rename the spacing all
+  at once (library, CSS, snapshots).
+- **`h`/`v` in HTML are only absolute**: `pt`, `em` and a sum become an empty
+  `span.k-h`/`div.k-v`; `1fr` and percents disappear with a warning,
+  `weak: true` is ignored. The fallback recognizes formulas by the theme's
+  math font: an own math font - and `quad` becomes a `span` inside MathML.
+- **The typst-html tree changes after introspection** (typst#7951): links
+  inside moved figure variants resolve against the base document. There are no
+  links inside figures yet.
+- **Passes are three lists** (`passes::TREE`, `passes::TEXT`,
+  `finish::FINISH`): dependencies between them are not checked (there are
+  none now); every tree pass is a separate traversal (fractions of a
+  millisecond).
+- **Shared frame parts are only whole SVG subtrees** longer than 96 bytes,
+  seen twice in a group. Over the network there is almost no gain (gzip
+  compressed the repeats), the gain is in memory and browser parsing.
 
-## Библиотека `baluk`
+## The `baluk` library
 
-- **Словари оформления - только `ru` и `en`**: другой язык - свои `words:`,
-  недостающие слова - английские. `notes check` видит только буквальный
-  `lang: "..."` в вызове шаблона. Как закрыть: словари файлами хранилища
-  (`/_words/de.typ`), если языков станет много.
-- **Имена аргументов не входят в снимок API** (`baluk-api.txt`): Typst их не
-  отдаёт. Частично их сверяет тест справочника навыка (ниже).
-- **Старые имена не поддерживаются**: заметки на прежнем русском API (`#рис`,
-  `холст`, `#см`...) не собираются, оригиналы конспектов - на нём; импорт -
-  отдельный инструмент (решение пользователя).
-- **Разбор формул интерактивных рисунков написан дважды** (Typst и TS):
-  расхождение ловит сверка только на формулах из набора. Как закрыть: Typst в
-  WASM или точки с сервера - дороже; пока - дописывать набор.
-- **Подмножество формул узкое**: нет `if`, `calc.max/min`, своих функций,
-  параметрических кривых. Рисунок целиком от параметра - `frames`.
-- **Диапазон y/z по умолчанию - по кадру при значениях по умолчанию**: при
-  другом значении кривая уходит за поле. Задавать `y:`/`z:` явно.
-- **3D - ортогональная проекция и алгоритм художника по центрам граней**:
-  огрехи перекрытия у сильно изогнутых поверхностей, осей с делениями нет. Как
-  закрыть: z-буфер в WebGL.
-- **Размер кадров не выравнивается сам**: без невидимой рамки кадры разного
-  размера смещаются. Как закрыть: мерить кадры (`measure`) и дополнять - но
-  сдвиг начала координат так не исправить.
-- **Кадры в PDF - один ряд без переноса**: широкие вылезут за поле. Предел - 60
-  кадров (не поднимать, пока не понадобится - решение пользователя). Как
-  закрыть: сетка с переносом (`columns:`).
+- **Layout dictionaries are only `ru` and `en`**: another language - own
+  `words:`, missing words are English. `notes check` sees only a literal
+  `lang: "..."` in the template call. How to close: dictionaries as vault
+  files (`/_words/de.typ`) if there are many languages.
+- **Argument names are not in the API snapshot** (`baluk-api.txt`): Typst does
+  not expose them. The skill reference test checks them partly (below).
+- **Old names are not supported**: notes on the former Russian API (`#рис`,
+  `холст`, `#см`...) do not build, the original notes use it; import is a
+  separate tool (user's decision).
+- **Interactive figure formula parsing is written twice** (Typst and TS): the
+  cross-check catches a divergence only on the formulas in the set. How to
+  close: Typst in WASM or points from the server - more expensive; for now -
+  extend the set.
+- **The formula subset is narrow**: no `if`, `calc.max/min`, own functions,
+  parametric curves. A whole figure depending on a parameter - `frames`.
+- **The default y/z range comes from the frame at default values**: with
+  another value the curve leaves the area. Give `y:`/`z:` explicitly.
+- **3D is an orthographic projection and the painter's algorithm by face
+  centers**: overlap glitches on strongly curved surfaces, no axes with ticks.
+  How to close: a z-buffer in WebGL.
+- **Frame size is not aligned automatically**: without an invisible frame
+  frames of different sizes shift. How to close: measure frames (`measure`)
+  and pad - but a shift of the origin cannot be fixed this way.
+- **Frames in PDF are one row without wrapping**: wide ones go past the
+  margin. The limit is 60 frames (do not raise until needed - user's
+  decision). How to close: a wrapping grid (`columns:`).
 
-## Шрифты
+## Fonts
 
-- **Математический шрифт не режется** (New Computer Modern Math, CFF с `MATH`):
-  `fontcull` не умеет ни CFF, ни замыкание `MATH`. Целиком - 669 КБ, самый
-  тяжёлый файл страницы; подмножество дало бы 192 КБ (E3). Как закрыть:
-  подмножество в fontations/klippa, когда появится, или нарезанные fontTools
-  части в репозитории (проверить растягиваемые скобки в Chromium, WebKit,
-  Gecko). Сейчас не делаем: оптимизация не задача, ядро отдаёт шрифт локально.
-- **Части шрифта - по наборам знаков, а не по знакам страницы**: латиница
-  грузится целиком (~40 КБ); кернинг между знаками разных частей теряется. Как
-  закрыть: подмножество по знакам страницы.
-- **Две копии brotli** (8 - `tower-http` и свой кодировщик CFF, 9 - `ttf2woff2`)
-  и вторая копия fontations у `fontcull`: дольше сборка с нуля. Как закрыть:
-  общая версия brotli; klippa напрямую.
-- **Кэш частей шрифтов** (`<данные>/cache/fonts`, ~3,6 МБ) чистит сервер при
-  запуске (`Fonts::prune_web`): ненужные части старше срока чужого кэша (другая
-  сборка делит каталог). Версию `webfonts::ENCODER` поднимают руками. Первый
-  запуск на новой машине - ~15 с процессора в фоне.
-- **Шрифты из коллекций (`.ttc`) не раздаются.** Сейчас не нужны.
-- **Знаки New Computer Modern шире своей ширины в строке** (☼, буквы в
-  кружках: рисунок Ⓐ - от -219 до 825 при ширине 613): наезжают на соседей и
-  в PDF, и в HTML - так устроен шрифт (пользователь: запасные - ладно).
-- **Текстовый шрифт CFF в браузере - перестроенный** (`webfonts::cff_to_truetype`):
-  кубические кривые -> квадратичные с точностью 0,5 единицы шрифта, хинтов
-  нет - на экране не отличить, но это не тот же файл, что у PDF. Перевод - при
-  каждом запуске сервера (~30 мс на начертание); роль шрифта (формулы или
-  текст) - из списков темы, не из файла. Как закрыть: не нужно, пока Chrome
-  отвергает CFF New Computer Modern; проверять при обновлении Typst.
-- **Шрифты оформления встроены целиком** (4,6 МБ) из пакетов Debian (возможны
-  мелкие отличия от релиза JetBrains); встроенные семейства не подменить
-  системными (только `--font-path`). Как закрыть: официальные релизы и новые
-  снимки - с пользователем.
+- **The math font is not subset** (New Computer Modern Math, CFF with `MATH`):
+  `fontcull` handles neither CFF nor the `MATH` closure. Whole it is 669 KB,
+  the heaviest file of a page; a subset would be 192 KB (E3). How to close: a
+  subset in fontations/klippa when available, or fontTools-cut parts in the
+  repository (check stretchy brackets in Chromium, WebKit, Gecko). Not done
+  now: optimization is not a goal, the core serves the font locally.
+- **Font parts follow character sets, not the page's characters**: Latin is
+  loaded whole (~40 KB); kerning between characters of different parts is
+  lost. How to close: a subset by the page's characters.
+- **Two copies of brotli** (8 - `tower-http` and our CFF encoder, 9 -
+  `ttf2woff2`) and a second copy of fontations in `fontcull`: a longer build
+  from scratch. How to close: a shared brotli version; klippa directly.
+- **The font part cache** (`<data>/cache/fonts`, ~3.6 MB) is cleaned by the
+  server at startup (`Fonts::prune_web`): unneeded parts older than the
+  foreign cache lifetime (another build shares the directory). The version
+  `webfonts::ENCODER` is bumped by hand. The first start on a new machine -
+  ~15 s of CPU in the background.
+- **Fonts from collections (`.ttc`) are not served.** Not needed now.
+- **New Computer Modern glyphs are wider than their advance** (☼, circled
+  letters: the drawing of Ⓐ spans -219 to 825 with an advance of 613): they
+  overlap neighbors both in PDF and in HTML - that is how the font is made
+  (user: fine for fallbacks).
+- **The CFF text font in the browser is rebuilt**
+  (`webfonts::cff_to_truetype`): cubic curves -> quadratic with 0.5 font unit
+  precision, no hints - indistinguishable on screen, but it is not the same
+  file as in the PDF. The conversion runs on every server start (~30 ms per
+  style); the font role (formulas or text) comes from the theme lists, not
+  from the file. How to close: not needed while Chrome rejects the CFF of New
+  Computer Modern; check on Typst updates.
+- **Layout fonts are embedded whole** (4.6 MB) from Debian packages (small
+  differences from the JetBrains release are possible); embedded families
+  cannot be replaced by system ones (only `--font-path`). How to close:
+  official releases and new snapshots - with the user.
 
-## Ядро и сервер
+## Core and server
 
-- **Метка кода отрисовки - по исходникам ядра** (`build.rs`): правка любого
-  файла `src/` вне `AFTER_CACHE` (даже комментария) - полный прогрев. Набор
-  шрифтов в метке - семейства и число начертаний, не содержимое.
-- **Встроенная библиотека не входит в версии заметок** (у файлов нет пути на
-  диске): её хэш - в метке кэша, новая библиотека - всё заново.
-- **Кэш на диске чистит только `notes serve`** (при запуске прогрева); новые
-  пределы - со следующей чистки.
-- **Настройки устройства - в том же `settings.json`**, их отличает признак
-  `device`: синхронизация (M4) обязана его учитывать. Значения по умолчанию
-  для телефона - на глаз (roadmap).
-- **Смена настроек рисунков читает сырую отрисовку с диска** ("Матан" - ~3 МБ
-  JSON, десятки мс). Отладочная и релизная сборки (и установленный `notes`)
-  делят каталог данных и перезаписывают кэш друг друга - лишний прогрев.
-- **Память сервера в простое после прогрева - ~360 МБ** (`tests/vault`, цель
-  <~300 МБ; `docs/research/E5.md`): живого в куче ~72 МБ, ещё кэш страниц
-  (до 64 МБ), части шрифтов и то, что jemalloc держит в своих аренах. Пик
-  прогрева ~1,2 ГБ (две сборки сразу), на "Демо" (15 заметок, рисунки) -
-  ~2 ГБ, после прохода - ~520 МБ. Под Windows (MSVC) jemalloc нет -
-  там память как с glibc. Как закрыть: замер, если станет мешать.
-- **Сила "Папки" на графе подобрана на синтетическом графе** (300 узлов,
-  `vault_graph::tests::forces_do_what_they_say`): настоящего хранилища с
-  многими папками для проверки нет. Как закрыть: подстроить `CLUSTER_PULL`
-  и `GROUP_REPEL`, когда такое хранилище появится.
-- **Параллельные сборки - пул кэшей файлов** (`world::Stores`): память - до
-  "число сборок" раз больше. `comemo::evict(N)` после сборки чистит и чужой
-  memo; большой проход прогрева (`evict(0)`) - и memo открытой заметки.
-- **Прогрев и пользователь делят процессор**: поток прогрева - с `nice` 10
-  (Linux, Android; `rustix`), но пул вёрстки Typst - общий, без понижения; на
-  других ОС приоритет не меняется. Порядок новых заметок - по размеру
-  исходников.
-- **Прерванная сборка продолжается** (Typst не умеет отменять): ушли с
-  собирающейся книги - она доработает. Как закрыть: отмена сборки.
-- **Наблюдатель - только у сервера и только каталога**: CLI обходит хранилище.
-  События ОС теряются (переполнение inotify, сетевые диски, файл в только что
-  созданной папке), поэтому индекс и прогрев обходят хранилище не реже раза в
-  10 минут (`graph::MAX_AGE`, `warm::RESCAN`); сломанный наблюдатель
-  (переполнение - `Rescan`) выключается, ответ событий - `watching: false`,
-  клиент перестаёт ждать и обновляет по кнопке (опроса нет). Каталог библиотеки на диске наблюдается вторым
-  источником (`Changes::also`), его сбой - предупреждение; правка библиотеки
-  устаревает все заметки. Индекс после изменения обходится целиком, не по
-  путям из события. Для десятков тысяч заметок - обновлять по путям.
-- **Вычисляемые ссылки - из последней удачной сборки** (`Record.links`): до
-  пересборки видны и удалённые ссылки; несобранная заметка даёт только
-  буквальные `#see("путь")`.
-- **Версия заметки с `#vault-graph` - ответ графа**: проверка версии строит
-  индекс и берёт раскладку (из кэша); правка ссылок в большом хранилище - новая
-  раскладка уже при проверке версии.
-- **Данные хранилища для заметок - поставщики граф и названия**
-  (`vault_data.rs`): отпечаток по умолчанию - хэш ответа, дешёвый признак
-  свежести поставщик задаёт сам (`DataProvider::token`). Фильтр графа - в имени
-  файла; имя `_vault` в корне хранилища занято.
-- **PDF - на каждый запрос без кэша** ("Матан" ~2 с): обычный `typst compile`
-  хранилище не соберёт.
-- HTML очищается (см. архитектуру): опасные теги и атрибуты удаляются, CSP
-  запрещает inline/eval скрипты. Осталось: уточнить allowlist по мере
-  добавления блоков в библиотеку, убедиться, что шрифты и темы не требуют
-  `style-src` без `unsafe-inline`.
-- `<style>` и `style=` в заметке могут переоформить весь UI приложения
-  (спуфинг: фальшивые диалоги, перекрытие кнопок): санитизация режет XSS, но
-  не ограничивает область стилей заметкой. Как закрыть: изоляция стилей
-  заметки (scope/shadow/переписывание селекторов).
-- DOM clobbering через `id`/`name`: заметка может задать имена, которые
-  конфликтуют с глобальными свойствами документа. Как закрыть: клиент не
-  должен опираться на `window.<id>` и `document.<name>`, только явные
-  `querySelector`/`getElementById` в своём контейнере.
-- **Вместо входа - общий токен без срока** (`auth.rs`): `?token=` остаётся в
-  адресной строке, истории и журнале, cookie без срока и `Secure`, 404
-  отвечает и без токена; HTTPS нет. Для `notes serve` на 127.0.0.1 терпимо; до
-  выкладки в сеть - вход (roadmap M4).
-- **Нет CORS**: `base` в `config.ts` есть, но сервер не пускает чужой
-  `Origin`. К серверу-хранилищу ходит ядро, а не страница - CORS нужен, только
-  если страница из другого источника обратится к серверу сама.
-- **События клиенту - "что-то изменилось"**: каждая вкладка на любую правку
-  сверяет версию заметки и список (два дешёвых запроса); вкладка - одно
-  соединение (у HTTP/1.1 предел ~6 на сервер). Для многих пользователей -
-  события по заметкам.
-- **Белый список пакетов - только CeTZ 0.4.2 и oxifmt 1.0.0** (что тянет
-  библиотека): остальное - через `device.packages`. Как закрыть:
-  пересматривать список, когда заметкам понадобится пакет. Смена
-  разрешённых пересобирает все заметки с библиотекой (она читает CeTZ).
-- **Хранилище закрывается после 10 минут без запросов** (`IDLE_CLOSE`), если
-  оно не активное и у него нет потока событий: открыть заново дёшево (шрифты
-  и темы общие), но страницы потом - с диска, не из памяти. Срок - константа,
-  не настройка.
-- **Активное (прогреваемое) хранилище - открытое или подсказавшее прогрев
-  последним**: две вкладки с разными хранилищами перетягивают прогрев.
-  Пропущенное собирается по запросу.
-- **Удаление - только в корзину системы**: на Android и в WASM её нет
-  (ошибка); вернуть можно только из корзины Dolphin; папка последней
-  удалённой заметки остаётся (пустой - в дереве). При синхронизации (M4)
-  удаление должно стать изменением с версией, иначе заметка вернётся с
-  сервера. Как закрыть: корзина хранилища `.trash/`.
+- **The rendering code tag is computed from the core sources** (`build.rs`):
+  an edit of any `src/` file outside `AFTER_CACHE` (even a comment) means a
+  full warm-up. The fonts in the tag are families and the number of styles,
+  not the content.
+- **The embedded library is not part of note versions** (its files have no
+  path on disk): its hash is in the cache tag, a new library - everything
+  anew.
+- **Only `notes serve` cleans the disk cache** (when the warm-up starts); new
+  limits apply from the next cleaning.
+- **Device settings live in the same `settings.json`**, the `device` flag
+  tells them apart: sync (M4) must take it into account. Phone defaults are
+  guessed (roadmap).
+- **Changing figure settings reads the raw rendering from disk** ("Матан" -
+  ~3 MB of JSON, tens of ms). Debug and release builds (and the installed
+  `notes`) share the data directory and overwrite each other's cache - an
+  extra warm-up.
+- **Server memory idle after warm-up is ~360 MB** (`tests/vault`, the target
+  <~300 MB; `docs/research/E5.md`): ~72 MB live on the heap, plus the page
+  cache (up to 64 MB), font parts and what jemalloc keeps in its arenas. The
+  warm-up peak is ~1.2 GB (two builds at once), on "Демо" (15 notes, figures)
+  - ~2 GB, ~520 MB after the pass. On Windows (MSVC) there is no jemalloc -
+  memory there is as with glibc. How to close: measure if it gets in the way.
+- **The "Папки" graph force was tuned on a synthetic graph** (300 nodes,
+  `vault_graph::tests::forces_do_what_they_say`): there is no real vault with
+  many folders to check on. How to close: tune `CLUSTER_PULL` and
+  `GROUP_REPEL` when such a vault appears.
+- **Parallel builds use a pool of file caches** (`world::Stores`): memory up
+  to "number of builds" times more. `comemo::evict(N)` after a build cleans
+  the other memo too; a large warm-up pass (`evict(0)`) - also the memo of
+  the open note.
+- **The warm-up and the user share the CPU**: the warm-up thread runs with
+  `nice` 10 (Linux, Android; `rustix`), but the Typst layout pool is shared,
+  without lowering; on other OSes the priority does not change. New notes are
+  ordered by source size.
+- **An interrupted build continues** (Typst cannot cancel): leave a book that
+  is building - it finishes. How to close: build cancellation.
+- **The watcher exists only in the server and only for the directory**: the
+  CLI walks the vault. OS events get lost (inotify overflow, network drives,
+  a file in a just created folder), so the index and the warm-up walk the
+  vault at least every 10 minutes (`graph::MAX_AGE`, `warm::RESCAN`); a
+  broken watcher (overflow - `Rescan`) is turned off, the events response is
+  `watching: false`, the client stops waiting and refreshes by a button (no
+  polling). The library directory on disk is watched as a second source
+  (`Changes::also`), its failure is a warning; a library edit makes all notes
+  stale. After a change the index is walked whole, not by the paths from the
+  event. For tens of thousands of notes - update by paths.
+- **Computed links come from the last successful build** (`Record.links`):
+  until a rebuild deleted links are still visible; an unbuilt note gives only
+  literal `#see("path")`.
+- **The version of a note with `#vault-graph` is the graph response**: the
+  version check builds the index and takes the layout (from the cache); a link
+  edit in a large vault means a new layout already during the version check.
+- **Vault data for notes - the providers graph and titles**
+  (`vault_data.rs`): the default fingerprint is a hash of the response, a
+  cheap freshness token is set by the provider itself (`DataProvider::token`).
+  The graph filter is in the file name; the name `_vault` in the vault root is
+  taken.
+- **PDF on every request without a cache** ("Матан" ~2 s): a plain
+  `typst compile` cannot build the vault.
+- HTML is sanitized (see the architecture): dangerous tags and attributes are
+  removed, the CSP forbids inline/eval scripts. Left: refine the allowlist as
+  blocks are added to the library, make sure fonts and themes do not need
+  `style-src` without `unsafe-inline`.
+- `<style>` and `style=` in a note can restyle the whole app UI (spoofing:
+  fake dialogs, covering buttons): sanitization cuts XSS but does not limit
+  the style scope to the note. How to close: note style isolation
+  (scope/shadow/rewriting selectors).
+- DOM clobbering via `id`/`name`: a note can set names that conflict with
+  global document properties. How to close: the client must not rely on
+  `window.<id>` and `document.<name>`, only explicit
+  `querySelector`/`getElementById` in its container.
+- **Instead of sign-in - a shared token without expiry** (`auth.rs`):
+  `?token=` stays in the address bar, history and log, the cookie has no
+  expiry and no `Secure`, 404 answers without a token too; no HTTPS. Bearable
+  for `notes serve` on 127.0.0.1; before going online - sign-in (roadmap M4).
+- **No CORS**: `config.ts` has `base`, but the server rejects a foreign
+  `Origin`. The core talks to the storage server, not the page - CORS is
+  needed only if a page from another origin calls the server itself.
+- **Events for the client are "something changed"**: every tab checks the note
+  version and the list on any edit (two cheap requests); a tab is one
+  connection (HTTP/1.1 has a limit of ~6 per server). For many users - events
+  per note.
+- **The package whitelist is only CeTZ 0.4.2 and oxifmt 1.0.0** (what the
+  library pulls in): the rest - via `device.packages`. How to close: review
+  the list when notes need a package. Changing the allowed ones rebuilds all
+  notes with the library (it reads CeTZ).
+- **A vault closes after 10 minutes without requests** (`IDLE_CLOSE`) if it
+  is not active and has no event stream: reopening is cheap (fonts and themes
+  are shared), but pages then come from disk, not memory. The period is a
+  constant, not a setting.
+- **The active (warmed) vault is the open one or the one that last hinted the
+  warm-up**: two tabs with different vaults pull the warm-up back and forth.
+  What is skipped is built on request.
+- **Deleting goes only to the system trash**: there is none on Android and in
+  WASM (an error); restoring is only from the Dolphin trash; the folder of the
+  last deleted note stays (empty - in the tree). With sync (M4) a deletion
+  must become a versioned change, otherwise the note comes back from the
+  server. How to close: a vault trash `.trash/`.
 
-## Граф
+## Graph
 
-- **Раскладка ядра - ~60 мс на 1000 узлов** (релиз, первый раз; повторно -
-  кэш), замеры - `docs/research/E6.md`. Площадь на узел - константа под
-  среднюю подпись: граф из длинных подписей тесноват (раздвигание - не больше
-  80 проходов), из коротких - просторен. Папки кучкуются потому, что узлы
-  упорядочены по пути: начальная раскладка по порядку, сила "к своей папке"
-  не нужна.
-- **Физика клиента - пружины к раскладке ядра, а не силы ядра**: иначе
-  нетронутый граф поплыл бы. Протянутый узел расталкивает только наехавших.
-  Решётка (с 200 узлов) - клетка по самому большому узлу: одна длинная подпись
-  возвращает почти полный перебор.
-- **Переставленные узлы не запоминаются**: смена фильтра или перезагрузка -
-  раскладка заново; вернуть её - кнопка только на `/graph`. Запоминать ли -
-  вкус пользователя.
-- **Ширина подписи - по числу знаков**: раскладка одинакова везде, зазоры у
-  широких букв неточные; на телефоне подписи могут наезжать; картинка Typst
-  большого графа мельчит подписи.
-- **Касание узла на телефоне сразу открывает заметку**, соседи подсвечиваются
-  только наведением. Решает пользователь (M6).
-- **Без движения (`prefers-reduced-motion`)** соседи не тянутся, переходы
-  мгновенные.
-- **Книги главами - только на `/graph`**: у главной и `#vault-graph` в
-  заметке флажка нет (решение пользователя: пока не нужно). Вершина главы - `<книга>/.<номер>`: вставили главу - номера
-  следующих сдвинулись (соседи главы в адресе - другая глава). Ссылка, которую
-  содержание не видит (внутри `#let`, вычисляемый путь), - от корня книги.
-  Жёсткость пружины "книга - глава" (`TIGHT_SPRING`) подобрана на глаз на
-  "Демо" с добавленной книгой на 5 глав.
+- **The core layout takes ~60 ms per 1000 nodes** (release, first time;
+  repeated - cache), measurements - `docs/research/E6.md`. The area per node is
+  a constant for an average label: a graph of long labels is cramped
+  (spreading - no more than 80 passes), of short ones - roomy. Folders cluster
+  because nodes are ordered by path: the initial layout goes in order, a
+  "toward own folder" force is not needed.
+- **Client physics are springs to the core layout, not core forces**:
+  otherwise an untouched graph would drift. A dragged node pushes away only
+  those it ran into. The grid (from 200 nodes) has a cell sized by the largest
+  node: one long label brings back an almost full scan.
+- **Moved nodes are not remembered**: a filter change or reload - the layout
+  anew; a button to restore it exists only on `/graph`. Whether to remember -
+  the user's taste.
+- **Label width is by the number of characters**: the layout is the same
+  everywhere, gaps at wide letters are inexact; on a phone labels may overlap;
+  the Typst picture of a large graph makes labels tiny.
+- **Tapping a node on a phone opens the note at once**, neighbors highlight
+  only on hover. The user decides (M6).
+- **Without motion (`prefers-reduced-motion`)** neighbors do not follow,
+  transitions are instant.
+- **Books as chapters only on `/graph`**: the home page and `#vault-graph` in
+  a note have no checkbox (user's decision: not needed yet). A chapter vertex
+  is `<book>/.<number>`: insert a chapter - the numbers of the following ones
+  shift (the chapter's neighbors in the address are another chapter). A link
+  the contents do not see (inside `#let`, a computed path) comes from the book
+  root. The stiffness of the "book - chapter" spring (`TIGHT_SPRING`) is tuned
+  by eye on "Демо" with an added 5-chapter book.
 
-## Клиент
+## Client
 
-- **Раскрытые "Ответы" - по якорю раздела и тексту `summary`**
-  (`lib/details.ts`), среди одинаковых - по номеру: новый блок выше раскрытого
-  с тем же текстом раскроется вместо него.
-- **Нечёткий поиск жадный** (`lib/fuzzy.ts`): буква запроса прыгает к началу
-  следующего слова, и запрос из нескольких слов может не совпасть с
-  названием, где слова идут подряд ("в этой заметке или книге" не находит
-  "Поиск в этой заметке или книге"). Как закрыть: подстрока без пробелов
-  или поиск с возвратом.
-- **"Нет связи" - по ответу сервера** (`api.onReach`): ответ с ошибкой (502
-  обратного прокси, M4) - это связь есть. Пробный запрос - `GET /api/vaults`
-  раз в 3 с, пока связи нет.
-- **Переименовать и удалить - только открытое хранилище**: другое - сначала
-  открыть. Вкладки и места чтения переезжают только в этом браузере; кэш на
-  диске привязан к пути хранилища - после переименования заметки
-  пересобираются, прежний кэш удалится как чужой (`device.foreign_days`).
-- **Настройки хранилища с ошибкой в JSON** (`.baluk/settings.json`): хранилище
-  открывается без них, изменения - только в памяти до перезапуска (файл не
-  перезаписывается); предупреждение - в журнале сервера, не в интерфейсе.
-- **Подсказки клавиш прячутся по `(pointer: coarse)`**: на планшете с
-  клавиатурой их тоже нет.
-- **На телефоне вкладки только прокручиваются** - без свайпа и списка. Для
-  Android (M6) - продумать заново.
-- **Тема первого кадра - память браузера** (`k-theme@<хранилище>`): новый
-  браузер или впервые открытое хранилище со своей темой - первый кадр в
-  последней показанной (или системной) теме, затем смена.
-- **3D пальцем: наклон - только жестом, начатым вбок** (начатый вверх-вниз -
-  прокрутка страницы, `touch-action: pan-y`); двумя пальцами не крутится.
-  Так решено (пользователь отдал выбор агенту): прокрутка не застревает на
-  рисунке, без лишних рамок и ручек. Другие варианты - полоса-ручка, касание
-  "включает" рисунок, вращение двумя пальцами - если на телефоне окажется
-  неудобно.
-- **Переименование - не транзакция** (`notes-core::rename`): файлы меняются
-  по одному, сбой посередине оставит часть правок. Переписываются только
-  буквальные `#see("путь")`: вычисляемые пути и `#import`/`#include` чужих
-  файлов по абсолютному пути - нет. Навык (`/baluk-note`) переименовывает
-  только название, файлы не трогает: команды `notes rename` нет.
-- **Вкладки и места чтения прежней версии клиента** (ключи без хранилища) не
-  переносятся.
-- **Другое хранилище - перезагрузка страницы**: для десктопа (M5) - окно на
-  хранилище или пересоздание состояния.
+- **Opened "Ответы" are matched by the section anchor and the `summary` text**
+  (`lib/details.ts`), among equal ones - by index: a new block above an opened
+  one with the same text opens instead of it.
+- **Fuzzy search is greedy** (`lib/fuzzy.ts`): a query letter jumps to the
+  start of the next word, and a multi-word query may miss a title where the
+  words go in a row ("в этой заметке или книге" does not find "Поиск в этой
+  заметке или книге"). How to close: a substring without spaces or a search
+  with backtracking.
+- **"Нет связи" depends on a server answer** (`api.onReach`): an error
+  response (502 of a reverse proxy, M4) counts as connected. The probe request
+  is `GET /api/vaults` every 3 s while disconnected.
+- **Only the open vault can be renamed and deleted**: another one - open it
+  first. Tabs and reading positions move only in this browser; the disk cache
+  is tied to the vault path - after a rename the notes are rebuilt, the
+  former cache is deleted as foreign (`device.foreign_days`).
+- **Vault settings with a JSON error** (`.baluk/settings.json`): the vault
+  opens without them, changes stay only in memory until a restart (the file is
+  not overwritten); the warning is in the server log, not in the interface.
+- **Key hints hide on `(pointer: coarse)`**: a tablet with a keyboard does not
+  get them either.
+- **On a phone tabs only scroll** - no swipe and no list. For Android (M6) -
+  rethink.
+- **The first-frame theme is browser memory** (`k-theme@<vault>`): a new
+  browser or a vault with its own theme opened for the first time - the first
+  frame is in the last shown (or system) theme, then it switches.
+- **3D by finger: tilting only by a gesture started sideways** (one started
+  vertically scrolls the page, `touch-action: pan-y`); no two-finger rotation.
+  Decided so (the user left the choice to the agent): scrolling does not get
+  stuck on the figure, no extra frames or handles. Other options - a handle
+  strip, a tap that "activates" the figure, two-finger rotation - if it turns
+  out inconvenient on a phone.
+- **Renaming is not a transaction** (`notes-core::rename`): files change one
+  by one, a failure in the middle leaves part of the edits. Only literal
+  `#see("path")` are rewritten: computed paths and `#import`/`#include` of
+  other files by an absolute path are not.
+- **Tabs and reading positions of the previous client version** (keys without
+  a vault) are not carried over.
+- **Another vault - a page reload**: for the desktop (M5) - a window per vault
+  or recreating the state.
 
-## Хранилище и инструменты
+## Vault and tools
 
-- **Название - текстом из исходника** (`outline.rs`): формула - исходником
-  (`[Ряд $sum 1/n^2$]` -> "Ряд sum 1/n^2", решение пользователя), вычисляемое
-  в `title: [...]` пропускается. Как закрыть: HTML названия клиенту (в
-  "Потом").
-- **`id` раздела с формулой в индексе не совпадает со страницей**
-  (`search::section_ids`): на странице слаг из текста MathML (`Пространство-ℝ𝑛-...`),
-  в индексе - из исходника. Поиск ведёт в такой раздел без прокрутки к нему;
-  "Ссылаются сюда" находит заголовок по якорю ссылки (`id` или слаг
-  страницы), иначе показывает текст. Как закрыть: `id` разделов из
-  собранной страницы (кэш) в индексе.
-- **Теги главы - только буквальные** (`outline.rs`): `chapter.with(tags: ...)`
-  разбирается из исходника, как `note.with`; теги из переменной или
-  вычисленные индекс не видит (на странице они есть). Превью ссылки в главу
-  показывает теги корня книги, не главы. Как закрыть: теги собранной страницы
-  по главам (`ul.k-chapter-tags`) и превью по главе.
-- **Название папки - только `_folder.toml`**: в папке книги не читается;
-  команды `notes` для него нет (интерфейс - переименование).
-- **Индекс ссылок подписывает `#see` без подписи именем файла** (текст для
-  поиска), а страница - названием: поиск по тексту ссылки находит имя файла.
-  Как закрыть: подставлять названия при сборке индекса (второй проход).
-- **Имя файла из названия - без нормализации Юникода**: "й" из двух кодовых
-  точек (macOS) и из одной - разные имена. Как закрыть: NFC при создании и
-  сравнении.
-- **`/_vault/title/...` без наблюдателя обходит хранилище** на каждое название
-  (`notes check`: 10 ссылок - 10 обходов `stat`, десятки мс). Как закрыть:
-  кэш обхода на время команды.
-- **Хранилища пользователя - вне git и без копий**: потеря каталога - потеря
-  заметок. Как закрыть: git-репозиторий хранилища или синхронизация (M4).
-- **Прогрев e2e - +20 с к прогону** (`e2e/global-setup.ts`) ради коротких
-  ожиданий; `01-switch` проверяет повторную долгую сборку, а не первую.
-- **`tools/check.sh` - последовательно** (~3,5 мин с e2e): `cargo test`
-  ~35 с (бинарники крейтов идут по очереди, самый долгий - модульные тесты
-  ядра, ~13 с), e2e ~80 с (из них прогрев 20 с). Пересборка тестов после
-  правки ядра ~3 с (сквозные тесты - один бинарник на крейт), релиз в
-  `install.sh` ~35 с. Новая зависимость или фича меняет набор фич общих
-  крейтов - стек Typst пересобирается во всех профилях (минуты, один раз).
-  Как ускорить ещё: e2e - уже прогрев и один воркер (общий сервер).
-- **Установленные `notes` и навык - снимок на момент `tools/install.sh`**: без
-  переустановки отстают от репозитория; службу `install.sh` перезапускает
-  сам, запущенный вручную `notes serve` работает до перезапуска. Как закрыть:
-  приложение с обновлением (M5).
-- **Части сверяют только номер версии** (`notes::check_version`, версия
-  workspace): две сборки одной версии из разных коммитов не различаются. Пока
-  части ставит `tools/install.sh` вместе - не страшно; с выпусками (PKGBUILD) -
-  поднимать версию.
-- **Сокет ядра - только Unix** (`notes serve --socket`): на Windows окну нужен
-  именованный канал или порт с токеном. Сокет упавшего сервера остаётся файлом
-  до следующего запуска (тот убирает его, если никто не отвечает).
-- **Окно `notes-app` - только Linux**: сокет Unix, `xdg-open` для ссылок и
-  PDF. Убитое SIGKILL окно оставляет своё ядро работать (следующее окно к нему
-  подключится); ядро упало при открытом окне - ответы 502 ("нет связи"),
-  нового ядра окно не запускает. PDF с ошибкой сборки - только строка в логе
-  окна. Одно окно на запуск: второй запуск - второе окно (single instance - с
-  пунктом "Окна" roadmap M5). Память страницы (вкладки, места чтения) у окна
-  своя, не та, что у браузера.
-- **WebKitGTK в окне: память и падение на выходе.** У пользователя за 11
-  минут работы процессы окна дошли до 1,7 ГБ (обход всех заметок "Демо" -
-  WebKit ~550 МБ без роста, 40 протяжек узла графа - без роста).
-  `WebKitWebProcess`, завершаясь сам, падал в `exit()`: деструктор
-  `libEGL.so.1` (libglvnd; загружены и Mesa, и NVIDIA) разбирает EGL, пока
-  поток отрисовки WebKit ещё в `libEGL_mesa` (WebKitGTK 2.52.6) - дамп система
-  пишет около минуты, машина лагает. Обход: окно перед выходом убивает свой
-  процесс WebKit (`notes-app` `quit`, SIGKILL от WebKit) - `exit()` в нём не
-  бывает (пользователь закрыл окно - отчёта о падении нет). В тестовом
-  композиторе (`kwin_wayland --virtual`) падение не воспроизводится; такой
-  композитор - только внутри `dbus-run-session`: на шине пользователя он после
-  выхода гасит глобальные сочетания KWin (Alt+Tab). Ошибка WebKit
-  остаётся: отчёт в WebKit, если её можно воспроизвести.
-- **`glib 0.18` с уязвимостью (Dependabot #1)**: приходит через окно
-  (`tauri` -> `wry`/`tao` -> `gtk 0.18`); исправление - в `glib 0.20`, а
-  `gtk 0.18` - последние привязки GTK3, Tauri 2 на Linux - на них. Уязвимый
-  `VariantStrIter` (`Variant::array_iter_str`) не вызывает ни одна
-  зависимость. Как закрыть: обновить, когда Tauri уйдёт с GTK3; до тех пор
-  при обновлении Tauri проверять заново (`cargo tree -i glib`).
-- **Автозапуск - только systemd пользователя** (`notes service`): нет macOS и
-  Windows; служба живёт, пока пользователь в системе (без `loginctl
-  enable-linger`), - для десктопа так и надо. Юнит запускает тот бинарник,
-  из которого вызван `install` (отладочный - с предупреждением). Как закрыть:
-  десктоп-приложение (M5) заменит службу.
-- **Копия `comemo` с правкой** (`.claude/rules/vendor.md`): при обновлении Typst -
-  перенести правку или убрать копию.
-- **Файл настроек `notes` - один ключ** (`data`, неизвестный - ошибка). Адрес
-  сервера в `notes new` и навыке - по умолчанию (`127.0.0.1:8421`), своего
-  `--addr` они не знают.
-- **Подсказка "путь начинается с имени каталога хранилища"** в `notes new` -
-  эвристика по первому сегменту; другие ошибки пути она не ловит.
-- **`target/` чистится целиком** (`check.sh`, больше 30 ГБ): после очистки
-  первая проверка собирает всё заново (~10 мин). Как закрыть: удалять только
-  старые варианты (`cargo-sweep`), если полная пересборка станет мешать.
+- **A title is source text** (`outline.rs`): a formula is shown as source
+  (`[Ряд $sum 1/n^2$]` -> "Ряд sum 1/n^2", user's decision), anything computed
+  in `title: [...]` is skipped. How to close: title HTML for the client (in
+  "Later").
+- **The `id` of a section with a formula in the index differs from the page**
+  (`search::section_ids`): on the page the slug comes from MathML text
+  (`Пространство-ℝ𝑛-...`), in the index - from the source. Search leads into
+  such a section without scrolling to it; "Ссылаются сюда" finds the heading
+  by the link anchor (`id` or the page slug), otherwise shows the text. How to
+  close: section `id`s from the built page (cache) in the index.
+- **Chapter tags are only literal** (`outline.rs`): `chapter.with(tags: ...)`
+  is parsed from the source, as `note.with`; tags from a variable or computed
+  ones are not seen by the index (they are on the page). A link preview into a
+  chapter shows the book root tags, not the chapter's. How to close: tags of
+  the built page per chapter (`ul.k-chapter-tags`) and a per-chapter preview.
+- **A folder title is only `_folder.toml`**: it is not read in a book folder;
+  there is no `notes` command for it (the interface - renaming).
+- **The link index labels a `#see` without text by the file name** (text for
+  search), while the page uses the title: a search by link text finds the file
+  name. How to close: substitute titles when building the index (a second
+  pass).
+- **A file name from a title is not Unicode-normalized**: "й" of two code
+  points (macOS) and of one are different names. How to close: NFC on
+  creation and comparison.
+- **`/_vault/title/...` without a watcher walks the vault** for every title
+  (`notes check`: 10 links - 10 `stat` walks, tens of ms). How to close: a
+  walk cache for the duration of a command.
+- **User vaults are outside git and have no copies**: losing the directory is
+  losing the notes. How to close: a git repository for the vault or sync (M4).
+- **The e2e warm-up adds 20 s to a run** (`e2e/global-setup.ts`) for the sake
+  of short waits; `01-switch` checks a repeated long build, not the first.
+- **`tools/check.sh` is sequential** (~3.5 min with e2e): `cargo test` ~35 s
+  (crate binaries run in turn, the longest is the core unit tests, ~13 s),
+  e2e ~80 s (20 s of it is the warm-up). Rebuilding tests after a core edit
+  takes ~3 s (end-to-end tests are one binary per crate), the release in
+  `install.sh` ~35 s. A new dependency or feature changes the feature set of
+  shared crates - the Typst stack is rebuilt in all profiles (minutes, once).
+  What else could speed it up: e2e already has a warm-up and one worker (a
+  shared server).
+- **The installed `notes` and skill are a snapshot at `tools/install.sh`
+  time**: without reinstalling they lag behind the repository; `install.sh`
+  restarts the service itself, a `notes serve` started by hand runs until a
+  restart. How to close: an app with updates (M5).
+- **Parts compare only the version number** (`notes::check_version`, the
+  workspace version): two builds of one version from different commits are
+  not told apart. While `tools/install.sh` installs the parts together - no
+  problem; with releases (PKGBUILD) - bump the version.
+- **The core socket is Unix only** (`notes serve --socket`): on Windows the
+  window needs a named pipe or a port with a token. The socket of a crashed
+  server stays as a file until the next start (which removes it if nobody
+  answers).
+- **The `notes-app` window is Linux only**: a Unix socket, `xdg-open` for
+  links and PDF. A window killed by SIGKILL leaves its core running (the next
+  window connects to it); the core crashed with the window open - 502
+  answers ("нет связи"), the window does not start a new core. A PDF with a
+  build error is only a line in the window log. One window per launch: a
+  second launch is a second window (single instance - with the "Windows" item
+  of roadmap M5). The page memory (tabs, reading positions) of the window is
+  its own, not the browser's.
+- **WebKitGTK in the window: memory and a crash on exit.** For the user, after
+  11 minutes of work the window processes reached 1.7 GB (walking all "Демо"
+  notes - WebKit ~550 MB without growth, 40 drags of a graph node - without
+  growth). `WebKitWebProcess`, exiting by itself, crashed in `exit()`: the
+  destructor of `libEGL.so.1` (libglvnd; both Mesa and NVIDIA are loaded)
+  tears down EGL while the WebKit render thread is still in `libEGL_mesa`
+  (WebKitGTK 2.52.6) - the system writes the dump for about a minute, the
+  machine lags. Workaround: the window kills its WebKit process before exit
+  (`notes-app` `quit`, SIGKILL from WebKit) - so `exit()` never runs there
+  (the user closed the window - no crash report). In a test compositor
+  (`kwin_wayland --virtual`) the crash does not reproduce; such a compositor
+  only inside `dbus-run-session`: on the user's bus it turns off KWin global
+  shortcuts (Alt+Tab) after exit. The WebKit bug remains: a report to WebKit
+  if it can be reproduced.
+- **`glib 0.18` with a vulnerability (Dependabot #1)**: it comes via the
+  window (`tauri` -> `wry`/`tao` -> `gtk 0.18`); the fix is in `glib 0.20`,
+  and `gtk 0.18` is the last GTK3 binding, Tauri 2 on Linux uses it. No
+  dependency calls the vulnerable `VariantStrIter`
+  (`Variant::array_iter_str`). How to close: update when Tauri leaves GTK3;
+  until then recheck on Tauri updates (`cargo tree -i glib`).
+- **Autostart is only a systemd user service** (`notes service`): no macOS or
+  Windows; the service lives while the user is logged in (without `loginctl
+  enable-linger`) - that is right for a desktop. The unit runs the binary
+  `install` was called from (a debug one - with a warning). How to close: the
+  desktop app (M5) replaces the service.
+- **The `comemo` copy with a patch** (`.claude/rules/vendor.md`): on a Typst
+  update - move the patch or remove the copy.
+- **The `notes` config file has one key** (`data`, an unknown one is an
+  error). The server address in `notes new` and the skill is the default
+  (`127.0.0.1:8421`), they do not know a custom `--addr`.
+- **The hint "the path starts with the vault directory name"** in `notes new`
+  is a heuristic on the first segment; it does not catch other path mistakes.
+- **`target/` is cleaned whole** (`check.sh`, over 30 GB): after a cleaning
+  the first check builds everything again (~10 min). How to close: remove only
+  old variants (`cargo-sweep`) if full rebuilds get in the way.
 
-## Навык `/baluk-note`
+## The `/baluk-note` skill
 
-- **Страницу в приложении навык смотрит через Claude in Chrome**: без него или
-  без `notes serve` - только PDF.
-- **`writing.md` и `SKILL.md` сверяются с библиотекой частично**: тест
-  проверяет только вызовы `#имя`; имена без `#` и смысл правил устареют
-  незаметно. Из сниппетов `SKILL.md` собирается только блок "Common calls";
-  шапка в разделе "The file" переписана с `new_note` руками.
-- **Справочник (`reference.md`) сверяется только по именованным параметрам**:
-  тест ищет `#let имя(...)` в `baluk/` текстом и сравнивает имена и значения по
-  умолчанию; позиционные аргументы, описания и допустимые строки ловит только
-  сборка примеров. Сигнатуры описаны дважды: `baluk/README.md` и
-  `reference.md`. Как закрыть: собирать `reference.md` из комментариев `///`
-  при установке.
-- **Правила содержания - в двух местах**: `docs/writing.md` (по-русски) и
-  `SKILL.md` (по-английски, "Writing a good note"). Правишь правило - правь
-  оба. Как закрыть: один английский источник, `writing.md` - ссылка или
-  перевод при установке.
-- **Навык рассчитан на Claude Code**: `allowed-tools`,
-  `disable-model-invocation`, "Base directory" - его понятия; другие оболочки
-  (opencode) читают `SKILL.md` как текст, путь к `examples/` - из "Base
-  directory", если оболочка её пишет.
+- **The skill looks at the page in the app through Claude in Chrome**: without
+  it or without `notes serve` - only the PDF.
+- **`writing.md` and `SKILL.md` are checked against the library only
+  partly**: the test checks only `#name` calls; names without `#` and the
+  meaning of rules go stale unnoticed. Of the `SKILL.md` snippets only the
+  "Common calls" block is built; the header in the "The file" section is
+  rewritten from `new_note` by hand.
+- **The reference (`reference.md`) is checked only by named parameters**: the
+  test finds `#let name(...)` in `baluk/` as text and compares names and
+  defaults; positional arguments, descriptions and allowed strings are caught
+  only by building the samples. Signatures are described twice:
+  `baluk/README.md` and `reference.md`. How to close: generate `reference.md`
+  from `///` comments at installation.
+- **Content rules live in two places**: `docs/writing.md` and `SKILL.md`
+  ("Writing a good note"). Edit a rule - edit both. How to close: one source,
+  `SKILL.md` refers to `notes docs writing` or includes it at installation.
+- **The skill is made for Claude Code**: `allowed-tools`,
+  `disable-model-invocation`, "Base directory" are its concepts; other shells
+  (opencode) read `SKILL.md` as text, the path to `examples/` comes from "Base
+  directory" if the shell writes it.

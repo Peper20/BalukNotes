@@ -1,86 +1,89 @@
-# baluk - библиотека оформления BalukNotes
+# baluk - the BalukNotes layout library
 
-Библиотека Typst для заметок BalukNotes: один исходник даёт и страницу в
-приложении (HTML), и PDF. Имена функций и параметров - английские, текст
-заметок - на любом языке. Что писать и как проверять - `notes docs writing`.
-Проверено на Typst 0.15.1; внешняя зависимость - `@preview/cetz:0.4.2` (кэш
-`~/.cache/typst/packages`, работает офлайн).
-Лицензия - AGPL-3.0, как у BalukNotes; заметки с библиотекой и собранные из
-них HTML и PDF - на любых условиях автора заметок (`LICENSE-EXCEPTION`).
+A Typst library for BalukNotes notes: one source gives both the page in the
+app (HTML) and the PDF. Function and parameter names are English, note text is
+in any language. What to write and how to check it - `notes docs writing`.
+Tested on Typst 0.15.1; the external dependency is `@preview/cetz:0.4.2`
+(cache `~/.cache/typst/packages`, works offline).
+License - AGPL-3.0, as BalukNotes; notes using the library and the HTML and
+PDF built from them - on any terms of the notes' author (`LICENSE-EXCEPTION`).
 
-## Заметка и книга
+## Note and book
 
-Библиотека видна хранилищу как `/_baluk/` (виртуально, копии в хранилище нет).
-Тема приходит входом `theme` (`--input theme=night`), в документе её не
-указывают.
+The vault sees the library as `/_baluk/` (virtual, no copy in the vault). The
+theme comes as the input `theme` (`--input theme=night`), a document does not
+set it.
 
-**Заметка** - один файл; `=` - раздел, нумерация сквозная ("Определение 3",
-"Рис. 2"), номера разделов по умолчанию скрыты:
+**A note** is one file; `=` is a section, numbering is continuous
+("Определение 3", "Рис. 2"), section numbers are hidden by default:
 
 ```typst
 #import "/_baluk/lib.typ": *
-#show: note.with(title: [SSH], tags: ("сеть", "безопасность"))
+#show: note.with(title: [SSH], tags: ("network", "security"))
 
 #lead[...]
-= Как это работает
+= How it works
 ```
 
-**Книга** - папка с `main.typ`: `=` - глава ("Глава N"), нумерация "глава.n".
-`main.typ` - **корень** книги: `book.with(...)` - общие характеристики, их
-наследуют все главы (язык, тема, слова, теги книги), и `#include` глав. Главы -
-файлы `NN-тема.typ`, начинаются с того же `#import`.
+**A book** is a folder with `main.typ`: `=` is a chapter ("Глава N"),
+numbering "chapter.n". `main.typ` is the book **root**: `book.with(...)` -
+shared properties all chapters inherit (language, theme, words, book tags),
+and `#include` of the chapters. Chapters are files `NN-topic.typ`, they start
+with the same `#import`.
 
 ```typst
 #import "/_baluk/lib.typ": *
 #show: book.with(
-  kind: auto,                    // надпись над названием: auto - "Конспект"; [Задачник], [Шпаргалка]...
-  title: [Кратные интегралы],
-  subtitle: [Двойные, тройные и $n$-мерные интегралы],
-  author: [Математический анализ, 2 семестр],
+  kind: auto,                    // label above the title: auto - "Конспект"; [Задачник], [Шпаргалка]...
+  title: [Multiple integrals],
+  subtitle: [Double, triple and $n$-dimensional integrals],
+  author: [Calculus, semester 2],
   date: [2026],
-  description: [Для кого конспект и как его читать - 2-3 фразы на титул.],
-  title-page: true, toc: true, depth: 2,   // только PDF
+  description: [Who the notes are for and how to read them - 2-3 sentences for the title page.],
+  title-page: true, toc: true, depth: 2,   // PDF only
 )
-#include "01-повторение.typ"
+#include "01-review.typ"
 ```
 
-**Глава** - `= Название` или, если у неё свои характеристики, как у заметки,
-`chapter.with`: название, свои теги (к тегам корня), метка. Первая глава -
-обычная глава, общего у неё нет. Шаблон ставит заголовок главы, под ним в HTML -
-свои теги (теги в PDF не печатаются); вне книги - ошибка.
+**A chapter** is `= Title` or, if it has own properties like a note,
+`chapter.with`: the title, own tags (added to the root tags), a label. The
+first chapter is an ordinary chapter, it holds nothing shared. The template
+sets the chapter heading, under it in HTML - own tags (tags are not printed in
+PDF); outside a book - an error.
 
 ```typst
 #import "/_baluk/lib.typ": *
-#show: chapter.with(title: [Двойной интеграл], tags: ("интегралы",), label: "гл-двойной")
+#show: chapter.with(title: [Double integral], tags: ("integrals",), label: "ch-double")
 ```
 
-**Язык** - `lang:` у `note` и `book` (по умолчанию `"ru"`): от него зависят
-слова оформления ("Определение"/"Definition", "Рис."/"Fig.", "Глава"/"Chapter",
-подпись кадров), переносы и кавычки; в HTML - `lang` у `<article>`. Словари -
-`i18n.typ`, `ru` и `en`. Языка нет в словаре - английские слова и
-предупреждение `notes check`. Свои слова - `words:` поверх словаря (ключи - как
-в `i18n.typ`). Сообщения об ошибках библиотеки - по-английски.
+**Language** - `lang:` of `note` and `book` (`"ru"` by default): it sets the
+layout words ("Определение"/"Definition", "Рис."/"Fig.", "Глава"/"Chapter",
+the frame caption), hyphenation and quotes; in HTML - `lang` on `<article>`.
+Dictionaries - `i18n.typ`, `ru` and `en`. A language without a dictionary gets
+English words and a `notes check` warning. Own words - `words:` over the
+dictionary (keys as in `i18n.typ`). Library error messages are in English.
 
 ```typst
 #show: note.with(lang: "en", title: [Limits])     // #definition -> "Definition 1."
 #show: note.with(lang: "de", words: (definition: "Definition", figure: "Abb."), title: [...])
 ```
 
-**Ссылки между заметками** - путь от корня хранилища без `.typ`; якорь - текст
-заголовка или метка. Заметку и раздел проверяет `notes check`:
+**Links between notes** - a path from the vault root without `.typ`; the
+anchor is a heading text or a label. `notes check` checks the note and the
+section:
 
 ```typst
-#see("Сеть/UFW")                               // название заметки
-#see("Сеть/SSH", anchor: "Смена порта")        // "Смена порта"
-#see("Сеть/SSH", anchor: "Смена порта")[порт]  // своя надпись
+#see("Network/UFW")                                  // the note title
+#see("Network/SSH", anchor: "Changing the port")     // "Changing the port"
+#see("Network/SSH", anchor: "Changing the port")[port]  // own text
 ```
 
-## Темы
+## Themes
 
-`classic` (синий акцент, врезки с полосой, книжный абзац) и `night` - та же
-вёрстка с тёмной палитрой: получена из `classic` одним
-`customize(classic, (color: ...))`. `title` - название темы в интерфейсе. Своя
-тема - глубокое слияние, указывать только то, что меняется:
+`classic` (blue accent, boxes with a rule, book paragraphs) and `night` - the
+same layout with a dark palette: made from `classic` with one
+`customize(classic, (color: ...))`. `title` is the theme name in the
+interface. An own theme is a deep merge, give only what changes:
 
 ```typst
 #let mine = customize(themes.classic, (
@@ -88,199 +91,203 @@
   color: (accent: rgb("#7a1f5c"), fig: (line: rgb("#7a1f5c"))),
   size: (text: 11.5pt),
 ))
-#show: book.with(theme: mine, ...)   // или новая запись в themes - появится в приложении
+#show: book.with(theme: mine, ...)   // or a new entry in themes - it appears in the app
 ```
 
-Текущая тема - `current-theme()` (только внутри `context`); в
-`canvas(theme => ...)` она приходит аргументом. Бледная заливка, видная в
-обеих темах, - `pale(theme, color)`.
+The current theme - `current-theme()` (only inside `context`); in
+`canvas(theme => ...)` it comes as the argument. A pale fill visible in both
+themes - `pale(theme, color)`.
 
-## Блоки (`blocks.typ`)
+## Blocks (`blocks.typ`)
 
-| Вызов | Что это |
+| Call | What it is |
 |---|---|
-| `#definition(title: "...")[...]` | определение; нумеруется "глава.n", вместе с теоремами |
-| `#theorem(title: "...")[...]` | теорема, утверждение |
-| `#proof[...]` | эскиз доказательства, мельче |
-| `#example(title: "...")[...]` | разобранный пример; своя нумерация |
-| `#step[Название]` | в примере: "Шаг 1. Название."; нумерация в каждом примере своя |
-| `#answer[...]` | ответ в рамке справа |
-| `#remark[...]`, `#idea[...]`, `#algorithm[...]`, `#pitfall[...]` | ненумерованные врезки |
-| `#formula(label: "...")[$ ... $]` | ключевая формула в рамке; `label` - надпись над ней, не метка для `@` |
-| `#lead[...]` | 2-4 вводных предложения |
-| `#plan([...], [...])` | "В этой главе": что научимся делать |
-| `#summary([...], [...])` | "Коротко о главном" в конце главы |
-| `#quiz(([вопрос], [ответ]), ...)` | "Проверь себя", ответы мелко внизу |
-| `#pitfalls(([ошибка], [как избежать]), ...)` | таблица типичных ошибок |
-| `#data-table(cols, header: (...), highlight: ("4,*": "third"), ...cells)` | таблица с подсветкой клетки ("2,2"), строки ("4,\*"), столбца ("\*,2") - трассировки |
-| `#margin-note[...]` | мелкая заметка сбоку |
-| `#side-by-side[текст][рисунок]` | текст и небольшой рисунок рядом |
-| `#small-caps[...]` | капитель для кириллицы (`smallcaps` у шрифтов не работает) |
+| `#definition(title: "...")[...]` | a definition; numbered "chapter.n", together with theorems |
+| `#theorem(title: "...")[...]` | a theorem, a statement |
+| `#proof[...]` | a proof sketch, smaller |
+| `#example(title: "...")[...]` | a worked example; own numbering |
+| `#step[Title]` | in an example: "Шаг 1. Title."; numbering is separate in each example |
+| `#answer[...]` | an answer in a frame on the right |
+| `#remark[...]`, `#idea[...]`, `#algorithm[...]`, `#pitfall[...]` | unnumbered boxes |
+| `#formula(label: "...")[$ ... $]` | a key formula in a frame; `label` is a caption above it, not a label for `@` |
+| `#lead[...]` | 2-4 introductory sentences |
+| `#plan([...], [...])` | "В этой главе": what we will learn to do |
+| `#summary([...], [...])` | "Коротко о главном" at the end of a chapter |
+| `#quiz(([question], [answer]), ...)` | "Проверь себя", answers in small type below |
+| `#pitfalls(([mistake], [how to avoid]), ...)` | a table of common mistakes |
+| `#data-table(cols, header: (...), highlight: ("4,*": "third"), ...cells)` | a table highlighting a cell ("2,2"), a row ("4,\*"), a column ("\*,2") - traces |
+| `#margin-note[...]` | a small note on the side |
+| `#side-by-side[text][figure]` | text and a small figure side by side |
+| `#small-caps[...]` | small caps for Cyrillic (`smallcaps` does not work with the fonts) |
 
-Определения и теоремы не рвутся между страницами, примеры рвутся.
+Definitions and theorems are not split between pages, examples are.
 
-## Код (`code.typ`)
+## Code (`code.typ`)
 
 ```typst
 #listing(
-  caption: [построение P],
-  highlight: (5, 6),              // подсветить строки
-  callouts: ("5": 1, "12": 2),    // номера-кружки у строк
+  caption: [building P],
+  highlight: (5, 6),              // highlight lines
+  callouts: ("5": 1, "12": 2),    // numbered circles at lines
   complexity: [$O(n m)$],
   ```cpp
   ...
   ```,
 )
-Строка #callout(1) - формула построения.   // ссылка на кружок из текста
+Line #callout(1) - the building formula.   // a reference to a circle from the text
 
 #code-from-file("/code/prefix.cpp", region: "build", highlight: (3,))
 ```
 
-Подсветка - цветами темы, лигатуры выключены; листинг до 15 строк не рвётся.
-`code-from-file` берёт кусок между `// region: имя` и `// endregion: имя`;
-путь - от корня хранилища, с `/`; нет региона - понятная ошибка сборки.
+Highlighting uses theme colors, ligatures are off; a listing up to 15 lines is
+not split. `code-from-file` takes the part between `// region: name` and
+`// endregion: name`; the path is from the vault root, with `/`; no region - a
+clear build error.
 
-## Рисунки (`figures.typ`, CeTZ 0.4.2)
+## Figures (`figures.typ`, CeTZ 0.4.2)
 
 ```typst
 #fig(
-  canvas(unit: 2.5cm, theme => {       // theme - текущая тема
+  canvas(unit: 2.5cm, theme => {       // theme - the current theme
     import cetz.draw: *
-    fill-between(x => x * x, x => x, 0, 1)   // заливка между кривыми
+    fill-between(x => x * x, x => x, 0, 1)   // fill between curves
     axes(x: (-0.1, 1.3), y: (-0.1, 1.2))
     plot(x => x * x, 0, 1.08, label: $y = x^2$, label-x: 0.9, label-anchor: "north-west")
-    spoke(0.6, 0.36, 0.6)              // двусторонняя стрелка
+    spoke(0.6, 0.36, 0.6)              // a double-headed arrow
     tick(1, $1$)
-    line((0, 0), (1, 1), stroke: 1pt + theme.color.fig.second)   // свои линии - цветами темы
+    line((0, 0), (1, 1), stroke: 1pt + theme.color.fig.second)   // own lines in theme colors
   }),
-  [Подпись - утверждение о том, что видно],
-  label: "рис-спица",                  // в тексте: рис. @рис-спица
-  floating: false,                     // true - вверх или вниз страницы PDF
+  [A caption - a statement about what is visible],
+  label: "fig-spoke",                  // in the text: рис. @fig-spoke
+  floating: false,                     // true - to the top or bottom of a PDF page
 )
 ```
 
-| Помощник | Назначение |
+| Helper | Purpose |
 |---|---|
-| `axes`, `tick`, `plot`, `parametric`, `fill-between`, `spoke`, `point` | 2D: оси через начало координат, функции, параметрические кривые, заливки |
-| `contours(f, levels, xr:, yr:)` | линии уровня |
-| `p3`, `axes3d`, `surface(f, xr, yr, style: "shaded"/"flat"/"wire")`, `prisms`, `base-shape`, `revolution(r)`, `cross-section(f, y0)` | псевдо-3D, алгоритм художника |
-| `array-cells(values, highlight:, spans:, pointers:, block-size:, block-values:, arcs:, index-from:)` | массив: блоки и своды (sqrt-декомпозиция), дуги, указатели |
-| `matrix-cells(matrix, rects:, cells:, arrows:, values:, index-from:)` | матрица и таблица ДП: подсветка, стрелки переходов |
-| `graph(vertices, edges, directed:, highlight:, marks:, shape:)` | граф; узлы `"circle"` или `"rect"` (две строки: ключ и приоритет); встречные рёбра разводятся сами |
-| `tree-layout(edges, root)`, `binary-layout(children, root)` + `binary-edges(children)`, `circle-layout(names)` | координаты вершин: по уровням, по порядку ключей (деревья поиска), по окружности |
-| `in-row(..., separators: ($=$, $-$))` | холсты в ряд: кадры алгоритма, формула из картинок |
+| `axes`, `tick`, `plot`, `parametric`, `fill-between`, `spoke`, `point` | 2D: axes through the origin, functions, parametric curves, fills |
+| `contours(f, levels, xr:, yr:)` | contour lines |
+| `p3`, `axes3d`, `surface(f, xr, yr, style: "shaded"/"flat"/"wire")`, `prisms`, `base-shape`, `revolution(r)`, `cross-section(f, y0)` | pseudo-3D, the painter's algorithm |
+| `array-cells(values, highlight:, spans:, pointers:, block-size:, block-values:, arcs:, index-from:)` | an array: blocks and block values (sqrt decomposition), arcs, pointers |
+| `matrix-cells(matrix, rects:, cells:, arrows:, values:, index-from:)` | a matrix and a DP table: highlights, transition arrows |
+| `graph(vertices, edges, directed:, highlight:, marks:, shape:)` | a graph; nodes `"circle"` or `"rect"` (two lines: key and priority); opposite edges are separated automatically |
+| `tree-layout(edges, root)`, `binary-layout(children, root)` + `binary-edges(children)`, `circle-layout(names)` | vertex coordinates: by levels, by key order (search trees), on a circle |
+| `in-row(..., separators: ($=$, $-$))` | canvases in a row: algorithm frames, a formula of pictures |
 
-Ребро `graph` - `(u, v, стиль, подпись, (side: "left", at: 0.5))`: подпись -
-слева или справа от направления u -> v, в доле длины от u; заслоняет вершина -
-сменить `side` или `at`. Стили: `"normal"`, `"bold"`, `"second"`, `"dim"`,
-`"dashed"`.
+A `graph` edge is `(u, v, style, label, (side: "left", at: 0.5))`: the label is
+left or right of the direction u -> v, at a fraction of the length from u; a
+vertex covers it - change `side` or `at`. Styles: `"normal"`, `"bold"`,
+`"second"`, `"dim"`, `"dashed"`.
 
-Цвета - именами `"line"`, `"second"`, `"third"`, `"accent"` (цвет текущей темы)
-или типом `color`. Ось y смотрит вверх везде, кроме `matrix-cells` и
-`array-cells` (строки сверху вниз). 3D: x вправо, z вверх, y "от нас".
-Внутри `import cetz.draw: *` имена `line`, `rect`, `content`, `fill`,
-`stroke`, `anchor`, `mark` заняты - не называть так свои переменные.
+Colors by names `"line"`, `"second"`, `"third"`, `"accent"` (a color of the
+current theme) or the `color` type. The y axis points up everywhere except
+`matrix-cells` and `array-cells` (rows top to bottom). 3D: x right, z up, y
+"away from us". Inside `import cetz.draw: *` the names `line`, `rect`,
+`content`, `fill`, `stroke`, `anchor`, `mark` are taken - do not name your
+variables so.
 
-## Интерактивные рисунки (`plots.typ`)
+## Interactive figures (`plots.typ`)
 
-График с ползунками и поверхность с вращением. Формула - строка кода Typst; в
-приложении рисунок живой, в PDF и без JS - кадр при значениях по умолчанию с
-подписью "a = 1, b = 2".
+A plot with sliders and a rotatable surface. The formula is a string of Typst
+code; in the app the figure is live, in PDF and without JS - the frame at the
+default values with the caption "a = 1, b = 2".
 
 ```typst
 #fig(interactive-plot(
   ("a * calc.sin(b * x)", (f: "calc.sin(x)", label: "sin x", dashed: true, color: "second")),
-  -5, 5,                                   // диапазон x
+  -5, 5,                                   // x range
   params: (a: (from: 0, to: 3, step: 0.1, value: 1), b: (from: 0.5, to: 4, value: 1)),
-  y: (-3, 3),                              // лучше задать: иначе - по кадру по умолчанию
-  labels: ("x", "y"), width: 8, height: 5, // поле графика, см
-), [Подпись])
+  y: (-3, 3),                              // better to give it: otherwise from the default frame
+  labels: ("x", "y"), width: 8, height: 5, // the plot area, cm
+), [Caption])
 
 #fig(interactive-surface("calc.sin(k * x) * calc.cos(y)", (-3, 3), (-3, 3),
   params: (k: (from: 0.2, to: 2, value: 1)), z: (-1, 1),
-  n: 24, style: "shaded",                  // или "wire"; color: "face"/"line"/"second"/"third"
-  rotation: -30, tilt: 28, size: 3,        // начальный вид (градусы), размер коробки (см)
-), [Подпись])
+  n: 24, style: "shaded",                  // or "wire"; color: "face"/"line"/"second"/"third"
+  rotation: -30, tilt: 28, size: 3,        // the initial view (degrees), box size (cm)
+), [Caption])
 ```
 
-- Формула: числа (`2.5`, `1e-3`), `x` (и `y` у поверхности), параметры,
-  `+ - * /`, скобки, унарный минус, `calc.sin cos tan asin acos atan exp ln log
-  sqrt pow abs floor ceil`, `calc.pi`, `calc.e`. Степень - `calc.pow(x, 2)`;
-  `asin`, `atan` дают число (радианы); `x-1` - это x минус 1.
-- Вне области определения и за полем (асимптоты `tan`) - разрыв кривой, не
-  ошибка. Непонятная формула - ошибка сборки с объяснением.
+- A formula: numbers (`2.5`, `1e-3`), `x` (and `y` for a surface), parameters,
+  `+ - * /`, parentheses, unary minus, `calc.sin cos tan asin acos atan exp ln
+  log sqrt pow abs floor ceil`, `calc.pi`, `calc.e`. A power is
+  `calc.pow(x, 2)`; `asin`, `atan` give a number (radians); `x-1` is x minus 1.
+- Outside the domain and past the plot area (asymptotes of `tan`) the curve
+  has a gap, not an error. An unclear formula is a build error with an
+  explanation.
 
-## Кадры (`frames.typ`)
+## Frames (`frames.typ`)
 
-Рисунок с параметром: Typst собирает его для каждого значения, в приложении -
-ползунок, кнопки и проигрывание (шаги алгоритма, сходимость). В PDF и без JS -
-кадр по умолчанию с подписью значения.
+A figure with a parameter: Typst builds it for each value, the app gets a
+slider, buttons and playback (algorithm steps, convergence). In PDF and
+without JS - the default frame with a caption of the value.
 
 ```typst
 #fig(frames(n => canvas(theme => {
   import cetz.draw: *
-  rect((-0.1, -0.1), (3.1, 1.2), stroke: none)   // рамка постоянного размера
-  ...                                            // рисунок при данном n
-}), n: (from: 1, to: 12, value: 4)), [Сумма Римана: $n$ прямоугольников])
+  rect((-0.1, -0.1), (3.1, 1.2), stroke: none)   // a frame of constant size
+  ...                                            // the figure for this n
+}), n: (from: 1, to: 12, value: 4)), [A Riemann sum: $n$ rectangles])
 
 #fig(frames(k => canvas(...), k: (values: (0, 1, 2, 3)),
-  label: k => [проход #k],   // своя подпись; none - без подписи
-  fps: 2, loop: false,       // скорость, по кругу ли
-  pdf: (1, 2, 3, 4),         // в PDF - эти кадры в ряд (номера с 1); auto - кадр по умолчанию
-), [Шаги алгоритма])
+  label: k => [pass #k],     // own caption; none - no caption
+  fps: 2, loop: false,       // speed, whether to loop
+  pdf: (1, 2, 3, 4),         // in PDF - these frames in a row (numbers from 1); auto - the default frame
+), [Algorithm steps])
 ```
 
-- Параметр - ровно один, именованный: `(from:, to:, step:, value:)` (`step` по
-  умолчанию 1), `(values: (...), value:)` или массив. Значения - любые, в том
-  числе словари состояния алгоритма.
-- Подпись по умолчанию - "n = 4" для чисел, "кадр 2 из 5" для прочего.
-- Не больше 60 кадров (каждый - свой SVG, ~4-8 КБ).
-- `pdf:` - ряд без переноса: широкие кадры выбирать поменьше.
-- Кадры лежат друг на друге, место - по самому большому. Чтобы рисунок не
-  прыгал, рисовать невидимую рамку постоянного размера: CeTZ подгоняет холст
-  под нарисованное.
+- Exactly one parameter, named: `(from:, to:, step:, value:)` (`step` defaults
+  to 1), `(values: (...), value:)` or an array. Values can be anything,
+  including dictionaries of algorithm state.
+- The default caption is "n = 4" for numbers, "кадр 2 из 5" for anything else.
+- No more than 60 frames (each is its own SVG, ~4-8 KB).
+- `pdf:` is a row without wrapping: pick fewer wide frames.
+- Frames lie on top of each other, the space is that of the largest. To keep
+  the figure from jumping, draw an invisible frame of constant size: CeTZ fits
+  the canvas to what is drawn.
 
-## Граф хранилища (`graph.typ`)
+## Vault graph (`graph.typ`)
 
 ```typst
-#vault-graph()                                        // всё хранилище
-#vault-graph(around: "Сеть/SSH", depth: 2)            // соседи заметки
-#vault-graph(folders: ("Математика",), missing: false, width: 10cm)
-#vault-graph(tag: "линал", orphans: false)
+#vault-graph()                                        // the whole vault
+#vault-graph(around: "Network/SSH", depth: 2)         // neighbors of a note
+#vault-graph(folders: ("Math",), missing: false, width: 10cm)
+#vault-graph(tag: "linalg", orphans: false)
 ```
 
-- `around`, `depth` - соседи заметки на `depth` шагов; она в центре, даже если
-  её скрыл бы другой фильтр;
-- `folders` / `hidden` - только эти / кроме этих папок верхнего уровня
-  (`"в корне"` - заметки в корне);
-- `tag` - заметки с тегом; `missing` - ненаписанные; `orphans` - без связей;
-- `width` - наибольшая ширина (большой граф ужимается).
+- `around`, `depth` - the neighbors of a note within `depth` steps; it is in
+  the center even if another filter would hide it;
+- `folders` / `hidden` - only these / except these top-level folders
+  (`"в корне"` - notes in the root);
+- `tag` - notes with the tag; `missing` - unwritten notes; `orphans` - notes
+  without links;
+- `width` - the largest width (a large graph shrinks).
 
-Граф считает приложение (как на странице графа); в PDF - картинка CeTZ, в
-приложении живой. Заметка с графом пересобирается при правке любой заметки;
-вне приложения (`typst compile`) не собирается.
+The app computes the graph (as on the graph page); in PDF - a CeTZ picture, in
+the app - live. A note with a graph is rebuilt on an edit of any note; outside
+the app (`typst compile`) it does not build.
 
-## Диаграммы по данным (`charts.typ`)
+## Data charts (`charts.typ`)
 
-Для измерений: время работы, размеры, доли. Диапазоны, засечки, сетка и
-легенда считаются сами.
+For measurements: running time, sizes, shares. Ranges, ticks, the grid and the
+legend are computed automatically.
 
 ```typst
 #fig(canvas(chart(
-  (kind: "line", points: true, label: [перебор], data: ((1, 10), (2, 40), (3, 90))),
+  (kind: "line", points: true, label: [brute force], data: ((1, 10), (2, 40), (3, 90))),
   (kind: "function", f: x => x * calc.log(x), from: 1, to: 5, label: [$n log n$]),
-  width: 5.2, height: 3.2, labels: ([$n$], [мс]), legend: "inside",
-)), [Что показывает диаграмма])
+  width: 5.2, height: 3.2, labels: ([$n$], [ms]), legend: "inside",
+)), [What the chart shows])
 ```
 
-Ряды (`kind`): `"line"` (`points: true`, `dashed: true`), `"points"`,
-`"steps"`, `"bars"` (данные - `((подпись, значение), ...)`), `"function"` (`f`,
-`from`, `to`). Прочее: `x`, `y` (диапазоны), `ticks-x`, `ticks-y`,
+Series (`kind`): `"line"` (`points: true`, `dashed: true`), `"points"`,
+`"steps"`, `"bars"` (data - `((label, value), ...)`), `"function"` (`f`,
+`from`, `to`). Other options: `x`, `y` (ranges), `ticks-x`, `ticks-y`,
 `format-x`, `format-y`, `gridlines`, `legend` (`"right"`, `"inside"`, `none`).
 
-## Математика (`math.typ`)
+## Math (`math.typ`)
 
-- `tg ctg arctg arcctg sh ch th cth rot grad const` - операторы в русской
-  традиции.
-- `dc("0,5")` - десятичная дробь с запятой; `$0,5$` напечатается "0, 5".
-- `dd(x)` - дифференциал; `defeq` - "равно по определению" (`:=`).
+- `tg ctg arctg arcctg sh ch th cth rot grad const` - operators in the Russian
+  tradition.
+- `dc("0,5")` - a decimal with a comma; `$0,5$` prints "0, 5".
+- `dd(x)` - a differential; `defeq` - "equal by definition" (`:=`).

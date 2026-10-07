@@ -3,37 +3,38 @@ paths:
   - "vendor/**"
 ---
 
-# Копии чужих крейтов с правками
+# Copies of foreign crates with patches
 
-Подключены через `[patch.crates-io]` корневого `Cargo.toml`; в workspace не
-входят (`exclude`), линты проекта к ним не применяются. Правка - как можно
-меньше, с тестом рядом с кодом. Убрать копию, когда правка выйдет в
-крейте (обновлять вместе с Typst: версия - та, что тянет `typst`).
+Wired through `[patch.crates-io]` of the root `Cargo.toml`; they are not
+workspace members (`exclude`), project lints do not apply to them. A patch is
+as small as possible, with a test next to the code. Remove a copy when the
+patch ships in the crate (update together with Typst: the version is the one
+`typst` pulls in).
 
 ## comemo 0.5.1
 
-Исходник - пакет crates.io `comemo-0.5.1` (MIT OR Apache-2.0, лицензии
-рядом), `Cargo.toml` - нормализованный из пакета.
+Source - the crates.io package `comemo-0.5.1` (MIT OR Apache-2.0, licenses
+next to it), `Cargo.toml` - normalized from the package.
 
-**Правка** (`src/tree.rs`, `CallTree::retain`): если после очистки дерево
-вызовов пустое, оно пересоздаётся. `evict` удаляет записи, но ёмкость slab
-и хэш-таблиц оставляет - после прогрева хранилища это ~0,85 ГБ, которые
-`comemo::evict(0)` не возвращал (dhat, `docs/tech-debt.md`). С
-правкой память процесса после прогрева `tests/vault` - 0,70 ГБ вместо
-1,34 ГБ. Обычные очистки (`evict(N)` после сборки) дерево не опустошают и
-ничего не пересоздают. Тест - `test_call_tree` (последние шаги).
+**Patch** (`src/tree.rs`, `CallTree::retain`): if the call tree is empty after
+eviction, it is recreated. `evict` removes entries but keeps the capacity of
+the slab and hash tables - after warming a vault that is ~0.85 GB that
+`comemo::evict(0)` did not return (dhat, `docs/tech-debt.md`). With the patch
+process memory after warming `tests/vault` is 0.70 GB instead of 1.34 GB.
+Ordinary evictions (`evict(N)` after a build) do not empty the tree and
+recreate nothing. Test - `test_call_tree` (the last steps).
 
-**Правка 2** (`src/accelerate.rs`, `evict`; `src/memoize.rs`): полная
-очистка (`evict(0)`) освобождает и акселераторы (вектор и хэш-таблицы
-вызовов), а не только очищает их - после прогрева `tests/vault` это ~126 МБ
-живой кучи (`docs/research/E5.md`). `evict(N)` после сборки память
-оставляет, как раньше. Тест - `test_evict_release`.
+**Patch 2** (`src/accelerate.rs`, `evict`; `src/memoize.rs`): a full eviction
+(`evict(0)`) also frees the accelerators (the vector and the call hash
+tables), not just clears them - after warming `tests/vault` that is ~126 MB of
+live heap (`docs/research/E5.md`). `evict(N)` after a build keeps the memory,
+as before. Test - `test_evict_release`.
 
-Проверка копии:
+Checking the copy:
 
 ```sh
 CARGO_TARGET_DIR=target/vendor cargo test --manifest-path vendor/comemo/Cargo.toml --features testing
 ```
 
-Предложить правку в `typst/comemo` - решение пользователя (PR от его
-имени).
+Proposing the patch to `typst/comemo` is the user's decision (a PR in their
+name).
