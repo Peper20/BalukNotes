@@ -3,7 +3,7 @@ name: baluk-note
 description: BalukNotes notes in Typst - create a note or a book, add a chapter, edit or rename a note (or name a folder) by the vault rules. Runs from any folder, often the one with the sources (lectures, problems).
 disable-model-invocation: true
 argument-hint: "[тема, книга ..., допиши ... или переименуй ...]"
-allowed-tools: Bash(notes info:*), Bash(notes vaults:*), Bash(notes docs:*), Bash(notes list:*), Bash(notes tags:*), Bash(notes new:*), Bash(notes check:*), Bash(notes rename:*), Bash(notes pdf:*), Bash(pdftoppm:*), Bash(pgrep -x notes-typst), Read, Glob, Grep
+allowed-tools: Bash(notes info:*), Bash(notes vaults:*), Bash(notes docs:*), Bash(notes list:*), Bash(notes tags:*), Bash(notes new:*), Bash(notes check:*), Bash(notes rename:*), Bash(notes pdf:*), Bash(notes png:*), Bash(pgrep -x notes-typst), Read, Glob, Grep
 ---
 
 # BalukNotes note
@@ -59,10 +59,10 @@ Work only in the chosen vault; never touch other vaults. In it, create or change
 11. **Header.** Update the progress header (see "The file") after each section: work is often interrupted, and the next session starts from it. When everything is done, delete the header.
 12. **Look at the result.** Numbers and `notes check` do not show overlapping labels, invisible lines in the dark theme or a table wider than a phone. If you can read images:
     ```sh
-    notes pdf --vault "Name" "Path" -o $TMP/note.pdf
-    pdftoppm -r 70 -png $TMP/note.pdf $TMP/page                        # open the PNG pages
-    notes pdf --vault "Name" "Path" --theme night -o $TMP/note-night.pdf  # dark theme
+    notes png --vault "Name" "Path" -o $TMP/pages                  # prints one PNG per page: open them
+    notes png --vault "Name" "Path" -o $TMP/pages --theme night    # dark theme; --pages 3-5 for a few pages of a book
     ```
+    The pages are exactly the PDF (`notes pdf` makes the file itself, when the user wants one).
     `$TMP` is the session temp folder (or `/tmp`), never the vault or a sources folder. If you have a browser tool and the app runs, also open the app URL: light and dark theme (switch at the top right), a narrow window (about 400 px), and the interactive parts (sliders, frames, rotation).
 13. **Report**: file path, app URL, what is done, what is left.
 

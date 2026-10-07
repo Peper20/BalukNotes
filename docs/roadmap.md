@@ -44,7 +44,7 @@ line (how it works - `docs/architecture.md`), open questions -
       rounding ("Матан" 3.7 -> 1.7 MB, 0.2 MB over the network)
 - [x] Memory and disk cache, warm-up, parallel builds, a watcher
 - [x] Link index, backlinks, graph, full-text search
-- [x] `notes` from any folder: `serve`, `new`, `list`, `tags`, `check`, `pdf`,
+- [x] `notes` from any folder: `serve`, `new`, `list`, `tags`, `check`, `pdf`, `png`,
       `docs`, `info`, `vaults`; installation - `tools/install.sh`
 - [x] The `/baluk-note` skill: everything needed is in the skill (workflow,
       reference, samples for every public name), only `notes` commands
@@ -55,9 +55,9 @@ line (how it works - `docs/architecture.md`), open questions -
       filter
 - [x] `notes rename`: as in the app (title, file name, `#see` links), the
       skill uses it
-- [ ] `notes png`: a note page as a picture, as in the PDF (`typst-render` of
-      the same version as Typst) - for models that do not read PDF (user's
-      decision)
+- [x] `notes png`: the PDF pages as PNG (`typst-render` of the same version as
+      Typst, `--pages`, `--dpi`) - for models that do not read PDF (user's
+      decision); the skill checks the look with it
 - [x] The browser also gets the theme fallback fonts (New Computer Modern,
       DejaVu Sans Mono): a glyph missing from the main font looks as in the
       PDF; parts only with the page's glyphs (NCM converted to TrueType)

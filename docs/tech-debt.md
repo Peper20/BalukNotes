@@ -185,8 +185,9 @@ it. Extended at the end of every iteration, closed items are deleted.
   cheap freshness token is set by the provider itself (`DataProvider::token`).
   The graph filter is in the file name; the name `_vault` in the vault root is
   taken.
-- **PDF on every request without a cache** ("Матан" ~2 s): a plain
-  `typst compile` cannot build the vault.
+- **PDF and PNG on every request without a cache** ("Матан" ~2 s): a plain
+  `typst compile` cannot build the vault. `notes png` compiles the whole note
+  even for one page (`--pages`), and the pages are rendered one after another.
 - HTML is sanitized (see the architecture): dangerous tags and attributes are
   removed, the CSP forbids inline/eval scripts. Left: refine the allowlist as
   blocks are added to the library, make sure fonts and themes do not need

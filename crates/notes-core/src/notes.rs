@@ -37,7 +37,7 @@ use crate::vault_graph::{GraphData, GraphFilter, GraphLayout, Layouts};
 use crate::version::Versions;
 use crate::warm::{RESCAN, RESCAN_UNWATCHED, WarmStats, Warmer};
 use crate::watch::{Change, Changes};
-use crate::world::{Compiler, LibrarySource};
+use crate::world::{Compiler, LibrarySource, PngPages};
 use crate::{Error, Result};
 
 pub use crate::pages::NotePage;
@@ -243,6 +243,22 @@ impl Notes {
             return Err(Error::Setting { key: "theme".into(), reason: format!("no theme \"{theme}\"") });
         }
         Ok(self.typst.compiler().compile_pdf(&entry.main, theme))
+    }
+
+    /// The note pages as PNG, as its PDF looks, in the theme `theme`: `pages`
+    /// are numbers from 1 (empty: all), `dpi` is the resolution; no cache.
+    pub fn png(
+        &self,
+        id: &NoteId,
+        theme: &str,
+        pages: &[usize],
+        dpi: f64,
+    ) -> Result<std::result::Result<PngPages, Vec<Diagnostic>>> {
+        let entry = self.vault().entry(id)?;
+        if !self.themes().names().iter().any(|t| t == theme) {
+            return Err(Error::Setting { key: "theme".into(), reason: format!("no theme \"{theme}\"") });
+        }
+        Ok(self.typst.compiler().compile_png(&entry.main, theme, pages, dpi / 72.0))
     }
 
     /// Deletes a note or a book (the whole folder) to the trash

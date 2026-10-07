@@ -12,6 +12,7 @@ it (`notes docs writing`). The `baluk` library does the layout, its API is
 | `notes list --vault "Name"`, `notes tags --vault "Name"` | notes (path, book, title, tags) and tags |
 | `notes check --vault "Name" [Path]` | build errors, warnings, broken links |
 | `notes pdf --vault "Name" Path -o file.pdf [--theme night]` | PDF of a note or book |
+| `notes png --vault "Name" Path -o dir [--pages 2-5] [--theme night]` | the PDF pages as PNG images, one file per page |
 | `notes info [--vault "Name"]` | where the vaults are, the app address |
 | `notes serve` | the app: `http://127.0.0.1:8421/v/<Vault>/n/<Path>`; in the background and at login - `notes service install` |
 
@@ -200,8 +201,7 @@ text and referenced from it.
 
 ```sh
 notes check --vault "Name" "Folder/Book"              # errors, warnings ("0,5" in a formula, ;), broken links
-notes pdf --vault "Name" "Folder/Book" -o $TMP/k.pdf  # and --theme night -o $TMP/k-night.pdf
-pdftoppm -r 70 -png $TMP/k.pdf $TMP/page              # and LOOK at the pages (PNG)
+notes png --vault "Name" "Folder/Book" -o $TMP/pages  # and LOOK at the pages; --theme night for the dark theme
 ```
 
 - `$TMP` is a temporary folder, not the vault and not the sources folder.
@@ -227,5 +227,5 @@ pdftoppm -r 70 -png $TMP/k.pdf $TMP/page              # and LOOK at the pages (P
 - [ ] listings up to 25 lines, the code is compiled and tested
 - [ ] numbers are recomputed independently
 - [ ] `pitfalls`, `summary`, `quiz` at the end
-- [ ] `notes check` is clean; the PDF and the page (light, dark, narrow screen) are looked at
+- [ ] `notes check` is clean; the PDF pages and the page (light, dark, narrow screen) are looked at
 - [ ] the file header reflects what is done and what is next

@@ -330,6 +330,15 @@ pub enum Priority {
     Background,
 }
 
+/// Pages of a note as PNG ([`Compiler::compile_png`]).
+#[derive(Debug, Clone)]
+pub struct PngPages {
+    /// Pages in the document.
+    pub count: usize,
+    /// The rendered pages: (number from 1, PNG).
+    pub pages: Vec<(usize, Vec<u8>)>,
+}
+
 /// The Typst compiler of one vault: file caches, fonts and a standard library
 /// per theme, shared by every build.
 pub struct Compiler {
@@ -478,6 +487,50 @@ impl Compiler {
 
     /// Compiles `main` to PDF in one theme (empty: without the `theme` input).
     pub fn compile_pdf(&self, main: &Path, theme: &str) -> Result<Vec<u8>, Vec<Diagnostic>> {
+        self.compile_paged(main, theme, |doc| typst_pdf::pdf(doc, &typst_pdf::PdfOptions::default()))
+    }
+
+    /// Compiles `main` in one theme and renders pages to PNG as the PDF looks:
+    /// `pages` are numbers from 1 (empty: all), `pixel_per_pt` is the scale
+    /// (`dpi / 72`).
+    pub fn compile_png(
+        &self,
+        main: &Path,
+        theme: &str,
+        pages: &[usize],
+        pixel_per_pt: f64,
+    ) -> Result<PngPages, Vec<Diagnostic>> {
+        let options =
+            typst_render::RenderOptions { pixel_per_pt: typst::utils::Scalar::new(pixel_per_pt), render_bleed: false };
+        let (count, rendered) = self.compile_paged(main, theme, |doc| {
+            let all = doc.pages();
+            if pages.iter().any(|&n| n == 0 || n > all.len()) {
+                return Ok((all.len(), Vec::new()));
+            }
+            let picked: Vec<_> = (1..=all.len())
+                .filter(|n| pages.is_empty() || pages.contains(n))
+                .map(|n| (n, typst_render::render(&all[n - 1], &options)))
+                .collect();
+            Ok((all.len(), picked))
+        })?;
+        if let Some(missing) = pages.iter().find(|&&n| n == 0 || n > count) {
+            return Err(vec![Diagnostic::error(format!("no page {missing}: the note has {count}"))]);
+        }
+        let pages = rendered
+            .into_iter()
+            .map(|(n, pixmap)| pixmap.encode_png().map(|png| (n, png)))
+            .collect::<Result<_, _>>()
+            .map_err(|e| vec![Diagnostic::error(format!("encoding PNG: {e}"))])?;
+        Ok(PngPages { count, pages })
+    }
+
+    /// Compiles `main` to pages in one theme and hands the document to `export`.
+    fn compile_paged<T>(
+        &self,
+        main: &Path,
+        theme: &str,
+        export: impl FnOnce(&PagedDocument) -> typst::diag::SourceResult<T>,
+    ) -> Result<T, Vec<Diagnostic>> {
         let main = main_id(main).map_err(|m| vec![Diagnostic::error(m)])?;
         let mut files = self.stores.take();
         files.reset();
@@ -489,12 +542,12 @@ impl Compiler {
         };
         let built = std::panic::catch_unwind(AssertUnwindSafe(|| {
             let doc = typst::compile::<PagedDocument>(&world).output.map_err(|e| to_diags(&e))?;
-            typst_pdf::pdf(&doc, &typst_pdf::PdfOptions::default()).map_err(|e| to_diags(&e))
+            export(&doc).map_err(|e| to_diags(&e))
         }));
-        let pdf = built.unwrap_or_else(|panic| Err(vec![panic_error(&*panic)]));
+        let exported = built.unwrap_or_else(|panic| Err(vec![panic_error(&*panic)]));
         drop(files);
         self.evict();
-        pdf
+        exported
     }
 
     fn library(&self, theme: &str) -> Arc<LazyHash<Library>> {

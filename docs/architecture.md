@@ -137,7 +137,8 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
 - The library is attached **virtually**: the core serves `/_baluk/...` from
   the app's `baluk/`, in release - embedded in the binary; its version always
   equals the app version. A plain `typst compile` cannot build the vault - the
-  app makes PDF (`notes pdf`, a button in the client). The theme comes from
+  app makes PDF (`notes pdf`, a button in the client) and its pages as PNG
+  (`notes png`, `typst-render`). The theme comes from
   `sys.inputs.theme`.
 - **A note** is one `.typ`, built separately: fast, and a broken one does not
   break the others. **A book** (large notes) is a folder with `main.typ` and
