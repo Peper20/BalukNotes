@@ -84,14 +84,16 @@ case ":$PATH:" in
 esac
 # The autostart service (`notes service`, unit baluk-notes.service) moves to
 # the new version; a `notes serve` started by hand is restarted by the user.
-# A unit without `--socket`: the `notes app` window does not find the service
-# core and starts a second one; a unit with default flags is rewritten, with own flags - a hint.
+# A unit with the default flags (with or without `--socket`) is rewritten:
+# new flags and texts of the unit; without `--socket` the `notes app` window
+# does not find the service core and starts a second one. A unit with own
+# flags is only restarted (without `--socket` - a hint).
 unit=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/baluk-notes.service
 service_pid=0
 if systemctl --user -q is-active baluk-notes.service 2>/dev/null; then
-  if grep -q '^ExecStart=.* serve --addr 127.0.0.1:8421$' "$unit"; then
+  if grep -Eq '^ExecStart=.* serve --addr 127\.0\.0\.1:8421( --socket)?$' "$unit"; then
     "$bin/notes" service install >/dev/null 2>&1
-    echo "  baluk-notes service: unit updated (socket for the window), restarted"
+    echo "  baluk-notes service: unit rewritten, restarted"
   else
     systemctl --user restart baluk-notes.service
     echo "  baluk-notes service restarted"

@@ -93,7 +93,7 @@ pub fn install(exe: &Path, args: &[String], addr: SocketAddr) -> Result<()> {
     systemctl(&["daemon-reload"])?;
     systemctl(&["enable", UNIT])?;
     systemctl(&[if running { "restart" } else { "start" }, UNIT])?;
-    println!("{}", path.display());
+    out!("{}", path.display());
     let done = if running { "restarted" } else { "installed and started" };
     eprintln!("service {done}: http://{addr}/; from now on it starts at login");
     eprintln!("runs: {}", exe.display());
@@ -121,14 +121,14 @@ pub fn status() -> Result<()> {
     ensure_linux()?;
     let path = unit_path()?;
     let Ok(text) = std::fs::read_to_string(&path) else {
-        println!("service: not installed (notes service install)");
+        out!("service: not installed (notes service install)");
         return Ok(());
     };
     let exec = text.lines().find_map(|l| l.strip_prefix("ExecStart=")).unwrap_or("?");
-    println!("service:  {} ({})", state("is-active"), state("is-enabled"));
-    println!("runs:     {exec}");
-    println!("unit:     {}", path.display());
-    println!("log:      journalctl --user -u {UNIT} -f");
+    out!("service:  {} ({})", state("is-active"), state("is-enabled"));
+    out!("runs:     {exec}");
+    out!("unit:     {}", path.display());
+    out!("log:      journalctl --user -u {UNIT} -f");
     Ok(())
 }
 
