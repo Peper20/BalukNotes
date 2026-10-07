@@ -9,6 +9,7 @@
 //!   notes list | tags         notes of the vault / tags
 //!   notes check [path]        compile errors and broken links
 //!   notes pdf <path>          a note as PDF (the PDF look of baluk)
+//!   notes png <path>          the PDF pages as PNG images
 //!   notes docs <topic>        how to write notes, the library API
 //!   notes info                where the vault, settings and library are
 //!   notes vaults [new <name>] vaults / create a new one
@@ -181,6 +182,25 @@ enum Command {
         /// Theme; default: the first (light).
         #[arg(long)]
         theme: Option<String>,
+    },
+    /// Pages of a note or book as PNG images, exactly as in the PDF (for
+    /// looking at the result without a PDF viewer). Prints one file per line.
+    Png {
+        /// Note path from the vault root: "Network/SSH", "Courses/Calculus".
+        id: String,
+        /// Output directory (created if missing); files are
+        /// <note name>-<page>.png. Default: here.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Theme; default: the first (light).
+        #[arg(long)]
+        theme: Option<String>,
+        /// Pages from 1: "3", "2-5", "1,4,7-9"; default: all.
+        #[arg(long)]
+        pages: Option<String>,
+        /// Resolution, dots per inch.
+        #[arg(long, default_value_t = 110)]
+        dpi: u16,
     },
     /// Rename a note, book or folder as the app does: the new title goes into
     /// the file (a folder: `_folder.toml`), the file (folder) name follows it,
@@ -470,6 +490,10 @@ fn run(cli: Cli) -> Result<ExitCode> {
             // Packages beyond the whitelist as in the app.
             notes.apply_device(&open_settings(&notes, &data)?.device());
             pdf(&notes, &note_id(&id, &vault)?, out, theme)
+        }
+        Command::Png { id, out, theme, pages, dpi } => {
+            notes.apply_device(&open_settings(&notes, &data)?.device());
+            png(&notes, &note_id(&id, &vault)?, out, theme, pages.as_deref(), dpi)
         }
         Command::Rename { id, title, dry_run } => rename(&notes, &note_id(&id, &vault)?, &title, dry_run),
         Command::Docs { .. }
@@ -791,6 +815,63 @@ fn pdf(notes: &Notes, id: &NoteId, out: Option<PathBuf>, theme: Option<String>) 
     }
 }
 
+fn png(
+    notes: &Notes,
+    id: &NoteId,
+    out: Option<PathBuf>,
+    theme: Option<String>,
+    pages: Option<&str>,
+    dpi: u16,
+) -> Result<ExitCode> {
+    let theme = theme.unwrap_or_else(|| notes.themes().names().first().cloned().unwrap_or_default());
+    let pages = pages.map(page_numbers).transpose()?.unwrap_or_default();
+    if !(10..=600).contains(&dpi) {
+        bail!("--dpi {dpi}: expected 10 to 600");
+    }
+    let rendered = match notes.png(id, &theme, &pages, f64::from(dpi))? {
+        Ok(rendered) => rendered,
+        Err(errors) => {
+            for e in errors {
+                eprintln!("{id}: {e}");
+            }
+            return Ok(ExitCode::FAILURE);
+        }
+    };
+    let dir = out.unwrap_or_else(|| PathBuf::from("."));
+    std::fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
+    let width = rendered.count.to_string().len();
+    for (n, bytes) in rendered.pages {
+        let path = dir.join(format!("{}-{n:0width$}.png", id.name()));
+        std::fs::write(&path, bytes).with_context(|| format!("write {}", path.display()))?;
+        out!("{}", path.display());
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Page numbers from "3", "2-5", "1,4,7-9" (from 1, in the given order).
+fn page_numbers(spec: &str) -> Result<Vec<usize>> {
+    let number = |s: &str| -> Result<usize> {
+        match s.trim().parse::<usize>() {
+            Ok(n) if n > 0 => Ok(n),
+            _ => bail!("--pages {spec}: \"{s}\" is not a page number (from 1)"),
+        }
+    };
+    let mut pages = Vec::new();
+    for part in spec.split(',') {
+        match part.split_once('-') {
+            Some((from, to)) => {
+                let (from, to) = (number(from)?, number(to)?);
+                if from > to {
+                    bail!("--pages {spec}: {from}-{to} goes backwards");
+                }
+                pages.extend(from..=to);
+            }
+            None => pages.push(number(part)?),
+        }
+    }
+    Ok(pages)
+}
+
 fn print_check(report: &Report, json: bool) -> Result<ExitCode> {
     if json {
         out!("{}", serde_json::to_string_pretty(report)?);
@@ -818,6 +899,16 @@ fn print_check(report: &Report, json: bool) -> Result<ExitCode> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn page_numbers_parse() {
+        assert_eq!(page_numbers("3").unwrap(), [3]);
+        assert_eq!(page_numbers("1,4,7-9").unwrap(), [1, 4, 7, 8, 9]);
+        assert_eq!(page_numbers(" 2 - 3 ").unwrap(), [2, 3]);
+        for bad in ["0", "", "a", "5-2", "1,,2"] {
+            assert!(page_numbers(bad).is_err(), "{bad}");
+        }
+    }
 
     fn err(result: Result<NoteId>) -> String {
         result.unwrap_err().to_string()

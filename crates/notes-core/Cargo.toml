@@ -39,6 +39,7 @@ typst.workspace = true
 typst-html.workspace = true
 typst-layout.workspace = true
 typst-pdf.workspace = true
+typst-render.workspace = true
 typst-kit.workspace = true
 comemo.workspace = true
 ecow.workspace = true

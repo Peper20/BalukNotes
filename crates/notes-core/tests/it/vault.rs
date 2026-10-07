@@ -552,3 +552,21 @@ fn book_chapters_on_graph() {
     let group = |id: &str| layout.nodes.iter().find(|n| n.id == id).map(|n| n.group.clone());
     assert_eq!(group("Книга/.1"), group("Книга"), "a chapter has its book's colors");
 }
+
+/// `Notes::png`: pages as PNG, the same count as the PDF; picked pages only;
+/// a missing page and a missing theme are errors.
+#[test]
+fn png_pages() {
+    let book = id("Книга");
+    let all = NOTES.png(&book, "classic", &[], 72.0).unwrap().unwrap();
+    assert_eq!(all.count, 5);
+    assert_eq!(all.pages.iter().map(|(n, _)| *n).collect::<Vec<_>>(), [1, 2, 3, 4, 5]);
+    for (_, png) in &all.pages {
+        assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    }
+    let picked = NOTES.png(&book, "night", &[4, 2], 72.0).unwrap().unwrap();
+    assert_eq!(picked.pages.iter().map(|(n, _)| *n).collect::<Vec<_>>(), [2, 4]);
+    let errors = NOTES.png(&book, "classic", &[6], 72.0).unwrap().unwrap_err();
+    assert!(errors[0].message.contains("no page 6: the note has 5"), "{errors:?}");
+    assert!(NOTES.png(&book, "nope", &[], 72.0).is_err());
+}

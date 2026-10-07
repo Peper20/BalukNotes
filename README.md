@@ -49,6 +49,7 @@ notes new --vault "Name" --title "Title"     # a stub; also --folder, --book, --
 notes list --vault "Name" | notes tags --vault "Name"
 notes check --vault "Name" [Path]            # build errors, warnings, broken links
 notes pdf --vault "Name" Path -o x.pdf [--theme night]
+notes png --vault "Name" Path -o dir [--pages 2-5]   # the PDF pages as PNG images
 notes rename --vault "Name" Path "Title"     # the file name and links to it too; --dry-run
 notes docs writing | library                 # how to write notes; the library API
 notes info                                   # where data and vaults are
