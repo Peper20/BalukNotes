@@ -1,18 +1,18 @@
-# fonts - шрифты оформления
+# fonts - layout fonts
 
-Шрифты оформления встроены в бинарник (`notes-core::fonts`) и выбираются
-раньше системных: отрисовка одинакова на любой машине (эталонные снимки,
-десктоп, Android), и шрифты не нужно ставить в систему.
+The layout fonts are embedded in the binary (`notes-core::fonts`) and win over
+system fonts: rendering is the same on any machine (reference snapshots,
+desktop, Android), and the fonts need not be installed in the system.
 
-| Файлы | Гарнитура | Версия | Правообладатель |
+| Files | Typeface | Version | Copyright holder |
 |---|---|---|---|
-| `GentiumPlus-*.ttf` | Gentium Plus: текст, заголовки | 6.200 | (c) 2003-2023 SIL International, Reserved Font Names "Gentium" и "SIL" |
-| `JetBrainsMono-*.ttf` | JetBrains Mono: код | 2.304 | (c) 2020 The JetBrains Mono Project Authors |
+| `GentiumPlus-*.ttf` | Gentium Plus: text, headings | 6.200 | (c) 2003-2023 SIL International, Reserved Font Names "Gentium" and "SIL" |
+| `JetBrainsMono-*.ttf` | JetBrains Mono: code | 2.304 | (c) 2020 The JetBrains Mono Project Authors |
 
-Обе - под [SIL Open Font License 1.1](OFL.txt): встраивать и распространять
-вместе с программой можно, продавать сами шрифты отдельно - нельзя.
-Формулы - New Computer Modern Math из Typst.
+Both are under the [SIL Open Font License 1.1](OFL.txt): they may be embedded
+and distributed with the program, the fonts themselves may not be sold
+separately. Formulas use New Computer Modern Math from Typst.
 
-Начертания: обычное, курсив, жирный, жирный курсив.
-Обновление шрифта - замена файла + `UPDATE_SNAPSHOTS=1 cargo test -p notes-core
---test it snapshots::` (глифы в рисунках изменятся) + проверка глазами.
+Styles: regular, italic, bold, bold italic. Updating a font - replace the file
++ `UPDATE_SNAPSHOTS=1 cargo test -p notes-core --test it snapshots::` (glyphs in
+figures change) + a visual check.

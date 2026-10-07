@@ -131,11 +131,14 @@ fn check_finds_exactly_the_planted_problems() {
     assert_eq!(report.summary(), expected_summary(), "the summary in .claude/rules/tests-vault.md");
 }
 
-/// The expected `notes check` summary: the line "Итог: `...`" in
+/// The expected `notes check` summary: the line "Total: `...`" in
 /// `.claude/rules/tests-vault.md` (`tools/check.sh` checks it too).
 fn expected_summary() -> String {
     let readme = std::fs::read_to_string(repo().join(".claude/rules/tests-vault.md")).unwrap();
-    let line = readme.lines().find_map(|l| l.strip_prefix("Итог: `")).expect("the line \"Итог: `...`\" in the README");
+    let line = readme
+        .lines()
+        .find_map(|l| l.strip_prefix("Total: `"))
+        .expect("the line \"Total: `...`\" in the fixture rules");
     line.trim_end_matches('`').to_owned()
 }
 

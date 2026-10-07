@@ -1,90 +1,92 @@
 # baluk notes
 
-Заметки на Typst с красотой печатных конспектов и удобством Obsidian: ссылки,
-граф, быстрый переход, поиск - и интерактив, которого нет в PDF. Ядро на Rust
-собирает хранилище `.typ` в HTML (светлая и тёмная темы) и PDF на самом
-устройстве; сейчас это `notes serve` и браузер, дальше - приложения Tauri для
-десктопа и Android, ядро в WASM и сервер-хранилище с входом
-(`docs/roadmap.md`).
+English | [Русский](README.ru.md)
 
-## Быстрый старт
+Notes on Typst with the beauty of printed lecture notes and the convenience of
+Obsidian: links, a graph, quick switching, search - and interactivity a PDF
+does not have. A Rust core builds a vault of `.typ` files into HTML (light and
+dark themes) and PDF on the device itself; today that is `notes serve` and a
+browser, next - Tauri apps for desktop and Android, the core in WASM and a
+storage server with sign-in (`docs/roadmap.md`).
 
-1. **Инструменты** (один раз): Rust 1.92+ (`rustup`), Node.js 22+ с `npm`.
-   Шрифты встроены; пакет Typst `@preview/cetz` скачается сам при первой
-   сборке заметки с рисунком.
-2. **Установить** `notes` и навык Claude Code `/baluk-note` (и после каждого
-   обновления репозитория): `tools/install.sh` (первая сборка - несколько
-   минут). Дальше `notes` работает из любой папки. `notes` - тонкая
-   команда: передаёт работу частям из своей папки (`notes-typst` - сборка и
-   все команды ниже; окно `notes-app` - в работе); какие стоят - `notes
-   --version`.
-3. **Хранилище**: `notes vaults new "Заметки"` (или в приложении).
-4. **Приложение**: `notes service install` - сервер в фоне, сам стартует при
-   входе в систему (служба systemd пользователя, без root; убрать - `notes
-   service remove`) -> http://127.0.0.1:8421. Без службы - `notes serve`
-   (остановить - Ctrl+C).
-   Заметка собирается при первом открытии (книга с рисунками - секунды),
-   потом берётся из кэша.
-5. **Заметка**: `notes new --vault "Заметки" --title "Моя заметка"` (книга -
-   `--book`) печатает путь файла; правьте его, приложение подхватит само:
+## Quick start
+
+1. **Tools** (once): Rust 1.92+ (`rustup`), Node.js 22+ with `npm`. Fonts are
+   embedded; the Typst package `@preview/cetz` downloads itself on the first
+   build of a note with a figure.
+2. **Install** `notes` and the Claude Code skill `/baluk-note` (and after every
+   repository update): `tools/install.sh` (the first build takes a few
+   minutes). Then `notes` works from any folder. `notes` is a thin command: it
+   hands work to the parts in its folder (`notes-typst` - building and all
+   commands below; the `notes-app` window - in progress); which are installed -
+   `notes --version`.
+3. **Vault**: `notes vaults new "Notes"` (or in the app).
+4. **App**: `notes service install` - a background server that starts at login
+   (a systemd user service, no root; remove - `notes service remove`) ->
+   http://127.0.0.1:8421. Without the service - `notes serve` (stop - Ctrl+C).
+   A note is built when first opened (a book with figures - seconds), then it
+   comes from the cache.
+5. **Note**: `notes new --vault "Notes" --title "My note"` (a book - `--book`)
+   prints the file path; edit it, the app picks it up by itself:
    ```typst
    #import "/_baluk/lib.typ": *
-   #show: note.with(title: [Моя заметка])
+   #show: note.with(title: [My note])
 
-   = Раздел
-   Текст, формулы $x^2$, ссылка на другую заметку: #see("Папка/Другая").
+   = Section
+   Text, formulas $x^2$, a link to another note: #see("Folder/Other").
    ```
-   С Claude Code - навык `/baluk-note` из папки с материалами: заведёт заметку
-   или книгу и поведёт по правилам (цель, план, главы, проверка).
+   With Claude Code - the `/baluk-note` skill from the folder with your
+   materials: it starts a note or a book and follows the rules (goal, plan,
+   chapters, checks).
 
-## Команды
+## Commands
 
 ```sh
-notes service install | remove | status      # автозапуск приложения (systemd); лог - journalctl --user -u baluk-notes
-notes serve                                  # приложение без службы; --token - только с токеном; --socket - сокет для окна
-notes vaults [new "Имя"]                     # хранилища
-notes new --vault "Имя" --title "Название"   # заготовка; ещё --folder, --book, --tag, --lang
-notes list --vault "Имя" | notes tags --vault "Имя"
-notes check --vault "Имя" [Путь]             # ошибки сборки, предупреждения, битые ссылки
-notes pdf --vault "Имя" Путь -o x.pdf [--theme night]
-notes rename --vault "Имя" Путь "Название"    # имя файла и ссылки на неё - тоже; --dry-run
-notes docs writing | library                 # как писать заметки; API библиотеки
-notes info                                   # где данные и хранилища
-notes --version                              # версия и какие части стоят
+notes service install | remove | status      # app autostart (systemd); log - journalctl --user -u baluk-notes
+notes serve                                  # the app without the service; --token - token only; --socket - a socket for the window
+notes vaults [new "Name"]                    # vaults
+notes new --vault "Name" --title "Title"     # a stub; also --folder, --book, --tag, --lang
+notes list --vault "Name" | notes tags --vault "Name"
+notes check --vault "Name" [Path]            # build errors, warnings, broken links
+notes pdf --vault "Name" Path -o x.pdf [--theme night]
+notes rename --vault "Name" Path "Title"     # the file name and links to it too; --dry-run
+notes docs writing | library                 # how to write notes; the library API
+notes info                                   # where data and vaults are
+notes --version                              # version and installed parts
 ```
 
-**Данные** - по умолчанию `~/.local/share/baluk-notes`: `vaults/` -
-хранилища, `settings.json`, `cache/` (можно удалять). Другой каталог - в
-`~/.config/baluk-notes/config.toml` (`data = "~/Заметки"`), разово -
-`--data <каталог>` или `NOTES_DATA`. Хранилище вне каталога данных -
-`--vault <путь>`.
+**Data** - `~/.local/share/baluk-notes` by default: `vaults/` - vaults,
+`settings.json`, `cache/` (can be deleted). Another directory - in
+`~/.config/baluk-notes/config.toml` (`data = "~/Notes"`), once -
+`--data <dir>` or `NOTES_DATA`. A vault outside the data directory -
+`--vault <path>`.
 
-## Разработка
+## Development
 
-Из репозитория без установки - `cargo run -p notes-typst -- <команда>`
-(отладочная сборка берёт `baluk/` и `app/dist` с диска); тестовый сервер на
-хранилище со всеми возможностями - `tools/test-env.sh`
-(http://127.0.0.1:8432). Проверка - `tools/check.sh` (`.claude/rules/tools.md`).
-Устройство репозитория, документы и правила - `.claude/rules/project.md`.
+From the repository without installing - `cargo run -p notes-typst --
+<command>` (a debug build takes `baluk/` and `app/dist` from disk); a test
+server on a vault with every feature - `tools/test-env.sh`
+(http://127.0.0.1:8432). Checks - `tools/check.sh` (`.claude/rules/tools.md`).
+Repository layout, documents and rules - `.claude/rules/project.md`.
 
-## Лицензия
+## License
 
 Copyright (C) 2026 Ivan Baluk.
 
-BalukNotes - под [GNU AGPL-3.0](LICENSE) (только версия 3): программу можно
-использовать, изучать, менять и распространять, в том числе за деньги, но
-изменённую версию - и ту, с которой работают по сети, - только с исходным
-кодом под той же лицензией.
+BalukNotes is under the [GNU AGPL-3.0](LICENSE) (version 3 only): the program
+may be used, studied, changed and distributed, including for money, but a
+modified version - including one used over a network - only with its source
+code under the same license.
 
-Заметки и всё, что из них собрано (HTML, PDF), - ваши: их можно
-распространять на любых условиях, даже если они используют библиотеку
-`baluk` ([дополнительное разрешение](LICENSE-EXCEPTION)).
+Notes and everything built from them (HTML, PDF) are yours: they may be
+distributed on any terms, even if they use the `baluk` library
+([additional permission](LICENSE-EXCEPTION)).
 
-**Коммерческая лицензия** - без условий AGPL (закрытый продукт или сервис
-на основе BalukNotes): по договорённости с автором,
+**A commercial license** - without the AGPL conditions (a closed product or
+service based on BalukNotes): by agreement with the author,
 [github.com/Peper20](https://github.com/Peper20).
 
-Чужой код в репозитории - под своими лицензиями, их текст - рядом с ним
-(`vendor/`, `fonts/`). Правки от других людей принимаются только с
-соглашением о передаче прав автору (CLA): иначе их нельзя включить в
-коммерческую лицензию.
+Third-party code in the repository is under its own licenses, their texts lie
+next to it (`vendor/`, `fonts/`). Contributions from other people are accepted
+only with an agreement assigning the rights to the author (CLA): otherwise
+they cannot be included in the commercial license.

@@ -79,12 +79,12 @@ skip() {
 }
 
 # notes check on tests/vault: exactly the intended problems. The expected total
-# is the line "Итог: `...`" in .claude/rules/tests-vault.md (the core test checks it too).
+# is the line "Total: `...`" in .claude/rules/tests-vault.md (the core test checks it too).
 vault_check() {
   local expected actual
-  expected=$(sed -n 's/^Итог: `\(.*\)`$/\1/p' .claude/rules/tests-vault.md)
+  expected=$(sed -n 's/^Total: `\(.*\)`$/\1/p' .claude/rules/tests-vault.md)
   if [[ -z $expected ]]; then
-    echo "no line \"Итог: \`...\`\" in .claude/rules/tests-vault.md"
+    echo "no line \"Total: \`...\`\" in .claude/rules/tests-vault.md"
     return 1
   fi
   # Exit code 1 is expected: the fixture has intended errors.

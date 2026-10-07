@@ -3,28 +3,30 @@ paths:
   - "baluk/**"
 ---
 
-# baluk - правка библиотеки
+# baluk - editing the library
 
-API для авторов заметок - `baluk/README.md` (= `notes docs library`).
+The API for note authors - `baluk/README.md` (= `notes docs library`).
 
-- PDF-вид менять только осознанно, сверяя с конспектами (`Конспекты/`
-  хранилища пользователя); рефакторинг - PDF и HTML байт в байт.
-- По-английски: публичный интерфейс (имена функций, параметров, ключей темы и
-  строковых значений), сообщения об ошибках, комментарии. Подписи - на языке
-  заметки (`i18n.typ`), названия тем - по-русски.
-- Публичные имена - только реэкспорт `lib.typ`, заметки подключают только его.
-  Список - снимок `tests/snapshots/baluk-api.txt`; тест
-  `crates/notes-core/tests/it/library.rs` падает на пропавшем имени и на новом
-  без описания в `baluk/README.md`, а также сверяет с исходниками `skills/baluk-note/reference.md`.
-  Имена с `_` - служебные. Исключение - фикстура
-  `tests/vault/Рисунки/Интерактив.typ` (`_formula`, `_eval`).
-- Большой модуль - подкаталог частей (`figures/`, `plots/`) и файл верхнего
-  уровня, который их собирает.
-- `/_baluk/` отладочной сборки - каталог репозитория (правки видны сразу),
-  релизной - копия в бинарнике (пересобрать).
-- В HTML весь документ - `<article class="k-doc" data-doc>`.
-- У каждого блока две ветки; в HTML - только разметка с классами `k-...`
-  (помощник `elem` из `web.typ`), без цветов и размеров - их задаёт CSS
+- Change the PDF look only deliberately, comparing with the notes
+  (`Конспекты/` of the user's vault); a refactoring keeps PDF and HTML byte for
+  byte.
+- In English: the public interface (names of functions, parameters, theme keys
+  and string values), error messages, comments. Captions are in the note's
+  language (`i18n.typ`), theme titles are Russian.
+- Public names are only the re-exports of `lib.typ`, notes import only it. The
+  list is the snapshot `tests/snapshots/baluk-api.txt`; the test
+  `crates/notes-core/tests/it/library.rs` fails on a missing name and on a new
+  one not described in `baluk/README.md`, and also checks
+  `skills/baluk-note/reference.md` against the sources. Names with `_` are
+  internal. The exception is the fixture `tests/vault/Рисунки/Интерактив.typ`
+  (`_formula`, `_eval`).
+- A large module is a subdirectory of parts (`figures/`, `plots/`) and a
+  top-level file that gathers them.
+- `/_baluk/` of a debug build is the repository directory (edits show at
+  once), of a release build - a copy in the binary (rebuild).
+- In HTML the whole document is `<article class="k-doc" data-doc>`.
+- Every block has two branches; HTML gets only markup with `k-...` classes
+  (the `elem` helper from `web.typ`), without colors and sizes - CSS sets them
   (`app/src/baluk-css/`):
 
   ```typst
@@ -34,47 +36,49 @@ API для авторов заметок - `baluk/README.md` (= `notes docs libr
   }
   ```
 
-  Общего помощника `web-or(html, pdf)` нет: ветки считают разное, а обёртки
-  в функции длиннее `if is-web() { return ... }`.
-- HTML-экспорт выбрасывает `grid`, `stack`, `align`, `place` (вместе с
-  содержимым), `h`, `v` - в HTML-ветке их не использовать. Для кода заметки
-  шаблон (`_web-template`) ставит страховки: SVG-кадр `k-layout`, класс для
-  `align`, пустой `span.k-h`/`div.k-v` для абсолютных отступов. Внутри
-  `html.frame` вёрстка снова постраничная - страховки проверяют `is-web()`.
-- Рисунки наследуют `set text` HTML-ветки шаблона (шрифт, кегль, цвет): без
-  него подписи SVG чёрные и не видны в тёмной теме. Проверять рисунки в `night`.
-- `return` в блоке отбрасывает стоящие перед ним `show`/`set` - оборачивать в
+  There is no shared helper `web-or(html, pdf)`: the branches compute
+  different things, and wrapping them in functions is longer than
+  `if is-web() { return ... }`.
+- The HTML export drops `grid`, `stack`, `align`, `place` (with their
+  content), `h`, `v` - do not use them in the HTML branch. For note code the
+  template (`_web-template`) sets fallbacks: an SVG frame `k-layout`, a class
+  for `align`, an empty `span.k-h`/`div.k-v` for absolute spacing. Inside
+  `html.frame` layout is paged again - the fallbacks check `is-web()`.
+- Figures inherit `set text` of the template's HTML branch (font, size,
+  color): without it SVG labels are black and invisible in the dark theme.
+  Check figures in `night`.
+- `return` in a block drops the `show`/`set` before it - wrap them in
   `{ ... }`.
-- Именованный аргумент с дефисом: `elem("div", "k-x", ..("data-x": v), body)`.
-- Цвета и шрифты тем - только в `theme.typ`; для HTML их выгружает `css.typ`.
-  Новая тема - словарь в `themes` (с `name` и русским `title`): CSS-переменные
-  и шрифты браузера появятся сами.
-- Рисунки - только через `canvas`: он оборачивает SVG в `div.k-frame`, по
-  которому ядро склеивает темы. Кадр `frames` - обычный `canvas`.
-- Слова оформления - только `word(...)` из `i18n.typ`; новое слово - во все
-  словари.
-- Разбор формул интерактивных рисунков - `plots/formula.typ` и
-  `app/src/lib/plot/formula.ts`, построчно одинаково: правишь один - правь
-  второй и дополни сверку в `tests/vault/Рисунки/Интерактив.typ` (обновить
-  снимок - Vitest сверит клиент с Typst).
-- Префикс `k-` в классах и переменных и имя `baluk` - оставить (решение
-  пользователя); переименовывать только разом (ядро, CSS, клиент, снимки).
+- A named argument with a hyphen: `elem("div", "k-x", ..("data-x": v), body)`.
+- Theme colors and fonts live only in `theme.typ`; `css.typ` exports them for
+  HTML. A new theme is a dictionary in `themes` (with `name` and a Russian
+  `title`): CSS variables and browser fonts appear by themselves.
+- Figures only through `canvas`: it wraps the SVG in `div.k-frame`, by which
+  the core merges themes. A `frames` frame is a plain `canvas`.
+- Layout words only via `word(...)` from `i18n.typ`; a new word goes into all
+  dictionaries.
+- Parsing interactive figure formulas - `plots/formula.typ` and
+  `app/src/lib/plot/formula.ts`, line by line the same: edit one - edit the
+  other and extend the cross-check in `tests/vault/Рисунки/Интерактив.typ`
+  (update the snapshot - Vitest compares the client with Typst).
+- The `k-` prefix in classes and variables and the name `baluk` stay (user's
+  decision); rename only all at once (core, CSS, client, snapshots).
 
 ```
-lib.typ        точка входа - публичные имена
-theme.typ      темы, customize(), current-theme(), css-colors() для HTML
-template.typ   note и book: HTML- и PDF-ветка
-blocks.typ     врезки, lead/plan/summary/quiz, заметки сбоку, таблицы
-code.typ       листинги, выноски, код из файла, опорные цвета кода для HTML
-figures.typ    рисунки: figures/canvas (canvas, fig, in-row, цвет по имени), plane (2D),
-               space (3D), cells (массивы, матрицы), graphs (граф и раскладки)
-plots.typ      интерактив: plots/formula (разбор формул), common, plot, surface
-frames.typ     кадры
-graph.typ      vault-graph (данные - из приложения)
-charts.typ     диаграммы по данным
+lib.typ        entry point - public names
+theme.typ      themes, customize(), current-theme(), css-colors() for HTML
+template.typ   note and book: HTML and PDF branches
+blocks.typ     boxes, lead/plan/summary/quiz, margin notes, tables
+code.typ       listings, callouts, code from a file, reference code colors for HTML
+figures.typ    figures: figures/canvas (canvas, fig, in-row, color by name), plane (2D),
+               space (3D), cells (arrays, matrices), graphs (graph and layouts)
+plots.typ      interactive: plots/formula (formula parsing), common, plot, surface
+frames.typ     frames
+graph.typ      vault-graph (data from the app)
+charts.typ     data charts
 links.typ      see
-i18n.typ       слова оформления: word()
-web.typ        HTML-режим: is-web(), elem(), frame()
-css.typ        выгрузка тем для CSS (читает приложение)
-math.typ       операторы, dc, dd, defeq
+i18n.typ       layout words: word()
+web.typ        HTML mode: is-web(), elem(), frame()
+css.typ        theme export for CSS (the app reads it)
+math.typ       operators, dc, dd, defeq
 ```

@@ -3,58 +3,59 @@ paths:
   - "tests/**"
 ---
 
-# tests/vault - хранилище-фикстура
+# tests/vault - the fixture vault
 
-На нём работают сквозные тесты (`crates/*/tests/`), эталонные снимки
-(`tests/snapshots/`), визуальная проверка и тестовый сервер (`.claude/rules/tools.md`).
+End-to-end tests (`crates/*/tests/`), reference snapshots (`tests/snapshots/`),
+the visual check and the test server (`.claude/rules/tools.md`) run on it.
 
-**Каждый файл в `tests/vault/` что-то проверяет.** Новый случай отрисовки - новый файл,
-строка в каталоге ниже, снимки (`UPDATE_SNAPSHOTS=1 cargo test -p notes-core
---test it snapshots::`) и, если меняется число заметок или проблем, строка "Итог".
+**Every file in `tests/vault/` checks something.** A new rendering case - a new
+file, a row in the catalog below, snapshots (`UPDATE_SNAPSHOTS=1 cargo test -p
+notes-core --test it snapshots::`) and, if the number of notes or problems
+changes, the "Total" line.
 
-## Намеренные проблемы
+## Intended problems
 
-`notes --vault tests/vault check` находит ровно это (код выхода 1):
+`notes --vault tests/vault check` finds exactly these (exit code 1):
 
-| Заметка | Проблема |
+| Note | Problem |
 |---|---|
-| `Особые случаи/Ошибка компиляции` | неизвестная функция; битая ссылка `Нет/Из несобравшейся` (ссылки несобравшейся - по исходнику) |
-| `Особые случаи/Предупреждение` | предупреждение Typst (`#h(1fr)` в HTML) и два - проверки приложения: `lang: "uk"` без словаря и без `words:`; `;` после `#see(...)` пропадает |
-| `Особые случаи/Ссылки` | битая ссылка на заметку и битый якорь |
-| `Сеть/UFW` | битая ссылка `Сеть/Nginx` |
-| `Глубоко/а/б/_folder.toml` | неизвестный ключ `titel` (папка - своим именем) |
+| `Особые случаи/Ошибка компиляции` | an unknown function; a broken link `Нет/Из несобравшейся` (links of a failed note come from the source) |
+| `Особые случаи/Предупреждение` | a Typst warning (`#h(1fr)` in HTML) and two from the app's checks: `lang: "uk"` without a dictionary and without `words:`; `;` after `#see(...)` disappears |
+| `Особые случаи/Ссылки` | a broken link to a note and a broken anchor |
+| `Сеть/UFW` | a broken link `Сеть/Nginx` |
+| `Глубоко/а/б/_folder.toml` | an unknown key `titel` (the folder shows its own name) |
 
-Итог - последняя строка вывода; его сверяют `tools/check.sh` и тест
-`check_finds_exactly_the_planted_problems`:
+The total is the last output line; `tools/check.sh` and the test
+`check_finds_exactly_the_planted_problems` compare it:
 
-Итог: `notes: 22, errors: 2, warnings: 4, broken links: 4`
+Total: `notes: 22, errors: 2, warnings: 4, broken links: 4`
 
-## Каталог
+## Catalog
 
-| Файл | Что проверяет |
+| File | What it checks |
 |---|---|
-| `Сеть/SSH.typ` | обычная заметка: теги, якоря заголовков, ссылки с якорем, рисунок, склеенный по цветам |
-| `Сеть/UFW.typ` | ссылка с якорем и своей подписью; битая ссылка |
-| `демо/компоненты.typ` | все блоки, листинги, цвета кода, плотные скобки в формулах |
-| `демо/визуализация.typ` | все виды рисунков: диаграммы, графики, 3D, массивы, графы, деревья; точность рисунков |
-| `ассессмент/01-тесты.typ` | большая глава с `book` (вне книги): код из файлов `code/` |
-| `Книга/` | книга: титул, главы `k-h1`, свои теги глав (`chapter.with`: у первой - с меткой `гл-основы`, у третьей - `=` без тегов), одинаковые "Итоги" в главах -> `Итоги`, `Итоги-2`, `Итоги-3`; метка `<особый>` -> `id`; `code-from-file` с регионом; картинка из файла (`img/схема.svg`); ссылки внутри книги |
-| `Особые случаи/Без шаблона.typ` | чистый Typst без библиотеки: заголовки в оглавлении, формулы |
-| `Особые случаи/Ошибка компиляции.typ` | ошибка с файлом и строкой; заглушка "Не собралось"; ссылки проверяются по исходнику |
-| `Особые случаи/Предупреждение.typ` | предупреждение Typst (дробный `h`) и `lint` (язык без словаря, `;`, `$0,5$`); абсолютные `#h`/`#v` -> `span.k-h`/`div.k-v` (и отрицательные), `quad` в формуле не трогается |
-| `Особые случаи/Запасные шрифты.typ` | знаки, которых нет в основных шрифтах тем: текст - из New Computer Modern (целым файлом), код - из DejaVu Sans Mono (частями); жирный и курсив |
-| `Особые случаи/English/` | книга с `lang: "en"`: слова оформления из `i18n.typ`, `lang` у `<article>` |
-| `Особые случаи/Свои слова.typ` | `lang: "de"` со своими `words:`; чего нет в `words:` - из английского словаря; без предупреждения |
-| `Особые случаи/Ссылки.typ` | все виды `#see`: по тексту, по метке, в главу книги, на имена с `+ # %`, на раздел со знаками, вглубь, вычисляемый путь; битые; повтор заголовков; `\;` после вызова |
-| `Имена/C++ и C#.typ` | пробелы, `+`, `#` в имени; заголовки "C", "C++", "C#" - разные якоря (в адресе `%23`); "a=b" и "a b" - разные |
-| `Имена/50% готово.typ` | `%` в имени: двойное декодирование адреса |
-| `Имена/_черновик.typ` | служебный файл (`_`) - не заметка |
-| `Имена/_folder.toml` | название папки - в дереве, графе и шапке вместо имени |
-| `Имена/странное.typ` | название из знаков, запрещённых в именах файлов; ссылка без подписи - название цели |
-| `Глубоко/а/б/в/г/Дно.typ` | пять уровней вложенности; `а/б` - с ошибкой в `_folder.toml` |
-| `Рисунки/Темы и градиент.typ` | форма рисунка зависит от темы (запасной путь: SVG на тему); градиент |
-| `Рисунки/Интерактив.typ` | `k-plot`: график с ползунками, несколько кривых, разрывы (tg, 1/x, корень), поверхность; таблица значений от Typst - эталон разборщика клиента (Vitest) |
-| `Рисунки/Граф хранилища.typ` | `vault-graph` по фильтру (соседи; папка без ненаписанных): данные `/_vault/graph/...`, `div.k-graph[data-k-graph]`; пересборка, только когда граф изменился |
-| `Рисунки/Кадры.typ` | `k-frames`: диапазон целых (суммы Римана), дробный шаг со своей подписью и `loop`, явные значения (шаги сортировки); без JS и в PDF - кадр по умолчанию, шаги в PDF - в ряд (`pdf: (1, 2, 3, 4)`) |
-| `Формулы и теги.typ` | заметка в корне; теги с пробелом; высокие скобки, матрицы, системы, `dc`, русские операторы; формула в заголовке (оглавление - HTML заголовка) |
-| `_служебное/`, `.скрытое/` | служебные папки - не видны в дереве |
+| `Сеть/SSH.typ` | an ordinary note: tags, heading anchors, links with an anchor, a figure merged by colors |
+| `Сеть/UFW.typ` | a link with an anchor and own text; a broken link |
+| `демо/компоненты.typ` | all blocks, listings, code colors, tight brackets in formulas |
+| `демо/визуализация.typ` | all kinds of figures: charts, plots, 3D, arrays, graphs, trees; figure precision |
+| `ассессмент/01-тесты.typ` | a large chapter with `book` (outside a book): code from the files in `code/` |
+| `Книга/` | a book: title page, `k-h1` chapters, own chapter tags (`chapter.with`: the first with the label `гл-основы`, the third is `=` without tags), the same "Итоги" in chapters -> `Итоги`, `Итоги-2`, `Итоги-3`; the label `<особый>` -> `id`; `code-from-file` with a region; an image from a file (`img/схема.svg`); links inside the book |
+| `Особые случаи/Без шаблона.typ` | plain Typst without the library: headings in the contents, formulas |
+| `Особые случаи/Ошибка компиляции.typ` | an error with file and line; the "Не собралось" stub; links are checked from the source |
+| `Особые случаи/Предупреждение.typ` | a Typst warning (fractional `h`) and `lint` (a language without a dictionary, `;`, `$0,5$`); absolute `#h`/`#v` -> `span.k-h`/`div.k-v` (negative too), `quad` in a formula is left alone |
+| `Особые случаи/Запасные шрифты.typ` | glyphs missing from the theme main fonts: text from New Computer Modern (whole file), code from DejaVu Sans Mono (in parts); bold and italic |
+| `Особые случаи/English/` | a book with `lang: "en"`: layout words from `i18n.typ`, `lang` on `<article>` |
+| `Особые случаи/Свои слова.typ` | `lang: "de"` with own `words:`; what `words:` lacks comes from the English dictionary; no warning |
+| `Особые случаи/Ссылки.typ` | all kinds of `#see`: by text, by label, into a book chapter, to names with `+ # %`, to a section with symbols, deep, a computed path; broken ones; repeated headings; `\;` after a call |
+| `Имена/C++ и C#.typ` | spaces, `+`, `#` in a name; headings "C", "C++", "C#" are different anchors (`%23` in the address); "a=b" and "a b" differ |
+| `Имена/50% готово.typ` | `%` in a name: double decoding of the address |
+| `Имена/_черновик.typ` | an internal file (`_`) is not a note |
+| `Имена/_folder.toml` | the folder title in the tree, graph and header instead of the name |
+| `Имена/странное.typ` | a title of characters forbidden in file names; a link without text shows the target title |
+| `Глубоко/а/б/в/г/Дно.typ` | five nesting levels; `а/б` has an error in `_folder.toml` |
+| `Рисунки/Темы и градиент.typ` | the figure shape depends on the theme (the fallback: SVG per theme); a gradient |
+| `Рисунки/Интерактив.typ` | `k-plot`: a plot with sliders, several curves, gaps (tg, 1/x, a root), a surface; a table of values from Typst is the reference for the client parser (Vitest) |
+| `Рисунки/Граф хранилища.typ` | `vault-graph` with a filter (neighbors; a folder without unwritten notes): data `/_vault/graph/...`, `div.k-graph[data-k-graph]`; rebuilt only when the graph changed |
+| `Рисунки/Кадры.typ` | `k-frames`: a range of integers (Riemann sums), a fractional step with own caption and `loop`, explicit values (sorting steps); without JS and in PDF - the default frame, steps in PDF in a row (`pdf: (1, 2, 3, 4)`) |
+| `Формулы и теги.typ` | a note in the root; tags with a space; tall brackets, matrices, systems, `dc`, Russian operators; a formula in a heading (the contents get the heading HTML) |
+| `_служебное/`, `.скрытое/` | internal folders are not shown in the tree |
