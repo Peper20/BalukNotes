@@ -51,11 +51,11 @@ Work only in the chosen vault; never touch other vaults. In it, create or change
    notes new --vault "Name" --book --title "Title" --folder "Folder" --tag tag        # B. book
    ```
    Add `--lang en` (ISO 639 code) when the note is not in Russian: it sets `lang:` in the template, so block words become "Definition", "Fig." instead of Russian ones. The file name is derived from the title. Output: line 1 is the file on disk (read and edit it), line 2 is the note path ("Path" below: for `notes check`, `notes pdf`, `#see`), line 3 is the app URL. Exit code 1 (`invalid note path`, `empty title`): report the message to the user and leave existing files alone. Exit code 2: wrong arguments, see `notes new --help`.
-6. `notes check --vault "Name" "Path"`: the fresh stub is clean (`ошибок: 0, предупреждений: 0`). Add the progress header at the top of the new file (a book: `main.typ`), see "The file".
+6. `notes check --vault "Name" "Path"`: the fresh stub is clean (`errors: 0, warnings: 0`). Add the progress header at the top of the new file (a book: `main.typ`), see "The file".
 7. **Where to look.** If `pgrep -x notes-typst` prints something, the app runs and the page at the URL from step 5 refreshes on every save; otherwise suggest `notes serve` to the user (or `notes service install`, which keeps it running in the background and starts it at login).
 8. **Plan.** First read `reference.md` and every file in `examples/` in full, once per session (skip this for task E and small fixes): the plan should use the figures and blocks the library actually has, and the samples show how a finished note looks. Then find out the goal (exam, contest, lab, "understand it") and the reader: what they know well and what poorly, since weak spots deserve more room. Propose sections (a book: chapters, then sections) with the figures, examples and hard spots of each, and wait for approval. If the user already said what the note must contain ("one parabola plot with a slider"), that is the plan.
 9. **Write** one section (chapter) at a time, see "Editing the file" and "Writing a good note". Start each call from its sample in `examples/`; `reference.md` lists every parameter and allowed value. The samples show the calls, not the limits: combine features and draw your own figures (see "Figures").
-10. **Check** after each section: `notes check --vault "Name" "Path"`, then fix and repeat until `ошибок: 0, предупреждений: 0, битых ссылок: 0`. The "Errors" list below explains the usual messages; for an unclear one compare your call with the sample and the signature in `reference.md`.
+10. **Check** after each section: `notes check --vault "Name" "Path"`, then fix and repeat until `errors: 0, warnings: 0, broken links: 0`. The "Errors" list below explains the usual messages; for an unclear one compare your call with the sample and the signature in `reference.md`.
 11. **Header.** Update the progress header (see "The file") after each section: work is often interrupted, and the next session starts from it. When everything is done, delete the header.
 12. **Look at the result.** Numbers and `notes check` do not show overlapping labels, invisible lines in the dark theme or a table wider than a phone. If you can read images:
     ```sh
@@ -160,7 +160,7 @@ Typst is neither LaTeX nor Markdown: `\frac`, `\begin`, `**bold**`, `# Heading` 
 - `broken link`: the `#see("...")` path is not in `notes list`, or the anchor does not match a heading text. Either write the target note or drop the link.
 - `_folder.toml: unknown field`: only `title = "Title"` is allowed.
 - `package ... is not whitelisted`: notes may import only whitelisted Typst packages (the library already brings CeTZ). Draw with the library instead; if a package is really needed, ask the user - only they can allow it in the device settings.
-- Other Russian messages come from the library and say what to change.
+- Other messages come from the library and say what to change.
 
 ## Writing a good note
 
