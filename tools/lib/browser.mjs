@@ -1,6 +1,6 @@
-// Headless Chromium через DevTools-протокол — общая часть tools/shot.mjs и
-// tools/visual.mjs. Без зависимостей: нужен системный chromium и Node ≥ 22
-// (встроенный WebSocket). Один браузер — на много снимков.
+// Headless Chromium via the DevTools protocol - the shared part of tools/shot.mjs
+// and tools/visual.mjs. No dependencies: needs a system chromium and Node ≥ 22
+// (built-in WebSocket). One browser serves many screenshots.
 
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -23,7 +23,7 @@ export class Browser {
         const m = log.match(/DevTools listening on (ws:\/\/\S+)/);
         if (m) resolve(m[1]);
       });
-      proc.on("exit", () => reject(new Error(`chromium завершился:\n${log}`)));
+      proc.on("exit", () => reject(new Error(`chromium exited:\n${log}`)));
     });
     const base = endpoint.replace(/^ws/, "http").replace(/\/devtools\/browser\/.*/, "");
     const target = (await (await fetch(`${base}/json/list`)).json()).find((t) => t.type === "page");
@@ -64,8 +64,8 @@ export class Browser {
     return r.result.value;
   }
 
-  // mobile: false — эмуляция телефона масштабирует окно (innerHeight
-  // вырастает вдвое) и искажает замеры; узкую вёрстку проверяем шириной.
+  // mobile: false - phone emulation scales the window (innerHeight doubles)
+  // and distorts measurements; the narrow layout is checked by width.
   viewport(width, height) {
     return this.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
   }
@@ -75,8 +75,8 @@ export class Browser {
   }
 
   /**
-   * Открыть адрес и дождаться отрисовки: `<html data-state="ready">` (если
-   * клиент его ставит), затем шрифтов; `wait` — запас на дорисовку.
+   * Open an address and wait for rendering: `<html data-state="ready">` (if
+   * the client sets it), then fonts; `wait` is extra time for finishing touches.
    */
   async open(url, { wait = 300, timeout = 60000 } = {}) {
     await this.send("Page.navigate", { url });
@@ -99,7 +99,7 @@ export class Browser {
 
   async close() {
     this.ws.close();
-    // Профиль удаляем после выхода браузера: до этого он ещё пишет в каталог.
+    // The profile is removed after the browser exits: until then it still writes to the directory.
     const exited = new Promise((r) => this.proc.once("exit", r));
     this.proc.kill();
     await exited;

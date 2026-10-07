@@ -48,7 +48,7 @@ scratchpad или `tests/.data/`, не в репозиторий; PNG откры
 
 ```sh
 tools/test-env.sh [--fresh] &          # сервер на tests/vault, порт 8432
-tools/visual.mjs [--only Книга]         # фикстуры x (светлая, тёмная, узкий) -> tests/.data/visual/index.html
+tools/visual.mjs [--only Книга]         # фикстуры x (light, dark, narrow) -> tests/.data/visual/index.html
 tools/shot.mjs "http://127.0.0.1:8432/v/vault/n/демо/компоненты" out.png [--dark] [--size 400x800] [--full]
 tools/shot.mjs URL out.png --print 'document.getElementById("page").scrollTop'  # замер в странице (прокручивается колонка #page)
 ```
@@ -58,9 +58,11 @@ tools/shot.mjs URL out.png --print 'document.getElementById("page").scrollTop'  
   эмулирует телефон (с эмуляцией замеры врут): узкий экран - шириной.
 - Отладочная сборка берёт `baluk/` и `app/dist` с диска; правки Rust - после
   перезапуска `notes serve`.
-- Остановить сервер - `kill $(pgrep -x notes-typst)`, не `pkill -f ...`, и не ждать
-  процесс через `pgrep -f ...`: шаблон совпадает с командной строкой самой
-  оболочки (убивает её или ждёт вечно).
+- Остановить тестовый сервер - по порту: `fuser -k -TERM 8432/tcp`. Не
+  `pgrep -x notes-typst`: так находится и служба пользователя `notes serve`
+  (порт 8421). Не `pkill -f ...` и не ждать процесс через `pgrep -f ...`:
+  шаблон совпадает с командной строкой самой оболочки (убивает её или ждёт
+  вечно).
 
 ## Облачное окружение
 

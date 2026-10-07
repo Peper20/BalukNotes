@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Полная проверка проекта одной командой — перед коммитом и PR.
+# Full project check in one command - before a commit and a PR.
 #
-#   tools/check.sh           # всё: Rust, хранилище-фикстура, типы API, клиент, e2e
-#   tools/check.sh --fast    # без сборки клиента и e2e (минута-две)
-#   tools/check.sh --rust    # только Rust: test, clippy, fmt, копии крейтов, notes check, заготовки заметок, типы API
-#   tools/check.sh --app     # только клиент: check, Vitest, сборка, e2e
+#   tools/check.sh           # everything: Rust, the fixture vault, API types, client, e2e
+#   tools/check.sh --fast    # without the client build and e2e (a minute or two)
+#   tools/check.sh --rust    # Rust only: test, clippy, fmt, crate copies, notes check, note templates, API types
+#   tools/check.sh --app     # client only: check, Vitest, build, e2e
 #
-# Шаги идут все, даже если какой-то упал (кроме зависимых: без сборки
-# клиента e2e не запускается). В конце — таблица «шаг → ок/упал, время»;
-# вывод упавшего шага — в tests/.data/check/<шаг>.log (хвост печатается).
-# Код возврата ненулевой, если упал хоть один шаг.
+# All steps run even if one fails (except dependent ones: e2e does not run
+# without a client build). At the end - a table "step -> ok/failed, time";
+# the output of a failed step is in tests/.data/check/<step>.log (its tail is printed).
+# The exit code is non-zero if any step failed.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -20,30 +20,30 @@ for arg in "$@"; do
     --rust) app=0 ;;
     --app) rust=0 ;;
     -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) echo "неизвестный параметр: $arg (есть --fast, --rust, --app)" >&2; exit 2 ;;
+    *) echo "unknown option: $arg (known: --fast, --rust, --app)" >&2; exit 2 ;;
   esac
 done
 if [[ $rust == 0 && $app == 0 ]]; then
-  echo "--rust и --app вместе — это просто tools/check.sh" >&2
+  echo "--rust and --app together is just tools/check.sh" >&2
   exit 2
 fi
 
-# Приоритет ниже обычного (наследуют cargo, npm, e2e): сборка на
-# всех ядрах уступает работе за компьютером (nice 2; ionice - шкала 0-7,
-# обычный 4), а свободный процессор занимает так же.
+# Lower than normal priority (cargo, npm, e2e inherit it): a build on all
+# cores yields to work at the computer (nice 2; ionice - scale 0-7, normal 4)
+# and takes idle CPU just the same.
 renice -n 2 -p $$ >/dev/null 2>&1 || true
 ionice -c 2 -n 5 -p $$ >/dev/null 2>&1 || true
 
-# target/ растёт без предела: cargo не удаляет старые варианты наших крейтов
-# (новый появляется от правки Cargo.toml, метки кэша, другого пути worktree).
-# Больше TARGET_LIMIT_GB (30) - сначала cargo clean. Чужой CARGO_TARGET_DIR
-# не чистим: его могут в это время собирать другие (агенты в worktree).
+# target/ grows without limit: cargo does not remove old variants of our crates
+# (a new one appears after a Cargo.toml edit, a cache tag, another worktree path).
+# Over TARGET_LIMIT_GB (30) - cargo clean first. Someone else's CARGO_TARGET_DIR
+# is left alone: others (agents in worktrees) may be building in it right now.
 limit_target() {
   local limit=${TARGET_LIMIT_GB:-30} size
   [[ -z ${CARGO_TARGET_DIR:-} && -d target ]] || return 0
   size=$(du -s --block-size=1G target | cut -f1)
   if (( size > limit )); then
-    echo "target/ - $size ГБ, больше предела $limit ГБ: cargo clean"
+    echo "target/ is $size GB, over the limit of $limit GB: cargo clean"
     cargo clean
   fi
 }
@@ -56,69 +56,69 @@ mkdir -p "$logs"
 names=() results=() times=()
 failed=0
 
-# step <имя> <команда…>: выполнить, записать итог и время.
+# step <name> <command...>: run it, record the result and time.
 step() {
   local name="$1"; shift
   local log="$logs/$name.log" start=$SECONDS
   echo "▶ $name: $*"
   if "$@" >"$log" 2>&1; then
-    results+=("ок")
+    results+=("ok")
   else
-    results+=("упал")
+    results+=("failed")
     failed=1
-    echo "  ✗ $name упал — хвост $log:"
+    echo "  ✗ $name failed - tail of $log:"
     tail -n 25 "$log" | sed 's/^/    /'
   fi
   names+=("$name")
   times+=("$((SECONDS - start))")
 }
 
-# skip <имя> <причина>
+# skip <name> <reason>
 skip() {
-  names+=("$1") results+=("пропущен: $2") times+=("-")
+  names+=("$1") results+=("skipped: $2") times+=("-")
 }
 
-# notes check на tests/vault: ровно намеренные проблемы. Ожидаемый итог —
-# строка «Итог: `…`» в .claude/rules/tests-vault.md (её же сверяет тест ядра).
+# notes check on tests/vault: exactly the intended problems. The expected total
+# is the line "Итог: `...`" in .claude/rules/tests-vault.md (the core test checks it too).
 vault_check() {
   local expected actual
   expected=$(sed -n 's/^Итог: `\(.*\)`$/\1/p' .claude/rules/tests-vault.md)
   if [[ -z $expected ]]; then
-    echo "в .claude/rules/tests-vault.md нет строки «Итог: \`…\`»"
+    echo "no line \"Итог: \`...\`\" in .claude/rules/tests-vault.md"
     return 1
   fi
-  # Код выхода 1 — ожидаем: в фикстуре есть намеренные ошибки.
+  # Exit code 1 is expected: the fixture has intended errors.
   actual=$(cargo run -q -p notes-typst -- --data tests/.data --vault tests/vault check | tee /dev/stderr | tail -n 1)
-  echo "ожидается: $expected"
-  echo "получено:  $actual"
+  echo "expected: $expected"
+  echo "actual:   $actual"
   [[ $actual == "$expected" ]]
 }
 
-# Типы API выгружены из Rust и закоммичены: после выгрузки нет изменений.
+# API types are exported from Rust and committed: no changes after the export.
 api_types() {
   local dir=app/src/lib/api/types
   (cd app && npm run -s types) || return 1
   local changed
   changed=$(git status --porcelain -- "$dir")
   if [[ -n $changed ]]; then
-    echo "типы API устарели — выгрузите (cd app && npm run types) и закоммитьте:"
+    echo "API types are stale - export them (cd app && npm run types) and commit:"
     echo "$changed"
     git --no-pager diff --stat -- "$dir"
     return 1
   fi
 }
 
-# Копии чужих крейтов с правками (.claude/rules/vendor.md) — их собственные тесты.
+# Copies of foreign crates with patches (.claude/rules/vendor.md) - their own tests.
 vendor_tests() {
   CARGO_TARGET_DIR=target/vendor cargo test -q --manifest-path vendor/comemo/Cargo.toml --features testing || return 1
   rm -f vendor/comemo/Cargo.lock
 }
 
-# Навык /baluk-note: заготовки `notes new` (заметка и книга; имя файла — из
-# названия со знаками разметки и запрещёнными в именах файлов), примеры
-# skills/baluk-note/examples и блок «Common calls» из SKILL.md (дописан в
-# заготовку заметки) собираются во временном хранилище без ошибок,
-# предупреждений и битых ссылок.
+# The /baluk-note skill: `notes new` templates (a note and a book; the file
+# name comes from a title with markup characters and characters forbidden in
+# file names), the examples skills/baluk-note/examples and the "Common calls"
+# block of SKILL.md (appended to the note template) build in a temporary vault
+# without errors, warnings or broken links.
 baluk_note() {
   local dir=tests/.data/baluk-note notes=(cargo run -q -p notes-typst -- --data tests/.data/baluk-note)
   rm -rf "$dir"
@@ -132,7 +132,7 @@ baluk_note() {
   cp -r skills/baluk-note/examples "$vault/examples"
   awk '/^## Common calls/ {on = 1} on && /^```$/ {exit} on == 2 {print} on && /^```typst/ {on = 2}' \
     skills/baluk-note/SKILL.md >>"$vault/Математика/Заметка.typ"
-  # цель ссылки #see из блока
+  # the target of the #see link from the block
   mkdir -p "$vault/Math"
   printf '#import "/_baluk/lib.typ": *\n#show: note.with(title: [Производная])\n' >"$vault/Math/Derivative.typ"
   local actual
@@ -142,16 +142,16 @@ baluk_note() {
 
 in_app() { (cd app && "$@"); }
 
-# Окно notes-app (Tauri) - только с WebKitGTK; без него (облако) - мимо.
+# The notes-app window (Tauri) - only with WebKitGTK; without it (cloud) - skipped.
 no_webkit=()
 if ! pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
   no_webkit=(--exclude notes-app)
-  echo "нет webkit2gtk-4.1 — notes-app не собирается"
+  echo "no webkit2gtk-4.1 - notes-app is not built"
 fi
 
 if [[ $rust == 1 ]]; then
   step cargo-test cargo test --workspace "${no_webkit[@]}"
-  # С фичей measure — и тяжёлые замеры памяти (сами они в тестах не идут).
+  # With the measure feature - also the heavy memory measurements (they do not run as tests).
   step clippy cargo clippy --workspace "${no_webkit[@]}" --all-targets --features notes-core/measure -- -D warnings
   step fmt cargo fmt --check
   step vendor vendor_tests
@@ -171,28 +171,28 @@ if [[ $app == 1 ]]; then
     skip e2e "--fast"
   else
     step build in_app npm run -s build
-    if [[ ${results[-1]} == "ок" ]]; then
+    if [[ ${results[-1]} == "ok" ]]; then
       step e2e in_app npm run -s e2e
     else
-      skip e2e "клиент не собрался"
+      skip e2e "the client did not build"
     fi
   fi
 fi
 
-# printf выравнивает по байтам, а не по буквам — дополняем сами.
+# printf pads by bytes, not by letters - pad ourselves.
 cell() {
   local LC_ALL=C.UTF-8 s="$1" width="$2"
   printf '%s%*s' "$s" $((width - ${#s})) ''
 }
 echo
-cell "шаг" 14; cell "итог" 22; echo "время, с"
+cell "step" 14; cell "result" 22; echo "time, s"
 for i in "${!names[@]}"; do
   cell "${names[$i]}" 14; cell "${results[$i]}" 22; echo "${times[$i]}"
 done
 echo
 if [[ $failed == 0 ]]; then
-  echo "проверка пройдена ($SECONDS с)"
+  echo "check passed (${SECONDS} s)"
 else
-  echo "ПРОВЕРКА НЕ ПРОЙДЕНА ($SECONDS с): логи — $logs/"
+  echo "CHECK FAILED (${SECONDS} s): logs in $logs/"
 fi
 exit "$failed"
