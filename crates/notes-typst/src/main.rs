@@ -36,7 +36,37 @@ use notes_core::settings::{Platform, Schema, SettingsStore};
 use notes_core::vault::NoteKind;
 use notes_core::{LibrarySource, NoteId, Notes, NotesConfig, VaultName, Vaults};
 
+/// `println!` that exits quietly (code 0) when the reader closed the pipe
+/// (`notes list | head`): Rust ignores SIGPIPE, and `println!` would panic.
+macro_rules! out {
+    ($($arg:tt)*) => {
+        $crate::write_out(format_args!($($arg)*), true)
+    };
+}
+
+/// `print!` with the same handling of a closed pipe as [`out!`].
+macro_rules! out_raw {
+    ($($arg:tt)*) => {
+        $crate::write_out(format_args!($($arg)*), false)
+    };
+}
+
 mod service;
+
+/// Writes command output to stdout: a closed pipe ends the process with code
+/// 0, another write error with code 1 (the output is lost anyway).
+fn write_out(args: std::fmt::Arguments<'_>, newline: bool) {
+    use std::io::Write as _;
+    let mut stdout = std::io::stdout().lock();
+    let written = stdout.write_fmt(args).and_then(|()| if newline { stdout.write_all(b"\n") } else { Ok(()) });
+    if let Err(e) = written {
+        if e.kind() == std::io::ErrorKind::BrokenPipe {
+            std::process::exit(0);
+        }
+        eprintln!("error: writing the output: {e}");
+        std::process::exit(1);
+    }
+}
 
 /// The app's directory name: `~/.config/<APP>`, `~/.local/share/<APP>`.
 const APP: &str = "baluk-notes";
@@ -353,7 +383,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
     // Without a vault: documentation, the service.
     match &cli.command {
         Command::Docs { topic } => {
-            print!("{}", topic.text());
+            out_raw!("{}", topic.text());
             return Ok(ExitCode::SUCCESS);
         }
         Command::Service { action } => {
@@ -420,8 +450,8 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 note.id_in(notes.vault(), &folder)?
             };
             let main = note.create(notes.vault(), &id)?;
-            println!("{}", notes.vault().storage().display(&main).display());
-            println!("{id}");
+            out!("{}", notes.vault().storage().display(&main).display());
+            out!("{id}");
             eprintln!("in the app: http://{ADDR}/v/{name}/n/{id} (if notes serve is running)");
             Ok(ExitCode::SUCCESS)
         }
@@ -476,7 +506,7 @@ fn rename(notes: &Notes, id: &NoteId, title: &str, dry_run: bool) -> Result<Exit
     // Neither a note nor a book: a folder (missing: the core's "not found" error).
     let kind = if notes.vault().entry(id).is_ok() { RenameKind::Note } else { RenameKind::Folder };
     let plan = notes.rename(kind, id, title, !dry_run)?;
-    println!("{}", plan.to);
+    out!("{}", plan.to);
     let links: Vec<String> = plan.links.iter().map(|l| format!("{} ({})", l.note, l.count)).collect();
     match (links.is_empty(), dry_run) {
         (true, _) => eprintln!("no links to it in other notes"),
@@ -493,13 +523,13 @@ fn vaults_command(vaults: &Vaults, action: Option<VaultsAction>) -> Result<ExitC
     if let Some(VaultsAction::New { name }) = action {
         let name = VaultName::new(name)?;
         let path = vaults.create(&name)?;
-        println!("{}", path.display());
+        out!("{}", path.display());
         eprintln!("in the app: http://{ADDR}/v/{name}/ (if notes serve is running)");
         return Ok(ExitCode::SUCCESS);
     }
     let list = vaults.list()?;
     for name in &list {
-        println!("{name}");
+        out!("{name}");
     }
     if list.is_empty() {
         eprintln!("no vaults: create one: notes vaults new \"Name\" (or in the app)");
@@ -517,17 +547,17 @@ fn info(vaults: &Vaults, data: &Path, arg: Option<&VaultArg>, library_dir: Optio
     match arg {
         Some(arg) => {
             let (name, path) = pick_vault(vaults, Some(arg))?;
-            println!("vault:     {} (\"{name}\")", path.display());
+            out!("vault:     {} (\"{name}\")", path.display());
         }
-        None => println!("vault:     not chosen (--vault \"Name\")"),
+        None => out!("vault:     not chosen (--vault \"Name\")"),
     }
     let names: Vec<String> = vaults.list()?.iter().map(ToString::to_string).collect();
     let names = if names.is_empty() { "none".to_owned() } else { names.join(", ") };
-    println!("vaults:    {names} ({})", vaults.root().display());
-    println!("data:      {} (settings.json, cache/)", data.display());
-    println!("config:    {config} (data = \"...\" sets another data directory)");
-    println!("library:   {library}");
-    println!("server:    http://{ADDR}/ (notes serve)");
+    out!("vaults:    {names} ({})", vaults.root().display());
+    out!("data:      {} (settings.json, cache/)", data.display());
+    out!("config:    {config} (data = \"...\" sets another data directory)");
+    out!("library:   {library}");
+    out!("server:    http://{ADDR}/ (notes serve)");
     Ok(ExitCode::SUCCESS)
 }
 
@@ -710,17 +740,17 @@ fn list(notes: &Notes, json: bool) -> Result<ExitCode> {
         })
         .collect();
     if json {
-        println!("{}", serde_json::to_string_pretty(&items)?);
+        out!("{}", serde_json::to_string_pretty(&items)?);
         return Ok(ExitCode::SUCCESS);
     }
     for item in &items {
         let kind = if item.kind == NoteKind::Book { "  [book]" } else { "" };
         let title = item.title.filter(|t| *t != item.id.name()).map(|t| format!("  \"{t}\"")).unwrap_or_default();
         let tags: String = item.tags.iter().flat_map(|t| ["  #", t.as_str()]).collect();
-        println!("{}{kind}{title}{tags}", item.id);
+        out!("{}{kind}{title}{tags}", item.id);
         for chapter in &item.chapters {
             let tags: String = chapter.tags.iter().flat_map(|t| ["  #", t.as_str()]).collect();
-            println!("  chapter \"{}\"{tags}", chapter.title);
+            out!("  chapter \"{}\"{tags}", chapter.title);
         }
     }
     Ok(ExitCode::SUCCESS)
@@ -738,7 +768,7 @@ fn tags(notes: &Notes) -> Result<ExitCode> {
     let mut sorted: Vec<_> = counts.into_iter().collect();
     sorted.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
     for (tag, count) in sorted {
-        println!("{tag}\t{count}");
+        out!("{tag}\t{count}");
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -749,7 +779,7 @@ fn pdf(notes: &Notes, id: &NoteId, out: Option<PathBuf>, theme: Option<String>) 
     match notes.pdf(id, &theme)? {
         Ok(bytes) => {
             std::fs::write(&out, bytes).with_context(|| format!("write {}", out.display()))?;
-            println!("{} -> {}", id, out.display());
+            out!("{} -> {}", id, out.display());
             Ok(ExitCode::SUCCESS)
         }
         Err(errors) => {
@@ -763,24 +793,24 @@ fn pdf(notes: &Notes, id: &NoteId, out: Option<PathBuf>, theme: Option<String>) 
 
 fn print_check(report: &Report, json: bool) -> Result<ExitCode> {
     if json {
-        println!("{}", serde_json::to_string_pretty(report)?);
+        out!("{}", serde_json::to_string_pretty(report)?);
     } else {
         for n in &report.notes {
             for e in &n.errors {
-                println!("{}: {e}", n.id);
+                out!("{}: {e}", n.id);
             }
             for w in &n.warnings {
-                println!("{}: {w}", n.id);
+                out!("{}: {w}", n.id);
             }
             for l in &n.broken_links {
                 let anchor = l.anchor.as_deref().map(|a| format!(" / {a}")).unwrap_or_default();
-                println!("{}: broken link \"{}{anchor}\": {}", n.id, l.target, l.reason);
+                out!("{}: broken link \"{}{anchor}\": {}", n.id, l.target, l.reason);
             }
         }
         for f in &report.folders {
-            println!("{}: {}", f.file, f.error);
+            out!("{}: {}", f.file, f.error);
         }
-        println!("{}", report.summary());
+        out!("{}", report.summary());
     }
     Ok(if report.is_clean() { ExitCode::SUCCESS } else { ExitCode::from(1) })
 }
