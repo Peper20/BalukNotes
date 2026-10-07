@@ -1,4 +1,4 @@
-// Поверхность с вращением: interactive-surface.
+// A rotatable surface: interactive-surface.
 
 #import "@preview/cetz:0.4.2"
 #import "../theme.typ": fig-shades
@@ -8,13 +8,13 @@
 
 // ── 3D ───────────────────────────────────────────────────────────────────
 //
-// Поверхность нормируется в коробку [-1, 1] × [-1, 1] × [-0.7, 0.7] и
-// рисуется ортогонально: поворот вокруг вертикали на угол `rotation`
-// (азимут), потом наклон на `tilt`. Клиент вращает с того же вида.
+// The surface is normalized into the box [-1, 1] × [-1, 1] × [-0.7, 0.7] and
+// drawn orthographically: a turn around the vertical by `rotation` (azimuth),
+// then a tilt by `tilt`. The client rotates from the same view.
 
 #let _Z = 0.7
 
-/// Экранные координаты и глубина (больше — ближе к зрителю) точки коробки.
+/// Screen coordinates and depth (larger is closer to the viewer) of a box point.
 #let _project(p, θ, φ) = {
   let (x, y, z) = p
   let xr = x * calc.cos(θ) - y * calc.sin(θ)
@@ -22,8 +22,8 @@
   (xr, z * calc.cos(φ) + yr * calc.sin(φ), -yr * calc.cos(φ) + z * calc.sin(φ))
 }
 
-/// Освещённость 0..1 грани с нормалью n (в осях экрана: u, v, глубина).
-/// Свет — от зрителя слева сверху; обе стороны грани освещены одинаково.
+/// Illumination 0..1 of a face with normal n (in screen axes: u, v, depth).
+/// Light comes from the viewer's top left; both sides of a face are lit alike.
 #let _illum(n) = {
   let (a, b, c) = n
   let len = calc.sqrt(a * a + b * b + c * c)
@@ -32,18 +32,18 @@
   calc.abs(a * lu + b * lv + c * ld) / len
 }
 
-/// Цвет грани: смесь тени и света темы (как `--k-fig-*-dark/-light` в CSS).
+/// Face color: a mix of the theme's shadow and light (as `--k-fig-*-dark/-light` in CSS).
 #let _tone(theme, base, k) = {
   let (shadow, light) = fig-shades(theme, base)
   color.mix((shadow, 100% - k * 100%), (light, k * 100%), space: rgb)
 }
 
-/// Поверхность z = f(x, y) с вращением перетаскиванием и ползунками.
-/// formula: "calc.sin(a * x) * calc.cos(y)"; xr, yr — диапазоны (x0, x1).
-/// z: (z0, z1) или auto (по кадру при значениях по умолчанию).
-/// style: "shaded" — грани со светотенью, "wire" — каркас.
-/// color: "face" (по умолчанию), "line", "second", "third".
-/// поворот, наклон — начальный вид (в градусах).
+/// A surface z = f(x, y), rotated by dragging, with sliders.
+/// formula: "calc.sin(a * x) * calc.cos(y)"; xr, yr - ranges (x0, x1).
+/// z: (z0, z1) or auto (from the frame at default values).
+/// style: "shaded" - faces with light and shade, "wire" - a wireframe.
+/// color: "face" (default), "line", "second", "third".
+/// rotation, tilt - the initial view (in degrees).
 #let interactive-surface(formula, xr, yr, params: (:), z: auto, labels: ("x", "y", "z"), n: 24, style: "shaded", color: "face", rotation: -30, tilt: 28, size: 3) = {
   let plist = _params(params, ("x", "y", "calc"))
   let names = ("x", "y") + plist.map(prm => prm.name)
@@ -51,9 +51,9 @@
   let vars = _env(plist)
   let (x0, x1) = xr.map(float)
   let (y0, y1) = yr.map(float)
-  if not (x1 > x0 and y1 > y0) { panic("interactive-surface: нужно x0 < x1 и y0 < y1") }
-  if color not in ("face", "line", "second", "third") { panic("interactive-surface: color — face, line, second или third") }
-  // значения в узлах сетки (n + 1) × (n + 1)
+  if not (x1 > x0 and y1 > y0) { panic("interactive-surface: needs x0 < x1 and y0 < y1") }
+  if color not in ("face", "line", "second", "third") { panic("interactive-surface: color is face, line, second or third") }
+  // values at grid nodes (n + 1) × (n + 1)
   let grid-vals = range(n + 1).map(i => range(n + 1).map(j => {
     let x = x0 + (x1 - x0) * i / n
     let y = y0 + (y1 - y0) * j / n
@@ -66,14 +66,14 @@
       if hi - lo < 1e-9 { (lo - 1, hi + 1) } else { (lo, hi) }
     }
   } else { z.map(float) }
-  if not (z1 > z0) { panic("interactive-surface: нужно z0 < z1") }
+  if not (z1 > z0) { panic("interactive-surface: needs z0 < z1") }
   let data = (
     kind: "3d", f: formula, x: (x0, x1), y: (y0, y1), z: (z0, z1), params: plist,
     labels: labels, n: n, style: style, color: color, view: (rotation, tilt), size: size,
   )
   let (θ, φ) = (rotation * 1deg, tilt * 1deg)
   let S = size / 2
-  // узел → точка коробки
+  // node -> box point
   let to-box(i, j, v) = (-1 + 2 * i / n, -1 + 2 * j / n, -_Z + 2 * _Z * (v - z0) / (z1 - z0))
   let to-screen(p) = { let (u, vv, _) = _project(p, θ, φ); (u * S, vv * S) }
   let frame = canvas(theme => {
@@ -81,12 +81,12 @@
     let fc = theme.color.fig
     let base = fc.at(color)
     let axis = 0.5pt + fc.axis
-    // пол коробки и вертикальное ребро в дальнем углу
+    // the box floor and the vertical edge in the far corner
     let corners = ((-1, -1), (1, -1), (1, 1), (-1, 1))
     let far = corners.sorted(key: ((x, y)) => _project((x, y, 0), θ, φ).at(2)).first()
     line(..corners.map(((x, y)) => to-screen((x, y, -_Z))), close: true, stroke: axis)
     line(to-screen((..far, -_Z)), to-screen((..far, _Z)), stroke: axis)
-    // грани: дальние раньше (алгоритм художника); точки вне [z0, z1] — не рисуем
+    // faces: far ones first (painter's algorithm); points outside [z0, z1] are not drawn
     let faces = ()
     for i in range(n) {
       for j in range(n) {
@@ -104,7 +104,7 @@
       if style == "wire" {
         line(..pts, close: true, stroke: 0.5pt + base)
       } else {
-        // нормаль по диагоналям грани (в осях экрана)
+        // normal from the face diagonals (in screen axes)
         let d1 = range(3).map(c => proj.at(2).at(c) - proj.at(0).at(c))
         let d2 = range(3).map(c => proj.at(3).at(c) - proj.at(1).at(c))
         let nrm = (
@@ -115,9 +115,9 @@
         line(..pts, close: true, fill: _tone(theme, base, _illum(nrm)), stroke: edge)
       }
     }
-    // подписи осей — поверх граней
+    // axis labels - over the faces
     let small-text(src) = text(fill: fc.axis, emph(src))
-    // x — у ближнего к зрителю ребра вдоль x, y — у ближнего вдоль y
+    // x - at the edge along x nearest to the viewer, y - at the nearest one along y
     let nearer(a, b) = if _project(a, θ, φ).at(2) > _project(b, θ, φ).at(2) { a } else { b }
     content(to-screen(nearer((0, -1.22, -_Z), (0, 1.22, -_Z))), small-text(labels.at(0)))
     content(to-screen(nearer((-1.22, 0, -_Z), (1.22, 0, -_Z))), small-text(labels.at(1)))

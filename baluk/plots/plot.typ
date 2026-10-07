@@ -1,4 +1,4 @@
-// График с ползунками: interactive-plot.
+// A plot with sliders: interactive-plot.
 
 #import "@preview/cetz:0.4.2"
 #import "../figures/canvas.typ": canvas
@@ -7,9 +7,9 @@
 
 // ── 2D ───────────────────────────────────────────────────────────────────
 
-/// Участки кривой внутри полосы y ∈ [y0, y1]: точки — (x, y) или (x, none).
-/// Отрезок, пересекающий полосу, обрезается по её краю; отрезок между
-/// точками по разные стороны от полосы — разрыв (асимптота, как у tg x).
+/// Curve pieces inside the band y ∈ [y0, y1]: points are (x, y) or (x, none).
+/// A segment crossing the band is clipped at its edge; a segment between
+/// points on different sides of the band is a gap (an asymptote, as of tg x).
 #let _segments(pts, y0, y1) = {
   let all = ()
   let cur-seg = ()
@@ -21,7 +21,7 @@
       cur-seg = ()
       continue
     }
-    // обрезка отрезка по полосе: параметры входа и выхода t ∈ [0, 1]
+    // clipping a segment by the band: entry and exit parameters t ∈ [0, 1]
     let (t0, t1) = (0.0, 1.0)
     for (bound, above) in ((y0, false), (y1, true)) {
       let out-a = if above { ya > bound } else { ya < bound }
@@ -50,13 +50,13 @@
   all
 }
 
-/// Точки кривой: n + 1 точка на [a, b].
+/// Curve points: n + 1 points on [a, b].
 #let _sample(ff, a, b, n, vars) = range(n + 1).map(i => {
   let x = a + (b - a) * i / n
   (x, _eval(ff, vars + (x: x)))
 })
 
-/// Диапазон y по точкам: без выбросов (2 % с каждой стороны) и с полями.
+/// The y range from points: without outliers (2 % on each side) and with margins.
 #let _range-of(values) = {
   let zz = values.filter(v => v != none).sorted()
   if zz.len() == 0 { return (-1.0, 1.0) }
@@ -67,7 +67,7 @@
   (lo - slack, hi + slack)
 }
 
-/// Кривые: строка, словарь (f:, цвет:, подпись:, пунктир:) или массив таких.
+/// Curves: a string, a dictionary (f:, color:, label:, dashed:) or an array of these.
 #let _curves(spec) = {
   let entries = if type(spec) == array { spec } else { (spec,) }
   let colors = ("line", "second", "third")
@@ -82,12 +82,12 @@
   })
 }
 
-/// График y = f(x) с ползунками параметров.
-/// formula: "a * calc.sin(x)" | (f: "…", color: "second", label: "sin", dashed: true) | массив.
-/// params: (a: (from: 0, to: 2, step: 0.1, value: 1), …) — step по умолчанию 1/100 диапазона,
-///   знач — от.
-/// y: (y0, y1) или auto (по кадру при значениях по умолчанию; лучше задать).
-/// ширина, высота — размер поля графика в см.
+/// A plot of y = f(x) with parameter sliders.
+/// formula: "a * calc.sin(x)" | (f: "...", color: "second", label: "sin", dashed: true) | an array.
+/// params: (a: (from: 0, to: 2, step: 0.1, value: 1), ...) - step defaults to 1/100 of the range,
+///   value to from.
+/// y: (y0, y1) or auto (from the frame at default values; better to give it).
+/// width, height - the plot area size in cm.
 #let interactive-plot(formula, a, b, params: (:), y: auto, labels: ("x", "y"), width: 8, height: 5, n: 160) = {
   let plist = _params(params, ("x", "y", "calc"))
   let names = ("x",) + plist.map(prm => prm.name)
@@ -95,10 +95,10 @@
   let trees = curves.map(crv => _formula(crv.f, names))
   let vars = _env(plist)
   let (a, b) = (float(a), float(b))
-  if not (b > a) { panic("interactive-plot: нужно a < b") }
+  if not (b > a) { panic("interactive-plot: needs a < b") }
   let points = trees.map(item => _sample(item, a, b, n, vars))
   let (y0, y1) = if y == auto { _range-of(points.join().map(p => p.at(1))) } else { y.map(float) }
-  if not (y1 > y0) { panic("interactive-plot: нужно y0 < y1") }
+  if not (y1 > y0) { panic("interactive-plot: needs y0 < y1") }
   let data = (
     kind: "2d", curves: curves, x: (a, b), y: (y0, y1), params: plist,
     labels: labels, width: width, height: height,
@@ -108,7 +108,7 @@
   let frame = canvas(theme => {
     import cetz.draw: *
     let fc = theme.color.fig
-    // оси: через ноль, если он в диапазоне, иначе по краю
+    // axes: through zero if it is in the range, else along the edge
     let ox = if a <= 0 and 0 <= b { 0.0 } else { a }
     let oy = if y0 <= 0 and 0 <= y1 { 0.0 } else { y0 }
     let (hx, hy) = (_tick-step(b - a), _tick-step(y1 - y0))

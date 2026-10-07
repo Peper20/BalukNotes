@@ -1,25 +1,25 @@
-// Помощники HTML-режима.
+// HTML mode helpers.
 //
-// Одна и та же заметка собирается в PDF (вёрстка страницами) и в HTML
-// (приложение). В HTML-экспорте Typst нет страниц, а `grid`, `stack`,
-// `align`, `place`, `v`, `h` игнорируются — вместе с содержимым. Поэтому у
-// каждого блока библиотеки две ветки: PDF — вёрстка страницами A4, HTML —
-// элементы с классами `k-…`, а вид задаёт CSS (`app/src/baluk-css/`, сборка — `assets/baluk.css`).
+// One note builds both to PDF (paged layout) and to HTML (the app). Typst's
+// HTML export has no pages and drops `grid`, `stack`, `align`, `place`, `v`,
+// `h` together with their content. So every library block has two branches:
+// PDF - A4 paged layout, HTML - elements with `k-...` classes styled by CSS
+// (`app/src/baluk-css/`, built into `assets/baluk.css`).
 //
-// Цвета в HTML не вшиваются: их задают CSS-переменные темы. Исключение —
-// рисунки (SVG из `html.frame`): заметка компилируется по разу на тему, и
-// приложение склеивает варианты каждого `div.k-frame`.
+// HTML has no baked-in colors: theme CSS variables set them. The exception is
+// figures (SVG from `html.frame`): a note is compiled once per theme and the
+// app merges the variants of each `div.k-frame`.
 
-/// HTML ли сейчас собираем. Только внутри `context`.
+/// Whether this is an HTML build. Only inside `context`.
 #let is-web() = target() == "html"
 
-/// Элемент с классом: elem("div", "k-box k-def", body, style: "…").
+/// An element with a class: elem("div", "k-box k-def", body, style: "...").
 #let elem(tag, cls, body, ..attrs) = html.elem(tag, attrs: (class: cls) + attrs.named(), body)
 
-/// Рисунок как SVG в обёртке, которую находит склейка тем.
-/// kind: "fig" — рисунок библиотеки (на экране чуть крупнее, см. CSS),
-///      "layout" — страховка для grid/stack/place: верстается шириной
-///      текста страницы PDF, иначе колонки 1fr схлопываются в ноль.
+/// A figure as SVG in the wrapper the theme merge looks for.
+/// kind: "fig" - a library figure (slightly larger on screen, see CSS),
+///      "layout" - the fallback for grid/stack/place: laid out at the PDF
+///      text width, otherwise 1fr columns collapse to zero.
 #let frame(body, kind: "fig") = if kind == "fig" {
   elem("div", "k-frame k-fig", html.frame(body))
 } else {

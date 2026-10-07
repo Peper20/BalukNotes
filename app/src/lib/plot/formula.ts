@@ -33,9 +33,9 @@ export function parse(s: string, names: string[]): Node {
   const t = (i: number) => toks[i] ?? "";
   const end = toks.length;
   const fail = (msg: string): never => {
-    throw new FormulaError(`формула «${s}»: ${msg}`);
+    throw new FormulaError(`formula "${s}": ${msg}`);
   };
-  if (end === 0) fail("пустая формула");
+  if (end === 0) fail("empty formula");
 
   // Levels: 0 - sum, 1 - product, 2 - unary sign and operand. Precedence as
   // in Typst: unary minus binds tighter than `*` and `/`.
@@ -50,7 +50,7 @@ export function parse(s: string, names: string[]): Node {
       }
       return [l, j];
     }
-    if (i >= end) fail("формула оборвалась");
+    if (i >= end) fail("the formula ends too early");
     const tok = t(i);
     if (tok === "-" || tok === "+") {
       const [a, j] = level(i + 1, 2);
@@ -58,7 +58,7 @@ export function parse(s: string, names: string[]): Node {
     }
     if (tok === "(") {
       const [a, j] = level(i + 1, 0);
-      if (j >= end || t(j) !== ")") fail("не хватает «)»");
+      if (j >= end || t(j) !== ")") fail("missing `)`");
       return [a, j + 1];
     }
     if (/^\d/.test(tok)) return [{ k: "n", v: Number(tok) }, i + 1];
@@ -67,8 +67,8 @@ export function parse(s: string, names: string[]): Node {
       const constant = CONSTANTS[name];
       if (constant !== undefined) return [{ k: "n", v: constant }, i + 1];
       const arity = FUNCTIONS[name];
-      if (arity === undefined) return fail(`нет функции «${tok}»`);
-      if (t(i + 1) !== "(") fail(`после «${tok}» нужны скобки`);
+      if (arity === undefined) return fail(`no function \`${tok}\``);
+      if (t(i + 1) !== "(") fail(`\`${tok}\` needs parentheses`);
       const args: Node[] = [];
       let [a, j] = level(i + 2, 0);
       args.push(a);
@@ -76,19 +76,19 @@ export function parse(s: string, names: string[]): Node {
         [a, j] = level(j + 1, 0);
         args.push(a);
       }
-      if (j >= end || t(j) !== ")") fail(`не хватает «)» после аргументов «${tok}»`);
-      if (args.length !== arity) fail(`«${tok}» принимает аргументов: ${arity}`);
+      if (j >= end || t(j) !== ")") fail(`missing \`)\` after the arguments of \`${tok}\``);
+      if (args.length !== arity) fail(`\`${tok}\` takes arguments: ${arity}`);
       return [{ k: "f", n: name, args }, j + 1];
     }
     if (names.includes(tok)) return [{ k: "v", n: tok }, i + 1];
-    if (tok === "^") fail("степень пишется calc.pow(x, 2)");
-    if (/^[\p{L}_]/u.test(tok)) fail(`неизвестное имя «${tok}»`);
-    return fail(`непонятный знак «${tok}»`);
+    if (tok === "^") fail("write a power as calc.pow(x, 2)");
+    if (/^[\p{L}_]/u.test(tok)) fail(`unknown name \`${tok}\``);
+    return fail(`unexpected character \`${tok}\``);
   }
 
   const [node, i] = level(0, 0);
-  if (t(i) === "^") fail("степень пишется calc.pow(x, 2)");
-  if (i < end) fail(`лишнее «${t(i)}»`);
+  if (t(i) === "^") fail("write a power as calc.pow(x, 2)");
+  if (i < end) fail(`extra \`${t(i)}\``);
   return node;
 }
 

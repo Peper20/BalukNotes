@@ -1,13 +1,14 @@
-// Слова оформления на языке заметки: «Определение», «Рис.», «Глава»…
+// Layout words in the note's language: "Definition", "Fig.", "Chapter"...
 //
-// Язык — параметр `lang:` шаблона (`note`, `book`), по умолчанию "ru"; он
-// же ставит `set text(lang:)` (переносы, кавычки). Языка нет в словаре —
-// английские слова (`notes check` предупреждает). Свои слова поверх словаря —
-// `words: (figure: "Abb.", …)` у шаблона; чего нет в `words:`, тоже берётся
-// из английского. Словари полные и с одинаковыми ключами (тест
-// `--test library`); новый язык — ещё один словарь с теми же ключами.
+// The language is the template's `lang:` parameter (`note`, `book`), "ru" by
+// default; it also sets `set text(lang:)` (hyphenation, quotes). A language
+// missing from the dictionaries gets English words (`notes check` warns).
+// Own words over the dictionary - the template's `words: (figure: "Abb.",
+// ...)`; what `words:` lacks also comes from English. The dictionaries are
+// complete and share keys (test `--test library`); a new language is one
+// more dictionary with the same keys.
 //
-// Сообщения об ошибках библиотеки — по-русски на любом языке заметки.
+// Library error messages are in English whatever the note's language.
 
 #let words = (
   ru: (
@@ -64,21 +65,21 @@
   ),
 )
 
-/// Свои слова документа (`words:` шаблона) — поверх словаря языка.
+/// The document's own words (the template's `words:`) over the language dictionary.
 #let _own-words = state("baluk-words", (:))
 
-/// Проверяет `words:` шаблона: словарь «ключ → строка» с ключами словаря.
+/// Checks the template's `words:`: a dictionary "key -> string" with dictionary keys.
 #let _check-words(own) = {
-  assert(type(own) == dictionary, message: "words — словарь, например (figure: \"Abb.\", chapter: \"Kapitel\")")
+  assert(type(own) == dictionary, message: "words is a dictionary, e.g. (figure: \"Abb.\", chapter: \"Kapitel\")")
   for (key, value) in own {
-    assert(key in words.en, message: "words: нет слова «" + key + "»; есть: " + words.en.keys().join(", "))
-    assert(type(value) == str, message: "words: «" + key + "» — строка, например \"" + words.en.at(key) + "\"")
+    assert(key in words.en, message: "words: no word \"" + key + "\"; known: " + words.en.keys().join(", "))
+    assert(type(value) == str, message: "words: \"" + key + "\" is a string, e.g. \"" + words.en.at(key) + "\"")
   }
   own
 }
 
-/// Слово оформления: своё (`words:` шаблона) или из словаря языка текста
-/// (`text.lang`), а языка нет в словарях — из английского; нужен `context`.
+/// A layout word: own (the template's `words:`) or from the dictionary of the
+/// text language (`text.lang`), English if the language has none; needs `context`.
 #let word(key) = {
   let own = _own-words.get()
   if key in own { own.at(key) } else { words.at(text.lang, default: words.en).at(key) }

@@ -1,15 +1,15 @@
-// Диаграммы по данным: оси с засечками, сетка, легенда и ряды.
+// Data charts: axes with ticks, a grid, a legend and series.
 //
-// Отличие от `axes` + `plot` из figures.typ: там оси пересекаются в начале
-// координат и рисуют математическую картинку в единицах холста. Здесь — поле
-// с рамкой слева и снизу, данные в своих единицах (секунды, мегабайты,
-// количество), и всё масштабируется само.
+// Unlike `axes` + `plot` from figures.typ: there the axes cross at the origin
+// and draw a math picture in canvas units. Here - a plot area framed on the
+// left and bottom, data in its own units (seconds, megabytes, counts), and
+// everything scales by itself.
 //
 //   #fig(canvas(chart(
 //     (kind: "bars", data: (([n²], 120), ([n log n], 14), ([n], 3))),
-//   )), [Время работы])
+//   )), [Running time])
 //
-// cetz-plot тут не используется: версия из кэша не запускается на Typst 0.15.
+// cetz-plot is not used here: the cached version does not run on Typst 0.15.
 
 #import "@preview/cetz:0.4.2"
 #import "theme.typ": current-theme, is-dark
@@ -17,15 +17,15 @@
 
 #let _draw = cetz.draw
 
-// ── Числа и засечки ───────────────────────────────────────────────────────
+// ── Numbers and ticks ─────────────────────────────────────────────────────
 #let _num(v) = {
   let r = calc.round(v, digits: 3)
   let s = str(r)
   let s = if s.ends-with(".0") { s.slice(0, -2) } else { s }
-  s.replace(".", ",") // десятичная запятая: подписи осей — обычный текст
+  s.replace(".", ",") // decimal comma: axis labels are plain text
 }
 
-// «Круглый» шаг засечек: 1, 2, 5 × 10^k — ближайший к размаху / сколько.
+// A "round" tick step: 1, 2, 5 × 10^k - the nearest to span / count.
 #let _tick-step(span, count) = {
   if span <= 0 { return 1 }
   let rough = span / calc.max(count, 1)
@@ -47,7 +47,7 @@
   result
 }
 
-// ── Диапазоны по рядам ────────────────────────────────────────────────────
+// ── Ranges from series ────────────────────────────────────────────────────
 #let _series-points(series) = {
   let kind = series.at("kind", default: "line")
   if kind == "function" {
@@ -60,14 +60,14 @@
   }
 }
 
-// ── Диаграмма ─────────────────────────────────────────────────────────────
-/// Ряды — позиционные словари:
+// ── Chart ─────────────────────────────────────────────────────────────────
+/// Series are positional dictionaries:
 ///   (kind: "line",  data: ((x, y), ...), label:, color:, points: true, dashed: false)
 ///   (kind: "points",    data: ((x, y), ...), label:, color:)
 ///   (kind: "steps",  data: ((x, y), ...), label:, color:)
-///   (kind: "bars",  data: ((label, val), ...) или (val, ...), color:)
+///   (kind: "bars",  data: ((label, val), ...) or (val, ...), color:)
 ///   (kind: "function",  f: x => ..., from:, to:, label:, color:)
-/// Диапазоны x и y по умолчанию считаются по данным (auto).
+/// The x and y ranges are computed from the data by default (auto).
 /// legend: "right" | "inside" | none.
 #let chart(
   ..series-list,
@@ -113,7 +113,7 @@
     (py - y0) / (y1 - y0) * height,
   )
 
-  // ── сетка и засечки
+  // ── grid and ticks
   let tx = if ticks-x != auto { ticks-x } else if bar-series.len() > 0 {
     bar-series.first().data.enumerate().map(((i, _)) => i)
   } else { _ticks(x0, x1, 5) }
@@ -148,7 +148,7 @@
     content((-0.72, height / 2), anchor: "south", angle: 90deg, text(size: 0.85em, labels.at(1)))
   }
 
-  // ── ряды
+  // ── series
   let colors = ("line", "second", "third", "accent")
   let legend-items = ()
   for (i, series) in all-series.enumerate() {
@@ -193,7 +193,7 @@
     }
   }
 
-  // ── легенда
+  // ── legend
   if legend != none and legend-items.len() > 0 {
     let (lx, ly) = if legend == "inside" { (0.25, height - 0.25) } else { (width + 0.35, height) }
     for (j, (kind, col, label)) in legend-items.enumerate() {

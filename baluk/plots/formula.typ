@@ -1,9 +1,9 @@
-// Разбор и вычисление формул интерактивных рисунков. Клиент приложения
-// (`app/src/lib/plot/formula.ts`) повторяет этот файл ПОСТРОЧНО: меняешь
-// одно — меняй и другое; сверка — фикстура `tests/vault/Рисунки/Интерактив.typ`
-// (её снимок читает Vitest).
+// Parsing and evaluation of interactive figure formulas. The app client
+// (`app/src/lib/plot/formula.ts`) repeats this file LINE BY LINE: change one -
+// change the other; the cross-check is the fixture
+// `tests/vault/Рисунки/Интерактив.typ` (Vitest reads its snapshot).
 
-// ── Разбор формулы ───────────────────────────────────────────────────────
+// ── Formula parsing ───────────────────────────────────────────────────────
 
 #let _functions = (
   sin: 1, cos: 1, tan: 1, asin: 1, acos: 1, atan: 1, exp: 1, ln: 1, log: 1,
@@ -13,14 +13,14 @@
 
 #let _token-re = regex("\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[\p{L}_][\p{L}\p{N}_]*(?:\.[\p{L}_][\p{L}\p{N}_]*)?|[-+*/(),]|\S")
 
-/// Лексемы формулы (пробелы пропускаются).
+/// Formula tokens (spaces are skipped).
 #let _tokens(src) = src.matches(_token-re).map(m => m.text)
 
-#let _fail(src, txt) = panic("формула «" + src + "»: " + txt)
+#let _fail(src, txt) = panic("formula \"" + src + "\": " + txt)
 
-/// Разбор выражения уровня `level` с лексемы `i`: (узел, следующая лексема).
-/// Уровни: 0 — сумма, 1 — произведение, 2 — унарный знак и операнд.
-/// Приоритеты как в Typst: унарный минус сильнее `*` и `/`.
+/// Parses an expression of level `level` from token `i`: (node, next token).
+/// Levels: 0 - sum, 1 - product, 2 - unary sign and operand.
+/// Precedence as in Typst: unary minus binds tighter than `*` and `/`.
 #let _parse(toks, i, level, names, src) = {
   let ntok = toks.len()
   if level < 2 {
@@ -33,7 +33,7 @@
     }
     return (cur, i)
   }
-  if i >= ntok { _fail(src, "формула оборвалась") }
+  if i >= ntok { _fail(src, "the formula ends too early") }
   let cur = toks.at(i)
   if cur == "-" or cur == "+" {
     let (operand, j) = _parse(toks, i + 1, 2, names, src)
@@ -41,7 +41,7 @@
   }
   if cur == "(" {
     let (operand, j) = _parse(toks, i + 1, 0, names, src)
-    if j >= ntok or toks.at(j) != ")" { _fail(src, "не хватает «)»") }
+    if j >= ntok or toks.at(j) != ")" { _fail(src, "missing `)`") }
     return (operand, j + 1)
   }
   if cur.match(regex("^\d")) != none { return ((k: "n", v: float(cur)), i + 1) }
@@ -49,9 +49,9 @@
     let name = cur.slice(5)
     if name in _constants { return ((k: "n", v: _constants.at(name)), i + 1) }
     if name not in _functions {
-      _fail(src, "нет функции «" + cur + "»; есть calc." + _functions.keys().join(", calc.") + ", calc.pi, calc.e")
+      _fail(src, "no function `" + cur + "`; available: calc." + _functions.keys().join(", calc.") + ", calc.pi, calc.e")
     }
-    if i + 1 >= ntok or toks.at(i + 1) != "(" { _fail(src, "после «" + cur + "» нужны скобки") }
+    if i + 1 >= ntok or toks.at(i + 1) != "(" { _fail(src, "`" + cur + "` needs parentheses") }
     let fargs = ()
     let j = i + 2
     let (operand, j) = _parse(toks, j, 0, names, src)
@@ -61,35 +61,35 @@
       fargs.push(operand)
       j = k
     }
-    if j >= ntok or toks.at(j) != ")" { _fail(src, "не хватает «)» после аргументов «" + cur + "»") }
+    if j >= ntok or toks.at(j) != ")" { _fail(src, "missing `)` after the arguments of `" + cur + "`") }
     if fargs.len() != _functions.at(name) {
-      _fail(src, "«" + cur + "» принимает аргументов: " + str(_functions.at(name)))
+      _fail(src, "`" + cur + "` takes arguments: " + str(_functions.at(name)))
     }
     return ((k: "f", n: name, args: fargs), j + 1)
   }
   if cur in names { return ((k: "v", n: cur), i + 1) }
-  if cur == "^" { _fail(src, "степень пишется calc.pow(x, 2)") }
+  if cur == "^" { _fail(src, "write a power as calc.pow(x, 2)") }
   if cur.match(regex("^[\p{L}_]")) != none {
-    _fail(src, "неизвестное имя «" + cur + "»; можно: " + names.join(", ") + ", calc.…")
+    _fail(src, "unknown name `" + cur + "`; allowed: " + names.join(", ") + ", calc....")
   }
-  _fail(src, "непонятный знак «" + cur + "»")
+  _fail(src, "unexpected character `" + cur + "`")
 }
 
-/// Разбирает формулу с переменными `names` (x, y, параметры).
+/// Parses a formula with the variables `names` (x, y, parameters).
 #let _formula(src, names) = {
   let toks = _tokens(src)
-  if toks.len() == 0 { _fail(src, "пустая формула") }
+  if toks.len() == 0 { _fail(src, "empty formula") }
   let (node, i) = _parse(toks, 0, 0, names, src)
-  if i < toks.len() and toks.at(i) == "^" { _fail(src, "степень пишется calc.pow(x, 2)") }
-  if i < toks.len() { _fail(src, "лишнее «" + toks.at(i) + "»") }
+  if i < toks.len() and toks.at(i) == "^" { _fail(src, "write a power as calc.pow(x, 2)") }
+  if i < toks.len() { _fail(src, "extra `" + toks.at(i) + "`") }
   node
 }
 
-// Число годно: не none, не NaN, не бесконечность.
+// A number is valid: not none, not NaN, not infinity.
 #let _valid(v) = v != none and v == v and calc.abs(v) < 1e300
 
-/// Значение узла при переменных `vars` (словарь). Вне области определения
-/// (деление на ноль, корень из отрицательного…) — none.
+/// The node value with the variables `vars` (a dictionary). Outside the domain
+/// (division by zero, the root of a negative...) - none.
 #let _eval(nd, vars) = {
   let k = nd.k
   if k == "n" { return nd.v }
@@ -106,7 +106,7 @@
     let r = if nd.o == "+" { a + b } else if nd.o == "-" { a - b } else if nd.o == "*" { a * b } else if b == 0 { none } else { a / b }
     return if _valid(r) { r } else { none }
   }
-  // функция
+  // a function
   let a = _eval(nd.args.at(0), vars)
   if a == none { return none }
   let fname = nd.n

@@ -1,26 +1,27 @@
-// Ссылки между заметками хранилища.
+// Links between vault notes.
 //
-//   #see("Сеть/SSH")                       → название заметки: «SSH: основы»
-//   #see("Сеть/SSH", anchor: "Туннели")      → «Туннели»
-//   #see("Сеть/SSH", anchor: "Туннели")[про туннели]
+//   #see("Network/SSH")                       -> the note title: "SSH basics"
+//   #see("Network/SSH", anchor: "Tunnels")    -> "Tunnels"
+//   #see("Network/SSH", anchor: "Tunnels")[about tunnels]
 //
-// Путь — от корня хранилища, без `.typ`; книга — путь к её папке. Якорь —
-// текст заголовка (как в Obsidian: «Смена порта») или имя метки. Название
-// цели (`title:` её шаблона, иначе имя файла) даёт приложение — файл
-// `/_vault/title/<путь>`: переименовали заметку — подписи ссылок следом.
+// The path is from the vault root, without `.typ`; a book is the path to its
+// folder. The anchor is a heading text (as in Obsidian: "Changing the port")
+// or a label name. The target title (`title:` of its template, else the file
+// name) comes from the app as the file `/_vault/title/<path>`: rename a note
+// and link texts follow.
 //
-// В HTML получается <a class="k-link" data-k-target data-k-anchor>: адрес
-// ставит приложение, оно же проверяет, что заметка и заголовок существуют
-// (`notes check`), и строит по этим ссылкам обратные ссылки и граф. В PDF
-// ссылка — просто текст цвета акцента: других заметок в PDF нет.
+// HTML gets <a class="k-link" data-k-target data-k-anchor>: the app sets the
+// address, checks that the note and heading exist (`notes check`) and builds
+// backlinks and the graph from these links. In PDF a link is plain text in
+// the accent color: there are no other notes in a PDF.
 
 #import "theme.typ": current-theme
 #import "web.typ": is-web, elem
 
 #let see(id, anchor: none, ..body-args) = {
-  assert(type(id) == str, message: "see: путь — строка, например \"Сеть/SSH\"")
-  assert(not id.ends-with(".typ"), message: "see: путь без .typ: \"" + id.trim(".typ", at: end) + "\"")
-  assert(anchor == none or type(anchor) == str, message: "see: anchor — строка (текст заголовка или метка)")
+  assert(type(id) == str, message: "see: the path is a string, e.g. \"Network/SSH\"")
+  assert(not id.ends-with(".typ"), message: "see: a path without .typ: \"" + id.trim(".typ", at: end) + "\"")
+  assert(anchor == none or type(anchor) == str, message: "see: anchor is a string (a heading text or a label)")
   let display-text = if body-args.pos().len() > 0 { body-args.pos().at(0) } else if anchor != none { anchor } else {
     read("/_vault/title/" + id)
   }

@@ -1,6 +1,6 @@
-// Шаблон документа: страница, шрифты, заголовки, колонтитулы, таблицы,
-// подписи, титул и оглавление. Вся «вёрстка» живёт здесь; главы содержат
-// только текст и вызовы блоков.
+// The document template: page, fonts, headings, running heads, tables,
+// captions, title page and contents. All the "layout" lives here; chapters
+// contain only text and block calls.
 
 #import "theme.typ": _theme-state, _doc-kind, themes, current-theme, pale
 #import "code.typ": tm-theme, code-theme
@@ -8,15 +8,15 @@
 #import "web.typ": is-web, elem, frame
 #import "i18n.typ": word, _own-words, _check-words
 
-// ── Мелочи ────────────────────────────────────────────────────────────────
+// ── Small things ──────────────────────────────────────────────────────────
 #let _margin-left(theme) = theme.page.margin.at("left", default: theme.page.margin.at("x", default: 2cm))
 #let _margin-right(theme) = theme.page.margin.at("right", default: theme.page.margin.at("x", default: 2cm))
 #let _margin-top(theme) = theme.page.margin.at("top", default: theme.page.margin.at("y", default: 2.5cm))
 
 #let _chapter-number() = counter(heading).get().first()
 
-// Название текущей главы для колонтитула (последняя глава до этой страницы
-// или на ней).
+// The current chapter title for the running head (the last chapter before
+// this page or on it).
 #let _current-chapter() = {
   let before = query(heading.where(level: 1).before(here()))
   let on-page = query(heading.where(level: 1)).filter(h => h.location().page() == here().page())
@@ -24,7 +24,7 @@
 }
 #let _chapter-page() = query(heading.where(level: 1)).any(h => h.location().page() == here().page())
 
-// Сброс счётчиков в начале главы (нумерация «глава.n»).
+// Counter reset at a chapter start (numbering "chapter.n").
 #let _reset-counters() = {
   counter("k-stmt").update(0)
   counter("k-example").update(0)
@@ -34,10 +34,10 @@
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// Заголовки глав
+// Chapter headings
 // ═════════════════════════════════════════════════════════════════════════
-// Надпись разрядкой, название, линейка и бледная крупная цифра справа —
-// развитие шапки главы из конспекта по матану.
+// A letter-spaced label, the title, a rule and a large pale digit on the
+// right - grown from the chapter header of the calculus notes.
 #let _chapter-heading(theme, it) = {
   let acc = theme.color.accent
   let numbered = it.numbering != none
@@ -57,7 +57,7 @@
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// Разделы и подразделы
+// Sections and subsections
 // ═════════════════════════════════════════════════════════════════════════
 #let _section-heading(theme, it) = {
   let acc = theme.color.accent
@@ -75,7 +75,7 @@
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// Колонтитулы
+// Running heads
 // ═════════════════════════════════════════════════════════════════════════
 #let _page-header(theme) = context {
   if _chapter-page() { return }
@@ -94,7 +94,7 @@
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// Титульный лист
+// Title page
 // ═════════════════════════════════════════════════════════════════════════
 #let _title-page(theme, kind, title, subtitle, author, date, description) = {
   let acc = theme.color.accent
@@ -118,13 +118,13 @@
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// HTML: приложение
+// HTML: the app
 // ═════════════════════════════════════════════════════════════════════════
-// Страниц, колонтитулов, титула и оглавления нет: оглавление строит
-// приложение. Размеры и цвета задаёт CSS, здесь — только разметка.
+// No pages, running heads, title page or contents: the app builds the
+// contents. CSS sets sizes and colors, here is only the markup.
 
-// Ссылки на заголовки и рисунки: только номер, как в PDF. В заметке номера
-// заголовков по умолчанию скрыты — ссылка на раздел показывает его название.
+// References to headings and figures: only the number, as in PDF. In a note
+// heading numbers are hidden by default - a reference to a section shows its title.
 #let _ref(doc-kind, it) = {
   let el = it.element
   if el == none { return it }
@@ -138,18 +138,18 @@
   } else { it }
 }
 
-// Номер рисунка: в книге «глава.n», в заметке — сквозной.
+// Figure number: "chapter.n" in a book, continuous in a note.
 #let _fig-numbering(doc-kind) = if doc-kind == "note" { "1" } else {
   n => numbering("1.1", counter(heading).get().first(), n)
 }
 
-/// Первое семейство шрифта из `text.font` (строка, массив, словарь с `name`).
+/// The first font family from `text.font` (a string, an array, a dictionary with `name`).
 #let _family(font) = {
   let first = if type(font) == array { font.first() } else { font }
   if type(first) == dictionary { first.name } else { first }
 }
 
-/// Длина Typst (pt, em или их сумма) → длина CSS.
+/// A Typst length (pt, em or their sum) -> a CSS length.
 #let _css-length(len) = {
   let num(x) = str(calc.round(x, digits: 4)).replace("−", "-")
   let parts = ()
@@ -159,30 +159,30 @@
 }
 
 #let _web-template(theme, doc-kind, kind, title, subtitle, author, date, description, tags, body) = {
-  // Шрифт, кегль и цвет в HTML-разметку не попадают (их задаёт CSS), но их
-  // наследуют рисунки: html.frame верстается как страница PDF. Без этого
-  // подписи на рисунках — чёрные (не видно в тёмной теме) и чужим шрифтом.
+  // Font, size and color do not get into the HTML markup (CSS sets them),
+  // but figures inherit them: html.frame lays out like a PDF page. Without
+  // this, figure labels are black (invisible in a dark theme) and in a foreign font.
   set text(font: theme.font.text, size: theme.size.text, fill: theme.color.text)
   show math.equation: set text(font: theme.font.math)
   show raw: set text(font: theme.font.code)
-  // Номера заголовков выдаются всегда (span.k-num): показывать ли их, решает
-  // настройка клиента, без перекомпиляции.
+  // Heading numbers are always emitted (span.k-num): whether to show them is
+  // a client setting, without recompiling.
   set heading(numbering: "1.1")
-  // Заголовок: <h2…h6>; <h1> занят названием. Класс k-hN — уровень
-  // оформления: в книге `=` — глава (k-h1), в заметке `=` — раздел (k-h2).
+  // A heading: <h2...h6>; <h1> is taken by the title. The class k-hN is the
+  // style level: in a book `=` is a chapter (k-h1), in a note `=` is a section (k-h2).
   let shift = if doc-kind == "note" { 1 } else { 0 }
   show heading: it => {
     if it.level == 1 and doc-kind == "book" { _reset-counters() }
     let tag = "h" + str(calc.min(it.level + 1, 6))
     context {
       let number = if it.numbering != none { counter(heading).display(it.numbering) }
-      // data-num у главы — для крупной бледной цифры справа (CSS ::after).
+      // data-num of a chapter - for the large pale digit on the right (CSS ::after).
       let is-chapter = it.level == 1 and doc-kind == "book"
       let attrs = if is-chapter and number != none { ("data-num": str(counter(heading).get().first())) } else { (:) }
-      // Метка `= Раздел <метка>` — это id: по нему ведут ссылки #see(anchor: "метка").
+      // The label `= Section <label>` is the id: #see(anchor: "label") links lead to it.
       if it.has("label") { attrs.insert("id", str(it.label)) }
       elem(tag, "k-h k-h" + str(calc.min(it.level + shift, 4)), ..attrs, {
-        // «Глава» перед номером главы рисует CSS (настройка вида) — слово на языке заметки.
+        // CSS draws "Chapter" before the chapter number (a view setting) - the word in the note's language.
         let word-attrs = if is-chapter { ("data-word": word("chapter")) } else { (:) }
         if number != none { elem("span", "k-num", ..word-attrs, number) }
         it.body
@@ -200,10 +200,10 @@
     it.body
   })
 
-  // Страховка: в HTML-экспорте содержимое этих элементов пропадает целиком.
-  // Выравнивание — классом, раскладку — SVG-кадром (текст в нём не
-  // выделяется, но ничего не теряется). Своё в библиотеке их не использует.
-  // Внутри кадра (html.frame) вёрстка снова постраничная — там не трогаем.
+  // Fallback: HTML export drops the content of these elements entirely.
+  // Alignment becomes a class, layout an SVG frame (its text cannot be
+  // selected, but nothing is lost). The library itself does not use them.
+  // Inside a frame (html.frame) layout is paged again - leave it alone there.
   show align: it => context if is-web() {
     let ax = it.alignment.x
     let cls = if ax == center { "k-center" } else if ax == right or ax == end { "k-right" } else { "k-left" }
@@ -212,12 +212,12 @@
   show grid: it => context if is-web() { frame(it, kind: "layout") } else { it }
   show stack: it => context if is-web() { frame(it, kind: "layout") } else { it }
   show place: it => context if is-web() { frame(it.body, kind: "layout") } else { it }
-  // Отступы `h`/`v` HTML-экспорт выбрасывает (с предупреждением). Абсолютная
-  // величина (pt, em и их сумма) — пустой элемент с отступом: размер —
-  // переменной `--k-h`/`--k-v`, правило — в CSS. Доли (`1fr`) и проценты
-  // без страницы смысла не имеют — остаются как есть (и предупреждение).
-  // В формулах `h` (и `quad`, `thin`) Typst сам делает `<mspace>` — их не
-  // трогаем: внутри формулы шрифт — математический темы.
+  // HTML export drops `h`/`v` spacing (with a warning). An absolute amount
+  // (pt, em and their sum) becomes an empty element with spacing: the size is
+  // the variable `--k-h`/`--k-v`, the rule is in CSS. Fractions (`1fr`) and
+  // percentages make no sense without a page - left as is (with the warning).
+  // In formulas Typst itself makes `h` (and `quad`, `thin`) an `<mspace>` -
+  // leave them: inside a formula the font is the theme's math font.
   let math-font = lower(_family(theme.font.math))
   show h: it => context if is-web() and type(it.amount) == length and lower(_family(text.font)) != math-font {
     elem("span", "k-h", ..("style": "--k-h: " + _css-length(it.amount)), [])
@@ -226,8 +226,8 @@
     elem("div", "k-v", ..("style": "--k-v: " + _css-length(it.amount)), [])
   } else { it }
 
-  // Весь документ — в <article data-doc>: по виду документа (а не по месту
-  // файла в хранилище) CSS решает, показывать ли номера и «Главу N».
+  // The whole document is in <article data-doc>: by the document kind (not by
+  // the file's place in the vault) CSS decides whether to show numbers and "Chapter N".
   elem("article", "k-doc", ..("data-doc": doc-kind, lang: text.lang), {
   if title != none {
     elem("header", "k-title", {
@@ -247,24 +247,24 @@
   })
 }
 
-// Общее для книги и заметки в PDF: ссылки, списки, код, таблицы, рисунки,
-// титул. Заголовки уже настроены в _pdf-шаблон.
+// Shared by book and note in PDF: references, lists, code, tables, figures,
+// title. Headings are already set up in _pdf-template.
 #let _pdf-body(theme, doc-kind, kind, title, subtitle, author, date, description, title-page, toc, depth, body) = {
   let acc = theme.color.accent
 
-  // Ссылки: только номер, падежное слово пишется в тексте руками
-  // («в разделе @sec-x»): typst ставит слово в именительном падеже.
-  // То же для рисунков: пишем «на рис. @метка», получаем «на рис. 2.3».
+  // References: only the number, the inflected word is written in the text by
+  // hand ("в разделе @sec-x"): typst would put the word in the nominative case.
+  // The same for figures: write "на рис. @label", get "на рис. 2.3".
   show ref: _ref.with(doc-kind)
   show link: set text(fill: acc)
 
-  // Списки
+  // Lists
   set list(marker: (text(fill: acc, "•"), text(fill: acc, "–"), text(fill: acc, "·")), indent: 0.4em, body-indent: 0.55em)
   set enum(numbering: n => text(fill: acc, weight: "bold", [#n.]), indent: 0.2em, body-indent: 0.5em)
   set terms(separator: [: ], hanging-indent: 1.2em)
   show terms.item: it => block(above: 0.7em, [#text(weight: "bold", fill: acc, it.term): #it.description])
 
-  // Код
+  // Code
   set raw(theme: tm-theme(theme.color.code))
   show raw: set text(font: theme.font.code)
   show raw.where(block: false): it => box(
@@ -276,8 +276,8 @@
     text(size: theme.size.code, it),
   )
 
-  // Таблицы
-  // Линейки вместо сетки: жирная сверху и снизу, тонкая под шапкой.
+  // Tables
+  // Rules instead of a grid: bold at top and bottom, thin under the header.
   set table(
     inset: (x: 7pt, y: 5pt),
     align: left + horizon,
@@ -290,12 +290,12 @@
   show table: set text(size: 0.94em)
   show table: set par(justify: false, first-line-indent: 0em)
   show table.cell.where(y: 0): set text(font: theme.font.captions, weight: "bold", fill: theme.color.text)
-  // Короткие таблицы не рвём; длинную (больше полстраницы) оборачивай в
-  // block(breakable: true) и повторяй шапку через table.header.
+  // Short tables are not split; wrap a long one (over half a page) in
+  // block(breakable: true) and repeat the header via table.header.
   show table: it => block(width: 100%, breakable: false,
     stroke: (top: 1pt + theme.color.text.transparentize(20%), bottom: 1pt + theme.color.text.transparentize(20%)), it)
 
-  // Рисунки и подписи: нумерация «глава.n»
+  // Figures and captions: numbering "chapter.n"
   set figure(numbering: _fig-numbering(doc-kind), gap: 0.7em)
   set figure.caption(separator: [. ])
   show figure: set block(above: 1.3em, below: 1.3em, breakable: false)
@@ -306,7 +306,7 @@
     block(width: 90%, [#text(weight: "bold", fill: acc, number). #it.body])
   }
 
-  // Заметка: название строкой сверху, без титульного листа.
+  // A note: the title as a line on top, no title page.
   if doc-kind == "note" and title != none {
     block(below: 1.4em, {
       text(font: theme.font.headings, size: theme.size.chapter, weight: "bold", fill: acc, hyphenate: false, title)
@@ -315,7 +315,7 @@
     })
   }
 
-  // Титул и оглавление
+  // Title page and contents
   if title-page { _title-page(theme, kind, title, subtitle, author, date, description) }
   if toc {
     page(header: none, footer: none, {
@@ -331,7 +331,7 @@
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// PDF: страницы, колонтитулы, титул и оглавление
+// PDF: pages, running heads, title page and contents
 // ═════════════════════════════════════════════════════════════════════════
 #let _pdf-template(theme, doc-kind, kind, title, subtitle, author, date, description, title-page, toc, depth, body) = {
   let acc = theme.color.accent
@@ -353,8 +353,8 @@
   )
   set block(spacing: theme.par.spacing + 0.25em)
 
-  // Заголовки. В книге `=` — глава с новой страницы, в заметке — раздел:
-  // заметка короткая и без нумерации (как в Obsidian).
+  // Headings. In a book `=` is a chapter on a new page, in a note a section:
+  // a note is short and unnumbered (as in Obsidian).
   if doc-kind == "note" {
     show heading.where(level: 1): it => context _section-heading(theme, it)
     show heading.where(level: 2): it => context _subsection-heading(theme, it)
@@ -376,23 +376,23 @@
 
 
 // ═════════════════════════════════════════════════════════════════════════
-// Главные шаблоны
+// Main templates
 // ═════════════════════════════════════════════════════════════════════════
-// Тема по умолчанию — из `--input theme=…` (приложение собирает заметку по
-// разу на тему), иначе «классика». Имя темы, которой нет, — ошибка.
+// The default theme comes from `--input theme=...` (the app builds a note
+// once per theme), else "classic". A theme name that does not exist is an error.
 #let _theme-from-input() = {
   let name = sys.inputs.at("theme", default: "classic")
-  assert(name in themes, message: "нет темы «" + name + "»; есть: " + themes.keys().join(", "))
+  assert(name in themes, message: "no theme \"" + name + "\"; known: " + themes.keys().join(", "))
   themes.at(name)
 }
 
 #let _document(doc-kind, theme, lang, words, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body) = {
-  assert(type(lang) == str, message: "lang — код языка строкой, например \"en\"")
+  assert(type(lang) == str, message: "lang is a language code as a string, e.g. \"en\"")
   let theme = if theme == auto { _theme-from-input() } else { theme }
   set text(lang: lang)
   _theme-state.update(theme)
   _doc-kind.update(doc-kind)
-  // Без своих слов состояние не трогаем: документ тот же, что и без `words:`.
+  // Without own words the state is left alone: the document is the same as without `words:`.
   if _check-words(words) != (:) { _own-words.update(words) }
 
   set document(title: title, author: if author == none { () } else if type(author) == str { author } else { () })
@@ -407,15 +407,15 @@
   body
 }
 
-/// Книга — большой конспект из глав: `=` — глава с номером.
+/// A book - large notes made of chapters: `=` is a numbered chapter.
 /// #show: book.with(
-///   theme: auto,              // auto — из --input theme=…; или themes.night, своя
-///   lang: "ru",               // язык: слова оформления («Глава», «Рис.») и переносы
-///   words: (:),               // свои слова поверх словаря: (chapter: "Kapitel", figure: "Abb.")
-///   kind: auto,               // надпись над названием (auto — «Конспект»): Задачник, Шпаргалка…
+///   theme: auto,              // auto - from --input theme=...; or themes.night, your own
+///   lang: "ru",               // language: layout words ("Глава", "Рис.") and hyphenation
+///   words: (:),               // own words over the dictionary: (chapter: "Kapitel", figure: "Abb.")
+///   kind: auto,               // the label above the title (auto - "Конспект"): [Задачник], [Шпаргалка]...
 ///   title: [...], subtitle: [...], author: [...], date: [...],
-///   description: [...],          // 2–3 фразы на титул: для кого и как читать
-///   title-page: true, toc: true, depth: 2,   // только PDF
+///   description: [...],          // 2-3 sentences for the title page: for whom and how to read
+///   title-page: true, toc: true, depth: 2,   // PDF only
 /// )
 #let book(
   theme: auto,
@@ -434,19 +434,20 @@
   body,
 ) = _document("book", theme, lang, words, kind, title, subtitle, author, date, description, tags, title-page, toc, depth, body)
 
-/// Глава книги — свои характеристики, как у заметки: название и теги. Общее
-/// для всех глав (язык, тема, слова, теги книги) — у корня книги, `book.with`
-/// в `main.typ`: глава его наследует. Ставит заголовок главы (`=`) и под ним
-/// свои теги (только HTML: теги книги и заметки в PDF тоже не печатаются).
+/// A book chapter - its own properties, as of a note: title and tags. What all
+/// chapters share (language, theme, words, book tags) is at the book root,
+/// `book.with` in `main.typ`: the chapter inherits it. Sets the chapter
+/// heading (`=`) and its own tags under it (HTML only: book and note tags are
+/// not printed in PDF either).
 ///   #import "/_baluk/lib.typ": *
-///   #show: chapter.with(title: [Интегралы], tags: ("интегралы",))
+///   #show: chapter.with(title: [Integrals], tags: ("integrals",))
 #let chapter(title: none, tags: (), label: none, body) = {
-  assert(title != none, message: "chapter: нужно название главы — title: [...]")
-  assert(type(tags) == array and tags.all(t => type(t) == str), message: "chapter: tags — массив строк, например (\"тег\",)")
-  assert(label == none or type(label) == str, message: "chapter: label — строка, например \"гл-интегралы\"")
+  assert(title != none, message: "chapter: needs a chapter title - title: [...]")
+  assert(type(tags) == array and tags.all(t => type(t) == str), message: "chapter: tags is an array of strings, e.g. (\"tag\",)")
+  assert(label == none or type(label) == str, message: "chapter: label is a string, e.g. \"ch-integrals\"")
   context assert(
     _doc-kind.get() == "book",
-    message: "chapter — только в главе книги (файл, подключённый #include из main.typ с book.with); в заметке раздел — `=`",
+    message: "chapter is only for a book chapter (a file included with #include from main.typ with book.with); in a note a section is `=`",
   )
   if label == none { heading(level: 1, title) } else { [#heading(level: 1, title)#std.label(label)] }
   if tags.len() > 0 {
@@ -455,9 +456,9 @@
   body
 }
 
-/// Заметка — одна тема целиком: `=` — раздел, нумерация сквозная.
+/// A note - one whole topic: `=` is a section, numbering is continuous.
 ///   #import "/_baluk/lib.typ": *
-///   #show: note.with(title: [SSH], tags: ("безопасность",))
+///   #show: note.with(title: [SSH], tags: ("security",))
 #let note(
   theme: auto,
   lang: "ru",

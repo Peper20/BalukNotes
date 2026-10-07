@@ -1,15 +1,15 @@
 // ═════════════════════════════════════════════════════════════════════════
-//  baluk — библиотека оформления заметок и конспектов BalukNotes на Typst.
+//  baluk - the BalukNotes Typst library for notes and books.
 //
-//  В хранилище приложения доступна как /_baluk/ (виртуально). Подключение:
+//  The app's vault sees it as /_baluk/ (virtual). Usage:
 //
 //    #import "/_baluk/lib.typ": *
-//    #show: note.with(title: [...])      // заметка
-//    #show: book.with(title: [...])     // книга (большой конспект), корень - main.typ
-//    #show: chapter.with(title: [...])  // глава книги
+//    #show: note.with(title: [...])      // a note
+//    #show: book.with(title: [...])     // a book (large notes), root - main.typ
+//    #show: chapter.with(title: [...])  // a book chapter
 //
-//  Внешняя зависимость одна: @preview/cetz:0.4.2 (лежит в кэше, работает
-//  офлайн). Правила содержания — docs/writing.md проекта, API — README.md.
+//  One external dependency: @preview/cetz:0.4.2 (cached, works offline).
+//  Content rules - the project's docs/writing.md, API - README.md.
 // ═════════════════════════════════════════════════════════════════════════
 
 #import "@preview/cetz:0.4.2"

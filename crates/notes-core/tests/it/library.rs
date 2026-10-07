@@ -321,9 +321,9 @@ fn own_words_are_checked() {
             compile(&format!("#import \"/_baluk/lib.typ\": *\n#show: note.with(lang: \"de\", words: {words})\nText\n"));
         page.errors.first().map(|e| e.message.clone()).unwrap_or_default()
     };
-    assert!(error("(figur: \"Abb.\")").contains("нет слова «figur»"), "{}", error("(figur: \"Abb.\")"));
-    assert!(error("(figure: [Abb.])").contains("— строка"));
-    assert!(error("\"Abb.\"").contains("words — словарь"));
+    assert!(error("(figur: \"Abb.\")").contains("no word \"figur\""), "{}", error("(figur: \"Abb.\")"));
+    assert!(error("(figure: [Abb.])").contains("is a string"));
+    assert!(error("\"Abb.\"").contains("words is a dictionary"));
     assert_eq!(error("(figure: \"Abb.\")"), "");
 }
 
@@ -339,7 +339,7 @@ fn frames_pdf_is_checked() {
     assert_eq!(error("(1, 3, 5)"), "");
     assert_eq!(error("auto"), "");
     for bad in ["(0, 2)", "(6,)", "()", "\"strip\"", "(1.5,)"] {
-        assert!(error(bad).contains("номера кадров от 1 до 5"), "{bad}: {}", error(bad));
+        assert!(error(bad).contains("frame numbers from 1 to 5"), "{bad}: {}", error(bad));
     }
 }
 
@@ -353,10 +353,10 @@ fn chapter_is_checked() {
         page.errors.first().map(|e| e.message.clone()).unwrap_or_default()
     };
     assert_eq!(error("book", "title: [Глава], tags: (\"тег\",), label: \"гл\""), "");
-    assert!(error("note", "title: [Глава]").contains("только в главе книги"), "{}", error("note", "title: [Глава]"));
-    assert!(error("book", "tags: (\"тег\",)").contains("нужно название"));
-    assert!(error("book", "title: [Глава], tags: \"тег\"").contains("массив строк"));
-    assert!(error("book", "title: [Глава], label: <гл>").contains("label — строка"));
+    assert!(error("note", "title: [Глава]").contains("only for a book chapter"), "{}", error("note", "title: [Глава]"));
+    assert!(error("book", "tags: (\"тег\",)").contains("needs a chapter title"));
+    assert!(error("book", "title: [Глава], tags: \"тег\"").contains("array of strings"));
+    assert!(error("book", "title: [Глава], label: <гл>").contains("label is a string"));
 }
 
 /// The texts of the `/baluk-note` skill (`SKILL.md`, `reference.md`, examples)

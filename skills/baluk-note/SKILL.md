@@ -151,8 +151,8 @@ Typst is neither LaTeX nor Markdown: `\frac`, `\begin`, `**bold**`, `# Heading` 
 - `missing argument: caption`: `fig` needs a caption, `fig(figure, [Caption])`.
 - `expected expression`: an extra or missing `#`, or an empty argument `,,`.
 - `invalid number suffix`: an unknown unit; valid are `pt cm mm em % deg fr`.
-- `непонятный знак` in a formula of `interactive-plot`: the formula language has no `**` or `^`; write `x * x` or `calc.pow(x, 2)`.
-- `неизвестное имя` in such a formula: functions need `calc.`, e.g. `calc.sin(x)`.
+- `unexpected character` in a formula of `interactive-plot`: the formula language has no `**` or `^`; write `x * x` or `calc.pow(x, 2)`.
+- `unknown name` in such a formula: functions need `calc.`, e.g. `calc.sin(x)`.
 - `file not found ... /_baluk/...`: the import must be exactly `#import "/_baluk/lib.typ": *`.
 - warning `a comma between digits`: `dc("0,5")` instead of `0,5` in math.
 - warning about `;` after a call: `\;`.

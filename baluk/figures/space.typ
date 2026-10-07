@@ -1,26 +1,27 @@
-// Псевдо-3D: оси, поверхности, призмы, тела вращения, сечения.
+// Pseudo-3D: axes, surfaces, prisms, solids of revolution, sections.
 
 #import "@preview/cetz:0.4.2"
 #import "../theme.typ": current-theme, is-dark
 #import "canvas.typ": _draw, _color
 
 // ═════════════════════════════════════════════════════════════════════════
-// Псевдо-3D (косая проекция). Ось x вправо, z вверх, y уходит ВЛЕВО-вверх
-// («от нас»). Зритель смотрит слева-спереди-сверху, поэтому видны грани
-// x = min, y = min и верх. Так все три оси идут по видимым рёбрам тела в
-// первом октанте или выходят за его контур — подписи осей не прячутся за
-// телом (при y вправо-вверх ось y уходила за столбики).
-// Глубина для алгоритма художника: −0.45x − y + 0.32z (больше — ближе).
-// Меняешь проекцию — меняй и `_depth`, и видимые грани в `_prism`.
+// Pseudo-3D (oblique projection). The x axis goes right, z up, y goes
+// LEFT-up ("away from us"). The viewer looks from the left-front-top, so the
+// faces x = min, y = min and the top are visible. This way all three axes run
+// along visible edges of a solid in the first octant or leave its outline -
+// axis labels do not hide behind the solid (with y going right-up the y axis
+// went behind the bars).
+// Depth for the painter's algorithm: −0.45x − y + 0.32z (larger is closer).
+// Change the projection - change both `_depth` and the visible faces in `_prism`.
 // ═════════════════════════════════════════════════════════════════════════
 
 #let p3(x, y, z) = (x - 0.45 * y, z + 0.32 * y)
 #let _depth(x, y, z) = -0.45 * x - y + 0.32 * z
 
-/// Оси x, y, z. Подписи ставятся за концами стрелок.
-/// hidden: (x: a, y: b, z: c) — длина участка оси, спрятанного за телом.
-/// Такие оси рисуют ПОСЛЕ тела: скрытый участок — тонким пунктиром поверх
-/// (как невидимые рёбра в учебнике), остальное — сплошной линией.
+/// Axes x, y, z. Labels go past the arrow tips.
+/// hidden: (x: a, y: b, z: c) - the length of the axis part hidden behind a solid.
+/// Such axes are drawn AFTER the solid: the hidden part as a thin dashed line
+/// on top (like invisible edges in a textbook), the rest as a solid line.
 #let axes3d(x: 3, y: 2.6, z: 2.4, labels: ($x$, $y$, $z$), hidden: (:)) = _draw.get-ctx(ctx => {
   let fc = current-theme().color.fig
   import cetz.draw: *
@@ -38,25 +39,25 @@
   content(p3(0, 0, z), anchor: "south", labels.at(2), padding: 3pt)
 })
 
-// Освещённость грани с нормалью n (не обязательно единичной): 0..1.
+// Illumination of a face with normal n (not necessarily unit): 0..1.
 #let _lighting(n) = {
   let (a, b, c) = n
   let len = calc.sqrt(a * a + b * b + c * c)
-  let (lx, ly, lz) = (-0.35, -0.55, 0.76) // свет спереди-слева-сверху
+  let (lx, ly, lz) = (-0.35, -0.55, 0.76) // light from front-left-top
   calc.max(0, (a * lx + b * ly + c * lz) / len)
 }
 
 #let _shade(theme, base, k) = {
-  // k ∈ [0,1]: 0 — тень, 1 — полностью освещено
+  // k ∈ [0,1]: 0 - shadow, 1 - fully lit
   let shadow = if is-dark(theme) { base.darken(35%) } else { base.darken(28%) }
   let light = if is-dark(theme) { base.lighten(18%) } else { base.lighten(45%) }
   color.mix((shadow, 100% - k * 100%), (light, k * 100%))
 }
 
-/// Поверхность z = f(x, y) над прямоугольником.
-/// style: "shaded" — непрозрачные грани со светотенью (основной вариант),
-///      "flat" — непрозрачные грани одного цвета,
-///      "wire" — прозрачный каркас (видно, что под поверхностью).
+/// A surface z = f(x, y) over a rectangle.
+/// style: "shaded" - opaque faces with light and shade (the main option),
+///      "flat" - opaque faces of one color,
+///      "wire" - a transparent wireframe (shows what is under the surface).
 #let surface(f, xr, yr, n: 14, m: auto, style: "shaded", color: auto, edge: auto) = _draw.get-ctx(ctx => {
   let theme = current-theme()
   let fc = theme.color.fig
@@ -92,7 +93,7 @@
   for (_, xa, xb, ya, yb) in cells.sorted(key: q => q.at(0)) {
     let (za, zb, zc, zd) = (f(xa, ya), f(xb, ya), f(xb, yb), f(xa, yb))
     let face = if style == "shaded" {
-      // нормаль по двум диагоналям ячейки
+      // normal from the two diagonals of the cell
       let u = (xb - xa, yb - ya, zc - za)
       let v = (xa - xb, yb - ya, zd - zb)
       let nrm = (u.at(1) * v.at(2) - u.at(2) * v.at(1), u.at(2) * v.at(0) - u.at(0) * v.at(2), u.at(0) * v.at(1) - u.at(1) * v.at(0))
@@ -102,18 +103,18 @@
   }
 })
 
-/// Прямоугольный параллелепипед [xa,xb]×[ya,yb]×[0,h] с видимыми гранями
-/// (верх, перед, левый бок). Годится для столбиков интегральной суммы.
+/// A rectangular box [xa,xb]×[ya,yb]×[0,h] with visible faces (top, front,
+/// left side). Suits the bars of an integral sum.
 #let _prism(theme, xa, xb, ya, yb, h, base, edge-st) = {
   import cetz.draw: *
-  // левый бок (x = xa), перед (y = ya), верх (z = h)
+  // left side (x = xa), front (y = ya), top (z = h)
   line(p3(xa, ya, 0), p3(xa, yb, 0), p3(xa, yb, h), p3(xa, ya, h), close: true, fill: _shade(theme, base, 0.4), stroke: edge-st)
   line(p3(xa, ya, 0), p3(xb, ya, 0), p3(xb, ya, h), p3(xa, ya, h), close: true, fill: _shade(theme, base, 0.68), stroke: edge-st)
   line(p3(xa, ya, h), p3(xb, ya, h), p3(xb, yb, h), p3(xa, yb, h), close: true, fill: _shade(theme, base, 0.95), stroke: edge-st)
 }
 
-/// Столбики интегральной суммы: разбиение n × m, высота — значение f
-/// в центре ячейки. выделить: ((i, j), ...) — ячейки другим цветом.
+/// Bars of an integral sum: an n × m partition, the height is the value of f
+/// at the cell center. highlight: ((i, j), ...) - cells in another color.
 #let prisms(f, xr, yr, n: 5, m: 4, gap: 0.0, highlight: (), color: auto, highlight-color: "second") = _draw.get-ctx(ctx => {
   let theme = current-theme()
   let fc = theme.color.fig
@@ -139,7 +140,7 @@
   }
 })
 
-/// Плоская фигура в плоскости z = 0 по вершинам (x, y).
+/// A flat shape in the plane z = 0 by vertices (x, y).
 #let base-shape(..points, color: auto, label: none) = _draw.get-ctx(ctx => {
   let theme = current-theme()
   import cetz.draw: *
@@ -154,8 +155,8 @@
   }
 })
 
-/// Тело вращения: горизонтальные «обручи» радиуса r(z) и силуэт. Обручи —
-/// это буквально линии r = const, то есть идея цилиндрических координат.
+/// A solid of revolution: horizontal "hoops" of radius r(z) and a silhouette.
+/// The hoops are literally the lines r = const, i.e. the idea of cylindrical coordinates.
 #let revolution(r, zmin: 0, zmax: 2, rings: 8, n: 40, color: auto) = _draw.get-ctx(ctx => {
   let theme = current-theme()
   let col = _color(theme, color)
@@ -178,8 +179,8 @@
   }
 })
 
-/// Сечение поверхности z = f(x, y) плоскостью y = y0 — «слой», из которых
-/// набирается объём.
+/// A section of the surface z = f(x, y) by the plane y = y0 - a "slice" the
+/// volume is built from.
 #let cross-section(f, y0, xr: (0, 3), n: 40, color: "second", fill-color: true) = _draw.get-ctx(ctx => {
   let theme = current-theme()
   let col = _color(theme, color)

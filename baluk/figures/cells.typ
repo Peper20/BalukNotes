@@ -1,23 +1,23 @@
-// Массивы и матрицы (таблицы ДП): подсветка, скобки, указатели, стрелки.
+// Arrays and matrices (DP tables): highlights, brackets, pointers, arrows.
 
 #import "@preview/cetz:0.4.2"
 #import "../theme.typ": current-theme, is-dark
 #import "canvas.typ": _draw, _color
 
 // ═════════════════════════════════════════════════════════════════════════
-// Массивы и таблицы значений (ось вниз: строка 0 — верхняя)
+// Arrays and value tables (axis down: row 0 is the top one)
 // ═════════════════════════════════════════════════════════════════════════
 
-/// Одномерный массив.
-/// - highlight: словарь «индекс → цвет» ("accent", "second", ... или color);
-/// - spans: ((l, r, цвет, подпись), ...) — скобка под ячейками l..r включительно;
-/// - pointers: ((i, подпись), ...) — стрелка сверху к ячейке i;
-/// - index-from: номер первой ячейки (0 или 1);
-/// - block-size: размер блока — границы блоков рисуются жирнее (sqrt-декомпозиция);
-/// - block-values: значения по блокам — коробки над массивом во всю ширину блока
-///   (суммы блоков, максимумы, «ленивые» пометки);
-/// - arcs: ((i, j, подпись, цвет), ...) — дуга над массивом между ячейками
-///   (обмен, ссылка, пара двух указателей).
+/// A one-dimensional array.
+/// - highlight: a dictionary "index -> color" ("accent", "second", ... or color);
+/// - spans: ((l, r, color, label), ...) - a bracket under cells l..r inclusive;
+/// - pointers: ((i, label), ...) - an arrow from above to cell i;
+/// - index-from: the number of the first cell (0 or 1);
+/// - block-size: the block size - block borders are drawn bolder (sqrt decomposition);
+/// - block-values: per-block values - boxes above the array the full block width
+///   (block sums, maximums, "lazy" marks);
+/// - arcs: ((i, j, label, color), ...) - an arc above the array between cells
+///   (a swap, a reference, a pair of two pointers).
 #let array-cells(
   values, cell: 0.62, highlight: (:), spans: (), pointers: (),
   indices: true, index-from: 0, block-size: none, block-values: (), arcs: (),
@@ -50,7 +50,7 @@
     line((x, k + 0.45), (x, k + 0.06), stroke: 0.9pt + fc.second, mark: (end: "stealth", fill: fc.second, stroke: 0pt, scale: 0.45))
     content((x, k + 0.45), anchor: "south", text(fill: fc.second, size: 0.85em, label))
   }
-  // Границы блоков поверх клеток.
+  // Block borders over the cells.
   if block-size != none {
     let n = values.len()
     let nblocks = calc.ceil(n / block-size)
@@ -59,7 +59,7 @@
       line((x, 0), (x, k), stroke: 1.4pt + fc.line)
     }
   }
-  // Своды блоков: коробка над каждым блоком.
+  // Block values: a box above each block.
   if block-values.len() > 0 {
     let n = values.len()
     let block-w = if block-size != none { block-size } else { calc.ceil(n / block-values.len()) }
@@ -87,14 +87,14 @@
   }
 })
 
-/// Двумерная таблица значений (матрица). Строки — сверху вниз.
-/// - rects: ((r1, c1, r2, c2, цвет), ...) — включительно, в
-///   нумерации `index-from`; рисуются полупрозрачной заливкой с рамкой;
-/// - cells: словарь "r,c" → цвет — точечная подсветка;
-/// - indices: подписи номеров строк и столбцов;
-/// - values: false — только клетки, без чисел (для мелких схем);
-/// - arrows: ((r1, c1, r2, c2, цвет), ...) — переход из клетки в клетку
-///   (ровно то, что нужно для таблиц ДП).
+/// A two-dimensional table of values (a matrix). Rows go top to bottom.
+/// - rects: ((r1, c1, r2, c2, color), ...) - inclusive, numbered from
+///   `index-from`; drawn as a translucent fill with a border;
+/// - cells: a dictionary "r,c" -> color - a single-cell highlight;
+/// - indices: row and column number labels;
+/// - values: false - only cells, no numbers (for small diagrams);
+/// - arrows: ((r1, c1, r2, c2, color), ...) - a transition from cell to cell
+///   (exactly what DP tables need).
 #let matrix-cells(
   mat, cell: 0.55, rects: (), cells: (:), indices: true,
   index-from: 1, compact: false, values: true, arrows: (),
@@ -105,7 +105,7 @@
   let k = cell
   let n = mat.len()
   let w = mat.at(0).len()
-  let cell-pos(r, c) = (c * k, -r * k) // левый верхний угол клетки (r, c), от 0
+  let cell-pos(r, c) = (c * k, -r * k) // top left corner of cell (r, c), from 0
   for r in range(n) {
     for c in range(w) {
       let key = str(r + index-from) + "," + str(c + index-from)

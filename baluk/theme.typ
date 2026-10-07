@@ -1,15 +1,15 @@
-// Темы оформления.
+// Layout themes.
 //
-// Тема — обычный словарь. Выбирается один раз в начале документа:
+// A theme is a plain dictionary. It is chosen once at the start of a document:
 //   #show: book.with(theme: themes.classic, ...)
-// Шаблон кладёт её в state, и все врезки, листинги и рисунки берут цвета
-// и шрифты оттуда (внутри `context`). Поэтому одна и та же глава без правок
-// верстается в любой теме.
+// The template puts it into state, and all boxes, listings and figures take
+// colors and fonts from there (inside `context`). So the same chapter lays
+// out in any theme without edits.
 //
-// Своя тема: #let mine = customize(themes.classic, (color: (accent: rgb("#7a1f5c"))))
-// — глубокое слияние, указывать нужно только то, что меняется.
+// Own theme: #let mine = customize(themes.classic, (color: (accent: rgb("#7a1f5c"))))
+// - a deep merge, only what changes needs to be given.
 
-// ── Глубокое слияние словарей ──────────────────────────────────────────────
+// ── Deep dictionary merge ─────────────────────────────────────────────────
 #let customize(base, changes) = {
   let result = base
   for (key, val) in changes {
@@ -22,14 +22,14 @@
   result
 }
 
-// ── Шрифты ────────────────────────────────────────────────────────────────
-// Первый в списке — основной, остальные — запасные для недостающих глифов.
+// ── Fonts ─────────────────────────────────────────────────────────────────
+// The first in a list is the main one, the rest are fallbacks for missing glyphs.
 #let _text-fonts = ("Gentium Plus", "New Computer Modern")
 #let _code-fonts = ("JetBrains Mono", "DejaVu Sans Mono")
 
-// Семантические цвета врезок: у каждой — насыщенный цвет (линия, подпись)
-// и фон. Разные типы различаются ТОНОМ: конспект читают с экрана, врезка
-// должна узнаваться боковым зрением до чтения подписи.
+// Semantic box colors: each has a saturated color (rule, caption) and a
+// background. Kinds differ in HUE: notes are read from a screen, a box
+// should be recognized by peripheral vision before reading its caption.
 #let _boxes(accent, example, remark, pitfall, idea, algorithm, bg: 94%) = (
   definition: accent,
   theorem: accent.darken(15%),
@@ -38,16 +38,16 @@
   pitfall: pitfall,
   idea: idea,
   algorithm: algorithm,
-  bg-share: bg, // насколько осветлять цвет для заливки
+  bg-share: bg, // how much to lighten the color for the fill
 )
 
 // ═════════════════════════════════════════════════════════════════════════
-// A. КЛАССИКА — основная тема: развитие конспекта по матану. Синий
-//    акцент, врезки с полосой слева, книжный абзац с отступом.
+// A. CLASSIC - the main theme: grown from the calculus notes. Blue accent,
+//    boxes with a left rule, book paragraphs with indent.
 // ═════════════════════════════════════════════════════════════════════════
 #let classic = (
   name: "classic",
-  title: "Классика", // название в интерфейсе
+  title: "Классика", // title in the interface
   font: (
     text: _text-fonts,
     headings: _text-fonts,
@@ -63,9 +63,9 @@
     text: rgb("#1b1b1b"),
     muted: rgb("#5f6670"),
     line: rgb("#c9ced6"),
-    surface: rgb("#f4f6f9"), // фон листингов, таблиц-шапок
+    surface: rgb("#f4f6f9"), // background of listings, table headers
     accent: rgb("#1f4e79"),
-    secondary: rgb("#c62828"), // «спицы», выделения на рисунках
+    secondary: rgb("#c62828"), // "spokes", highlights in figures
     boxes: _boxes(
       rgb("#1f4e79"), rgb("#2e7d32"), rgb("#b8860b"),
       rgb("#b3261e"), rgb("#00796b"), rgb("#6a4c93"),
@@ -86,10 +86,10 @@
 
 // ═════════════════════════════════════════════════════════════════════════
 // ═════════════════════════════════════════════════════════════════════════
-// B. НОЧЬ — та же «классика», перекрашенная для чтения с экрана в темноте.
-//    Отличие ТОЛЬКО в палитре: шрифты, кегли, поля, заголовки, врезки и
-//    колонтитулы те же. Один и тот же конспект в двух видах должен выглядеть
-//    одним конспектом, а не двумя разными.
+// B. NIGHT - the same "classic", recolored for reading from a screen in the
+//    dark. ONLY the palette differs: fonts, sizes, margins, headings, boxes
+//    and running heads are the same. One set of notes in two looks should
+//    look like one set of notes, not two different ones.
 // ═════════════════════════════════════════════════════════════════════════
 #let night = customize(classic, (
   name: "night",
@@ -105,7 +105,7 @@
     boxes: _boxes(
       rgb("#7fb4ff"), rgb("#69d3a0"), rgb("#f2c46d"),
       rgb("#ff8585"), rgb("#5fd0d6"), rgb("#b69cff"),
-      // На тёмном фоне заливку врезки делаем прозрачностью, а не осветлением.
+      // On a dark background the box fill is transparency, not lightening.
       bg: 0%,
     ),
     code: (
@@ -123,45 +123,45 @@
 
 #let themes = (classic: classic, night: night)
 
-// ── Доступ к текущей теме ──────────────────────────────────────────────────
+// ── Access to the current theme ───────────────────────────────────────────
 #let _theme-state = state("baluk-theme", none)
 
-/// Вид документа: "book" (главы, нумерация «глава.n») или "note"
-/// (разделы, сквозная нумерация). Ставит шаблон.
+/// Document kind: "book" (chapters, numbering "chapter.n") or "note"
+/// (sections, continuous numbering). Set by the template.
 #let _doc-kind = state("baluk-doc-kind", "book")
 
-/// Текущая тема. Вызывать только внутри `context`.
+/// The current theme. Call only inside `context`.
 #let current-theme() = {
   let theme = _theme-state.get()
   if theme == none { classic } else { theme }
 }
 
-/// Тёмная ли тема (по светлоте фона).
+/// Whether the theme is dark (by background lightness).
 #let is-dark(theme) = theme.color.bg.components().at(0) < 50%
 
-/// Бледный оттенок цвета для крупных «водяных» деталей (номер главы) и
-/// заливок в рисунках: в тёмной теме — прозрачность, в светлой — осветление.
+/// A pale shade of a color for large "watermark" details (chapter number)
+/// and figure fills: transparency in a dark theme, lightening in a light one.
 #let pale(theme, col) = if is-dark(theme) { col.transparentize(88%) } else { col.lighten(88%) }
 
-/// Цвет заливки врезки данного вида с учётом темы (светлой или тёмной).
+/// The fill color of a box of this kind for the theme (light or dark).
 #let box-bg(theme, color) = {
   if theme.color.boxes.bg-share == 0% { color.transparentize(90%) } else { color.lighten(theme.color.boxes.bg-share) }
 }
 
-/// Тень и свет грани цвета `base` для объёмных рисунков (интерактивная
-/// поверхность): грань смешивает их по освещённости. В HTML — переменные
-/// `--k-fig-<color>-dark/-light`, чтобы клиент красил так же.
+/// Shadow and light of a face of color `base` for solid figures (interactive
+/// surface): a face mixes them by illumination. In HTML - the variables
+/// `--k-fig-<color>-dark/-light`, so the client paints the same way.
 #let fig-shades(theme, base) = if is-dark(theme) {
   (base.darken(35%), base.lighten(18%))
 } else {
   (base.darken(28%), base.lighten(45%))
 }
 
-// ── Цвета для CSS (HTML-режим) ────────────────────────────────────────────
-// В HTML цвета задаёт CSS, но источник правды — эта же тема: сборщик
-// забирает словарь из css.typ (typst query) и пишет CSS-переменные
-// --k-<имя>. Производные цвета (фон врезки, бледный номер главы) считаются
-// здесь теми же функциями, что и в PDF, — вид совпадает.
+// ── Colors for CSS (HTML mode) ────────────────────────────────────────────
+// In HTML CSS sets the colors, but the source of truth is this same theme:
+// the build takes the dictionary from css.typ (typst query) and writes CSS
+// variables --k-<name>. Derived colors (box fill, pale chapter number) are
+// computed here by the same functions as in PDF, so the look matches.
 #let _css-boxes = (
   definition: "def", theorem: "thm", example: "example", remark: "remark",
   pitfall: "pitfall", idea: "idea", algorithm: "algo",
@@ -189,7 +189,7 @@
   for (name, color) in (second: pal.fig.second, third: pal.fig.third, line: pal.fig.line) {
     result.insert("hl-" + name, if dark { color.transparentize(80%) } else { color.lighten(85%) })
   }
-  // рисунки: цвета интерактивных рисунков (клиент рисует их сам)
+  // figures: colors of interactive figures (the client draws them itself)
   for (name, cls) in (line: "line", second: "second", third: "third", face: "face") {
     let (shadow, light) = fig-shades(theme, pal.fig.at(name))
     result.insert("fig-" + cls, pal.fig.at(name))
