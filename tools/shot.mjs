@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-// Снимок страницы через DevTools-протокол headless Chromium — для проверки
-// вида глазами. В отличие от `chromium --screenshot`, снимает то, что видно
-// после прокрутки (якоря), ждёт отрисовки и умеет выполнять JS.
+// A page screenshot via the DevTools protocol of headless Chromium - for
+// checking the look by eye. Unlike `chromium --screenshot`, it captures what
+// is visible after scrolling (anchors), waits for rendering and can run JS.
 //
 //   tools/shot.mjs <url> <out.png> [--size 1300x900] [--dark] [--full]
-//                  [--wait 300] [--eval 'JS'] [--print 'JS-выражение']
+//                  [--wait 300] [--eval 'JS'] [--print 'JS expression']
 //
 //   --dark   prefers-color-scheme: dark
-//   --full   вся страница целиком (иначе — окно)
-//   --wait   запас после отрисовки, мс (отрисовку ждёт по <html data-state>)
-//   --eval   выполнить перед снимком (например, открыть настройки)
-//   --print  вывести значение выражения (например, прокрутку колонки #page)
+//   --full   the whole page (otherwise the viewport)
+//   --wait   extra time after rendering, ms (rendering is awaited by <html data-state>)
+//   --eval   run before the screenshot (e.g. open the settings)
+//   --print  print the value of an expression (e.g. the scroll of the #page column)
 //
-// Много снимков разом — tools/visual.mjs.
+// Many screenshots at once - tools/visual.mjs.
 
 import { Browser } from "./lib/browser.mjs";
 
