@@ -33,7 +33,13 @@ pub const TYPST: Part =
     Part { bin: "notes-typst", commands: &[], about: "builds notes: serve, new, list, check, pdf, ..." };
 /// The app window.
 pub const APP: Part = Part { bin: "notes-app", commands: &["app"], about: "app window: notes app" };
-pub const PARTS: &[Part] = &[TYPST, APP];
+/// The storage server online and its accounts (`notes hub serve`, `notes users ...`).
+pub const HUB: Part = Part {
+    bin: "notes-hub",
+    commands: &["hub", "users"],
+    about: "storage server online: hub serve, users add | list | passwd | remove",
+};
+pub const PARTS: &[Part] = &[TYPST, APP, HUB];
 
 /// Global `notes-typst` flags that take a value: in `notes --vault app list`
 /// the command is `list`. A `notes-typst` test checks them against `clap`.
@@ -111,7 +117,11 @@ mod tests {
     fn part_by_command() {
         assert_eq!(part_for(&["app"]), APP);
         assert_eq!(part_for(&["--data", "d", "app"]), APP);
+        assert_eq!(part_for(&["hub", "serve", "--addr", "127.0.0.1:1"]), HUB);
+        assert_eq!(part_for(&["--data", "d", "hub", "serve"]), HUB);
+        assert_eq!(part_for(&["--data=d", "users", "add", "ivan"]), HUB);
         assert_eq!(part_for(&["list", "app"]), TYPST);
+        assert_eq!(part_for(&["list", "hub"]), TYPST);
         assert_eq!(part_for::<&str>(&[]), TYPST);
     }
 

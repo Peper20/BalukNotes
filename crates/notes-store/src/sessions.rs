@@ -2,7 +2,9 @@
 //!
 //! A session is a random token the browser keeps in a cookie. The file
 //! `<data>/sessions.json` holds only the SHA-256 of the token, so a leaked file
-//! signs nobody in. Time is always a parameter (`now`, unix seconds,
+//! signs nobody in. The file is read again when another process changed it
+//! (`notes users passwd` ends the sessions of a user while the server runs).
+//! Time is always a parameter (`now`, unix seconds,
 //! [`now`] gives the current one) so tests do not sleep.
 
 use std::collections::{HashMap, VecDeque};
@@ -17,7 +19,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::fsutil::write_private;
+use crate::fsutil::{FileStamp, write_private};
 
 /// The disk copy of `seen` of a session is refreshed at most this often (in
 /// seconds): a request does not write a file. After a restart a session can
@@ -72,13 +74,21 @@ struct Entry {
     saved: u64,
 }
 
+#[derive(Debug)]
+struct Inner {
+    /// By the hash of the token: a lookup compares hashes, never the secret.
+    entries: HashMap<String, Entry>,
+    /// The version of the file `entries` were read from or written to
+    /// (`None`: no file).
+    stamp: Option<FileStamp>,
+}
+
 /// The sessions of the signed-in users.
 #[derive(Debug)]
 pub struct Sessions {
     path: PathBuf,
     lifetime: u64,
-    /// By the hash of the token: a lookup compares hashes, never the secret.
-    entries: Mutex<HashMap<String, Entry>>,
+    inner: Mutex<Inner>,
 }
 
 impl Sessions {
@@ -96,18 +106,15 @@ impl Sessions {
             Err(e) if e.kind() == io::ErrorKind::NotFound => File::default(),
             Err(source) => return Err(Error::Io { path, source }),
         };
-        let entries = file
-            .sessions
-            .into_iter()
-            .map(|s| (s.hash, Entry { login: s.login, created: s.created, seen: s.seen, saved: s.seen }))
-            .collect();
-        let sessions = Self { path, lifetime: lifetime.as_secs(), entries: Mutex::new(entries) };
+        let stamp = FileStamp::of(&path).map_err(|source| Error::Io { path: path.clone(), source })?;
+        let entries = file.sessions.into_iter().map(stored_entry).collect();
+        let sessions = Self { path, lifetime: lifetime.as_secs(), inner: Mutex::new(Inner { entries, stamp }) };
         {
-            let mut entries = sessions.entries.lock();
-            let before = entries.len();
-            sessions.prune(&mut entries, now());
-            if entries.len() != before
-                && let Err(e) = sessions.save(&mut entries)
+            let mut inner = sessions.inner.lock();
+            let before = inner.entries.len();
+            sessions.prune(&mut inner.entries, now());
+            if inner.entries.len() != before
+                && let Err(e) = sessions.save(&mut inner)
             {
                 tracing::warn!("{e}");
             }
@@ -125,11 +132,12 @@ impl Sessions {
         rand::thread_rng().fill_bytes(&mut bytes);
         let token = URL_SAFE_NO_PAD.encode(bytes);
         let hash = hash_token(&token);
-        let mut entries = self.entries.lock();
-        self.prune(&mut entries, now);
-        entries.insert(hash.clone(), Entry { login: login.to_owned(), created: now, seen: now, saved: now });
-        if let Err(e) = self.save(&mut entries) {
-            entries.remove(&hash);
+        let mut inner = self.inner.lock();
+        self.refresh(&mut inner);
+        self.prune(&mut inner.entries, now);
+        inner.entries.insert(hash.clone(), Entry { login: login.to_owned(), created: now, seen: now, saved: now });
+        if let Err(e) = self.save(&mut inner) {
+            inner.entries.remove(&hash);
             return Err(e);
         }
         Ok(token)
@@ -140,11 +148,12 @@ impl Sessions {
     #[must_use]
     pub fn check(&self, token: &str, now: u64) -> Option<String> {
         let hash = hash_token(token);
-        let mut entries = self.entries.lock();
-        let entry = entries.get_mut(&hash)?;
+        let mut inner = self.inner.lock();
+        self.refresh(&mut inner);
+        let entry = inner.entries.get_mut(&hash)?;
         if self.expired(entry, now) {
-            entries.remove(&hash);
-            if let Err(e) = self.save(&mut entries) {
+            inner.entries.remove(&hash);
+            if let Err(e) = self.save(&mut inner) {
                 tracing::warn!("{e}");
             }
             return None;
@@ -152,7 +161,7 @@ impl Sessions {
         entry.seen = entry.seen.max(now);
         let login = entry.login.clone();
         if entry.seen - entry.saved >= SEEN_SAVE_EVERY
-            && let Err(e) = self.save(&mut entries)
+            && let Err(e) = self.save(&mut inner)
         {
             tracing::warn!("{e}");
         }
@@ -164,10 +173,11 @@ impl Sessions {
     /// # Errors
     /// The file cannot be written.
     pub fn revoke(&self, token: &str) -> Result<bool, Error> {
-        let mut entries = self.entries.lock();
-        let found = entries.remove(&hash_token(token)).is_some();
+        let mut inner = self.inner.lock();
+        self.refresh(&mut inner);
+        let found = inner.entries.remove(&hash_token(token)).is_some();
         if found {
-            self.save(&mut entries)?;
+            self.save(&mut inner)?;
         }
         Ok(found)
     }
@@ -178,12 +188,13 @@ impl Sessions {
     /// # Errors
     /// The file cannot be written.
     pub fn revoke_user(&self, login: &str) -> Result<usize, Error> {
-        let mut entries = self.entries.lock();
-        let before = entries.len();
-        entries.retain(|_, e| e.login != login);
-        let removed = before - entries.len();
+        let mut inner = self.inner.lock();
+        self.refresh(&mut inner);
+        let before = inner.entries.len();
+        inner.entries.retain(|_, e| e.login != login);
+        let removed = before - inner.entries.len();
         if removed > 0 {
-            self.save(&mut entries)?;
+            self.save(&mut inner)?;
         }
         Ok(removed)
     }
@@ -196,9 +207,48 @@ impl Sessions {
         entries.retain(|_, e| !self.expired(e, now));
     }
 
+    /// Reads the file again if another process changed it: the file is the
+    /// truth (a session it no longer lists is ended), except that a use seen
+    /// here and not yet saved is kept. A file that cannot be read now leaves
+    /// the sessions as they are.
+    fn refresh(&self, inner: &mut Inner) {
+        let stamp = match FileStamp::of(&self.path) {
+            Ok(stamp) => stamp,
+            Err(e) => {
+                tracing::warn!("{}: {e}", self.path.display());
+                return;
+            }
+        };
+        if stamp == inner.stamp {
+            return;
+        }
+        let file = match std::fs::read(&self.path) {
+            Ok(data) => match serde_json::from_slice::<File>(&data) {
+                Ok(file) => file,
+                Err(source) => {
+                    tracing::warn!("{}", Error::Parse { path: self.path.clone(), source });
+                    return;
+                }
+            },
+            Err(e) if e.kind() == io::ErrorKind::NotFound => File::default(),
+            Err(e) => {
+                tracing::warn!("{}: {e}", self.path.display());
+                return;
+            }
+        };
+        let mut entries: HashMap<String, Entry> = file.sessions.into_iter().map(stored_entry).collect();
+        for (hash, entry) in &mut entries {
+            if let Some(known) = inner.entries.get(hash) {
+                entry.seen = entry.seen.max(known.seen);
+            }
+        }
+        *inner = Inner { entries, stamp };
+    }
+
     /// Writes all sessions; on success `saved` of all of them is `seen`.
-    fn save(&self, entries: &mut HashMap<String, Entry>) -> Result<(), Error> {
-        let mut sessions: Vec<Stored> = entries
+    fn save(&self, inner: &mut Inner) -> Result<(), Error> {
+        let mut sessions: Vec<Stored> = inner
+            .entries
             .iter()
             .map(|(hash, e)| Stored { hash: hash.clone(), login: e.login.clone(), created: e.created, seen: e.seen })
             .collect();
@@ -206,11 +256,16 @@ impl Sessions {
         let data = serde_json::to_vec_pretty(&File { sessions })
             .map_err(|source| Error::Parse { path: self.path.clone(), source })?;
         write_private(&self.path, &data).map_err(|source| Error::Io { path: self.path.clone(), source })?;
-        for e in entries.values_mut() {
+        for e in inner.entries.values_mut() {
             e.saved = e.seen;
         }
+        inner.stamp = FileStamp::of(&self.path).map_err(|source| Error::Io { path: self.path.clone(), source })?;
         Ok(())
     }
+}
+
+fn stored_entry(s: Stored) -> (String, Entry) {
+    (s.hash, Entry { login: s.login, created: s.created, seen: s.seen, saved: s.seen })
 }
 
 /// Hex SHA-256 of a token.
@@ -433,6 +488,30 @@ mod tests {
         assert!(sessions.check(&old, later).is_none());
         assert!(sessions.check(&token, later).is_none());
         assert!(sessions.check(&fresh, later).is_some());
+    }
+
+    #[test]
+    fn follows_changes_made_by_another_process() {
+        let (_dir, path) = setup();
+        let t = now();
+        let server = Sessions::open(&path, 30 * DAY).unwrap();
+        let ivan = server.create("ivan", t).unwrap();
+        let anna = server.create("anna", t).unwrap();
+        // `notes users passwd ivan` in another process.
+        let cli = Sessions::open(&path, Duration::from_secs(u64::MAX)).unwrap();
+        assert_eq!(cli.revoke_user("ivan").unwrap(), 1);
+        assert!(server.check(&ivan, t + 1).is_none(), "ended by the other process");
+        assert!(server.check(&anna, t + 1).is_some());
+        // The server writes later and does not bring the session back.
+        let fresh = server.create("anna", t + 2).unwrap();
+        let again = Sessions::open(&path, 30 * DAY).unwrap();
+        assert!(again.check(&ivan, t + 3).is_none());
+        assert!(again.check(&fresh, t + 3).is_some());
+        // A use not saved yet survives a reload; a session made elsewhere is seen.
+        assert!(server.check(&anna, t + 100).is_some());
+        let bob = Sessions::open(&path, 30 * DAY).unwrap().create("bob", t + 5).unwrap();
+        assert!(server.check(&bob, t + 101).is_some());
+        assert_eq!(server.inner.lock().entries.get(&hash_token(&anna)).map(|e| e.seen), Some(t + 100));
     }
 
     #[test]

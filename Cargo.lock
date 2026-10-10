@@ -3358,6 +3358,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "notes-hub"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "clap",
+ "http-body-util",
+ "notes",
+ "notes-store",
+ "percent-encoding",
+ "rpassword",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "ureq",
+]
+
+[[package]]
 name = "notes-server"
 version = "0.1.0"
 dependencies = [
@@ -3381,6 +3404,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "base64 0.22.1",
+ "dirs 6.0.0",
  "parking_lot",
  "rand",
  "serde",
@@ -3388,6 +3412,7 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.21",
+ "toml 0.8.23",
  "tracing",
  "ts-rs",
 ]
@@ -4436,6 +4461,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1964b10c76125c36f8afe190065a4bf9a87bf324842c05701330bba9f1cacbb"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "rpassword"
+version = "7.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2da316a15f47e3d053de9cb2c439650bd8fa4aaeb9365f2e5f27f492ff73c196"
+dependencies = [
+ "libc",
+ "rtoolbox",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "rtoolbox"
+version = "0.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9a1efe12a1469752d0e6ff5ebec0b6ef4924cc5c4c71046b0ec730040535819d"
+dependencies = [
+ "libc",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

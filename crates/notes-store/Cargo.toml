@@ -19,10 +19,12 @@ rand = "0.8"
 base64 = "0.22"
 # Hashes of session tokens and of synced files: the version typst already pulls.
 sha2 = "0.10"
+dirs.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+toml.workspace = true
 tracing.workspace = true
 ts-rs = { workspace = true, optional = true }
 

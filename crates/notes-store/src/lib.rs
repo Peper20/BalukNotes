@@ -1,6 +1,8 @@
 //! The light part of the core, without Typst (architecture §1, §9): what the
 //! storage server (`notes-hub`) shares with the device core (`notes-core`).
 //!
+//! - [`config`]: the config file and the data directory, one rule for every
+//!   part;
 //! - [`fsutil`]: small file helpers (an atomic write);
 //! - [`names`]: vault names;
 //! - [`accounts`]: users and password hashes;
@@ -9,6 +11,7 @@
 //!   device side and the engine between them.
 
 pub mod accounts;
+pub mod config;
 pub mod fsutil;
 pub mod names;
 pub mod sessions;

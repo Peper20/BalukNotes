@@ -1,0 +1,47 @@
+[package]
+name = "notes-hub"
+description = "The storage server online: vault files and versions, sign-in, sync (no Typst)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+default = ["client"]
+# The HTTP client of a device (`client`, over ureq with native-tls). The server
+# binary does not need it: `--no-default-features` builds the VPS binary without
+# a TLS library.
+client = ["dep:ureq", "dep:percent-encoding"]
+
+[lib]
+name = "notes_hub"
+path = "src/lib.rs"
+
+[[bin]]
+name = "notes-hub"
+path = "src/main.rs"
+
+[dependencies]
+notes.workspace = true
+notes-store.workspace = true
+anyhow.workspace = true
+axum.workspace = true
+clap.workspace = true
+percent-encoding = { workspace = true, optional = true }
+rpassword.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "time", "macros"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+ureq = { workspace = true, optional = true }
+
+[dev-dependencies]
+http-body-util = "0.1"
+tempfile.workspace = true
+tower = { version = "0.5", features = ["util"] }
+
+[lints]
+workspace = true

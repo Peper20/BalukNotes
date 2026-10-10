@@ -53,6 +53,20 @@ fn app_goes_to_its_part() {
 }
 
 #[test]
+fn hub_commands_go_to_the_hub_part() {
+    let (dir, bin) = setup();
+    fake_part(dir.path(), "notes-hub");
+    fake_part(dir.path(), "notes-typst");
+    for args in [&["hub", "serve"][..], &["--data", "d", "hub", "serve"], &["users", "list", "--data", "d"]] {
+        let (code, out, _) = notes(&bin, args);
+        assert_eq!(code, Some(7));
+        assert!(out.contains("notes-hub") && out.ends_with(&format!(" {}\n", args.join(" "))), "{out}");
+    }
+    let (_, out, _) = notes(&bin, &["list", "hub"]);
+    assert!(out.contains("notes-typst"), "{out}");
+}
+
+#[test]
 fn missing_part_is_named() {
     let (_dir, bin) = setup();
     let (code, _, err) = notes(&bin, &["app"]);
@@ -66,7 +80,13 @@ fn help_and_version_list_parts() {
     fake_part(dir.path(), "notes-typst");
     let (code, out, _) = notes(&bin, &["--help"]);
     assert_eq!(code, Some(7), "help exits with the part's code");
-    assert!(out.contains("--help") && out.contains("yes  notes-typst") && out.contains("no   notes-app"), "{out}");
+    assert!(
+        out.contains("--help")
+            && out.contains("yes  notes-typst")
+            && out.contains("no   notes-app")
+            && out.contains("no   notes-hub"),
+        "{out}"
+    );
     let (code, out, _) = notes(&bin, &["--version"]);
     assert_eq!(code, Some(0));
     assert!(out.starts_with(&format!("notes {}\n", notes::VERSION)), "{out}");
