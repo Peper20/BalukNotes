@@ -173,8 +173,9 @@ before M7 starts.
       a conflict - `device.sync_prefer` (the computer writes first, the others
       receive - user's decision); `notes sync`, a background worker in the
       core, the API for the client
-- [ ] Sync in the app settings: the server address, sign-in, which vaults
-      are synced, the state (M5)
+- [x] Sync in the app settings (the section "Синхронизация"): the server
+      address and sign-in, which vaults are synced (a vault only on the
+      server - download), the state and the conflicts of the last round
 - [ ] An edit lock (one writer at a time) - groundwork only: a write names
       the version it replaces
 - [x] HTTPS - the reverse proxy (user's decision: nginx is already on the
@@ -228,7 +229,7 @@ before M7 starts.
       a PKGBUILD (user's decision)
 - [x] The app icon (user's choice of 7 variants): an italic "b" and lines of
       text; it is also the site favicon
-- [ ] A vault copy + sync (M4); the server address and sign-in in settings
+- [x] A vault copy + sync, the server address and sign-in in settings (M4)
 
 ## M6. Android - Tauri with the core inside
 

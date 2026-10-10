@@ -22,6 +22,10 @@ import type { Preview } from "./types/Preview";
 import type { SearchHit } from "./types/SearchHit";
 import type { SessionResponse } from "./types/SessionResponse";
 import type { SettingsResponse } from "./types/SettingsResponse";
+import type { SyncAccount } from "./types/SyncAccount";
+import type { SyncLogin } from "./types/SyncLogin";
+import type { SyncReport } from "./types/SyncReport";
+import type { SyncStatus } from "./types/SyncStatus";
 import type { Theme } from "./types/Theme";
 import type { VaultSettingsResponse } from "./types/VaultSettingsResponse";
 import type { VersionResponse } from "./types/VersionResponse";
@@ -57,6 +61,11 @@ export type { Apply } from "./types/Apply";
 export type { Theme } from "./types/Theme";
 export type { VaultsResponse } from "./types/VaultsResponse";
 export type { VaultSettingsResponse } from "./types/VaultSettingsResponse";
+export type { SyncAccount } from "./types/SyncAccount";
+export type { SyncReport } from "./types/SyncReport";
+export type { SyncState } from "./types/SyncState";
+export type { SyncStatus } from "./types/SyncStatus";
+export type { SyncVault } from "./types/SyncVault";
 
 /** Which book chapter to request: by number or the one with the anchor. */
 export interface ChapterSelect {
@@ -189,6 +198,21 @@ export const api = {
   /** Sets settings only for the shown vault; `null` makes one shared again. */
   saveVaultSettings: (patch: Record<string, number | string | boolean | null>) =>
     request<VaultSettingsResponse>(inVault("/settings"), json("PUT", patch)),
+  /**
+   * Vault sync of this device: the account and every vault with its state.
+   * ApiError 404 - this server runs without sync.
+   */
+  syncStatus: () => request<SyncStatus>("/api/device/sync"),
+  /** Signs in to a storage server. 422: wrong login or password, 502: the server is unreachable (never 401). */
+  syncLogin: (r: SyncLogin) => request<SyncAccount>("/api/device/sync/login", json("POST", r)),
+  /** Forgets the account; linked vaults stay linked. */
+  syncLogout: () => request<unknown>("/api/device/sync/logout", { method: "POST" }).then(() => {}),
+  /** Links a vault and runs its first round (a vault only on the server is downloaded). */
+  syncLink: (name: string) => request<SyncReport>(`/api/device/sync/vaults/${encodeURIComponent(name)}/link`, { method: "POST" }),
+  /** Stops syncing a vault; files stay on both sides. */
+  syncUnlink: (name: string) => request<unknown>(`/api/device/sync/vaults/${encodeURIComponent(name)}/unlink`, { method: "POST" }).then(() => {}),
+  /** One round of a linked vault now. */
+  syncNow: (name: string) => request<SyncReport>(`/api/device/sync/vaults/${encodeURIComponent(name)}/now`, { method: "POST" }),
   /** Tells the server what to build in advance first (no response needed). */
   warm: (req: WarmRequest) => request<unknown>(inVault("/warm"), json("POST", req)).then(() => {}),
   /** PDF address: the browser opens it (a new tab), the session cookie goes with it. */

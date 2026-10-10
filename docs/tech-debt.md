@@ -242,6 +242,11 @@ it. Extended at the end of every iteration, closed items are deleted.
   password lives in memory (a restart resets it); one wrong password makes
   that login wait ~1 s even with the right one. How to close: a KV database
   with several users.
+- **Sign-in in the client is only the form**: a password is changed from the
+  console (`notes users passwd`), no "remember me". A client pointed at
+  another origin (`__NOTES_API__.base`) cannot sign in: the server has no
+  CORS with credentials. `--session-days` is not passed to `notes service
+  install`.
 - **The hub trusts `X-Forwarded-Proto` and `X-Forwarded-Host`**: right behind
   a reverse proxy on localhost, wrong if the port is open to the network (the
   `Origin` check compares host and port, not the scheme).
@@ -264,6 +269,10 @@ it. Extended at the end of every iteration, closed items are deleted.
   copy stays under the old name, there is no rename on the server and no
   re-link. Unlinking from the console while `notes serve` runs - its worker
   stops on the next round or state request.
+- **Sync in settings shows words only**: a round error is the core's English
+  text, no progress of a large download, conflicts are the file names of the
+  last round; the state is read while the settings window is open. The "plain
+  http" warning repeats the core's rule in `lib/sync.ts`.
 - **Extra sync rounds**: every pulled file and every server echo of an own
   upload wakes the worker for one more cheap round. `.baluk/settings.json`
   (a hidden path for the watcher) goes with the next round, not at once.

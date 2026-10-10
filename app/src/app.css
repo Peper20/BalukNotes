@@ -364,6 +364,46 @@ select option { color: var(--k-text); background: var(--k-surface); }
 .setting-action:hover { color: var(--k-accent); }
 .setting-action:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
 
+/* Vault sync (SyncSettings.svelte): the account, the sign-in form, a row per vault. */
+.sync-note { margin: 0.2rem 0 0.4rem; color: var(--k-muted); }
+.sync-account { display: flex; align-items: center; justify-content: space-between; gap: 0.2rem 1rem; padding: 0.35rem 0; }
+.sync-who { min-width: 0; overflow-wrap: anywhere; }
+.sync-button {
+  font: inherit; padding: 0.2rem 0.8rem; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--k-line); background: var(--k-surface); color: var(--k-text);
+}
+.sync-button:hover { border-color: var(--k-accent); }
+.sync-button:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
+.sync-button:disabled { opacity: 0.5; cursor: default; }
+.sync-button.primary { border-color: var(--k-accent); background: var(--k-accent); color: var(--k-bg); }
+.sync-warning {
+  margin: 0.35rem 0; font-size: 0.85em; padding: 0.35rem 0.55rem; border-radius: 5px;
+  border-left: 3px solid var(--k-box-pitfall); color: var(--k-text);
+  background: color-mix(in srgb, var(--k-box-pitfall) 10%, transparent);
+}
+.sync-error { margin: 0.4rem 0 0; color: var(--k-box-pitfall); overflow-wrap: anywhere; }
+.sync-form { display: flex; flex-direction: column; padding: 0.35rem 0; }
+.sync-form label { margin-bottom: 0.25rem; }
+.sync-form input {
+  margin-bottom: 0.6rem; min-width: 0; font: inherit; padding: 0.2rem 0.4rem; border-radius: 5px;
+  border: 1px solid var(--k-line); background: var(--k-surface); color: var(--k-text);
+}
+.sync-form input:focus-visible { outline: 2px solid var(--k-accent); outline-offset: -1px; }
+.sync-submit { display: flex; }
+.sync-vaults { list-style: none; margin: 0.4rem 0 0; padding: 0; }
+.sync-vault {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.1rem 1rem;
+  padding: 0.45rem 0; border-top: 1px solid var(--k-line);
+}
+.sync-name { font-weight: 600; overflow-wrap: anywhere; }
+.sync-switch { display: flex; align-items: center; justify-content: flex-end; gap: 0.4rem; cursor: pointer; }
+.sync-switch input { width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--k-accent); }
+.sync-state { min-width: 0; color: var(--k-muted); font-size: 0.85em; overflow-wrap: anywhere; }
+.sync-state[data-kind="error"], .sync-state[data-kind="sign-in"] { color: var(--k-box-pitfall); }
+.sync-now { justify-self: end; }
+.sync-extra { grid-column: 1 / -1; font-size: 0.85em; color: var(--k-muted); overflow-wrap: anywhere; }
+.sync-extra.sync-error { margin: 0; color: var(--k-box-pitfall); }
+
 /* ── Vault picker (an address without a vault, the first start) ─────── */
 .vault-picker { box-sizing: border-box; width: min(28rem, 100%); margin: 12vh auto 2rem; padding: 0 1rem; }
 .vault-picker h1 { margin: 0 0 0.4rem; font-size: 1.5rem; }

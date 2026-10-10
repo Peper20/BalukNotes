@@ -20,7 +20,8 @@ npm test        # Vitest; also check, e2e
   a field in someone else's. Pure logic - `src/lib/*.ts` with Vitest next to it
   (`*.test.ts`); components - `src/components/`.
 - The server only through `src/lib/api/` (address - `api/config.ts`,
-  errors - `ApiError`), no `fetch` in components. The source of changes is
+  errors - `ApiError`; a 401 answer -> the sign-in screen, one place:
+  `api/signin.ts`), no `fetch` in components. The source of changes is
   `changes.ts` (long polling `GET .../events?after=`, no polling every N
   seconds); the server connection is `state/connection.svelte.ts` (whether it
   answered - `api.onReach`).

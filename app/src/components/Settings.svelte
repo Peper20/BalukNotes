@@ -8,6 +8,7 @@
   import X from "@lucide/svelte/icons/x";
   import type { SettingDef } from "../lib/api";
   import { settings } from "../lib/state";
+  import SyncSettings from "./SyncSettings.svelte";
   import { ui } from "../lib/ui.svelte";
   import { vault } from "../lib/vault";
 
@@ -42,6 +43,8 @@
       Изменения — только для хранилища «{vault()}». Для всех хранилищ сразу меняются: {everywhere} и настройки устройства.
     </p>
     {#each settings.schema?.groups ?? [] as group (group.key)}
+      <!-- Not a schema setting: vault sync has its own section, before the device's. -->
+      {#if group.key === "device"}<SyncSettings />{/if}
       <fieldset>
         <legend>{group.label}</legend>
         {#each inGroup(group.key) as def (def.key)}
