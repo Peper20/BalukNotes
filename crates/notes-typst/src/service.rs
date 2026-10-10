@@ -84,7 +84,7 @@ pub fn install(exe: &Path, args: &[String], addr: SocketAddr) -> Result<()> {
     // The address is taken by something other than the service (a `notes
     // serve` started by hand): the service would crash and restart forever.
     if !running && std::net::TcpListener::bind(addr).is_err() {
-        bail!("address {addr} is in use: stop the running notes serve (kill $(pgrep -x notes-typst)) and retry");
+        bail!("address {addr} is in use: stop the running notes serve and retry");
     }
     let path = unit_path()?;
     let dir = path.parent().unwrap_or(Path::new("."));

@@ -40,6 +40,15 @@ it. Extended at the end of every iteration, closed items are deleted.
   no fractions, roots, limits, matrices between them (`passes/fences.rs`,
   `TALL`). Something tall not on the list gets unstretched brackets. How to
   close: extend the list; ideally - a fix in Typst.
+- **The gap after an operator with limits is moved by a pass**
+  (`passes/operators.rs`): WebKit keeps the `rspace` of the base `mo` between
+  the operator and its limits, so the pass zeroes it and adds an `mspace`
+  after the construct (also in Chromium - the look does not change). Only
+  `em` spaces and parents with a free child count (`math`, `mrow`, `mtd`,
+  `msqrt`); the large operator list is in the pass. Left in WebKit: `∬`/`∮`
+  display glyphs are ~8 px narrower, stretchy brackets and matrices differ in
+  width (display formulas shift by 4-5 px); number inputs in settings have a
+  spin button.
 - **Anchor separators are a list** (`render::SEPARATORS`: spaces and common
   punctuation); the rest stays in the `id`, including rare punctuation and
   formula symbols in a heading. How to close: extend the list.
@@ -297,8 +306,8 @@ it. Extended at the end of every iteration, closed items are deleted.
   other files by an absolute path are not.
 - **Tabs and reading positions of the previous client version** (keys without
   a vault) are not carried over.
-- **Another vault - a page reload**: for the desktop (M5) - a window per vault
-  or recreating the state.
+- **Another vault - a page reload** (in this window) or a new window (tab) -
+  the setting `vaults.open`.
 
 ## Vault and tools
 
@@ -342,9 +351,9 @@ it. Extended at the end of every iteration, closed items are deleted.
   What else could speed it up: e2e already has a warm-up and one worker (a
   shared server).
 - **The installed `notes` and skill are a snapshot at `tools/install.sh`
-  time**: without reinstalling they lag behind the repository; `install.sh`
-  restarts the service itself, a `notes serve` started by hand runs until a
-  restart. How to close: an app with updates (M5).
+  time**: without reinstalling they lag behind the repository; an open window
+  (its core) and a `notes serve` started by hand run the old version until a
+  restart. How to close: an app with updates (PKGBUILD).
 - **Parts compare only the version number** (`notes::check_version`, the
   workspace version): two builds of one version from different commits are
   not told apart. While `tools/install.sh` installs the parts together - no
@@ -357,10 +366,18 @@ it. Extended at the end of every iteration, closed items are deleted.
   links and PDF. A window killed by SIGKILL leaves its core running (the next
   window connects to it); the core crashed with the window open - 502
   answers ("нет связи"), the window does not start a new core. A PDF with a
-  build error is only a line in the window log. One window per launch: a
-  second launch is a second window (single instance - with the "Windows" item
-  of roadmap M5). The page memory (tabs, reading positions) of the window is
-  its own, not the browser's.
+  build error is only a line in the window log. The page memory (tabs,
+  reading positions) of the window is its own, not the browser's.
+- **One app for all launches** (`notes-app` `instance.rs`): a second launch
+  with another `--data` or `--vault <dir>` is handed to the running app, which
+  ignores those flags (its core does not serve that vault - an error page);
+  the launch waits up to 40 s for the answer while the first app starts its
+  core. Which vault a window shows comes from its address: only real
+  navigations are intercepted, not the client's `pushState` (the client does
+  not switch vaults that way). Taking the focus on Wayland needs the
+  activation token of the launcher (`XDG_ACTIVATION_TOKEN`): a launch from a
+  terminal without it only asks for attention. Maximized/fullscreen is
+  remembered per window label (`main`, `w2`...).
 - **WebKitGTK in the window: memory and a crash on exit.** For the user, after
   11 minutes of work the window processes reached 1.7 GB (walking all "Демо"
   notes - WebKit ~550 MB without growth, 40 drags of a graph node - without
@@ -381,16 +398,15 @@ it. Extended at the end of every iteration, closed items are deleted.
   dependency calls the vulnerable `VariantStrIter`
   (`Variant::array_iter_str`). How to close: update when Tauri leaves GTK3;
   until then recheck on Tauri updates (`cargo tree -i glib`).
-- **Autostart is only a systemd user service** (`notes service`): no macOS or
+- **Autostart of `notes serve` is only a systemd user service** (`notes
+  service`, for self-hosting; the window does not need it): no macOS or
   Windows; the service lives while the user is logged in (without `loginctl
-  enable-linger`) - that is right for a desktop. The unit runs the binary
-  `install` was called from (a debug one - with a warning). How to close: the
-  desktop app (M5) replaces the service.
+  enable-linger`). The unit runs the binary `install` was called from (a
+  debug one - with a warning).
 - **The `comemo` copy with a patch** (`.claude/rules/vendor.md`): on a Typst
   update - move the patch or remove the copy.
 - **The `notes` config file has one key** (`data`, an unknown one is an
-  error). The server address in `notes new` and the skill is the default
-  (`127.0.0.1:8421`), they do not know a custom `--addr`.
+  error).
 - **The hint "the path starts with the vault directory name"** in `notes new`
   is a heuristic on the first segment; it does not catch other path mistakes.
 - **`target/` is cleaned whole** (`check.sh`, over 30 GB): after a cleaning
@@ -399,8 +415,11 @@ it. Extended at the end of every iteration, closed items are deleted.
 
 ## The `/baluk-note` skill
 
-- **The skill looks at the page in the app through Claude in Chrome**: without
-  it or without `notes serve` - only the PDF.
+- **The skill looks at the page through a browser tool** on its own temporary
+  `notes serve` (port 8439, next to the window's core: they share the disk
+  cache without locking, as the CLI always did); without a browser tool - only
+  the PNG pages. Stopping that server (`kill <PID>`) is not in
+  `allowed-tools` - Claude Code may ask the user.
 - **`writing.md` and `SKILL.md` are checked against the library only
   partly**: the test checks only `#name` calls; names without `#` and the
   meaning of rules go stale unnoticed. Of the `SKILL.md` snippets only the

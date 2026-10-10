@@ -13,4 +13,4 @@ styles: 1509 bytes, fnv 6df1eccb54ca6374
 <h3 id="Список" data-k-anchor="Список">Список</h3>
 <ul>
 <li>первый пункт</li>
-<li>второй пункт</li></ul><math display="block"><msubsup><mo lspace="0em">∫</mo><mn>0</mn><mn>1</mn></msubsup><msup><mi>𝑥</mi><mn>2</mn></msup><mspace width="0.1667em"/><mo form="prefix" lspace="0em" rspace="0em">d</mo><mi>𝑥</mi><mo>=</mo><mfrac><mn>1</mn><mn>3</mn></mfrac></math>
+<li>второй пункт</li></ul><math display="block"><msubsup><mo lspace="0em" rspace="0em">∫</mo><mn>0</mn><mn>1</mn></msubsup><mspace width="0.16666666666666666em"/><msup><mi>𝑥</mi><mn>2</mn></msup><mspace width="0.1667em"/><mo form="prefix" lspace="0em" rspace="0em">d</mo><mi>𝑥</mi><mo>=</mo><mfrac><mn>1</mn><mn>3</mn></mfrac></math>

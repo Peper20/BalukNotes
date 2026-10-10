@@ -13,8 +13,9 @@ it (`notes docs writing`). The `baluk` library does the layout, its API is
 | `notes check --vault "Name" [Path]` | build errors, warnings, broken links |
 | `notes pdf --vault "Name" Path -o file.pdf [--theme night]` | PDF of a note or book |
 | `notes png --vault "Name" Path -o dir [--pages 2-5] [--theme night]` | the PDF pages as PNG images, one file per page |
-| `notes info [--vault "Name"]` | where the vaults are, the app address |
-| `notes serve` | the app: `http://127.0.0.1:8421/v/<Vault>/n/<Path>`; in the background and at login - `notes service install` |
+| `notes info [--vault "Name"]` | where the vaults are, how to open the app |
+| `notes app [--vault "Name" ["Path"]]` | the app window, optionally on a vault or a note; it refreshes on every save |
+| `notes serve --addr 127.0.0.1:8439` | the same app in a browser at `http://127.0.0.1:8439/v/<Vault>/n/<Path>` (self-hosting; for a check by a browser tool, on a free port) |
 
 There is no default vault: note commands always need `--vault "Name"` (the
 list - `notes vaults`); the user creates the first vault.
@@ -89,8 +90,8 @@ in it: `title = "Сети и протоколы"` (no file - the folder name).
    delete the header.
 4. Add visualizations right away, without waiting to be asked.
 
-The user sees the note as it is written: `notes serve` picks up edits by
-itself.
+The user sees the note as it is written: the app window picks up edits by
+itself (`notes new` prints the command that opens the note there).
 
 ## A book chapter (a note section - the same, without `plan`)
 
@@ -205,10 +206,13 @@ notes png --vault "Name" "Folder/Book" -o $TMP/pages  # and LOOK at the pages; -
 ```
 
 - `$TMP` is a temporary folder, not the vault and not the sources folder.
-- The page - `http://127.0.0.1:8421/v/<Vault>/n/Folder/Book` in a browser
-  (Claude in Chrome): light and dark theme (the switch at the top right), a
-  narrow window (~400 px), interactivity. The server is not running - `notes
-  serve` (or ask the user; permanently - `notes service install`).
+- The page in a browser (Claude in Chrome): start a temporary server on a
+  free port of your own, `notes serve --addr 127.0.0.1:8439` in the
+  background, open `http://127.0.0.1:8439/v/<Vault>/n/Folder/Book` (vault and
+  path percent-encoded), look at the light and dark theme (the switch at the
+  top right), a narrow window (~400 px), interactivity; then stop that server.
+  The app window itself is `notes app --vault "<Vault>" "Folder/Book"`; do not
+  open it for the user uninvited.
 - Your own note has no errors, warnings or broken links; other problems of the
   vault (`notes check` without a path) are not fixed silently - tell the user.
 - Every number is recomputed independently (Python, sympy, brute force,

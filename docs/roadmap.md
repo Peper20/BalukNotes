@@ -188,26 +188,18 @@ before M7 starts.
       the core socket; the core is already running (service) - connect, if
       not - start its own (closing the window and SIGTERM stop it); external
       links and PDF go to system programs
-- [ ] Desktop instead of the browser (user's decision); the console `notes`
-      works alongside; in the browser - a separate web version; `notes serve`
-      stays for self-hosting (architecture §1). The window exists and is
-      installed in the menu; what is left (decide with the user): the root
-      README ("сейчас `notes serve` и браузер"), `docs/writing.md` and the
-      `/baluk-note` skill point to `http://127.0.0.1:8421/...` in a browser -
-      move them to the window; there is no way to open a note in the window
-      from the console (`notes new` prints a browser address;
-      `NOTES_APP_START` is for debugging only) - a command or link like
-      `notes app <note>` is needed, and a second launch must go to the window
-      already open (item "Windows"); the role of the `notes service` service
-      with the window - to decide (a window without the service starts its own
-      core; the skill needs a server to check the page - item "The skill
-      without the service"; tech debt "Autostart")
-- [ ] The skill without the service (user's decision): it looks at the page
-      in the app by starting `notes serve` for the check, otherwise - the PDF
-- [ ] Windows (user's decision): one window; a setting "another vault - in
-      this window or a new one" (this one by default); right click on a vault
-      - "in this window" and "in a new window" with any setting; Ctrl+click -
-      a new window; a vault already open in another window - switch to it
+- [x] Desktop instead of the browser (user's decision): the app is the
+      window - the menu entry or `notes app [--vault <name> [<note>]]`; README,
+      `docs/writing.md`, `notes new` and the skill point to it; `notes serve`
+      and `notes service` stay for the browser version and self-hosting
+      (`tools/install.sh` does not install the service)
+- [x] The skill without the service (user's decision): it tells the user the
+      `notes app` command, looks at the PNG pages and, with a browser tool,
+      at the page of its own temporary `notes serve`
+- [x] Windows (user's decision): one app, a second launch goes to it; the
+      setting "another vault - in this window or a new one" (this one by
+      default); right click on a vault - both choices; Ctrl+click - a new
+      window; a vault already open in another window - switch to it
 - [x] A `WebKitWebProcess` crash when closing the window (user's task): the
       window kills its WebKit process before exit (tech debt "WebKitGTK in
       the window")
@@ -217,13 +209,13 @@ before M7 starts.
 - [x] The window opens maximized or fullscreen if it was so when closed
       (user's task; `tauri-plugin-window-state`, size and position are not
       remembered)
-- [ ] WebKitGTK differences (E7): no gap after ∑ and ∫ with limits; the
-      `/graph` filter row wraps (a GTK-styled `<select>` is wider). Done:
-      `baluk.css` goes through lightningcss with prefixes (without
-      `-webkit-user-select` dragging a node selected the whole graph); no
-      elastic page bounce for the mouse and touchpad
-- [x] Installation - `tools/install.sh` (parts, a menu entry and icon; the
-      default service unit has the socket), later a PKGBUILD (user's decision)
+- [x] WebKitGTK differences (E7): the gap after an operator with limits or
+      scripts (∑, ∫, lim) - the pass `passes/operators.rs` puts it after the
+      whole construct for every engine; interface `<select>` and the graph
+      checkbox have their own look, the same in both engines; `baluk.css`
+      goes through lightningcss with prefixes; no elastic page bounce
+- [x] Installation - `tools/install.sh` (parts, a menu entry and icon), later
+      a PKGBUILD (user's decision)
 - [x] The app icon (user's choice of 7 variants): an italic "b" and lines of
       text; it is also the site favicon
 - [ ] A vault copy + sync (M4); the server address and sign-in in settings

@@ -22,6 +22,7 @@ mod code_colors;
 mod fences;
 mod heading_html;
 mod links;
+mod operators;
 mod sanitize;
 mod tags;
 mod themes;
@@ -35,7 +36,8 @@ use crate::render::{Heading, LinkRef, LinkResolver, Rendered, walk_mut};
 
 /// Tree passes, in order.
 // Sanitizing comes first: it removes dangerous elements and attributes before serializing.
-pub const TREE: &[TreePass] = &[sanitize::PASS, themes::PASS, anchors::PASS, links::PASS, fences::PASS, tags::PASS];
+pub const TREE: &[TreePass] =
+    &[sanitize::PASS, themes::PASS, anchors::PASS, links::PASS, fences::PASS, operators::PASS, tags::PASS];
 
 /// Passes over the text of the raw page, in order.
 pub const TEXT: &[TextPass] = &[code_colors::PASS, heading_html::PASS];

@@ -4,7 +4,8 @@
 //! the user's data directory; the library, client and fonts are embedded in
 //! the binary (release build).
 //!
-//!   notes serve               local server with the client (http://127.0.0.1:8421)
+//!   notes app                 the window (the `notes-app` part): the app itself
+//!   notes serve               the browser version / self-hosting (http://127.0.0.1:8421)
 //!   notes new <path>          a note stub (--book: a book)
 //!   notes list | tags         notes of the vault / tags
 //!   notes check [path]        compile errors and broken links
@@ -13,7 +14,7 @@
 //!   notes docs <topic>        how to write notes, the library API
 //!   notes info                where the vault, settings and library are
 //!   notes vaults [new <name>] vaults / create a new one
-//!   notes service install     autostart of notes serve (systemd user service)
+//!   notes service install     autostart of notes serve for self-hosting (systemd user service)
 //!
 //! Data directory (`vaults/`, `settings.json`, `cache/`): `--data` or
 //! `NOTES_DATA`, else `data` from `~/.config/baluk-notes/config.toml`, else
@@ -109,7 +110,8 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Local server with the client.
+    /// The browser version / self-hosting: a local server with the client.
+    /// (The app itself is the `notes app` window.)
     Serve {
         /// Address for the browser; 0.0.0.0:8421 for access from the network.
         /// Default: 127.0.0.1:8421, unless only --socket is given.
@@ -220,14 +222,15 @@ enum Command {
         /// What to show.
         topic: Topic,
     },
-    /// Where the vault, settings and cache are, which library, the server address.
+    /// Where the vault, settings and cache are, which library, how to open the app.
     Info,
     /// Vaults of the data directory; `new <name>` creates a new one.
     Vaults {
         #[command(subcommand)]
         action: Option<VaultsAction>,
     },
-    /// Autostart of `notes serve`: a systemd user service (Linux), no root.
+    /// Autostart of `notes serve` for self-hosting: a systemd user service
+    /// (Linux), no root. The `notes app` window does not need it.
     Service {
         #[command(subcommand)]
         action: ServiceAction,
@@ -236,10 +239,10 @@ enum Command {
 
 #[derive(Debug, Subcommand)]
 enum ServiceAction {
-    /// Install and start: the server runs in the background, starts at login
-    /// and restarts after a crash. Already installed: restart it (after
-    /// updating notes). Runs this same `notes` binary; --data, --library and
-    /// --font-path are passed to the service.
+    /// Install and start: the browser server runs in the background, starts
+    /// at login and restarts after a crash. Already installed: restart it
+    /// (after updating notes). Runs this same `notes` binary; --data,
+    /// --library and --font-path are passed to the service.
     Install {
         /// Address; 0.0.0.0:8421 for access from the network.
         #[arg(long, default_value_t = ADDR)]
@@ -472,7 +475,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
             let main = note.create(notes.vault(), &id)?;
             out!("{}", notes.vault().storage().display(&main).display());
             out!("{id}");
-            eprintln!("in the app: http://{ADDR}/v/{name}/n/{id} (if notes serve is running)");
+            eprintln!("in the app: notes app --vault \"{name}\" \"{id}\"");
             Ok(ExitCode::SUCCESS)
         }
         Command::List { json } => list(&notes, json),
@@ -548,7 +551,7 @@ fn vaults_command(vaults: &Vaults, action: Option<VaultsAction>) -> Result<ExitC
         let name = VaultName::new(name)?;
         let path = vaults.create(&name)?;
         out!("{}", path.display());
-        eprintln!("in the app: http://{ADDR}/v/{name}/ (if notes serve is running)");
+        eprintln!("in the app: notes app --vault \"{name}\"");
         return Ok(ExitCode::SUCCESS);
     }
     let list = vaults.list()?;
@@ -581,7 +584,7 @@ fn info(vaults: &Vaults, data: &Path, arg: Option<&VaultArg>, library_dir: Optio
     out!("data:      {} (settings.json, cache/)", data.display());
     out!("config:    {config} (data = \"...\" sets another data directory)");
     out!("library:   {library}");
-    out!("server:    http://{ADDR}/ (notes serve)");
+    out!("app:       notes app (the window); in a browser: notes serve -> http://{ADDR}/");
     Ok(ExitCode::SUCCESS)
 }
 

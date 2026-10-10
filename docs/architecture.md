@@ -25,15 +25,25 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
 - **The core (`notes-core`: compiling, cache, link index, graph, search) runs
   on the device**, next to the `app/` interface, and answers it over an HTTP
   API (`notes-server`); the layer `app/src/lib/api/` knows only the address.
-  - Computer: `notes serve` and a browser (exists now); in the background - a
-    systemd user service (`notes service`, the CLI writes the unit, no root).
-  - Desktop - a Tauri 2 window without Typst (`notes-app`): the core is a
-    `notes-typst serve` process the window connects to over a Unix socket
-    (`0600` in `$XDG_RUNTIME_DIR`), or starts itself. The interface uses its
-    own Tauri address scheme, the window passes a request to the socket. No
-    port: browser pages and other users cannot reach the core, no token is
-    needed. Typst is on disk once, one core for the window, the skill and the
-    service.
+  - Desktop (the main way on a computer) - a Tauri 2 window without Typst
+    (`notes-app`): the core is a `notes-typst serve` process the window
+    connects to over a Unix socket (`0600` in `$XDG_RUNTIME_DIR`), or starts
+    itself and stops on exit. The interface uses its own Tauri address scheme,
+    the window passes a request to the socket. No port: browser pages and
+    other users cannot reach the core, no sign-in is needed. Typst is on disk
+    once.
+  - **One app, several windows.** `notes app [--vault <name> [<note>]]` (and
+    the menu entry) opens a page; a second launch hands its page to the
+    running app over a second socket (`app.sock` next to the core socket) and
+    exits. A window shows one vault. Another vault opens in the same window
+    or a new one (the setting `vaults.open`, a right click or Ctrl+click in
+    the vault menu); a vault already shown by a window is never opened twice -
+    that window gets the focus (the app cancels the navigation). The client
+    asks for a new window with a plain `window.open`, so in a browser the
+    same code opens a tab.
+  - Browser on a computer - `notes serve` (self-hosting, checks; in the
+    background - a systemd user service, `notes service`, the CLI writes the
+    unit, no root). The window does not need either.
   - Android - the same window, the core inside the app (there is no console):
     the scheme is served by the same `Router` in-process
     (`docs/research/E7.md`).
@@ -88,9 +98,9 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   (§9).
 
 ```
-   computer              desktop / Android (Tauri)     browser (plan)
+   self-hosting          desktop / Android (Tauri)     browser (plan)
    browser: app/         WebView: app/                 app/
-      | HTTP localhost      | own address scheme          | messages
+      | HTTP                | own address scheme          | messages
    notes serve           socket -> notes-typst serve   core in WASM (worker)
                          (Android - core in-process)
    notes-core            notes-core                    notes-core

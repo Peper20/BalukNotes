@@ -3,7 +3,7 @@
 // directory), with a confirmation; the tabs of a deleted note close.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { TRASH, VAULT, noteUrl, open, ready, vaultUrl } from "./helpers";
 
 const head = (title: string) => `#import "/_baluk/lib.typ": *\n#show: note.with(title: [${title}])\n\n`;
@@ -235,4 +235,131 @@ test("an empty folder is in the tree; renaming a note and a folder: file, title,
   } finally {
     for (const p of [empty, dir, join(VAULT, "Готово"), join(VAULT, "Ссылка2.typ")]) rmSync(p, { recursive: true, force: true });
   }
+});
+
+test.describe("opening another vault: this window or a new one", () => {
+  const other = join(VAULT, "..", "Соседнее");
+  const otherHome = `/v/${encodeURIComponent("Соседнее")}/`;
+
+  const setOpen = async (page: Page, value: "this" | "new") => {
+    const res = await page.request.put("/api/settings", { data: { "vaults.open": value } });
+    if (!res.ok()) throw new Error(`vaults.open not set: ${res.status()}`);
+  };
+
+  test.beforeEach(() => {
+    mkdirSync(other, { recursive: true });
+    writeFileSync(join(other, "Заметка.typ"), `${head("Заметка")}Текст.\n`);
+  });
+  test.afterEach(async ({ page }) => {
+    await setOpen(page, "this");
+    rmSync(other, { recursive: true, force: true });
+  });
+
+  const row = (page: Page) => page.locator("#vault-menu").getByRole("menuitem", { name: "Соседнее", exact: true });
+  async function menu(page: Page) {
+    await open(page, "Сеть/SSH");
+    await page.locator("#vault-switch").click();
+    await expect(row(page)).toBeVisible();
+  }
+
+  test("a plain click by the default setting goes in this window; Ctrl+click and middle click open a new one", async ({
+    page,
+    context,
+  }) => {
+    await menu(page);
+    // Ctrl+click: a new page with that vault, this one stays.
+    const [second] = await Promise.all([context.waitForEvent("page"), row(page).click({ modifiers: ["Control"] })]);
+    await second.waitForLoadState();
+    await ready(second);
+    await expect(second).toHaveURL(otherHome);
+    await expect(second.locator("#vault-name")).toHaveText("Соседнее");
+    await expect(page).toHaveURL(noteUrl("Сеть/SSH"));
+    await expect(page.locator("#vault-menu")).toHaveCount(0);
+    await second.close();
+
+    // The middle button as well.
+    await page.locator("#vault-switch").click();
+    const [third] = await Promise.all([context.waitForEvent("page"), row(page).click({ button: "middle" })]);
+    await third.waitForLoadState();
+    await expect(third).toHaveURL(otherHome);
+    await expect(page).toHaveURL(noteUrl("Сеть/SSH"));
+    await third.close();
+
+    // A plain click: the same page navigates.
+    await page.locator("#vault-switch").click();
+    await row(page).click();
+    await expect(page).toHaveURL(otherHome);
+    await ready(page);
+    await expect(page.locator("#vault-name")).toHaveText("Соседнее");
+    expect(context.pages()).toHaveLength(1);
+  });
+
+  test("right click: a menu with two items; the current vault has none", async ({ page, context }) => {
+    await menu(page);
+    const choice = page.locator("#vault-open-menu");
+
+    // The current vault: no menu of ours.
+    await page.locator("#vault-menu").getByRole("menuitem", { name: "vault", exact: true }).click({ button: "right" });
+    await expect(choice).toHaveCount(0);
+
+    // Escape closes the right-click menu first, then the vault menu.
+    await row(page).click({ button: "right" });
+    await expect(choice.locator(".note-menu-head")).toHaveText("Соседнее");
+    await expect(choice.getByRole("menuitem")).toHaveText(["В этом окне", "В новом окне"]);
+    await page.keyboard.press("Escape");
+    await expect(choice).toHaveCount(0);
+    await expect(page.locator("#vault-menu")).toBeVisible();
+
+    // "В новом окне" with the setting "this".
+    await row(page).click({ button: "right" });
+    const [second] = await Promise.all([
+      context.waitForEvent("page"),
+      choice.getByRole("menuitem", { name: "В новом окне" }).click(),
+    ]);
+    await second.waitForLoadState();
+    await expect(second).toHaveURL(otherHome);
+    await expect(page).toHaveURL(noteUrl("Сеть/SSH"));
+    await second.close();
+
+    // "В этом окне" with the setting "new".
+    await setOpen(page, "new");
+    await page.reload();
+    await ready(page);
+    await page.locator("#vault-switch").click();
+    await row(page).click({ button: "right" });
+    await choice.getByRole("menuitem", { name: "В этом окне" }).click();
+    await expect(page).toHaveURL(otherHome);
+    expect(context.pages()).toHaveLength(1);
+  });
+
+  test("the setting 'new': a plain click and Enter open a new window", async ({
+    page,
+    context,
+  }) => {
+    await setOpen(page, "new");
+    await menu(page);
+    const [second] = await Promise.all([context.waitForEvent("page"), row(page).click()]);
+    await second.waitForLoadState();
+    await expect(second).toHaveURL(otherHome);
+    await expect(page).toHaveURL(noteUrl("Сеть/SSH"));
+    await second.close();
+
+    await page.locator("#vault-switch").click();
+    await row(page).focus();
+    const [third] = await Promise.all([context.waitForEvent("page"), page.keyboard.press("Enter")]);
+    await third.waitForLoadState();
+    await expect(third).toHaveURL(otherHome);
+    await third.close();
+  });
+
+  test("the setting is in the settings window and saves", async ({ page }) => {
+    await open(page, "Сеть/SSH");
+    await page.locator("#open-settings").click();
+    const dialog = page.locator("#settings");
+    await expect(dialog.locator("legend", { hasText: "Хранилища" })).toBeVisible();
+    await dialog.getByLabel("Другое хранилище открывать").selectOption("new");
+    // Shared by all vaults, like the theme.
+    const shared = async () => (await (await page.request.get("/api/settings")).json()).values["vaults.open"];
+    await expect.poll(shared).toBe("new");
+  });
 });
