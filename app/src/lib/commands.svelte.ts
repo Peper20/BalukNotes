@@ -2,7 +2,7 @@
 // (?). A new interface feature = a command here.
 
 import { api } from "./api";
-import { notes, places, reader, router, settings, tabs, updates } from "./state";
+import { notes, places, reader, router, session, settings, tabs, updates } from "./state";
 import { graphHref, homeHref, noteHref, parseRoute, tagHref } from "./ids";
 import { combo, type Combo } from "./keys";
 import { movedId } from "./rename";
@@ -108,6 +108,14 @@ export function commands(): Command[] {
 
     { id: "settings", group: "Приложение", title: "Настройки", keys: keys("Ctrl+Comma"), run: () => (ui.settingsOpen = true) },
     { id: "help", group: "Приложение", title: "Горячие клавиши", keys: keys("?"), run: () => (ui.helpOpen = true) },
+    // Only on a server with sign-in; the page then reloads to the sign-in screen.
+    {
+      id: "sign-out",
+      group: "Приложение",
+      title: `Выйти (${session.login ?? ""})`,
+      available: () => session.login != null,
+      run: () => void session.signOut().then((error) => error && (reader.status = `не удалось выйти: ${error}`)),
+    },
   ];
   for (let i = 1; i <= 9; i++) {
     list.push({ id: `tab-${i}`, group: "Вкладки", title: `Вкладка ${i}`, keys: keys(`Alt+Digit${i}`), available: () => tabs.list.length >= i, run: () => router.switchTab(i - 1) });

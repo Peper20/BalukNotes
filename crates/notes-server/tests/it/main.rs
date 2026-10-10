@@ -5,3 +5,4 @@
 mod api;
 mod common;
 mod csp;
+mod device_sync;

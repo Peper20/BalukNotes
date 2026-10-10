@@ -13,6 +13,7 @@ PDF, a Svelte client shows the notes.
 | tech debt: what is simplified, the risk, how to close it | `docs/tech-debt.md` |
 | open questions to the user | `docs/questions.md` |
 | how to write notes | `docs/writing.md` (= `notes docs writing`) |
+| the storage server on a VPS: service, nginx | `docs/server.md` |
 | research measurements | `docs/research/` |
 | the layout library API | `baluk/README.md` (= `notes docs library`) |
 | fonts and their licenses | `fonts/README.md` |

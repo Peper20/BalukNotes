@@ -20,6 +20,7 @@ pub const MAX_WAIT_SECS: u64 = 30;
 
 /// `POST /api/login`.
 #[derive(Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct LoginRequest {
     pub login: String,
     pub password: String,
@@ -47,6 +48,7 @@ impl fmt::Debug for LoginResponse {
 
 /// The answer of `GET /api/session`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
 pub struct SessionResponse {
     pub login: String,
 }

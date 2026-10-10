@@ -17,6 +17,9 @@
 //! created, and that one is neither renamed nor deleted. Themes and fonts are
 //! shared by all (one library): the core without a vault serves them
 //! ([`VaultSet::library`]).
+//!
+//! Renaming or deleting a vault that is linked to a storage server stops its
+//! sync worker first and unlinks it afterwards (`device_sync`).
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -35,6 +38,7 @@ use tokio::sync::watch;
 
 use crate::AppState;
 use crate::api::{ChangeEvent, CreateVaultRequest, RenameVaultRequest, VaultsResponse};
+use crate::device_sync;
 use crate::error::{ApiError, ApiResult, blocking};
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -84,26 +88,31 @@ async fn rename(
     Json(req): Json<RenameVaultRequest>,
 ) -> ApiResult<Json<VaultsResponse>> {
     registry_only(&s)?;
+    // A linked vault: its sync worker stops before the folder moves.
+    let linked = device_sync::detach(&s, &vault).await;
     let vaults = s.vaults.clone();
-    Ok(Json(
-        blocking(move || {
-            vaults.rename(&vault, &VaultName::new(req.name)?)?;
-            vaults.describe()
-        })
-        .await?,
-    ))
+    let from = vault.clone();
+    let result = blocking(move || {
+        vaults.rename(&from, &VaultName::new(req.name)?)?;
+        vaults.describe()
+    })
+    .await;
+    device_sync::settle(&s, &vault, linked, result.is_ok()).await;
+    Ok(Json(result?))
 }
 
 async fn remove(State(s): State<AppState>, Path(vault): Path<String>) -> ApiResult<Json<VaultsResponse>> {
     registry_only(&s)?;
+    let linked = device_sync::detach(&s, &vault).await;
     let vaults = s.vaults.clone();
-    Ok(Json(
-        blocking(move || {
-            vaults.trash(&vault)?;
-            vaults.describe()
-        })
-        .await?,
-    ))
+    let name = vault.clone();
+    let result = blocking(move || {
+        vaults.trash(&name)?;
+        vaults.describe()
+    })
+    .await;
+    device_sync::settle(&s, &vault, linked, result.is_ok()).await;
+    Ok(Json(result?))
 }
 
 /// An open vault.

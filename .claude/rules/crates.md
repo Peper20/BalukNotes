@@ -17,6 +17,9 @@ How it works and why - `docs/architecture.md`; here - code rules of `crates/`.
 | `notes` | the thin `notes` command: calls the parts from its own folder, no dependencies (architecture §1) |
 | `notes-typst` | the part that builds with Typst: every command except those of other parts |
 | `notes-app` | the window (Tauri 2) without Typst: the `notes://` scheme -> the core over a Unix socket; needs WebKitGTK |
+| `notes-store` | the light part without Typst, HTTP or async: data directory rules, vault names, accounts, sessions, the sync engine |
+| `notes-hub` | the storage server without Typst (`notes hub serve`, `notes users`): sign-in (`auth`, also mounted by `notes-server`), the sync API, the device's HTTP client (feature `client`) |
+| `notes-device` | the device side of sync: account, linked vaults, rounds, the background worker (uses `notes-hub`'s client, so not in the core) |
 
 Logic lives in the core, the other crates are thin wrappers. A new app part is
 a binary `notes-<name>` and a line in `notes::PARTS` (its commands); shared
@@ -69,7 +72,7 @@ Where the project differs from the skill:
 
 - **Server** - a module per API area (`vaults`, `notes`, `graph`, `search`,
   `settings`, `assets`, `fonts`, `events`) with its own `routes()`; shared -
-  `AppState` (`lib.rs`), `error.rs`, the token - `auth.rs`. A new area - a
+  `AppState` (`lib.rs`), `error.rs`; sign-in - `notes_hub::auth` (public paths - `auth.rs`), device sync - `device_sync.rs`. A new area - a
   module + `merge`. The vault API is under `/api/vaults/{vault}/...`
   (`s.vault(name)` - an open vault); what is shared by all (settings, themes,
   fonts) - without a vault. A response is a named struct

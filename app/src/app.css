@@ -389,6 +389,25 @@ select option { color: var(--k-text); background: var(--k-surface); }
 }
 .vault-picker-row button:disabled { opacity: 0.5; cursor: default; }
 
+/* ── Sign-in (the server wants a session): the picker's look, a column of fields ── */
+.sign-in { box-sizing: border-box; width: min(24rem, 100%); margin: 12vh auto 2rem; padding: 0 1rem; }
+.sign-in h1 { margin: 0 0 0.4rem; font-size: 1.5rem; }
+.sign-in-lead { margin: 0 0 1.2rem; color: var(--k-muted); }
+.sign-in-form { display: flex; flex-direction: column; }
+.sign-in-form label { margin-bottom: 0.35rem; font-weight: 600; }
+.sign-in-form input {
+  margin-bottom: 0.9rem; min-width: 0; font: inherit; padding: 0.4rem 0.55rem; border-radius: 6px;
+  border: 1px solid var(--k-line); background: var(--k-surface); color: var(--k-text);
+}
+.sign-in-form input:focus-visible { outline: 2px solid var(--k-accent); outline-offset: -1px; }
+.sign-in-form button {
+  font: inherit; padding: 0.45rem 1rem; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--k-accent); background: var(--k-accent); color: var(--k-bg);
+}
+.sign-in-form button:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 2px; }
+.sign-in-form button:disabled { opacity: 0.5; cursor: default; }
+.sign-in-form .dialog-error { margin: 0.8rem 0 0; }
+
 /* ── Short dialogs: vault (new, rename, delete), note and folder (rename, delete) ── */
 .vault-new, .vault-edit, .note-delete, .note-rename { width: min(26rem, 94vw); }
 .vault-new h2, .vault-edit h2, .note-delete h2, .note-rename h2 { overflow-wrap: anywhere; }

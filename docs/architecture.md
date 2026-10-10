@@ -61,9 +61,11 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
 - **Parts are installed separately** (user's decision). `notes` is thin: help,
   light commands and calling the parts in its folder (`notes app` ->
   `notes-app`), with a version check; a missing part - a message which one.
-  Parts: `notes-typst` (building, `check`, `pdf`, `serve`), `notes-app` (the
-  window, without Typst), `notes-hub` (the storage server, without Typst).
-  Typst only in `notes-typst`.
+  Parts: `notes-typst` (building, `check`, `pdf`, `serve`, `sync`),
+  `notes-app` (the window, without Typst), `notes-hub` (the storage server and
+  `notes users`, without Typst). Typst only in `notes-typst`. What the parts
+  share without Typst (the data directory rules, vault names, accounts,
+  sessions, the sync engine) is the light crate `notes-store`.
 - **Every device has a copy of the vault** with sync (§9): notes are read
   without a network, Claude Code writes to the copy on the computer.
 - Typst is a Rust library in the core with a pinned version: the HTML export
@@ -93,9 +95,7 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   (`storage.ts: moveVault`).
 - The core address is one client setting (`app/src/lib/api/config.ts`:
   `globalThis.__NOTES_API__` or `configure`), the server that served the page
-  by default. The token lives there for now (`notes serve --token`: a header,
-  `?token=` -> the cookie `notes_token`); sign-in with a session replaces it
-  (§9).
+  by default. Who may use the server - the session cookie (§9).
 
 ```
    self-hosting          desktop / Android (Tauri)     browser (plan)
@@ -381,24 +381,60 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
 
 ### 9. The server online: storage, sync, sign-in
 
-Not done yet (roadmap, M4); the decisions:
+How to put it on a VPS - `docs/server.md`.
 
-- **Without Typst**: stores files and their versions, serves changes, lets in
-  by session. Storage is behind `trait Storage` (a directory, later a
-  database; with several users - a vault per user).
-- **Sync** - file versions + an edit lock, no CRDT. A device keeps a copy and
-  pulls changes on a server event. First "one writer" (the computer with
-  Claude Code), the lock is groundwork.
-- **Sign-in** (user's decision): `POST /api/login` with a password -> a
-  session in a cookie (`HttpOnly`, `SameSite=Strict`, `Secure` behind HTTPS).
-  A token is never passed in the address. A session lives 30 days without
-  requests, each one extends it; expired - sign in again; session hashes are
-  on the server disk. One token, no refresh. `POST /api/logout` closes the
-  session. The device core signs in the same way; the interface shows the
-  sign-in on a 401 response.
+- **`notes-hub` - a server without Typst** (`crates/notes-hub`): sign-in and
+  vault files with versions. It listens on HTTP on localhost; HTTPS is the
+  reverse proxy's job (user's decision: the VPS already runs nginx), so the
+  server trusts `X-Forwarded-Proto` for the `Secure` cookie flag. Each account
+  has its own vaults: `<data>/hub/<login>/<vault>/` - `files/` (a plain vault
+  folder, the truth), `manifest.json` (hash, size and change number `seq` of
+  every file, tombstones of deleted ones), `history/<seq>/` (what a write
+  replaced or removed: nothing is lost on the server).
+- **Sign-in** (user's decision: login + password from the start;
+  `notes_hub::auth`, the same module for the hub and for `notes serve
+  --auth`): accounts are created on the machine (`notes users add <login>`,
+  Argon2id hashes in `<data>/users.json`). `POST /api/login` -> a session: a
+  cookie (`HttpOnly`, `SameSite=Strict`, `Secure` behind HTTPS) for the
+  browser, the same token as `Authorization: Bearer` for a device core. A
+  token is never passed in an address. A session lives 30 days without
+  requests (`--session-days`), each request extends it; the server disk holds
+  only hashes of tokens (`<data>/sessions.json`). A wrong password slows the
+  next attempt for that login (1 s doubling to 60 s; many failures - for
+  everyone); a state-changing request with a foreign `Origin` is refused.
+  `POST /api/logout`, `GET /api/session`; changing a password or removing a
+  user ends their sessions.
+- **Who needs to sign in**: the browser and sync. The app window talks to its
+  core over a Unix socket only the user can open - no sign-in (user's
+  decision). `notes serve` on a localhost address is open as before; on
+  another address it starts only with `--auth`. With sign-in on, the page,
+  client files, themes and fonts are public (the sign-in screen needs them),
+  everything else answers 401 and the client shows the sign-in screen.
+- **Sync** (`notes_store::sync` - the engine, no network; `notes-hub` - the
+  API and the client `HttpRemote`; `notes-device` - the device side): file
+  versions, no CRDT. A device keeps a full copy of a vault and the state of
+  the last sync (hash of every file). A round: scan the folder (only files
+  whose size or time changed are hashed), ask the server for changes after
+  the known `seq`, then per file - changed only there: download; only here:
+  upload with "I replace version X" (the server refuses if it has another
+  one); both sides differently: the device setting `device.sync_prefer`
+  decides ("the computer writes first, the others receive": this device wins
+  on a computer, the server wins on a phone). A local file that sync replaces
+  or removes is moved to `<data>/sync/removed/` (kept 30 days), never just
+  deleted.
+- **The device side** (`crates/notes-device`; the core stays free of HTTP for
+  WASM): `<data>/sync/` holds the account (server, login, session token), the
+  state of every linked vault, the last result and a lock per vault. `notes
+  sync login | link | now | status | unlink | logout`; `notes serve` (so the
+  window's core too) runs a worker per linked vault: a round at start, 2 s
+  after a local change (the file watcher), on a server change (long polling
+  `changes?after=&wait=`), a retry with a growing pause when the server is
+  unreachable. Pulled files are ordinary file changes: open notes refresh by
+  themselves (§8). The client gets the state and the actions at
+  `/api/device/sync...`.
 - **A vault from the server is untrusted**: note HTML is sanitized, the client
   sets a strict CSP. See the section below.
-- Version history and backups - on the server. Encryption - far away.
+- Reading the history, backups - later. Encryption - far away.
 
 ### 10. Fonts
 

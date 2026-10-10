@@ -50,6 +50,7 @@ fn measure_memory_and_reopen_time() {
     // Limit the page cache memory (less noise in measurements): applied directly.
     let device = notes_core::settings::Device {
         warm: notes_core::warm::WarmMode::All,
+        sync_prefer: notes_core::settings::SyncPrefer::Local,
         builds: 2,
         memory: 8 * 1024 * 1024,
         disk: notes_core::cache::DiskLimits::default(),

@@ -13,6 +13,8 @@ default = ["client"]
 # binary does not need it: `--no-default-features` builds the VPS binary without
 # a TLS library.
 client = ["dep:ureq", "dep:percent-encoding"]
+# Exports the wire types of sign-in to app/src/lib/api/types (cd app && npm run types).
+ts = ["dep:ts-rs"]
 
 [lib]
 name = "notes_hub"
@@ -36,6 +38,7 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "macros"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
+ts-rs = { workspace = true, optional = true }
 ureq = { workspace = true, optional = true }
 
 [dev-dependencies]

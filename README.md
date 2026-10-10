@@ -18,7 +18,8 @@ with sign-in (`docs/roadmap.md`); in a browser it works through `notes serve`.
    repository update): `tools/install.sh` (the first build takes a few
    minutes). Then `notes` works from any folder. `notes` is a thin command: it
    hands work to the parts in its folder (`notes-typst` - building and all
-   commands below; `notes-app` - the window); which are installed - `notes
+   commands below; `notes-app` - the window; `notes-hub` - accounts and the
+   storage server); which are installed - `notes
    --version`.
 3. **Vault**: `notes vaults new "Notes"` (or in the app).
 4. **App**: the window "baluk notes" from the menu, or `notes app` (`notes app
@@ -45,7 +46,10 @@ with sign-in (`docs/roadmap.md`); in a browser it works through `notes serve`.
 
 ```sh
 notes app [--vault "Name" ["Path"]]          # the app window; on a vault or a note
-notes serve                                  # the browser version / self-hosting; --token - token only; --socket - a socket for the window
+notes serve                                  # the browser version / self-hosting; --auth - sign-in (required beyond localhost); --socket - a socket for the window
+notes sync login <server> --login <name>     # sync with a storage server: then link --vault "Name", now, status, unlink, logout
+notes users add <login> | list | passwd | remove   # accounts for sign-in (notes serve --auth, notes hub)
+notes hub serve                              # the storage server without Typst, for a VPS: docs/server.md
 notes service install | remove | status      # autostart of notes serve for self-hosting (systemd); log - journalctl --user -u baluk-notes
 notes vaults [new "Name"]                    # vaults
 notes new --vault "Name" --title "Title"     # a stub; also --folder, --book, --tag, --lang

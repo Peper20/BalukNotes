@@ -19,7 +19,7 @@ npm test        # Vitest; also check, e2e
   `ui.svelte.ts` (panels, chapter, contents); new state is its own module, not
   a field in someone else's. Pure logic - `src/lib/*.ts` with Vitest next to it
   (`*.test.ts`); components - `src/components/`.
-- The server only through `src/lib/api/` (address and token - `api/config.ts`,
+- The server only through `src/lib/api/` (address - `api/config.ts`,
   errors - `ApiError`), no `fetch` in components. The source of changes is
   `changes.ts` (long polling `GET .../events?after=`, no polling every N
   seconds); the server connection is `state/connection.svelte.ts` (whether it

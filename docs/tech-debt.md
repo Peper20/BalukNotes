@@ -209,10 +209,6 @@ it. Extended at the end of every iteration, closed items are deleted.
   global document properties. How to close: the client must not rely on
   `window.<id>` and `document.<name>`, only explicit
   `querySelector`/`getElementById` in its container.
-- **Instead of sign-in - a shared token without expiry** (`auth.rs`):
-  `?token=` stays in the address bar, history and log, the cookie has no
-  expiry and no `Secure`, 404 answers without a token too; no HTTPS. Bearable
-  for `notes serve` on 127.0.0.1; before going online - sign-in (roadmap M4).
 - **No CORS**: `config.ts` has `base`, but the server rejects a foreign
   `Origin`. The core talks to the storage server, not the page - CORS is
   needed only if a page from another origin calls the server itself.
@@ -236,6 +232,45 @@ it. Extended at the end of every iteration, closed items are deleted.
   last deleted note stays (empty - in the tree). With sync (M4) a deletion
   must become a versioned change, otherwise the note comes back from the
   server. How to close: a vault trash `.trash/`.
+
+## Sign-in and sync
+
+- **Accounts are files** (`users.json`, `sessions.json` in the data
+  directory): fine for a few users; a `notes users` command and a running
+  server may save `sessions.json` at the same moment (a tiny window). A
+  session's "last used" on disk lags up to an hour. The pause after a wrong
+  password lives in memory (a restart resets it); one wrong password makes
+  that login wait ~1 s even with the right one. How to close: a KV database
+  with several users.
+- **The hub trusts `X-Forwarded-Proto` and `X-Forwarded-Host`**: right behind
+  a reverse proxy on localhost, wrong if the port is open to the network (the
+  `Origin` check compares host and port, not the scheme).
+- **All accounts of `notes serve --auth` see the same vaults** (one data
+  directory); only the hub keeps vaults per account.
+- **Hub vaults**: tombstones and `history/` are kept forever, there is no API
+  to read the history; open vaults are never closed, the vault list opens
+  (rescans) all of them; a file edited on the server by hand is noticed on the
+  next start or on a request for that path; `notes users remove` keeps the
+  vault files. A file is held whole in memory (limit 64 MiB).
+- **Sync sees a change by size and time, then by hash**: an edit that keeps
+  both is missed until the next one. Paths are compared byte by byte (case,
+  Unicode forms). A failed file operation on the device fails the whole
+  round.
+- **A deletion is a change like any other**: emptying a linked vault folder by
+  hand deletes the files on the server and on other devices (the server keeps
+  them in `history/`, a device - 30 days in `sync/removed/`). There is no "too
+  many deletions - ask first" guard.
+- **Rename or delete of a linked vault in the app unlinks it**: the server
+  copy stays under the old name, there is no rename on the server and no
+  re-link. Unlinking from the console while `notes serve` runs - its worker
+  stops on the next round or state request.
+- **Extra sync rounds**: every pulled file and every server echo of an own
+  upload wakes the worker for one more cheap round. `.baluk/settings.json`
+  (a hidden path for the watcher) goes with the next round, not at once.
+  Without a file watcher - a round every 60 s (a constant).
+- **`notes-server` pulls the HTTP client** (`ureq`, native TLS) through
+  `notes-device`; the hub binary alone builds without it
+  (`--no-default-features`).
 
 ## Graph
 

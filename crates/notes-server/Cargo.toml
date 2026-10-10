@@ -9,10 +9,14 @@ publish.workspace = true
 
 [features]
 # Exports the API types to app/src/lib/api/types (cd app && npm run types).
-ts = ["dep:ts-rs", "notes-core/ts"]
+ts = ["dep:ts-rs", "notes-core/ts", "notes-hub/ts"]
 
 [dependencies]
 notes-core.workspace = true
+# Vault sync of this device (the API `/api/device/sync`).
+notes-device = { path = "../notes-device" }
+# Sign-in (`--auth`); no `client`: the server does not pull ureq and TLS.
+notes-hub = { workspace = true, default-features = false }
 axum.workspace = true
 notes-assets.workspace = true
 serde.workspace = true
@@ -23,6 +27,7 @@ tracing.workspace = true
 ts-rs = { workspace = true, optional = true }
 
 [dev-dependencies]
+notes-device = { path = "../notes-device", features = ["testing"] }
 http-body-util = "0.1"
 tempfile.workspace = true
 tower = { version = "0.5", features = ["util"] }

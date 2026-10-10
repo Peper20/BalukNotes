@@ -3358,6 +3358,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "notes-device"
+version = "0.1.0"
+dependencies = [
+ "notes-core",
+ "notes-device",
+ "notes-hub",
+ "notes-store",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "notes-hub"
 version = "0.1.0"
 dependencies = [
@@ -3377,6 +3394,7 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
+ "ts-rs",
  "ureq",
 ]
 
@@ -3388,6 +3406,8 @@ dependencies = [
  "http-body-util",
  "notes-assets",
  "notes-core",
+ "notes-device",
+ "notes-hub",
  "serde",
  "serde_json",
  "tempfile",
@@ -3426,13 +3446,16 @@ dependencies = [
  "dirs 6.0.0",
  "notes",
  "notes-core",
+ "notes-device",
+ "notes-hub",
  "notes-server",
+ "notes-store",
+ "rpassword",
  "serde",
  "serde_json",
  "tempfile",
  "tikv-jemallocator",
  "tokio",
- "toml 0.8.23",
  "tracing",
  "tracing-subscriber",
 ]

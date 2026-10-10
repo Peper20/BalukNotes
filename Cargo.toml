@@ -15,7 +15,8 @@ publish = false
 notes = { path = "crates/notes" }
 notes-core = { path = "crates/notes-core" }
 notes-store = { path = "crates/notes-store" }
-notes-hub = { path = "crates/notes-hub" }
+# Without default features: a member asks for `client` (ureq, TLS) only if it needs it.
+notes-hub = { path = "crates/notes-hub", default-features = false }
 notes-server = { path = "crates/notes-server" }
 notes-assets = { path = "crates/notes-assets" }
 

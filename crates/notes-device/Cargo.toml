@@ -1,0 +1,33 @@
+[package]
+name = "notes-device"
+description = "The device side of vault sync: the account, linked vaults, sync rounds, the background worker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# A hub in this process for the tests of the crates that use sync (`testing`).
+testing = ["dep:tokio", "dep:tempfile"]
+
+[dependencies]
+notes-core.workspace = true
+notes-store.workspace = true
+notes-hub = { workspace = true, features = ["client"] }
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tempfile = { workspace = true, optional = true }
+thiserror.workspace = true
+tokio = { workspace = true, optional = true }
+tracing.workspace = true
+
+[dev-dependencies]
+# The tests use the hub of `testing`.
+notes-device = { path = ".", features = ["testing"] }
+tempfile.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
