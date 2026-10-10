@@ -9,7 +9,7 @@ publish.workspace = true
 
 [features]
 # Exports the API types to app/src/lib/api/types (cd app && npm run types).
-ts = ["dep:ts-rs"]
+ts = ["dep:ts-rs", "notes-store/ts"]
 # Heavy measurements of memory and rebuilds (docs/research/E5.md): each needs
 # its own process, so they are separate binaries built only on request
 # (otherwise every `cargo test` links three more of about 100 MB each).
@@ -28,6 +28,7 @@ name = "memo_regression"
 required-features = ["measure"]
 
 [dependencies]
+notes-store.workspace = true
 brotli.workspace = true
 ttf2woff2.workspace = true
 fontcull.workspace = true

@@ -1,0 +1,33 @@
+[package]
+name = "notes-store"
+description = "The light part of the core, without Typst: names, files, accounts, sessions, sync"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# Exports the API types to app/src/lib/api/types (cd app && npm run types).
+ts = ["dep:ts-rs"]
+
+[dependencies]
+# Password hashes (accounts.rs): Argon2id, the PHC string format.
+argon2 = "0.5"
+# Session tokens and password salts.
+rand = "0.8"
+base64 = "0.22"
+# Hashes of session tokens and of synced files: the version typst already pulls.
+sha2 = "0.10"
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+ts-rs = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

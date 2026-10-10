@@ -14,6 +14,7 @@ publish = false
 [workspace.dependencies]
 notes = { path = "crates/notes" }
 notes-core = { path = "crates/notes-core" }
+notes-store = { path = "crates/notes-store" }
 notes-server = { path = "crates/notes-server" }
 notes-assets = { path = "crates/notes-assets" }
 
