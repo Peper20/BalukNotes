@@ -9,7 +9,7 @@
 // - then for it. "For all vaults" is `forAll`, "only here" is `onlyHere`.
 // Without a vault (the picker screen), only the shared ones.
 
-import { api, type Schema, type SettingValues, type Theme, type VaultSettingsResponse } from "../api";
+import { api, type Schema, type SettingsProblem, type SettingValues, type Theme, type VaultSettingsResponse } from "../api";
 import { applyAppearance, nextTheme, resolveTheme, themeMemo } from "../appearance";
 import { save, saveShared } from "../storage";
 import { vault } from "../vault";
@@ -29,6 +29,8 @@ class Settings {
   schema = $state.raw<Schema | null>(null);
   themes = $state.raw<Theme[]>([]);
   systemDark = $state(false);
+  /** The vault's settings file is broken: changes are not saved. */
+  problem = $state.raw<SettingsProblem | null>(null);
   /** The server did not accept the last change. */
   error = $state<string | null>(null);
 
@@ -57,6 +59,7 @@ class Settings {
     this.shared = r.shared;
     this.own = r.own;
     this.values = r.values;
+    this.problem = r.problem ?? null;
   }
 
   #shared(values: SettingValues): void {

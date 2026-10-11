@@ -61,6 +61,7 @@ export type { Apply } from "./types/Apply";
 export type { Theme } from "./types/Theme";
 export type { VaultsResponse } from "./types/VaultsResponse";
 export type { VaultSettingsResponse } from "./types/VaultSettingsResponse";
+export type { SettingsProblem } from "./types/SettingsProblem";
 export type { SyncAccount } from "./types/SyncAccount";
 export type { SyncReport } from "./types/SyncReport";
 export type { SyncState } from "./types/SyncState";

@@ -28,10 +28,35 @@ export function stateText(v: SyncVault, now: number): string {
     case "sign-in":
       return "нужен вход";
     case "error":
-      return v.error ? `ошибка: ${v.error}` : "ошибка";
+      return v.error ? roundError(v.error) : "ошибка";
     case "idle":
       return v.last_sync == null ? "ждёт первой синхронизации" : `синхронизировано ${ago(now - v.last_sync)}`;
   }
+}
+
+/**
+ * A failed round in plain Russian. The core's error is one English line (`notes-device/src/error.rs`,
+ * `notes-store/src/sync/error.rs`), recognised by its start; the line itself is shown small under
+ * the sentence (`SyncSettings.svelte`), an unknown one gets the general sentence.
+ */
+export function roundError(error: string): string {
+  const rules: [RegExp, string][] = [
+    [/^(cannot reach|network error)/, "Нет связи с сервером хранилища"],
+    [/^(the session ended|not signed in|unauthorized)/, "Сессия закончилась - войдите снова"],
+    [/^wrong login/, "Неверный логин или пароль"],
+    [/^invalid server address/, "Неверный адрес сервера"],
+    [/^the hub answered 429/, "Сервер хранилища просит подождать: слишком много запросов"],
+    [/^the hub answered/, "Сервер хранилища ответил ошибкой"],
+    [/is not on the server|^not found:/, "Хранилища нет на сервере - отключите синхронизацию и включите снова"],
+    [/^the folder of vault .* is missing/, "Папка хранилища не найдена на устройстве"],
+    [/bytes is over the limit/, "Файл слишком большой для синхронизации"],
+    [/not a valid file/, "Служебный файл синхронизации повреждён"],
+    [/refused a forced write/, "Сервер отказался принять изменения"],
+    [/^sync of ".*" is already running/, "Синхронизация уже идёт"],
+    [/^\/|No such file|Permission denied|os error/, "Не удалось прочитать или записать файл на устройстве"],
+  ];
+  const hit = rules.find(([re]) => re.test(error));
+  return hit ? hit[1] : "Не удалось синхронизировать";
 }
 
 /** The server address as the person knows it: without "https://". */
