@@ -22,15 +22,24 @@ export function fuzzy(query: string, text: string): Match | null {
   const t = [...text];
   const tf = t.map(fold);
 
-  // First the whole substring: the best case, we take it.
-  const joined = q.join("");
-  const at = tf.join("").indexOf(joined);
-  if (at >= 0 && t.length === tf.join("").length) {
-    const positions = [...Array(q.length).keys()].map((i) => at + i);
+  // First the whole substring (the query as typed, with its spaces, then
+  // without them): the best case, we take it.
+  const folded = tf.join("");
+  const typed = [...query.trim()].map(fold).join("");
+  for (const needle of [typed, q.join("")]) {
+    const at = folded.indexOf(needle);
+    if (at < 0) continue;
+    const positions = [...Array(needle.length).keys()].map((i) => at + i);
     return { score: 100 + (at === 0 ? 50 : isBoundary(t[at - 1]) ? 30 : 0) - t.length / 10, positions };
   }
 
   // Otherwise greedily from left to right, preferring word starts.
+  // A word-start jump can run past the letters that follow, so if it fails
+  // the plain first occurrences still find the match.
+  return scan(q, t, tf, true) ?? scan(q, t, tf, false);
+}
+
+function scan(q: string[], t: string[], tf: string[], jump: boolean): Match | null {
   const positions: number[] = [];
   let from = 0;
   let score = 0;
@@ -39,10 +48,11 @@ export function fuzzy(query: string, text: string): Match | null {
     for (let i = from; i < tf.length; i++) {
       if (tf[i] !== c) continue;
       if (found < 0) found = i;
-      if (isBoundary(t[i - 1])) {
+      if (jump && isBoundary(t[i - 1])) {
         found = i;
         break;
       }
+      if (!jump) break;
     }
     if (found < 0) return null;
     const prev = positions.at(-1);
