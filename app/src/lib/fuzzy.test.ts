@@ -21,6 +21,19 @@ describe("fuzzy search", () => {
     expect(rank("ssh", ["Сеть/SSH", "Сеть/UFW"])).toEqual(["Сеть/SSH"]);
   });
 
+  it("a multi-word query that is a substring of the title matches", () => {
+    const title = "Поиск в этой заметке или книге";
+    const m = fuzzy("в этой заметке или книге", title)!;
+    expect(m).not.toBeNull();
+    expect(m.positions).toHaveLength("в этой заметке или книге".replace(/ /g, "").length);
+    expect(highlight(title, m.positions).map((p) => p.text.trim())).toEqual(["Поиск", "в этой заметке или книге"]);
+    expect(rank("этой заметке", ["Заметки этой книги", title, "Другая"])[0]).toBe(title);
+  });
+
+  it("a word-start jump does not hide a match", () => {
+    expect(fuzzy("aa", "xaa a")).not.toBeNull();
+  });
+
   it("positions for highlighting", () => {
     const m = fuzzy("пс", "Префиксные суммы")!;
     expect(highlight("Префиксные суммы", m.positions)).toEqual([
