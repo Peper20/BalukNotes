@@ -76,6 +76,8 @@ trash = "5"
 # The hub client (notes-hub::client), blocking HTTP: the version and the TLS backend
 # (native-tls) typst-kit already uses, so there is one TLS stack.
 ureq = { version = "2.12", default-features = false, features = ["native-tls"] }
+# ureq does not turn native-tls on by itself: the client hands it a connector.
+native-tls = "0.2"
 thiserror = "2"
 # Settings file of `notes` (~/.config/baluk-notes/config.toml): the version typst
 # already pulls.
