@@ -47,6 +47,12 @@ pub enum Error {
     Json(#[from] serde_json::Error),
 }
 
+impl From<notes_store::names::InvalidName> for Error {
+    fn from(e: notes_store::names::InvalidName) -> Self {
+        Self::InvalidVault { name: e.name, reason: e.reason }
+    }
+}
+
 impl Error {
     pub(crate) fn io(path: impl Into<PathBuf>, source: io::Error) -> Self {
         Self::Io { path: path.into(), source }

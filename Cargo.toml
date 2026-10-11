@@ -14,6 +14,9 @@ publish = false
 [workspace.dependencies]
 notes = { path = "crates/notes" }
 notes-core = { path = "crates/notes-core" }
+notes-store = { path = "crates/notes-store" }
+# Without default features: a member asks for `client` (ureq, TLS) only if it needs it.
+notes-hub = { path = "crates/notes-hub", default-features = false }
 notes-server = { path = "crates/notes-server" }
 notes-assets = { path = "crates/notes-assets" }
 
@@ -54,6 +57,10 @@ dirs = "6"
 # the client.
 notify = "8"
 parking_lot = "0.12"
+# Percent-encoding of path segments in the hub client: the version url/ureq already pull.
+percent-encoding = "2"
+# A password prompt without echo (`notes users`).
+rpassword = "7"
 rust-embed = { version = "8", features = ["mime-guess", "include-exclude"] }
 serde = { version = "1", features = ["derive", "rc"] }
 # Stable hash of versions and the disk cache (notes-core::version): the version
@@ -66,6 +73,9 @@ serde_json = { version = "1", features = ["preserve_order"] }
 tikv-jemallocator = "0.6"
 tempfile = "3"
 trash = "5"
+# The hub client (notes-hub::client), blocking HTTP: the version and the TLS backend
+# (native-tls) typst-kit already uses, so there is one TLS stack.
+ureq = { version = "2.12", default-features = false, features = ["native-tls"] }
 thiserror = "2"
 # Settings file of `notes` (~/.config/baluk-notes/config.toml): the version typst
 # already pulls.

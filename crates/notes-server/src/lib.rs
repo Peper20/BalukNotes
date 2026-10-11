@@ -45,15 +45,23 @@
 //! | `GET .../settings`           | vault settings: result, shared, own          |
 //! | `PUT .../settings`           | set own ones (`null` - back to shared)       |
 //!
+//! Vault sync of this device (`device_sync`, not per vault):
+//! `GET /api/device/sync` (status), `POST /api/device/sync/login` and `/logout`,
+//! `POST /api/device/sync/vaults/{vault}/link`, `/unlink`, `/now`.
+//!
 //! Modules by area: `vaults` (vaults opened by the server), `notes` (notes,
 //! PDF, warming, deletion), `graph`, `search`, `settings` (and themes),
-//! `assets` (the client), `fonts`, `events` (vault changes); shared -
-//! [`AppState`] and `error`. With [`AppState::token`] every path needs the
-//! token (`auth`: a header, `?token=` or a cookie).
+//! `assets` (the client), `fonts`, `events` (vault changes), `device_sync` (vault sync of this device); shared -
+//! [`AppState`] and `error`. With [`AppState::auth`] (`notes serve --auth`) the
+//! TCP address needs a sign-in (`auth`): `notes_hub::auth` adds `POST
+//! /api/login`, `POST /api/logout` and `GET /api/session`, and only the client
+//! page, its files, the themes and the fonts are open. The Unix socket never
+//! needs it. Without it `GET /api/session` answers 204.
 
 pub mod api;
 mod assets;
 mod auth;
+mod device_sync;
 mod error;
 mod events;
 mod fonts;
@@ -79,20 +87,29 @@ pub use vaults::{OpenVault, VaultSet};
 pub struct AppState {
     pub vaults: Arc<VaultSet>,
     pub settings: Arc<SettingsStore>,
-    /// Access token: when set, the server answers 401 without it (see `auth`).
-    pub token: Option<Arc<str>>,
+    /// Sign-in: when set, the TCP router needs a session (see `auth`).
+    pub auth: Option<Arc<notes_hub::Auth>>,
     /// The server is stopping: waiting event requests get their answer.
     pub closing: Arc<watch::Sender<bool>>,
+    /// Vault sync of this device (`notes serve` sets it): its workers run
+    /// while the server does, and `/api/device/sync` works on it.
+    pub device_sync: Option<Arc<notes_device::DeviceSync>>,
 }
 
 impl AppState {
-    /// State without a token. Vault changes reach the vault events once the
+    /// State without sign-in. Vault changes reach the vault events once the
     /// watcher is on (`Notes::watch`, done by [`serve`]). Device settings are
     /// applied to the core right away.
     pub fn new(vaults: VaultSet) -> Self {
         vaults.apply_device();
         let settings = vaults.settings().clone();
-        Self { vaults: Arc::new(vaults), settings, token: None, closing: Arc::new(watch::Sender::new(false)) }
+        Self {
+            vaults: Arc::new(vaults),
+            settings,
+            auth: None,
+            closing: Arc::new(watch::Sender::new(false)),
+            device_sync: None,
+        }
     }
 
     /// The vault from the path; opened (on a blocking thread) if it is not yet.
@@ -107,16 +124,24 @@ impl AppState {
         Ok(open)
     }
 
-    /// With an access token; an empty string means no token.
+    /// With the sync of this device's vaults (the API `/api/device/sync`; the
+    /// background workers run while [`serve`] does).
     #[must_use]
-    pub fn with_token(mut self, token: Option<String>) -> Self {
-        self.token = token.filter(|t| !t.is_empty()).map(Into::into);
+    pub fn with_device_sync(mut self, sync: Option<Arc<notes_device::DeviceSync>>) -> Self {
+        self.device_sync = sync;
+        self
+    }
+
+    /// With sign-in by login and password.
+    #[must_use]
+    pub fn with_auth(mut self, auth: Option<Arc<notes_hub::Auth>>) -> Self {
+        self.auth = auth;
         self
     }
 }
 
 pub fn router(state: AppState) -> Router {
-    let mut app = Router::new()
+    let app = Router::new()
         .merge(assets::routes())
         .merge(vaults::routes())
         .merge(notes::routes())
@@ -124,10 +149,12 @@ pub fn router(state: AppState) -> Router {
         .merge(search::routes())
         .merge(settings::routes())
         .merge(fonts::routes())
-        .merge(events::routes());
-    if let Some(token) = state.token.clone() {
-        app = app.layer(axum::middleware::from_fn_with_state(token, auth::require_token));
-    }
+        .merge(events::routes())
+        .merge(device_sync::routes());
+    let app = match state.auth.clone() {
+        Some(auth) => auth.protect(app, auth::is_public),
+        None => app.merge(auth::no_auth_routes()),
+    };
     // WOFF2 is already brotli-compressed: do not compress it twice.
     app.layer(
         CompressionLayer::new().compress_when(DefaultPredicate::new().and(NotForContentType::const_new("font/woff2"))),
@@ -135,13 +162,22 @@ pub fn router(state: AppState) -> Router {
     .with_state(state)
 }
 
+/// Stops the sync workers when the server ends, however it ends.
+struct StopSync(Arc<notes_device::DeviceSync>);
+
+impl Drop for StopSync {
+    fn drop(&mut self) {
+        self.0.stop();
+    }
+}
+
 /// Where the server listens.
 #[derive(Debug)]
 pub enum Listen {
-    /// TCP (`notes serve --addr`): the browser; the token, if set.
+    /// TCP (`notes serve --addr`): the browser; with sign-in, if set.
     Tcp(tokio::net::TcpListener),
     /// A Unix socket (`notes serve --socket`): the `notes-app` window. Only the
-    /// user has access to the socket, so no token.
+    /// user has access to the socket, so no sign-in.
     #[cfg(unix)]
     Unix(tokio::net::UnixListener),
 }
@@ -159,6 +195,11 @@ pub async fn serve(
     std::thread::spawn(move || library.warm_fonts());
     // Warming and the file watcher run for every open vault.
     state.vaults.start_background();
+    // Vault sync: the workers of the linked vaults run until the server stops.
+    let _sync = state.device_sync.clone().map(StopSync);
+    if let Some(sync) = state.device_sync.clone() {
+        let _ = tokio::task::spawn_blocking(move || sync.start()).await;
+    }
     // Inactive vaults without requests or waiting events close after a timeout.
     let vaults = state.vaults.clone();
     let closing = state.closing.clone();
@@ -183,7 +224,7 @@ pub async fn serve(
             }
             #[cfg(unix)]
             Listen::Unix(l) => {
-                let state = AppState { token: None, ..state.clone() };
+                let state = AppState { auth: None, ..state.clone() };
                 servers.spawn(axum::serve(l, router(state)).with_graceful_shutdown(stop).into_future());
             }
         }

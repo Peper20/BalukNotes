@@ -32,10 +32,18 @@ fn app() -> (axum::Router, tempfile::TempDir) {
     (router(single(NOTES.clone(), &dir)), dir)
 }
 
-/// The same with an access token.
-fn app_with_token(token: &str) -> (axum::Router, tempfile::TempDir) {
+/// Sign-in on for the account `ann` with the password `correct-horse-9`.
+fn signed_in_state(dir: &tempfile::TempDir) -> AppState {
+    let auth = notes_hub::Auth::open(dir.path(), std::time::Duration::from_secs(3600)).unwrap();
+    auth.accounts().add("ann", "correct-horse-9").unwrap();
+    auth.accounts().add("bob", "battery-staple-7").unwrap();
+    single(NOTES.clone(), dir).with_auth(Some(auth))
+}
+
+/// The same with sign-in.
+fn app_with_auth() -> (axum::Router, tempfile::TempDir) {
     let dir = tempfile::tempdir().unwrap();
-    (router(single(NOTES.clone(), &dir).with_token(Some(token.into()))), dir)
+    (router(signed_in_state(&dir)), dir)
 }
 
 /// Core config for the vault `vault` (the library comes from the repository).
@@ -300,42 +308,83 @@ async fn book_by_chapters() {
     assert!(note["book"].is_null() && note["rendered"]["title"] == "SSH");
 }
 
-#[tokio::test]
-async fn token_is_required_when_set() {
-    let (open, _open_dir) = app();
-    let (app, _dir) = app_with_token("s3cret");
-    let get = |uri: &str| Request::get(uri).body(Body::empty()).unwrap();
-    let status = |res: axum::response::Response| res.status();
+/// `POST /api/login` for `login` with `password`: the response.
+async fn login(app: &axum::Router, login: &str, password: &str) -> axum::response::Response {
+    let body = serde_json::json!({ "login": login, "password": password }).to_string();
+    let req = Request::post("/api/login").header("content-type", "application/json").body(Body::from(body));
+    app.clone().oneshot(req.unwrap()).await.unwrap()
+}
 
-    // No token or a wrong one: 401 everywhere - API, client, fonts.
-    for path in ["/api/vaults/test/notes", "/", "/api/fonts.css", "/assets/baluk.css"] {
-        assert_eq!(status(app.clone().oneshot(get(path)).await.unwrap()), StatusCode::UNAUTHORIZED, "{path}");
+/// The `name=value` pair of the `Set-Cookie` header, for a `Cookie` header.
+fn cookie_of(res: &axum::response::Response) -> String {
+    let set = res.headers()["set-cookie"].to_str().unwrap();
+    set.split(';').next().unwrap().to_owned()
+}
+
+#[tokio::test]
+async fn sign_in_is_required_when_set() {
+    let (app, _dir) = app_with_auth();
+    let get = |uri: &str| Request::get(uri).body(Body::empty()).unwrap();
+    let status = |app: &axum::Router, uri: &str| {
+        let (app, req) = (app.clone(), get(uri));
+        async move { app.oneshot(req).await.unwrap().status() }
+    };
+
+    // Without a session: 401 with the usual error body for the data...
+    for path in ["/api/vaults", "/api/vaults/test/notes", "/api/settings", "/api/vaults/test/events", "/api/session"] {
+        assert_eq!(status(&app, path).await, StatusCode::UNAUTHORIZED, "{path}");
     }
     let (code, body) = call(app.clone(), "GET", "/api/vaults/test/notes", None).await;
     assert_eq!(code, StatusCode::UNAUTHORIZED);
-    assert_eq!(body["error"], "access token required");
-    let wrong =
-        Request::get("/api/vaults/test/notes").header("authorization", "Bearer s3cre").body(Body::empty()).unwrap();
-    assert_eq!(status(app.clone().oneshot(wrong).await.unwrap()), StatusCode::UNAUTHORIZED);
+    assert_eq!((body["error"].as_str(), body["errors"].as_array().map(Vec::len)), (Some("sign-in required"), Some(0)));
+    assert_eq!(call(app.clone(), "PUT", "/api/settings", Some("{}")).await.0, StatusCode::UNAUTHORIZED);
+    // ...and the sign-in screen is open: the page, its files, the themes, the fonts.
+    for path in ["/", "/v/test", "/v/test/n/a", "/assets/baluk.css", "/api/themes", "/api/themes.css", "/api/fonts.css"]
+    {
+        assert_ne!(status(&app, path).await, StatusCode::UNAUTHORIZED, "{path}");
+    }
 
-    // With the token: 200 by header, by URL parameter (sets the cookie) and by cookie.
-    let bearer =
-        Request::get("/api/vaults/test/notes").header("authorization", "Bearer s3cret").body(Body::empty()).unwrap();
-    let res = app.clone().oneshot(bearer).await.unwrap();
-    assert_eq!(res.status(), StatusCode::OK);
+    // A wrong password: 401 with a message, no cookie; the next attempts of that login wait (429).
+    let res = login(&app, "bob", "nope-nope").await;
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
     assert!(res.headers().get("set-cookie").is_none());
+    let res = login(&app, "bob", "battery-staple-7").await;
+    assert_eq!(res.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(res.headers().contains_key("retry-after"));
 
-    let res = app.clone().oneshot(get("/api/vaults/test/notes?token=s3cret")).await.unwrap();
+    // The right one: the cookie, and with it the API and the session.
+    let res = login(&app, "ann", "correct-horse-9").await;
     assert_eq!(res.status(), StatusCode::OK);
-    let cookie = res.headers()["set-cookie"].to_str().unwrap().to_owned();
-    assert!(cookie.starts_with("notes_token=s3cret;") && cookie.contains("HttpOnly"), "{cookie}");
+    let set = res.headers()["set-cookie"].to_str().unwrap().to_owned();
+    assert!(set.starts_with("notes_session=") && set.contains("HttpOnly") && set.contains("SameSite=Strict"), "{set}");
+    let cookie = cookie_of(&res);
+    let with_cookie = |uri: &str, cookie: &str| Request::get(uri).header("cookie", cookie).body(Body::empty()).unwrap();
+    let res = app.clone().oneshot(with_cookie("/api/vaults/test/notes", &cookie)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let res = app.clone().oneshot(with_cookie("/api/session", &format!("theme=x; {cookie}"))).await.unwrap();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap()["login"], "ann");
 
-    let with_cookie =
-        Request::get("/api/fonts.css").header("cookie", "theme=x; notes_token=s3cret").body(Body::empty());
-    assert_eq!(status(app.oneshot(with_cookie.unwrap()).await.unwrap()), StatusCode::OK);
+    // The token never works from a URL; as a Bearer header it does (devices).
+    let token = cookie.strip_prefix("notes_session=").unwrap();
+    assert_eq!(status(&app, &format!("/api/vaults/test/notes?token={token}")).await, StatusCode::UNAUTHORIZED);
+    let bearer = Request::get("/api/vaults/test/notes").header("authorization", format!("Bearer {token}"));
+    assert_eq!(app.clone().oneshot(bearer.body(Body::empty()).unwrap()).await.unwrap().status(), StatusCode::OK);
 
-    // No token configured: nothing is checked.
-    assert_eq!(status(open.oneshot(get("/api/vaults/test/notes")).await.unwrap()), StatusCode::OK);
+    // Logout ends the session.
+    let out = Request::post("/api/logout").header("cookie", &cookie).body(Body::empty()).unwrap();
+    assert_eq!(app.clone().oneshot(out).await.unwrap().status(), StatusCode::NO_CONTENT);
+    let res = app.clone().oneshot(with_cookie("/api/vaults/test/notes", &cookie)).await.unwrap();
+    assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn no_sign_in_means_nothing_is_checked() {
+    let (app, _dir) = app();
+    assert_eq!(call(app.clone(), "GET", "/api/vaults/test/notes", None).await.0, StatusCode::OK);
+    // The client asks "is there a sign-in here": no, and not as an error.
+    assert_eq!(call(app.clone(), "GET", "/api/session", None).await.0, StatusCode::NO_CONTENT);
+    assert_eq!(call(app, "POST", "/api/login", Some("{}")).await.0, StatusCode::NOT_FOUND);
 }
 
 /// `GET .../events` as JSON (with a timeout: long polling must not hang).
@@ -643,10 +692,10 @@ async fn rename_plan_and_apply() {
 }
 
 /// The server listens on TCP and a Unix socket at once; only TCP needs the
-/// token (the socket is the `notes-app` window, owned by the user).
+/// sign-in (the socket is the `notes-app` window, owned by the user).
 #[cfg(unix)]
 #[tokio::test]
-async fn serves_tcp_with_token_and_unix_socket_without() {
+async fn serves_tcp_with_sign_in_and_unix_socket_without() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     async fn get(mut stream: impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin) -> String {
         stream.write_all(b"GET /api/vaults HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n").await.unwrap();
@@ -658,7 +707,7 @@ async fn serves_tcp_with_token_and_unix_socket_without() {
     let tmp = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let path = tmp.path().join("s.sock");
     let dir = tempfile::tempdir().unwrap();
-    let state = single(NOTES.clone(), &dir).with_token(Some("t".into()));
+    let state = signed_in_state(&dir);
     let tcp = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = tcp.local_addr().unwrap();
     let unix = tokio::net::UnixListener::bind(&path).unwrap();

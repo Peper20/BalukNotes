@@ -37,6 +37,7 @@ use notes_core::search::{TaggedChapter, tagged_chapters};
 use notes_core::settings::{Platform, Schema, SettingsStore};
 use notes_core::vault::NoteKind;
 use notes_core::{LibrarySource, NoteId, Notes, NotesConfig, VaultName, Vaults};
+use notes_store::config;
 
 /// `println!` that exits quietly (code 0) when the reader closed the pipe
 /// (`notes list | head`): Rust ignores SIGPIPE, and `println!` would panic.
@@ -54,6 +55,7 @@ macro_rules! out_raw {
 }
 
 mod service;
+mod sync;
 
 /// Writes command output to stdout: a closed pipe ends the process with code
 /// 0, another write error with code 1 (the output is lost anyway).
@@ -70,8 +72,8 @@ fn write_out(args: std::fmt::Arguments<'_>, newline: bool) {
     }
 }
 
-/// The app's directory name: `~/.config/<APP>`, `~/.local/share/<APP>`.
-const APP: &str = "baluk-notes";
+/// Default lifetime of a sign-in session without requests, in days.
+const DEFAULT_SESSION_DAYS: u64 = 30;
 /// Default address of `notes serve`.
 const ADDR: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 8421));
 
@@ -118,16 +120,20 @@ enum Command {
         #[arg(long)]
         addr: Option<SocketAddr>,
         /// Also a Unix socket, for the `notes app` window (user-only
-        /// permissions, no token). Without a path:
+        /// permissions, no sign-in). Without a path:
         /// $XDG_RUNTIME_DIR/baluk-notes/notes.sock.
         #[arg(long, num_args = 0..=1, value_name = "PATH")]
         #[expect(clippy::option_option, reason = "clap: no flag, a flag without a path, a flag with a path")]
         socket: Option<Option<PathBuf>>,
-        /// Access token: without it the server answers 401. Sent as the header
-        /// `Authorization: Bearer ...`, the parameter `?token=` (the server sets
-        /// a cookie) or the cookie `notes_token`. Does not apply to the Unix socket.
-        #[arg(long, env = "NOTES_TOKEN", hide_env_values = true)]
-        token: Option<String>,
+        /// Sign-in by login and password on the TCP address (accounts:
+        /// `notes users add <login>`). Required for an address other than
+        /// localhost. Does not apply to the Unix socket. The server speaks
+        /// HTTP only: for the network put a reverse proxy with HTTPS in front.
+        #[arg(long)]
+        auth: bool,
+        /// With --auth: a session ends after this many days without requests.
+        #[arg(long, default_value_t = DEFAULT_SESSION_DAYS, value_parser = clap::value_parser!(u64).range(1..=3650))]
+        session_days: u64,
     },
     /// A stub of a new note or book; prints the path of its file and, on the
     /// second line, the note path (for check, pdf, #see).
@@ -235,6 +241,13 @@ enum Command {
         #[command(subcommand)]
         action: ServiceAction,
     },
+    /// Sync vaults with a storage server (`notes-hub`): sign in, link a vault,
+    /// sync now. `notes serve` (and the app) then keep linked vaults in sync
+    /// by themselves.
+    Sync {
+        #[command(subcommand)]
+        action: sync::SyncAction,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -244,9 +257,12 @@ enum ServiceAction {
     /// (after updating notes). Runs this same `notes` binary; --data,
     /// --library and --font-path are passed to the service.
     Install {
-        /// Address; 0.0.0.0:8421 for access from the network.
+        /// Address; 0.0.0.0:8421 for access from the network (needs --auth).
         #[arg(long, default_value_t = ADDR)]
         addr: SocketAddr,
+        /// Sign-in by login and password, as `notes serve --auth`.
+        #[arg(long)]
+        auth: bool,
     },
     /// Stop and remove the service.
     Remove,
@@ -280,42 +296,11 @@ impl Topic {
     }
 }
 
-/// The `notes` config file (`~/.config/baluk-notes/config.toml`).
-#[derive(Debug, Default, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Config {
-    /// Data directory; `~/` is home, a relative path is relative to the config file.
-    data: Option<PathBuf>,
-}
-
-fn config_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|dir| dir.join(APP).join("config.toml"))
-}
-
-/// The config file; no file means an empty config.
-fn load_config() -> Result<Config> {
-    let Some(path) = config_path().filter(|p| p.is_file()) else { return Ok(Config::default()) };
-    let text = std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
-    let mut config: Config = toml::from_str(&text).with_context(|| format!("config {}", path.display()))?;
-    if let Some(data) = config.data.take() {
-        let home = dirs::home_dir().unwrap_or_default();
-        config.data = Some(match data.strip_prefix("~") {
-            Ok(rest) => home.join(rest),
-            Err(_) => path.parent().unwrap_or(Path::new("")).join(data),
-        });
-    }
-    Ok(config)
-}
-
-/// Data directory: explicit, from the config file, or the standard one.
-fn data_dir(explicit: Option<&PathBuf>, config: &Config) -> Result<PathBuf> {
-    if let Some(dir) = explicit.or(config.data.as_ref()) {
-        return Ok(dir.clone());
-    }
-    match dirs::data_dir() {
-        Some(dir) => Ok(dir.join(APP)),
-        None => bail!("user data directory not found: pass --data"),
-    }
+/// Data directory: explicit, from the config file, or the standard one
+/// (`notes_store::config`, the rule shared by all parts).
+fn data_dir(explicit: Option<&Path>) -> Result<PathBuf> {
+    // The error text already has its cause: not a chain, `{e:#}` would repeat it.
+    config::data_dir(explicit).map_err(|e| anyhow::anyhow!("{e}"))
 }
 
 /// The style library: the given one, the repository's in a debug build, else
@@ -402,6 +387,7 @@ fn pick_vault(vaults: &Vaults, arg: Option<&VaultArg>) -> Result<(VaultName, Pat
     }
 }
 
+#[expect(clippy::too_many_lines, reason = "the dispatch of every command")]
 fn run(cli: Cli) -> Result<ExitCode> {
     // Without a vault: documentation, the service.
     match &cli.command {
@@ -411,14 +397,19 @@ fn run(cli: Cli) -> Result<ExitCode> {
         }
         Command::Service { action } => {
             match action {
-                ServiceAction::Install { addr } => {
+                ServiceAction::Install { addr, auth } => {
+                    // The service must start: check what `serve` checks, here and now.
+                    check_sign_in(Some(*addr), *auth)?;
+                    if *auth {
+                        open_auth(&data_dir(cli.data.as_deref())?, DEFAULT_SESSION_DAYS)?;
+                    }
                     let exe = std::env::current_exe().context("path of the notes binary")?;
                     if cfg!(debug_assertions) {
                         eprintln!(
                             "warning: a debug build; the service will run it (usually: tools/install.sh and notes from PATH)"
                         );
                     }
-                    service::install(&exe, &service_args(&cli, *addr)?, *addr)?;
+                    service::install(&exe, &service_args(&cli, *addr, *auth)?, *addr)?;
                 }
                 ServiceAction::Remove => service::remove()?,
                 ServiceAction::Status => service::status()?,
@@ -427,7 +418,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         }
         _ => {}
     }
-    let data = data_dir(cli.data.as_ref(), &load_config()?)?;
+    let data = data_dir(cli.data.as_deref())?;
     let vaults = Vaults::new(&data);
     let arg = cli.vault.as_deref().map(VaultArg::parse);
     let config = NotesConfig {
@@ -441,14 +432,15 @@ fn run(cli: Cli) -> Result<ExitCode> {
     // Without an open vault: the vault list, info, the server.
     match cli.command {
         Command::Vaults { action } => return vaults_command(&vaults, action),
+        Command::Sync { action } => return sync::run(&data, cli.vault.as_deref(), action),
         Command::Info => return info(&vaults, &data, arg.as_ref(), cli.library.as_ref()),
-        Command::Serve { addr, socket, token } => {
+        Command::Serve { addr, socket, auth, session_days } => {
             let socket = socket
                 .map(|path| {
                     path.or_else(notes::default_socket).context("no $XDG_RUNTIME_DIR: give a path: --socket <path>")
                 })
                 .transpose()?;
-            return serve(vaults, config, &data, arg, Listen { addr, socket }, token);
+            return serve(vaults, config, &data, arg, Listen { addr, socket }, SignIn { enabled: auth, session_days });
         }
         _ => {}
     }
@@ -503,6 +495,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         | Command::Service { .. }
         | Command::Info
         | Command::Vaults { .. }
+        | Command::Sync { .. }
         | Command::Serve { .. } => {
             unreachable!("handled above")
         }
@@ -511,12 +504,15 @@ fn run(cli: Cli) -> Result<ExitCode> {
 
 /// Arguments of the service: `serve --addr ...` and the global flags of this
 /// run (absolute paths: the service has its own working directory).
-fn service_args(cli: &Cli, addr: SocketAddr) -> Result<Vec<String>> {
+fn service_args(cli: &Cli, addr: SocketAddr, auth: bool) -> Result<Vec<String>> {
     let absolute = |p: &PathBuf| -> Result<String> {
         Ok(std::path::absolute(p).with_context(|| format!("path {}", p.display()))?.to_string_lossy().into_owned())
     };
     // The socket lets the `notes app` window use the service's core instead of starting a second one.
     let mut args = vec!["serve".to_owned(), "--addr".to_owned(), addr.to_string(), "--socket".to_owned()];
+    if auth {
+        args.push("--auth".to_owned());
+    }
     if let Some(data) = &cli.data {
         args.extend(["--data".to_owned(), absolute(data)?]);
     }
@@ -565,7 +561,7 @@ fn vaults_command(vaults: &Vaults, action: Option<VaultsAction>) -> Result<ExitC
 }
 
 fn info(vaults: &Vaults, data: &Path, arg: Option<&VaultArg>, library_dir: Option<&PathBuf>) -> Result<ExitCode> {
-    let config = config_path().map(|p| p.display().to_string()).unwrap_or_default();
+    let config = config::config_path().map(|p| p.display().to_string()).unwrap_or_default();
     let library = match library(library_dir) {
         LibrarySource::Dir(dir) => dir.display().to_string(),
         LibrarySource::Embedded => "embedded in the binary".into(),
@@ -638,6 +634,39 @@ struct Listen {
     socket: Option<PathBuf>,
 }
 
+/// `notes serve --auth` and `--session-days`.
+#[derive(Debug, Clone, Copy)]
+struct SignIn {
+    enabled: bool,
+    session_days: u64,
+}
+
+/// The TCP address a server with these flags listens on, if any.
+fn tcp_addr(listen: &Listen) -> Option<SocketAddr> {
+    listen.addr.or_else(|| listen.socket.is_none().then_some(ADDR))
+}
+
+/// The rule of the TCP address: other than localhost, it needs sign-in (secure
+/// by default); sign-in is for the TCP address only.
+fn check_sign_in(addr: Option<SocketAddr>, auth: bool) -> Result<()> {
+    match addr {
+        Some(addr) if !auth && !addr.ip().is_loopback() => bail!(
+            "{addr} is not a localhost address: add --auth (sign-in by login and password; accounts: notes users add <login>). The server speaks HTTP only: HTTPS is the job of a reverse proxy in front of it"
+        ),
+        None if auth => bail!("--auth protects the TCP address: add --addr"),
+        _ => Ok(()),
+    }
+}
+
+/// The sign-in of the TCP address: needs at least one account.
+fn open_auth(data: &Path, session_days: u64) -> Result<Arc<notes_hub::Auth>> {
+    let auth = notes_hub::Auth::open(data, std::time::Duration::from_secs(session_days * 24 * 3600))?;
+    if auth.accounts().is_empty()? {
+        bail!("no users: create one: notes users add <login>");
+    }
+    Ok(auth)
+}
+
 /// The server: all vaults of the data directory (opened on request; there may
 /// be none, the first is created in the app) or one (`--vault <name or path>`).
 fn serve(
@@ -646,8 +675,14 @@ fn serve(
     data: &Path,
     arg: Option<VaultArg>,
     listen: Listen,
-    token: Option<String>,
+    sign_in: SignIn,
 ) -> Result<ExitCode> {
+    let addr = tcp_addr(&listen);
+    check_sign_in(addr, sign_in.enabled)?;
+    let auth = sign_in.enabled.then(|| open_auth(data, sign_in.session_days)).transpose()?;
+    if let Some(addr) = addr.filter(|a| sign_in.enabled && !a.ip().is_loopback()) {
+        tracing::warn!("{addr} is not localhost: passwords travel in the clear unless a reverse proxy does HTTPS");
+    }
     let set = if let Some(arg) = arg {
         let (name, vault) = pick_vault(&vaults, Some(&arg))?;
         let notes = Notes::open(&NotesConfig { vault, ..config }).context("open the vault")?;
@@ -663,14 +698,14 @@ fn serve(
         tracing::info!("vaults: {}", vaults.root().display());
         notes_server::VaultSet::registry(vaults, config, Arc::new(library), settings)
     };
-    let state = notes_server::AppState::new(set).with_token(token);
-    if state.token.is_some() {
-        tracing::info!("access only with the token");
+    let device_sync = sync::service(data, set.settings().clone());
+    let state = notes_server::AppState::new(set).with_auth(auth).with_device_sync(Some(device_sync));
+    if state.auth.is_some() {
+        tracing::info!("sign-in on the TCP address (accounts: notes users)");
     }
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async move {
         let mut listeners = Vec::new();
-        let addr = listen.addr.or_else(|| listen.socket.is_none().then_some(ADDR));
         if let Some(addr) = addr {
             let listener = tokio::net::TcpListener::bind(addr).await.with_context(|| format!("bind {addr}"))?;
             tracing::info!("open: http://{addr}/");
@@ -957,6 +992,37 @@ mod tests {
         assert!(err(new_note_id("vault/Тема", vault)).ends_with("the path is from its root: \"Тема\""));
         assert_eq!(new_note_id("vaults/Тема", vault).unwrap().as_str(), "vaults/Тема");
         assert_eq!(new_note_id("Тема", vault).unwrap().as_str(), "Тема");
+    }
+
+    #[test]
+    fn tcp_address_rules() {
+        let addr = |s: &str| Some(s.parse::<SocketAddr>().unwrap());
+        // Localhost works as it did, with or without sign-in.
+        assert!(check_sign_in(addr("127.0.0.1:8421"), false).is_ok());
+        assert!(check_sign_in(addr("[::1]:8421"), false).is_ok());
+        assert!(check_sign_in(addr("127.0.0.1:8421"), true).is_ok());
+        // Any other address without --auth is refused, and the error says what to add.
+        for other in ["0.0.0.0:8421", "192.168.1.5:8421", "[::]:8421"] {
+            let e = check_sign_in(addr(other), false).unwrap_err().to_string();
+            assert!(e.contains(other) && e.contains("add --auth") && e.contains("HTTPS"), "{e}");
+            assert!(check_sign_in(addr(other), true).is_ok());
+        }
+        // Only the socket: no TCP address to protect.
+        assert!(check_sign_in(None, false).is_ok());
+        assert!(check_sign_in(None, true).unwrap_err().to_string().contains("--addr"));
+    }
+
+    #[test]
+    fn sign_in_needs_an_account() {
+        let data = tempfile::tempdir().unwrap();
+        let e = open_auth(data.path(), 30).map(|_| ()).unwrap_err();
+        assert_eq!(e.to_string(), "no users: create one: notes users add <login>");
+        notes_hub::Auth::open(data.path(), std::time::Duration::from_secs(1))
+            .unwrap()
+            .accounts()
+            .add("ann", "correct-horse-9")
+            .unwrap();
+        assert!(open_auth(data.path(), 30).is_ok());
     }
 
     /// There is no default vault: even the only one must be named.

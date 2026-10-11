@@ -46,6 +46,18 @@ it("changes - check; the next request carries the response number", async () => 
   expect(server.last.signal.aborted).toBe(true);
 });
 
+it("a refusal for the lack of a session ends the listening: no retries", async () => {
+  const server = new FakeServer();
+  const seen = vi.fn();
+  serverEvents(server.poll).start(seen);
+  await flush();
+  server.last.reject(Object.assign(new Error("sign-in required"), { status: 401 }));
+  await flush();
+  await vi.advanceTimersByTimeAsync(RETRY_MS * 5);
+  expect(server.calls).toHaveLength(1);
+  expect(seen).not.toHaveBeenCalled();
+});
+
 it("the server did not answer - a retry after a pause; it answered - one check", async () => {
   const server = new FakeServer();
   const seen = vi.fn();

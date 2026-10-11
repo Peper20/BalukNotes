@@ -7,6 +7,7 @@
 // done by state/updates - a source just says "check". The api sees the
 // connection to the server (`onReach`) by the same requests.
 
+import { isSignIn } from "./api/signin";
 import type { EventsResponse } from "./api/types/EventsResponse";
 
 export interface ChangeSource {
@@ -35,7 +36,9 @@ export function changeSource(mode: RefreshMode, poll: Poll): ChangeSource {
  * Server events: the response has changes - check. The server did not
  * answer - a new request after `RETRY_MS`; it answered again - one check:
  * changes during the break may have been lost. `watching: false` - the
- * server does not watch the files, nothing to wait for.
+ * server does not watch the files, nothing to wait for. A refusal for the
+ * lack of a session (401) ends the listening: the sign-in screen takes over,
+ * and a new start comes with the page.
  */
 export function serverEvents(poll: Poll): ChangeSource {
   return {
@@ -48,8 +51,8 @@ export function serverEvents(poll: Poll): ChangeSource {
           let res: EventsResponse;
           try {
             res = await poll(after, abort.signal);
-          } catch {
-            if (abort.signal.aborted) return;
+          } catch (e) {
+            if (abort.signal.aborted || isSignIn(e)) return;
             lost = true;
             await sleep(RETRY_MS, abort.signal);
             continue;

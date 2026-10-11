@@ -13,6 +13,7 @@
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import House from "@lucide/svelte/icons/house";
   import Library from "@lucide/svelte/icons/library";
+  import LogOut from "@lucide/svelte/icons/log-out";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -21,6 +22,7 @@
   import { api, type VaultsResponse } from "../lib/api";
   import { graphHref, homeHref } from "../lib/ids";
   import { graphIcon } from "../lib/icons";
+  import { session } from "../lib/state/session.svelte";
   import { settings } from "../lib/state/settings.svelte";
   import { ui } from "../lib/ui.svelte";
   import { vault, vaultHome } from "../lib/vault";
@@ -29,6 +31,7 @@
   let open = $state(false);
   let list = $state<VaultsResponse | null>(null);
   let failed = $state(false);
+  let signOutError = $state<string | null>(null);
   let root: HTMLElement | undefined = $state();
   const icon = { size: 16, strokeWidth: 1.75, "aria-hidden": true } as const;
 
@@ -54,11 +57,16 @@
     choice = null;
     if (!open) return;
     failed = false;
+    signOutError = null;
     try {
       list = await api.vaults();
     } catch {
       failed = true;
     }
+  }
+
+  async function signOut() {
+    signOutError = await session.signOut();
   }
 
   function dialog(which: "new" | "rename" | "delete") {
@@ -168,6 +176,16 @@
           <button type="button" role="menuitem" id="vault-delete" class="danger" onclick={() => dialog("delete")}>
             <span class="vault-menu-mark"><Trash2 {...icon} /></span>
             <span class="vault-menu-name">Удалить «{vault()}»…</span>
+          </button>
+        </div>
+      {/if}
+      {#if session.login}
+        <!-- Only on a server with sign-in. -->
+        <div class="vault-menu-actions">
+          {#if signOutError}<p class="vault-menu-note dialog-error" role="alert">Не удалось выйти: {signOutError}</p>{/if}
+          <button type="button" role="menuitem" id="sign-out" onclick={signOut}>
+            <span class="vault-menu-mark"><LogOut {...icon} /></span>
+            <span class="vault-menu-name" title="Выйти из аккаунта">Выйти ({session.login})</span>
           </button>
         </div>
       {/if}

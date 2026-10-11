@@ -101,9 +101,8 @@ line (how it works - `docs/architecture.md`), open questions -
 - [x] A folder page (`/f/<path>`, user's decision): subfolders and notes, a
       link to the folder graph (`/graph?folder=`, notes with subfolders); the
       path in the top bar - links to folders
-- [ ] `__NOTES_API__` - only the address (`base`): remove the `token` field,
-      the `Authorization` header and `?token=` (`apiUrl(..., { withToken })`)
-      together with the server's shared token (M4)
+- [x] `__NOTES_API__` is only the address (`base`): who may use the server -
+      the session cookie (M4)
 
 ## M3. Graph and interactivity
 
@@ -145,10 +144,12 @@ before M7 starts.
 
 ## M4. Storage server and sign-in
 
-- [ ] Sign-in instead of the shared token (architecture §9): the session
-      lifetime is a server parameter; token hashes on disk, later a KV
-      database (to choose); slow down password guessing (a pause after a
-      failure); a sign-in screen on 401 (the look - variants to choose from)
+- [x] Sign-in instead of the shared token (architecture §9): login +
+      password (user's decision), accounts - `notes users`; sessions 30 days
+      without requests (`--session-days`), token hashes on disk; a pause after
+      a wrong password; the sign-in screen on 401 and "Выйти" in the vault
+      menu; `notes serve --auth` (required on a non-localhost address), the
+      window needs no sign-in
 - [x] **A vault from the server is untrusted**: HTML is sanitized by an
       allowlist (allowed tags and attributes), `on*`, dangerous URLs and SVG
       `foreignObject`/`use` pointing outside are removed. The client is served
@@ -162,15 +163,25 @@ before M7 starts.
       `device.packages` with a warning (user's decision). Review and extend
       the list regularly: the beauty of notes matters more; the same rules
       apply to sync
-- [ ] A server without Typst, `notes-hub` (architecture §1): storage, file
-      versions, events, sessions; for it the core splits into a light crate
-      (storage, paths, settings, watcher) and a crate with Typst
-- [ ] Sync: a copy on the device, file versions, changes on events; the
-      computer writes first, the others receive (user's decision); locking -
-      groundwork
-- [ ] HTTPS (the server itself or a reverse proxy - to decide), a service on
-      a VPS
-- [ ] Client: a clear "sign-in needed" screen (the "нет связи" look - M2)
+- [x] A server without Typst, `notes-hub` (architecture §9): accounts,
+      sessions, vault files with versions and history, change long polling;
+      the light crate `notes-store` (data directory rules, vault names,
+      accounts, sessions, the sync engine)
+- [ ] The rest of the core split: storage, paths, settings and the watcher
+      move to the light crate when light commands move into `notes`
+- [x] Sync: a copy on the device, file versions, changes on events; who wins
+      a conflict - `device.sync_prefer` (the computer writes first, the others
+      receive - user's decision); `notes sync`, a background worker in the
+      core, the API for the client
+- [x] Sync in the app settings (the section "Синхронизация"): the server
+      address and sign-in, which vaults are synced (a vault only on the
+      server - download), the state and the conflicts of the last round
+- [ ] An edit lock (one writer at a time) - groundwork only: a write names
+      the version it replaces
+- [x] HTTPS - the reverse proxy (user's decision: nginx is already on the
+      VPS); how to deploy - `docs/server.md`
+- [ ] Put the hub on the VPS (the user's machine: by the user, with
+      `docs/server.md`)
 
 ## M5. Desktop - Tauri with the core inside
 
@@ -218,7 +229,7 @@ before M7 starts.
       a PKGBUILD (user's decision)
 - [x] The app icon (user's choice of 7 variants): an italic "b" and lines of
       text; it is also the site favicon
-- [ ] A vault copy + sync (M4); the server address and sign-in in settings
+- [x] A vault copy + sync, the server address and sign-in in settings (M4)
 
 ## M6. Android - Tauri with the core inside
 

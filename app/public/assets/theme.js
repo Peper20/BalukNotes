@@ -8,8 +8,9 @@ try {
   var m = /^\/v\/([^/]+)/.exec(location.pathname);
   var own = m && localStorage.getItem("k-theme@" + decodeURIComponent(m[1]));
   var t = JSON.parse(own || localStorage.getItem("k-theme") || "null");
-  var name = t && (t.fixed || (matchMedia("(prefers-color-scheme: dark)").matches ? t.dark : t.light));
-  if (typeof name === "string") document.documentElement.dataset.theme = name;
+  // Not `name`: in a classic script that is `window.name`, which turns null into the string "null".
+  var chosen = t && (t.fixed || (matchMedia("(prefers-color-scheme: dark)").matches ? t.dark : t.light));
+  if (typeof chosen === "string") document.documentElement.dataset.theme = chosen;
 } catch (e) {
   // no localStorage: the theme comes with the settings
 }

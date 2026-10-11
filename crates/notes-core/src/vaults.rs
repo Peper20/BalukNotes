@@ -13,80 +13,18 @@
 //! `.obsidian/`), and move with the folder ([`crate::settings::VaultSettings`]).
 //! Internal names starting with `.` are never notes ([`crate::storage::is_hidden`]).
 
-use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
+pub use notes_store::names::{MAX_NAME, VaultName};
 
-use crate::storage::is_hidden;
 use crate::{Error, Result};
 
 /// The vaults directory inside the data directory.
 pub const VAULTS_DIR: &str = "vaults";
 /// Vault settings: the path inside the vault folder.
 pub const SETTINGS_FILE: &str = ".baluk/settings.json";
-/// The longest vault name, in characters.
-pub const MAX_NAME: usize = 64;
-
-/// A vault name, which is also the name of its folder. It is checked on
-/// creation, so a path in the vaults directory can always be safely derived from it.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
-#[serde(try_from = "String", into = "String")]
-pub struct VaultName(String);
-
-impl VaultName {
-    pub fn new(name: impl Into<String>) -> Result<Self> {
-        let name = name.into();
-        let invalid = |reason| Err(Error::InvalidVault { name: name.clone(), reason });
-        if name.trim().is_empty() {
-            return invalid("empty name");
-        }
-        if name.trim() != name {
-            return invalid("spaces at the start or the end");
-        }
-        if name.chars().count() > MAX_NAME {
-            return invalid("longer than 64 characters");
-        }
-        if is_hidden(&name) {
-            return invalid("names starting with _ and . are internal");
-        }
-        // A folder name on any OS (Windows forbids these characters and a trailing dot).
-        if name.chars().any(|c| c.is_control() || r#"/\:*?"<>|"#.contains(c)) {
-            return invalid(r#"no characters / \ : * ? " < > |"#);
-        }
-        if name.ends_with('.') {
-            return invalid("a dot at the end");
-        }
-        Ok(Self(name))
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for VaultName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl TryFrom<String> for VaultName {
-    type Error = Error;
-
-    fn try_from(name: String) -> Result<Self> {
-        Self::new(name)
-    }
-}
-
-impl From<VaultName> for String {
-    fn from(name: VaultName) -> Self {
-        name.0
-    }
-}
 
 /// The vaults in the data directory: list, create, rename, move to the trash,
 /// path by name.
@@ -191,18 +129,13 @@ mod tests {
     }
 
     #[test]
-    fn names() {
-        for ok in ["Заметки", "Учёба 2026", "C++", "a.b", "x-y_z"] {
-            assert_eq!(name(ok).as_str(), ok);
-        }
-        for bad in ["", "  ", " a", "a ", ".git", "_baluk", "a/b", r"a\b", "a:b", "a?", "a.", "a\nb"] {
-            assert!(VaultName::new(bad).is_err(), "{bad:?}");
-        }
-        assert!(VaultName::new("я".repeat(MAX_NAME)).is_ok());
-        assert!(VaultName::new("я".repeat(MAX_NAME + 1)).is_err());
-        // From JSON with the same check.
-        assert!(serde_json::from_str::<VaultName>(r#""a/b""#).is_err());
-        assert_eq!(serde_json::from_str::<VaultName>(r#""Учёба""#).unwrap(), name("Учёба"));
+    fn invalid_name_error() {
+        // The store's error becomes the core one with the same message.
+        let err = Error::from(VaultName::new("a/b").unwrap_err());
+        assert!(matches!(err, Error::InvalidVault { reason, .. } if reason.starts_with("no characters")));
+        assert_eq!(err.to_string(), r#"invalid vault name "a/b": no characters / \ : * ? " < > |"#);
+        let found: Result<VaultName> = VaultName::new(" x").map_err(Error::from);
+        assert!(found.is_err());
     }
 
     #[test]

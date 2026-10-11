@@ -6,7 +6,8 @@
 // - router: page address -> what to show, navigation;
 // - reader: the shown note - loading, status, scroll;
 // - updates: the change check;
-// - connection: the connection to the server ("нет связи" and back).
+// - connection: the connection to the server ("нет связи" and back);
+// - session: who is signed in (a server with sign-in), sign-out.
 //
 // Pure logic is in ../tabs.ts, ../places.ts, ../reading.ts (with Vitest).
 // The interface around a note (panels, chapter, outline) is ../ui.svelte.ts.
@@ -19,11 +20,12 @@ import { notes } from "./notes.svelte";
 import { places } from "./places.svelte";
 import { reader } from "./reader.svelte";
 import { router } from "./router.svelte";
+import { session } from "./session.svelte";
 import { settings } from "./settings.svelte";
 import { tabs } from "./tabs.svelte";
 import { updates } from "./updates.svelte";
 
-export { connection, notes, places, reader, router, settings, tabs, updates };
+export { connection, notes, places, reader, router, session, settings, tabs, updates };
 
 /** Client start: settings and the note list from the server, the route, warming. */
 export async function start(): Promise<void> {

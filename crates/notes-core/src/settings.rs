@@ -213,10 +213,56 @@ impl Platform {
     }
 }
 
+/// Who wins when a file changed on this device and on the server (sync, the
+/// device setting `device.sync_prefer`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SyncPrefer {
+    /// This device's edit (the computer that writes first).
+    Local,
+    /// The server's version (the devices that receive).
+    Remote,
+}
+
+impl SyncPrefer {
+    /// The default of a platform: a computer writes first, a phone receives.
+    pub fn default_for(platform: Platform) -> Self {
+        platform.pick(Self::Local, Self::Remote)
+    }
+
+    /// Setting value: `local`, `remote`.
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Remote => "remote",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<Self> {
+        match key {
+            "local" => Some(Self::Local),
+            "remote" => Some(Self::Remote),
+            _ => None,
+        }
+    }
+}
+
+/// `device.sync_prefer` from a settings file, without the schema (and so
+/// without a core: the `notes sync` commands do not open one). A missing or
+/// unreadable file, or a bad value, gives the platform's default.
+pub fn stored_sync_prefer(path: &Path, platform: Platform) -> SyncPrefer {
+    fs::read(path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Map<String, Value>>(&bytes).ok())
+        .and_then(|values| values.get("device.sync_prefer")?.as_str().and_then(SyncPrefer::from_key))
+        .unwrap_or_else(|| SyncPrefer::default_for(platform))
+}
+
 /// Device settings as the core applies them (`Notes::apply_device`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Device {
     pub warm: WarmMode,
+    /// Who wins a sync conflict; read by the sync, not by the notes core.
+    pub sync_prefer: SyncPrefer,
     /// Builds of different notes at once.
     pub builds: usize,
     /// The limit of pages in memory, in bytes.
@@ -430,6 +476,20 @@ impl Schema {
                     (1.0, 365.0, 1.0),
                     14,
                 ),
+                SettingDef::new(
+                    "device.sync_prefer",
+                    "Если заметку правили здесь и на сервере",
+                    choices(&[
+                        (SyncPrefer::Local.key(), "правки этого устройства главнее"),
+                        (SyncPrefer::Remote.key(), "правки с сервера главнее"),
+                    ]),
+                    json!(SyncPrefer::default_for(p).key()),
+                )
+                .help(
+                    "Относится к синхронизации. Проигравшая версия не пропадает: на сервере она в истории, \
+                     на устройстве лежит в папке замен",
+                )
+                .device(),
             ],
         }
     }
@@ -561,8 +621,14 @@ impl SettingsStore {
         };
         let warm = values.get("device.warm").and_then(Value::as_str).and_then(WarmMode::from_key);
         let size = |n: u64| usize::try_from(n).unwrap_or(usize::MAX);
+        let text = |key: &str| {
+            let stored = values.get(key).and_then(Value::as_str);
+            stored.or_else(|| self.schema.get(key)?.default.as_str()).map(str::to_owned)
+        };
+        let sync_prefer = text("device.sync_prefer").and_then(|key| SyncPrefer::from_key(&key));
         Device {
             warm: warm.unwrap_or_default(),
+            sync_prefer: sync_prefer.unwrap_or(SyncPrefer::Remote),
             builds: size(number("device.builds")),
             memory: size(number("device.memory") * MB),
             disk: DiskLimits {
@@ -813,6 +879,8 @@ mod tests {
         assert_eq!(desktop.get("device.warm").unwrap().default, json!("all"));
         assert_eq!(phone.get("device.warm").unwrap().default, json!("off"), "no warming on a phone");
         assert_eq!(desktop.get("device.builds").unwrap().default, json!(2));
+        assert_eq!(desktop.get("device.sync_prefer").unwrap().default, json!("local"), "the computer writes first");
+        assert_eq!(phone.get("device.sync_prefer").unwrap().default, json!("remote"), "the phone receives");
 
         let dir = tempfile::tempdir().unwrap();
         let store = SettingsStore::open(dir.path().join("settings.json"), schema()).unwrap();
@@ -827,6 +895,20 @@ mod tests {
         changes.insert("device.memory".into(), json!(128));
         store.update(&changes).unwrap();
         assert_eq!(store.device().warm, WarmMode::Open);
+        assert_eq!(store.device().sync_prefer, SyncPrefer::Local);
+        changes.insert("device.sync_prefer".into(), json!("remote"));
+        store.update(&changes).unwrap();
+        assert_eq!(store.device().sync_prefer, SyncPrefer::Remote);
+        assert!(store.update(&Map::from_iter([("device.sync_prefer".to_owned(), json!("both"))])).is_err());
+        // Read without the schema: a stored value, else the platform's default.
+        let file = dir.path().join("settings.json");
+        assert_eq!(stored_sync_prefer(&file, Platform::Phone), SyncPrefer::Remote);
+        assert_eq!(stored_sync_prefer(&dir.path().join("none.json"), Platform::Desktop), SyncPrefer::Local);
+        assert_eq!(stored_sync_prefer(&dir.path().join("none.json"), Platform::Phone), SyncPrefer::Remote);
+        fs::write(&file, r#"{"device.sync_prefer": "local"}"#).unwrap();
+        assert_eq!(stored_sync_prefer(&file, Platform::Phone), SyncPrefer::Local);
+        fs::write(&file, r#"{"device.sync_prefer": "sideways"}"#).unwrap();
+        assert_eq!(stored_sync_prefer(&file, Platform::Desktop), SyncPrefer::Local);
         assert_eq!(store.device().memory, 128 << 20);
         assert_eq!(serde_json::to_value(desktop.get("device.warm").unwrap()).unwrap()["device"], json!(true));
         assert!(serde_json::to_value(desktop.get("header.title").unwrap()).unwrap().get("device").is_none());

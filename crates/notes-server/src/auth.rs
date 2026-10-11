@@ -1,68 +1,45 @@
-//! An optional access token (`notes serve --token`, `NOTES_TOKEN`).
+//! Sign-in for the TCP address (`notes serve --auth`, architecture §9).
 //!
-//! Closes the `notes serve` API to other programs and pages until there is a
-//! login with sessions (architecture §9). The Tauri window does not need it:
-//! it reaches the core through its own URL scheme, with no port
-//! (docs/research/E7.md). The token is accepted as:
+//! The sign-in itself is `notes_hub::auth` (login and password, the cookie
+//! session, `POST /api/login`, `POST /api/logout`, `GET /api/session`);
+//! [`AppState::auth`](crate::AppState::auth) mounts it over the whole router.
+//! The Unix socket (the `notes-app` window) never has it: only the user can
+//! reach the socket.
 //!
-//! - the `Authorization: Bearer <token>` header, for API requests from code;
-//! - the `?token=<token>` URL parameter, which opens the first page; the
-//!   server answers with a cookie;
-//! - the `notes_token` cookie (`HttpOnly`, `SameSite=Strict`), which the
-//!   browser sends with every request of the page: API, client files, fonts, PDF.
-//!
-//! Without a token (the default) nothing is checked.
+//! What the browser needs to draw the sign-in screen is public - [`is_public`];
+//! everything else needs a session.
 
-use axum::extract::{Query, Request, State};
-use axum::http::{HeaderValue, StatusCode, header};
-use axum::middleware::Next;
-use axum::response::{IntoResponse, Response};
+use axum::Router;
+use axum::http::{Method, StatusCode};
+use axum::routing::get;
 
-use crate::error::ApiError;
+use crate::AppState;
 
-/// The name of the token cookie.
-pub(crate) const COOKIE: &str = "notes_token";
+/// Paths of the client page (the shell; the routing is in JS).
+const PAGES: [&str; 4] = ["/v", "/n", "/graph", "/tags"];
 
-#[derive(Debug, serde::Deserialize)]
-struct TokenQuery {
-    token: Option<String>,
-}
+/// The API paths of the sign-in screen: the theme and the fonts.
+const OPEN_API: [&str; 3] = ["/api/themes", "/api/themes.css", "/api/fonts.css"];
 
-/// Middleware: passes a request with the right token, otherwise answers 401.
-pub(crate) async fn require_token(State(token): State<std::sync::Arc<str>>, req: Request, next: Next) -> Response {
-    let from_query = Query::<TokenQuery>::try_from_uri(req.uri()).ok().and_then(|q| q.0.token);
-    let presented = from_query.as_deref().is_some_and(|t| same(t, &token));
-    let valid = |t: Option<&str>| t.is_some_and(|t| same(t, &token));
-    if !(presented || valid(bearer(&req)) || valid(cookie(&req))) {
-        return ApiError(StatusCode::UNAUTHORIZED, "access token required".into()).into_response();
+/// Whether a request needs no session: the client page for every client
+/// route, the client files, the fonts and the themes (the sign-in screen is
+/// drawn with them). Only reads: any other method needs a session.
+pub(crate) fn is_public(method: &Method, path: &str) -> bool {
+    if !matches!(*method, Method::GET | Method::HEAD) {
+        return false;
     }
-    let mut res = next.run(req).await;
-    if presented {
-        // A token from the URL goes to a cookie: from now on the browser sends it itself.
-        let value = format!("{COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict");
-        if let Ok(value) = HeaderValue::from_str(&value) {
-            res.headers_mut().append(header::SET_COOKIE, value);
-        }
-    }
-    res
+    let under = |dir: &str| path.strip_prefix(dir).is_some_and(|rest| rest.starts_with('/'));
+    path == "/"
+        || PAGES.iter().any(|page| path == *page || under(page))
+        || under("/assets")
+        || under("/fonts")
+        || OPEN_API.contains(&path)
 }
 
-fn bearer(req: &Request) -> Option<&str> {
-    req.headers().get(header::AUTHORIZATION)?.to_str().ok()?.strip_prefix("Bearer ")
-}
-
-fn cookie(req: &Request) -> Option<&str> {
-    req.headers()
-        .get_all(header::COOKIE)
-        .iter()
-        .filter_map(|v| v.to_str().ok())
-        .flat_map(|v| v.split(';'))
-        .find_map(|pair| pair.trim().strip_prefix(COOKIE)?.strip_prefix('='))
-}
-
-/// Compares without an early exit: the time does not reveal how many characters matched.
-fn same(a: &str, b: &str) -> bool {
-    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0, |acc, (x, y)| acc | (x ^ y)) == 0
+/// Without sign-in `GET /api/session` answers 204: the client sees "no
+/// sign-in here" (a 404 would show up in the browser console).
+pub(crate) fn no_auth_routes() -> Router<AppState> {
+    Router::new().route("/api/session", get(|| async { StatusCode::NO_CONTENT }))
 }
 
 #[cfg(test)]
@@ -70,22 +47,47 @@ mod tests {
     use super::*;
 
     #[test]
-    fn compares_whole_tokens() {
-        assert!(same("abc", "abc"));
-        assert!(!same("abc", "abd"));
-        assert!(!same("abc", "abcd"));
-        assert!(!same("", "a"));
+    fn what_the_sign_in_screen_needs_is_public() {
+        for path in [
+            "/",
+            "/v/Study",
+            "/v/Study/",
+            "/v/Study/n/Network/SSH",
+            "/n/Network/SSH",
+            "/graph",
+            "/tags/rust",
+            "/assets/index-CX38oHQo.js",
+            "/api/themes",
+            "/api/themes.css",
+            "/api/fonts.css",
+            "/fonts/Lora/regular/latin.woff2",
+        ] {
+            assert!(is_public(&Method::GET, path), "{path}");
+            assert!(is_public(&Method::HEAD, path), "{path}");
+        }
     }
 
     #[test]
-    fn finds_token_cookie_among_others() {
-        let req = Request::builder()
-            .header(header::COOKIE, "a=1; notes_token=s3cret; b=2")
-            .body(axum::body::Body::empty())
-            .unwrap();
-        assert_eq!(cookie(&req), Some("s3cret"));
-        let other =
-            Request::builder().header(header::COOKIE, "notes_token_x=1").body(axum::body::Body::empty()).unwrap();
-        assert_eq!(cookie(&other), None);
+    fn data_and_writes_are_not_public() {
+        for path in [
+            "/api/vaults",
+            "/api/vaults/test/notes",
+            "/api/vaults/test/events",
+            "/api/vaults/test/pdf/a",
+            "/api/settings",
+            "/api/session",
+            "/api/themesx",
+            "/api/themes/x",
+            "/assetsx",
+            "/graphs",
+            "/vault",
+            "/other",
+        ] {
+            assert!(!is_public(&Method::GET, path), "{path}");
+        }
+        for method in [Method::POST, Method::PUT, Method::PATCH, Method::DELETE] {
+            assert!(!is_public(&method, "/"), "{method}");
+            assert!(!is_public(&method, "/api/themes"), "{method}");
+        }
     }
 }

@@ -5,7 +5,7 @@
 // no change polling); back - the `onBack` subscribers check for changes and
 // load what did not open.
 
-import { api, onReach } from "../api";
+import { api, isSignIn, onReach } from "../api";
 
 /** How often to probe the connection while it is lost. */
 export const PROBE_MS = 3000;
@@ -40,7 +40,8 @@ class Connection {
   /** Tries now (the "Повторить" button). */
   retry(): void {
     clearTimeout(this.#timer);
-    void api.vaults().catch(() => this.#probe());
+    // A 401 is an answer (the sign-in screen takes over): no probing.
+    void api.vaults().catch((e: unknown) => (isSignIn(e) ? undefined : this.#probe()));
   }
 
   #probe(): void {

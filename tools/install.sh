@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Install BalukNotes for use from any folder - one version from this
 # repository: the `notes` command with the parts `notes-typst` (release build:
-# the baluk library, the client and fonts are embedded) and `notes-app` (the
+# the baluk library, the client and fonts are embedded), `notes-hub` (accounts,
+# the storage server) and `notes-app` (the
 # window, with a menu entry and an icon), the Claude Code skill /baluk-note.
 # The window is the app: it starts its own core, no service is needed. Run
 # again after project changes.
@@ -29,12 +30,12 @@ echo "▶ client (app/dist)"
 npm --prefix app run -s build
 
 echo "▶ notes, release build"
-cargo build --release -p notes -p notes-typst -p notes-app
+cargo build --release -p notes -p notes-typst -p notes-app -p notes-hub
 
 # Via a temporary file: a running `notes serve` does not block the replacement.
 # The parts go to the same folder as notes (it looks for them there).
 mkdir -p "$bin"
-for name in notes notes-typst notes-app; do
+for name in notes notes-typst notes-app notes-hub; do
   install -m755 "target/release/$name" "$bin/.$name.new"
   mv -f "$bin/.$name.new" "$bin/$name"
   echo "  $bin/$name"
