@@ -12,7 +12,7 @@ default = ["client"]
 # The HTTP client of a device (`client`, over ureq with native-tls). The server
 # binary does not need it: `--no-default-features` builds the VPS binary without
 # a TLS library.
-client = ["dep:ureq", "dep:percent-encoding"]
+client = ["dep:ureq", "dep:native-tls", "dep:percent-encoding"]
 # Exports the wire types of sign-in to app/src/lib/api/types (cd app && npm run types).
 ts = ["dep:ts-rs"]
 
@@ -40,6 +40,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 ts-rs = { workspace = true, optional = true }
 ureq = { workspace = true, optional = true }
+native-tls = { workspace = true, optional = true }
 
 [dev-dependencies]
 http-body-util = "0.1"

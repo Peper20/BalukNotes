@@ -3382,6 +3382,7 @@ dependencies = [
  "axum",
  "clap",
  "http-body-util",
+ "native-tls",
  "notes",
  "notes-store",
  "percent-encoding",

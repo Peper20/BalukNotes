@@ -15,6 +15,7 @@
 //! 60 s to read, which is longer than the longest long-poll wait.
 
 use std::io::Read;
+use std::sync::Arc;
 use std::time::Duration;
 
 use notes_store::sync::path::check;
@@ -37,6 +38,19 @@ fn segment(text: &str) -> String {
     utf8_percent_encode(text, SEGMENT).to_string()
 }
 
+/// The HTTP agent with TLS. `ureq` built with `native-tls` still has no TLS
+/// until it is given a connector: without one every `https://` request fails.
+fn agent() -> Agent {
+    let builder = AgentBuilder::new().timeout_connect(CONNECT_TIMEOUT).timeout_read(READ_TIMEOUT);
+    match native_tls::TlsConnector::new() {
+        Ok(tls) => builder.tls_connector(Arc::new(tls)).build(),
+        Err(e) => {
+            tracing::warn!("no TLS for the hub client, https will not work: {e}");
+            builder.build()
+        }
+    }
+}
+
 /// A hub address and, after sign-in, a token.
 #[derive(Debug, Clone)]
 struct Api {
@@ -47,8 +61,7 @@ struct Api {
 
 impl Api {
     fn new(base_url: &str, token: Option<&str>) -> Self {
-        let agent = AgentBuilder::new().timeout_connect(CONNECT_TIMEOUT).timeout_read(READ_TIMEOUT).build();
-        Self { base: base_url.trim_end_matches('/').to_owned(), token: token.map(str::to_owned), agent }
+        Self { base: base_url.trim_end_matches('/').to_owned(), token: token.map(str::to_owned), agent: agent() }
     }
 
     fn request(&self, method: &str, path: &str) -> Request {
@@ -248,6 +261,18 @@ mod tests {
         assert_eq!(segment("Сеть"), "%D0%A1%D0%B5%D1%82%D1%8C");
         assert_eq!(segment("a b#?%/"), "a%20b%23%3F%25%2F");
         assert_eq!(segment("a-b_c.d~"), "a-b_c.d~");
+    }
+
+    /// The client speaks TLS: an `https://` request reaches the handshake (which a
+    /// plain TCP listener fails), it is not refused for a missing TLS backend.
+    #[test]
+    fn https_has_a_tls_backend() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = std::thread::spawn(move || drop(listener.accept()));
+        let error = login(&format!("https://127.0.0.1:{port}"), "a", "b").unwrap_err().to_string();
+        server.join().unwrap();
+        assert!(!error.contains("no TLS backend"), "{error}");
     }
 
     #[test]
