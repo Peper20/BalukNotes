@@ -245,8 +245,7 @@ it. Extended at the end of every iteration, closed items are deleted.
 - **Sign-in in the client is only the form**: a password is changed from the
   console (`notes users passwd`), no "remember me". A client pointed at
   another origin (`__NOTES_API__.base`) cannot sign in: the server has no
-  CORS with credentials. `--session-days` is not passed to `notes service
-  install`.
+  CORS with credentials.
 - **The hub trusts `X-Forwarded-Proto` and `X-Forwarded-Host`**: right behind
   a reverse proxy on localhost, wrong if the port is open to the network (the
   `Origin` check compares host and port, not the scheme).
@@ -261,17 +260,30 @@ it. Extended at the end of every iteration, closed items are deleted.
   both is missed until the next one. Paths are compared byte by byte (case,
   Unicode forms). A failed file operation on the device fails the whole
   round.
-- **A deletion is a change like any other**: emptying a linked vault folder by
-  hand deletes the files on the server and on other devices (the server keeps
-  them in `history/`, a device - 30 days in `sync/removed/`). There is no "too
-  many deletions - ask first" guard.
+- **The mass-deletion guard is simple**: the limits (more than 10 files and
+  over 20 % of the vault, or all of it) are constants, not a device setting.
+  A renamed or moved large folder is deletions plus uploads and asks for a
+  confirmation (no rename detection by content). A held round stops the whole
+  vault, not just the deletions: the other uploads and the server's changes
+  wait for `confirm` or `restore`, and the worker looks again every 30 s. A
+  failed `confirm` round (no network) forgets the held set; the next round
+  holds it again. For files gone from the server there is no `restore` (the
+  way back is unlink and link, which uploads the device's files); the
+  guard does not see a file emptied inside, only deleted ones.
+- **Sign-in attempts count even when they succeed**: the hub's throttle adds
+  every login request to the "recent attempts" window and removes it only for
+  that login, so about 20 sign-ins within a minute slow down everyone (tests
+  of `notes-device` live within this limit and sign in with a ready session
+  where they can). How to close: take a successful attempt out of the window.
 - **Rename or delete of a linked vault in the app unlinks it**: the server
   copy stays under the old name, there is no rename on the server and no
   re-link. Unlinking from the console while `notes serve` runs - its worker
   stops on the next round or state request.
 - **Sync in settings shows words only**: a round error is the core's English
-  text, no progress of a large download, conflicts are the file names of the
-  last round; the state is read while the settings window is open. The "plain
+  line recognised by its start in `lib/sync.ts` (`roundError`; a new error
+  text there needs a rule, otherwise "Не удалось синхронизировать" and the
+  line under it), no progress of a large download, conflicts are the file
+  names of the last round; the state is read while the settings window is open. The "plain
   http" warning repeats the core's rule in `lib/sync.ts`.
 - **Extra sync rounds**: every pulled file and every server echo of an own
   upload wakes the worker for one more cheap round. `.baluk/settings.json`
@@ -317,10 +329,9 @@ it. Extended at the end of every iteration, closed items are deleted.
   (`lib/details.ts`), among equal ones - by index: a new block above an opened
   one with the same text opens instead of it.
 - **Fuzzy search is greedy** (`lib/fuzzy.ts`): a query letter jumps to the
-  start of the next word, and a multi-word query may miss a title where the
-  words go in a row ("в этой заметке или книге" does not find "Поиск в этой
-  заметке или книге"). How to close: a substring without spaces or a search
-  with backtracking.
+  start of the next word; if that fails, a second pass takes the first
+  occurrences, but the pick is not the best one by score (no full
+  backtracking).
 - **"Нет связи" depends on a server answer** (`api.onReach`): an error
   response (502 of a reverse proxy, M4) counts as connected. The probe request
   is `GET /api/vaults` every 3 s while disconnected.
@@ -328,9 +339,6 @@ it. Extended at the end of every iteration, closed items are deleted.
   first. Tabs and reading positions move only in this browser; the disk cache
   is tied to the vault path - after a rename the notes are rebuilt, the
   former cache is deleted as foreign (`device.foreign_days`).
-- **Vault settings with a JSON error** (`.baluk/settings.json`): the vault
-  opens without them, changes stay only in memory until a restart (the file is
-  not overwritten); the warning is in the server log, not in the interface.
 - **Key hints hide on `(pointer: coarse)`**: a tablet with a keyboard does not
   get them either.
 - **On a phone tabs only scroll** - no swipe and no list. For Android (M6) -

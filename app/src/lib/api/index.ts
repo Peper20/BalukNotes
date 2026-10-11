@@ -61,7 +61,9 @@ export type { Apply } from "./types/Apply";
 export type { Theme } from "./types/Theme";
 export type { VaultsResponse } from "./types/VaultsResponse";
 export type { VaultSettingsResponse } from "./types/VaultSettingsResponse";
+export type { SettingsProblem } from "./types/SettingsProblem";
 export type { SyncAccount } from "./types/SyncAccount";
+export type { SyncHeld } from "./types/SyncHeld";
 export type { SyncReport } from "./types/SyncReport";
 export type { SyncState } from "./types/SyncState";
 export type { SyncStatus } from "./types/SyncStatus";
@@ -213,6 +215,10 @@ export const api = {
   syncUnlink: (name: string) => request<unknown>(`/api/device/sync/vaults/${encodeURIComponent(name)}/unlink`, { method: "POST" }).then(() => {}),
   /** One round of a linked vault now. */
   syncNow: (name: string) => request<SyncReport>(`/api/device/sync/vaults/${encodeURIComponent(name)}/now`, { method: "POST" }),
+  /** Deletes the files a held round stopped at (state "held"). 409: nothing waits, or more files are gone now. */
+  syncConfirm: (name: string) => request<SyncReport>(`/api/device/sync/vaults/${encodeURIComponent(name)}/confirm`, { method: "POST" }),
+  /** Gets back from the storage server the files a held round stopped at, instead of deleting them there. */
+  syncRestore: (name: string) => request<SyncReport>(`/api/device/sync/vaults/${encodeURIComponent(name)}/restore`, { method: "POST" }),
   /** Tells the server what to build in advance first (no response needed). */
   warm: (req: WarmRequest) => request<unknown>(inVault("/warm"), json("POST", req)).then(() => {}),
   /** PDF address: the browser opens it (a new tab), the session cookie goes with it. */

@@ -15,7 +15,7 @@ const AFTER_ACTION = 2;
 /** The "N мин назад" texts are re-counted this often while the window is open, ms. */
 const CLOCK = 30_000;
 
-export type RowAction = "link" | "unlink" | "now";
+export type RowAction = "link" | "unlink" | "now" | "confirm" | "restore";
 
 class Sync {
   status = $state.raw<SyncStatus | null>(null);
@@ -129,6 +129,16 @@ class Sync {
   /** One round of a linked vault now. */
   syncNow(name: string): Promise<void> {
     return this.#row(name, "now", () => api.syncNow(name));
+  }
+
+  /** Goes on with the deletions a held round stopped at. */
+  confirmDeletion(name: string): Promise<void> {
+    return this.#row(name, "confirm", () => api.syncConfirm(name));
+  }
+
+  /** Gets the files a held round stopped at back from the storage server. */
+  restoreFiles(name: string): Promise<void> {
+    return this.#row(name, "restore", () => api.syncRestore(name));
   }
 
   async #row(name: string, action: RowAction, run: () => Promise<unknown>): Promise<void> {

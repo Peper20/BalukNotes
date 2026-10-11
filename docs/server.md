@@ -107,6 +107,15 @@ From then on the app (`notes app`, or `notes serve`) syncs linked vaults in
 the background. Who wins when the same file changed on two devices - the
 setting "Это устройство" -> `device.sync_prefer`.
 
+A slip does not wipe the vault everywhere: if a round would delete a large
+part of it (more than 10 files and over a fifth, or all of it) - because the
+folder was emptied by hand, a disk was not mounted - it stops before it
+deletes anything on the server. `notes sync status` and the settings say
+"paused"; `notes sync confirm --vault "Notes"` (or the button in the settings)
+deletes them, `notes sync restore --vault "Notes"` gets the files back from the
+server. The same holds in the other direction, for files deleted on the
+server.
+
 ## Updating
 
 One command on the laptop; the VPS builds everything itself, the laptop

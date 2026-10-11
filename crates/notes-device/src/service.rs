@@ -173,6 +173,30 @@ impl DeviceSync {
         round::sync_linked(&self.ctx.paths, &vault, (self.ctx.prefer)())
     }
 
+    /// Deletes the files a held round stopped at (see [`round::confirm`]), in
+    /// the caller's thread; then the worker looks again.
+    pub fn confirm(&self, vault: &str) -> Result<Round> {
+        let vault = name(vault)?;
+        let round = round::confirm(&self.ctx.paths, &vault, (self.ctx.prefer)())?;
+        self.wake(&vault);
+        Ok(round)
+    }
+
+    /// Gets back from the server the files a held round stopped at (see
+    /// [`round::restore`]), in the caller's thread; then the worker looks again.
+    pub fn restore(&self, vault: &str) -> Result<Round> {
+        let vault = name(vault)?;
+        let round = round::restore(&self.ctx.paths, &vault, (self.ctx.prefer)())?;
+        self.wake(&vault);
+        Ok(round)
+    }
+
+    fn wake(&self, vault: &VaultName) {
+        if let Some(worker) = self.workers.lock().get(vault) {
+            worker.wake();
+        }
+    }
+
     /// Before the vault's folder is moved or deleted: stops its worker.
     /// Returns whether the vault is linked; pass it to [`Self::settle`].
     pub fn detach(&self, vault: &str) -> bool {

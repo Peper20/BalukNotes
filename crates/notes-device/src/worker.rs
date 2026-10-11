@@ -15,6 +15,13 @@
 //!   to [`Timing::backoff_max`]. A worker without a file watcher also runs a
 //!   round every [`UNWATCHED_RESCAN`].
 //!
+//! - **a round is held** (it would delete a large part of the vault, architecture
+//!   §9): the worker is in state `held`, says so in the log once per set of
+//!   files, and looks again after [`Timing::held_recheck`] (a confirmation or
+//!   a restore from another process shows up then; [`Worker::wake`] makes it
+//!   immediate). No backoff, no repeated log lines. The server's changes wait:
+//!   the poller is not told a round ended.
+//!
 //! A refused session ends the worker (state `sign-in`); [`crate::DeviceSync`]
 //! starts it again after a new sign-in. A stop (`Worker::stop`) is prompt: it
 //! waits for a round that is running, not for the long poll, which ends by
@@ -46,6 +53,8 @@ pub const UNWATCHED_RESCAN: Duration = Duration::from_secs(60);
 pub struct Timing {
     /// Quiet time after a local change before a round.
     pub debounce: Duration,
+    /// How long a worker whose round is held waits before it looks again.
+    pub held_recheck: Duration,
     /// How long one request for server changes waits (the hub cuts it to 30 s).
     pub poll_wait: Duration,
     /// The first wait after a failed round or request; it doubles.
@@ -57,6 +66,7 @@ impl Default for Timing {
     fn default() -> Self {
         Self {
             debounce: Duration::from_secs(2),
+            held_recheck: Duration::from_secs(30),
             poll_wait: Duration::from_secs(20),
             backoff_min: Duration::from_secs(5),
             backoff_max: Duration::from_secs(300),
@@ -84,6 +94,9 @@ pub enum WorkState {
     SignIn,
     /// The server cannot be reached; retrying.
     Offline,
+    /// The round would delete a large part of the vault and waits for the
+    /// user ([`crate::confirm`] or [`crate::restore`]).
+    Held,
 }
 
 /// What the worker tells about itself.
@@ -155,6 +168,11 @@ impl Worker {
 
     pub fn token(&self) -> &str {
         &self.token
+    }
+
+    /// Asks for a round now (after a confirmation made elsewhere).
+    pub fn wake(&self) {
+        let _ = self.tx.send(Event::Remote);
     }
 
     /// The thread ended by itself (the session is gone).
@@ -245,6 +263,8 @@ impl Runner {
         let mut round = true;
         let mut retry_in: Option<Duration> = None;
         let mut failures = 0u32;
+        // The held set already in the log.
+        let mut logged_held: Option<String> = None;
         loop {
             if round {
                 round = false;
@@ -252,12 +272,23 @@ impl Runner {
                     Ok(seq) => {
                         failures = 0;
                         retry_in = None;
+                        logged_held = None;
                         self.set(WorkState::Idle, None);
                         let _ = ctl.send(Ctl::Seq(seq));
                     }
                     Err(e) if e.needs_sign_in() => {
                         self.set(WorkState::SignIn, Some(e.to_string()));
                         return;
+                    }
+                    Err(Error::Held { held, vault }) => {
+                        failures = 0;
+                        retry_in = Some(timing.held_recheck);
+                        let text = Error::Held { held: held.clone(), vault }.to_string();
+                        if logged_held.as_ref() != Some(&held.fingerprint) {
+                            tracing::warn!("sync of \"{}\": {text}", self.vault);
+                            logged_held = Some(held.fingerprint);
+                        }
+                        self.set(WorkState::Held, Some(text));
                     }
                     Err(e) => {
                         failures += 1;
@@ -319,7 +350,10 @@ impl Runner {
 
     /// One round; the server number the device is now up to date with.
     fn round(&self) -> Result<u64> {
-        self.set(WorkState::Syncing, None);
+        // A held round stays "held" while it looks again, not flashing "syncing".
+        if self.live.lock().state != WorkState::Held {
+            self.set(WorkState::Syncing, None);
+        }
         let prefer = (self.ctx.prefer)();
         sync_linked(&self.ctx.paths, &self.vault, prefer).map(|round| round.remote_seq)
     }

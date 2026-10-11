@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use std::time::Duration;
 
 use notes_core::VaultName;
+use notes_store::sync::Held;
 use serde::Serialize;
 
 use crate::account::Account;
@@ -46,6 +47,8 @@ pub struct VaultStatus {
     pub error: Option<String>,
     /// What the last successful round did.
     pub report: Option<ReportInfo>,
+    /// The deletions the sync waits to be confirmed ([`WorkState::Held`]).
+    pub held: Option<Held>,
 }
 
 /// Builds the status. `live` gives the state of a running worker for a vault
@@ -70,8 +73,14 @@ pub fn status(paths: &Paths, live: impl Fn(&str) -> Option<Live>, remote: bool) 
             let last = VaultName::new(name).ok().and_then(|v| LastRound::read(paths, &v));
             let live = live(name);
             let failed = last.as_ref().is_some_and(|l| l.error.is_some());
+            let held = last.as_ref().and_then(|l| l.held.clone());
             let state = match &live {
+                // A round that was held, whoever ran it, has not been settled yet.
+                Some(live) if held.is_some() && matches!(live.state, WorkState::Idle | WorkState::Held) => {
+                    WorkState::Held
+                }
                 Some(live) => live.state,
+                None if held.is_some() => WorkState::Held,
                 None if failed => WorkState::Error,
                 None => WorkState::Idle,
             };
@@ -85,6 +94,7 @@ pub fn status(paths: &Paths, live: impl Fn(&str) -> Option<Live>, remote: bool) 
                 last_sync: last.as_ref().map(|l| l.at),
                 error: live_error.or_else(|| last.as_ref().and_then(|l| l.error.clone())),
                 report: last.and_then(|l| l.report),
+                held,
             }
         })
         .collect();

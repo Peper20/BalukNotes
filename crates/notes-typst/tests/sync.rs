@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 
 use notes_device::testing::{PASSWORD, TestHub};
 
-static HUB: LazyLock<TestHub> = LazyLock::new(|| TestHub::start(&["ivan", "anna", "pavel", "kira"]));
+static HUB: LazyLock<TestHub> = LazyLock::new(|| TestHub::start(&["ivan", "anna", "pavel", "kira", "boris"]));
 
 /// `notes-typst --data <data> <args>` with a clean environment; `stdin` is
 /// what the command reads.
@@ -206,4 +206,50 @@ fn now_goes_through_every_vault_and_fails_if_one_does() {
     assert_eq!(o.status.code(), Some(1));
     assert!(err(&o).contains("one: failed: the folder of vault \"one\" is missing"), "{}", err(&o));
     assert!(out(&o).contains("two: uploaded 1"), "{}", out(&o));
+}
+
+#[test]
+fn an_emptied_vault_waits_for_confirm_or_restore() {
+    let data = tempfile::tempdir().unwrap();
+    let data = data.path();
+    login(data, "boris");
+    for i in 0..12 {
+        write(data, "wipe", &format!("n{i}.typ"), &format!("= {i}\n"));
+    }
+    ok(&run(data, &["sync", "link", "--vault", "wipe"], ""));
+    let wipe = || {
+        for i in 0..12 {
+            std::fs::remove_file(data.join("vaults/wipe").join(format!("n{i}.typ"))).unwrap();
+        }
+    };
+    let held =
+        "sync of \"wipe\" is paused: 12 of 12 files are gone from this device and would be deleted on the server";
+
+    // The folder is emptied by hand: the round stops, nothing is deleted.
+    wipe();
+    let o = run(data, &["sync", "now", "--vault", "wipe"], "");
+    assert_eq!(o.status.code(), Some(1));
+    assert!(err(&o).contains(held) && err(&o).contains("notes sync confirm --vault \"wipe\""), "{}", err(&o));
+    let text = ok(&run(data, &["sync", "status"], ""));
+    assert!(text.contains("wipe: linked, PAUSED, nothing is deleted: sync of"), "{text}");
+    let status: serde_json::Value = serde_json::from_str(&ok(&run(data, &["sync", "status", "--json"], ""))).unwrap();
+    assert_eq!(status["vaults"][0]["state"], "held");
+    assert_eq!(status["vaults"][0]["held"]["count"], 12);
+
+    // Restore: the files come back.
+    let o = run(data, &["sync", "restore", "--vault", "wipe"], "");
+    assert_eq!(ok(&o).trim(), "wipe: uploaded 0, downloaded 12, removed 0 local / 0 on the server");
+    assert!(data.join("vaults/wipe/n5.typ").is_file());
+    let o = run(data, &["sync", "confirm", "--vault", "wipe"], "");
+    assert!(err(&o).contains("nothing of \"wipe\" waits for a confirmation"), "{}", err(&o));
+
+    // Emptied again, and this time confirmed.
+    wipe();
+    assert_eq!(run(data, &["sync", "now"], "").status.code(), Some(1));
+    let o = run(data, &["sync", "confirm", "--vault", "wipe"], "");
+    assert_eq!(ok(&o).trim(), "wipe: uploaded 0, downloaded 0, removed 0 local / 12 on the server");
+    assert_eq!(
+        ok(&run(data, &["sync", "now"], "")).trim(),
+        "wipe: uploaded 0, downloaded 0, removed 0 local / 0 on the server"
+    );
 }

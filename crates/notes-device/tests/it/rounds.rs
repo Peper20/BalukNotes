@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use notes_device::round::Lock;
-use notes_device::{Error, LastRound, Prefer, WorkState, link, logout, status, sync_linked, unlink};
+use notes_device::{Error, LastRound, Prefer, WorkState, confirm, link, logout, restore, status, sync_linked, unlink};
 
 use crate::common::{Device, HUB};
 
@@ -239,4 +239,67 @@ fn a_running_round_makes_the_next_one_wait() {
         waiting.join().unwrap()
     });
     assert_eq!(round.unwrap().report.uploaded, 1);
+}
+
+#[test]
+fn a_mass_deletion_waits_for_confirm_or_restore() {
+    let (a, b) = (Device::new(), Device::new());
+    a.sign_in_directly("emil");
+    b.sign_in_directly("emil");
+    let vault = a.vault("guarded");
+    for i in 0..12 {
+        a.write("guarded", &format!("n{i}.typ"), &format!("= {i}"));
+    }
+    link(&a.paths, &vault, Prefer::Local).unwrap();
+    link(&b.paths, &vault, Prefer::Remote).unwrap();
+
+    // A few notes go as usual.
+    std::fs::remove_file(a.folder("guarded").join("n0.typ")).unwrap();
+    assert_eq!(sync_linked(&a.paths, &vault, Prefer::Local).unwrap().report.removed_remote, 1);
+
+    // The rest vanishes: the round stops, says so, and the server keeps everything.
+    for i in 1..12 {
+        std::fs::remove_file(a.folder("guarded").join(format!("n{i}.typ"))).unwrap();
+    }
+    let error = sync_linked(&a.paths, &vault, Prefer::Local).unwrap_err();
+    assert!(error.is_held());
+    assert_eq!(
+        error.to_string(),
+        "sync of \"guarded\" is paused: 11 of 11 files are gone from this device and would be deleted on the \
+         server; to delete them there: notes sync confirm --vault \"guarded\"; to get them back from the server \
+         instead: notes sync restore --vault \"guarded\""
+    );
+    let last = LastRound::read(&a.paths, &vault).unwrap();
+    assert_eq!(last.held.as_ref().map(|h| h.count), Some(11));
+    assert_eq!(status(&a.paths, |_| None, false).unwrap().vaults[0].state, WorkState::Held);
+    assert_eq!(sync_linked(&b.paths, &vault, Prefer::Remote).unwrap().report.removed_local, 1);
+    assert_eq!(b.read("guarded", "n5.typ").as_deref(), Some("= 5"), "nothing was deleted on the server");
+
+    // Restore: the files come back and nothing waits any more.
+    let round = restore(&a.paths, &vault, Prefer::Local).unwrap();
+    assert_eq!((round.report.downloaded, round.report.removed_remote), (11, 0));
+    assert_eq!(a.read("guarded", "n5.typ").as_deref(), Some("= 5"));
+    assert!(LastRound::read(&a.paths, &vault).unwrap().held.is_none());
+    assert_eq!(
+        confirm(&a.paths, &vault, Prefer::Local).unwrap_err().to_string(),
+        "nothing of \"guarded\" waits for a confirmation"
+    );
+
+    // The same again, and this time the user confirms.
+    for i in 1..12 {
+        std::fs::remove_file(a.folder("guarded").join(format!("n{i}.typ"))).unwrap();
+    }
+    assert!(sync_linked(&a.paths, &vault, Prefer::Local).unwrap_err().is_held());
+    let round = confirm(&a.paths, &vault, Prefer::Local).unwrap();
+    assert_eq!(round.report.removed_remote, 11);
+    assert!(LastRound::read(&a.paths, &vault).unwrap().held.is_none());
+    // The mirror: the other device is asked before it loses its notes.
+    let error = sync_linked(&b.paths, &vault, Prefer::Remote).unwrap_err();
+    assert!(
+        error.to_string().contains("11 of 11 files are gone from the server and would be removed from this device"),
+        "{error}"
+    );
+    assert_eq!(b.read("guarded", "n5.typ").as_deref(), Some("= 5"));
+    confirm(&b.paths, &vault, Prefer::Remote).unwrap();
+    assert_eq!(b.read("guarded", "n5.typ"), None);
 }

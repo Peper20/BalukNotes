@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ApiError, type SyncStatus, type SyncVault } from "../api";
 
-const calls = { status: 0 };
+const calls = { status: 0, confirm: 0, restore: 0 };
 let answer: () => Promise<SyncStatus>;
 vi.mock("../api", async (original) => ({
   ...(await original<typeof import("../api")>()),
@@ -12,6 +12,14 @@ vi.mock("../api", async (original) => ({
     },
     syncLink: async () => ({}),
     syncUnlink: async () => {},
+    syncConfirm: async () => {
+      calls.confirm++;
+      return {};
+    },
+    syncRestore: async () => {
+      calls.restore++;
+      return {};
+    },
   },
 }));
 
@@ -26,12 +34,13 @@ const vault = (state: SyncVault["state"] = "idle"): SyncVault => ({
   last_sync: null,
   error: null,
   report: null,
+  held: null,
 });
 const status = (vaults: SyncVault[]): SyncStatus => ({ server: "https://s", login: "me", signed_in: true, server_error: null, session_ended: false, vaults });
 
 beforeEach(() => {
   vi.useFakeTimers();
-  calls.status = 0;
+  calls.status = calls.confirm = calls.restore = 0;
 });
 afterEach(() => {
   sync.watch(false);
@@ -82,6 +91,18 @@ it("after an action: the status again, then a couple more asks, then quiet", asy
   expect(calls.status).toBe(4);
   await vi.advanceTimersByTimeAsync(30_000);
   expect(calls.status).toBe(4);
+});
+
+it("confirming or restoring held deletions is a row action that asks the status again", async () => {
+  answer = async () => status([{ ...vault("held"), held: { side: "server", count: 12, total: 12 } }]);
+  sync.watch(true);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(sync.status?.vaults[0]?.held?.count).toBe(12);
+  await sync.restoreFiles("v");
+  await sync.confirmDeletion("v");
+  expect([calls.restore, calls.confirm]).toEqual([1, 1]);
+  expect(calls.status).toBe(3);
+  expect(sync.busy).toEqual({});
 });
 
 it("a server without sync (404): unavailable, no polling", async () => {

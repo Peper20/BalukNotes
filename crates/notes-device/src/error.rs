@@ -3,7 +3,7 @@
 use std::io;
 use std::path::PathBuf;
 
-use notes_store::sync::Error as SyncError;
+use notes_store::sync::{Error as SyncError, Held, Side};
 
 use crate::account::Account;
 
@@ -41,6 +41,14 @@ pub enum Error {
     #[error("the folder of vault \"{0}\" is missing")]
     FolderMissing(String),
 
+    /// The round would delete a large part of the vault and waits for the
+    /// user (the guard against mass deletion, architecture §9).
+    #[error("{}", held_text(.vault, .held))]
+    Held { vault: String, held: Held },
+
+    #[error("nothing of \"{0}\" waits for a confirmation")]
+    NothingHeld(String),
+
     /// Any other failure of the sync engine or the hub.
     #[error(transparent)]
     Sync(#[from] SyncError),
@@ -62,6 +70,18 @@ pub enum Error {
 /// The result of device sync.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// What the user sees when a round waits for a confirmation.
+fn held_text(vault: &str, held: &Held) -> String {
+    let hint = match held.side {
+        Side::Server => format!(
+            "to delete them there: notes sync confirm --vault \"{vault}\"; \
+             to get them back from the server instead: notes sync restore --vault \"{vault}\""
+        ),
+        Side::Device => format!("to remove them here: notes sync confirm --vault \"{vault}\""),
+    };
+    format!("sync of \"{vault}\" is paused: {held}; {hint}")
+}
+
 impl Error {
     pub(crate) fn io(path: impl Into<PathBuf>, source: io::Error) -> Self {
         Self::Io { path: path.into(), source }
@@ -71,6 +91,12 @@ impl Error {
     #[must_use]
     pub fn needs_sign_in(&self) -> bool {
         matches!(self, Self::NotSignedIn | Self::SessionEnded { .. })
+    }
+
+    /// The round waits for the user to confirm deletions.
+    #[must_use]
+    pub fn is_held(&self) -> bool {
+        matches!(self, Self::Held { .. })
     }
 
     /// The server could not be reached: try again later.
@@ -85,6 +111,7 @@ impl Error {
             SyncError::Unauthorized => {
                 Self::SessionEnded { server: account.server.clone(), login: account.login.clone() }
             }
+            SyncError::DeletionsHeld(held) => Self::Held { vault: vault.unwrap_or_default().to_owned(), held },
             SyncError::Network(detail) => Self::Unreachable { server: account.server.clone(), detail },
             SyncError::NotFound(_) if vault.is_some() => Self::RemoteMissing(vault.unwrap_or_default().to_owned()),
             other => Self::Sync(other),

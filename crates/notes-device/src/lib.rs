@@ -38,6 +38,10 @@
 //! - Only one round runs for a vault at a time, across processes: the lock
 //!   file is an OS lock, so a crash releases it. A second round waits for
 //!   [`LOCK_WAIT`] and then says that the sync is already running.
+//! - A round that would delete a large part of the vault stops before it
+//!   deletes anything ([`Error::Held`], state [`WorkState::Held`]) and goes on
+//!   only after [`confirm`] (delete) or [`restore`] (get the files back from
+//!   the server). Architecture §9.
 //! - Linking never deletes anything on either side. Unlinking forgets the
 //!   state only; files stay on both sides.
 //! - Errors are one line and say what to do ([`Error`]).
@@ -65,9 +69,11 @@ pub mod worker;
 pub use account::{Account, Server, login, logout, parse_server};
 pub use error::{Error, Result};
 pub use notes_core::settings::SyncPrefer;
-pub use notes_store::sync::Prefer;
+pub use notes_store::sync::{Held, Prefer, Side};
 pub use paths::Paths;
-pub use round::{LOCK_WAIT, LastRound, REMOVED_KEEP, ReportInfo, Round, link, prune, sync_linked, unlink};
+pub use round::{
+    LOCK_WAIT, LastRound, REMOVED_KEEP, ReportInfo, Round, confirm, link, prune, restore, sync_linked, unlink,
+};
 pub use service::DeviceSync;
 pub use status::{Status, VaultStatus, status};
 pub use worker::{Timing, WorkState};

@@ -25,7 +25,8 @@
 //!   implements it for a local mode and tests; the HTTP client implements it
 //!   over the network, the server routes call [`HubVault`] methods;
 //! - [`sync`] / [`Report`]: one round; its algorithm is described in
-//!   [`engine`].
+//!   [`engine`]. A round that would delete a large part of the vault stops
+//!   first ([`Deletions`], [`Held`]).
 //!
 //! # The write protocol
 //!
@@ -52,6 +53,7 @@
 
 pub mod engine;
 mod error;
+mod guard;
 mod hub;
 pub mod path;
 mod protocol;
@@ -61,8 +63,9 @@ mod tree;
 #[cfg(test)]
 mod tests;
 
-pub use engine::{Prefer, Remote, Report, sync};
+pub use engine::{Options, Prefer, Remote, Report, sync, sync_with};
 pub use error::{Error, Result};
+pub use guard::{Deletions, Held, MIN_FILES, MIN_SHARE_PERCENT, Side};
 pub use hub::{HubVault, MAX_FILE_SIZE};
 pub use protocol::{Base, Changes, Conflict, Entry, Outcome, hash_hex, is_hash};
 pub use state::{State, Synced};

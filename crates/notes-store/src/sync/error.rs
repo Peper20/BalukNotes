@@ -38,6 +38,11 @@ pub enum Error {
     #[error("unauthorized")]
     Unauthorized,
 
+    /// The round would delete a large part of the vault and was stopped
+    /// before it deleted anything (see [`super::Deletions`]).
+    #[error("{0}")]
+    DeletionsHeld(super::Held),
+
     /// Anything else.
     #[error("{0}")]
     Other(String),

@@ -37,6 +37,17 @@
 //! skipped because it changed locally during the round, or vanished on the
 //! server, makes the next round look at the server's changes again.
 //!
+//! # The guard against mass deletion
+//!
+//! The plan is complete before anything is executed. If it deletes a large
+//! part of the vault on the server (the files are gone from the device) or on
+//! the device (they are gone from the server) - [`super::guard::is_mass`] -
+//! the round returns [`Error::DeletionsHeld`] having changed nothing but the
+//! state's file timestamps: no upload, download or deletion, `remote_seq` does
+//! not move. [`Deletions::Confirmed`] with the fingerprint of that very set
+//! lets the next round through; [`Deletions::Restore`] turns the device's
+//! deletions into downloads, so the files come back from the server.
+//!
 //! # First sync and edge cases
 //!
 //! The first round of a device is the same algorithm with an empty base: a
@@ -63,6 +74,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::io;
 
 use super::error::{Error, Result};
+use super::guard::{self, Deletions, Side};
 use super::hub::MAX_FILE_SIZE;
 use super::path::is_synced;
 use super::protocol::{Base, Changes, Conflict, Outcome, hash_hex};
@@ -127,11 +139,40 @@ impl Report {
     }
 }
 
+/// How a round decides.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Options {
+    pub prefer: Prefer,
+    pub deletions: Deletions,
+}
+
+impl Options {
+    /// The usual round: `prefer` settles conflicts, mass deletion is held.
+    #[must_use]
+    pub fn new(prefer: Prefer) -> Self {
+        Self { prefer, deletions: Deletions::Guard }
+    }
+}
+
+/// One sync round with the guard on; see the module docs.
+pub fn sync(tree: &dyn Tree, state: &mut State, remote: &dyn Remote, prefer: Prefer) -> Result<Report> {
+    sync_with(tree, state, remote, &Options::new(prefer))
+}
+
 /// One sync round; see the module docs. The state is saved before returning,
 /// also when the round fails.
-pub fn sync(tree: &dyn Tree, state: &mut State, remote: &dyn Remote, prefer: Prefer) -> Result<Report> {
+pub fn sync_with(tree: &dyn Tree, state: &mut State, remote: &dyn Remote, options: &Options) -> Result<Report> {
     let mut report = Report::default();
-    let result = Round { tree, remote, prefer, state: &mut *state, report: &mut report, retry: false }.run();
+    let result = Round {
+        tree,
+        remote,
+        prefer: options.prefer,
+        deletions: &options.deletions,
+        state: &mut *state,
+        report: &mut report,
+        retry: false,
+    }
+    .run();
     let saved = state.save();
     result?;
     saved?;
@@ -198,6 +239,7 @@ struct Round<'a> {
     tree: &'a dyn Tree,
     remote: &'a dyn Remote,
     prefer: Prefer,
+    deletions: &'a Deletions,
     state: &'a mut State,
     report: &'a mut Report,
     /// Some path was left for the next round: `remote_seq` must not advance.
@@ -233,6 +275,15 @@ impl Round<'_> {
             }
             plan.push((path.to_owned(), action));
         }
+        if matches!(self.deletions, Deletions::Restore) {
+            // The files that are missing here come back from the server.
+            for (_, action) in &mut plan {
+                if matches!(action, Action::DeleteRemote(_)) {
+                    *action = Action::Download;
+                }
+            }
+        }
+        self.guard(&plan)?;
         // Removals first: a folder can turn into a file.
         plan.sort_by_key(|(path, action)| (!matches!(action, Action::RemoveLocal), path.clone()));
         for (path, action) in plan {
@@ -242,6 +293,19 @@ impl Round<'_> {
             self.state.remote_seq = changes.seq;
         }
         Ok(())
+    }
+
+    /// Stops the round if the plan deletes a large part of the vault.
+    fn guard(&self, plan: &[(String, Action)]) -> Result<()> {
+        let total = self.state.files.len();
+        let paths = |wanted: fn(&Action) -> bool| -> Vec<&str> {
+            plan.iter().filter(|(_, action)| wanted(action)).map(|(path, _)| path.as_str()).collect()
+        };
+        let on_server = paths(|a| matches!(a, Action::DeleteRemote(_)));
+        let here = paths(|a| matches!(a, Action::RemoveLocal));
+        let held = guard::check(self.deletions, Side::Server, &on_server, total)
+            .or_else(|| guard::check(self.deletions, Side::Device, &here, total));
+        held.map_or(Ok(()), |held| Err(Error::DeletionsHeld(held)))
     }
 
     fn fetch_changes(&mut self) -> Result<Changes> {

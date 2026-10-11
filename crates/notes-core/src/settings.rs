@@ -674,6 +674,24 @@ pub fn figure_options(values: &Map<String, Value>) -> FigureOptions {
 pub struct VaultSettings {
     path: Option<PathBuf>,
     own: RwLock<Map<String, Value>>,
+    /// The file could not be read: the settings live in memory, the file is left alone.
+    problem: Option<SettingsProblem>,
+}
+
+/// Why the vault settings file was not loaded (shown in the interface).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct SettingsProblem {
+    pub path: String,
+    /// The error text (English, from the parser or the disk).
+    pub message: String,
+    /// Where the JSON error is (1-based), if the parser knows.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub column: Option<u32>,
 }
 
 /// Device settings are shared: a vault does not have them.
@@ -685,12 +703,37 @@ impl VaultSettings {
     pub fn open(path: Option<PathBuf>, schema: &Schema) -> Result<Self> {
         let Some(path) = path else { return Ok(Self::in_memory()) };
         let own = load(&path, schema, not_device)?;
-        Ok(Self { path: Some(path), own: RwLock::new(own) })
+        Ok(Self { path: Some(path), own: RwLock::new(own), problem: None })
+    }
+
+    /// Like [`Self::open`], but a broken file is not an error: the vault goes
+    /// without its settings, changes are kept in memory only (the file is not
+    /// overwritten) and [`Self::problem`] says why.
+    pub fn open_or_broken(path: Option<PathBuf>, schema: &Schema) -> Self {
+        let shown = path.clone();
+        Self::open(path, schema).unwrap_or_else(|e| {
+            let (line, column) = match &e {
+                Error::Json(j) => (u32::try_from(j.line()).ok(), u32::try_from(j.column()).ok()),
+                _ => (None, None),
+            };
+            let problem = SettingsProblem {
+                path: shown.map(|p| p.display().to_string()).unwrap_or_default(),
+                message: e.to_string(),
+                line,
+                column,
+            };
+            Self { problem: Some(problem), ..Self::in_memory() }
+        })
     }
 
     /// No settings of its own, changes are kept in memory only.
     pub fn in_memory() -> Self {
-        Self { path: None, own: RwLock::default() }
+        Self { path: None, own: RwLock::default(), problem: None }
+    }
+
+    /// Why the settings file was not loaded, if so.
+    pub fn problem(&self) -> Option<&SettingsProblem> {
+        self.problem.as_ref()
     }
 
     /// Those set in the vault.
@@ -912,6 +955,24 @@ mod tests {
         assert_eq!(store.device().memory, 128 << 20);
         assert_eq!(serde_json::to_value(desktop.get("device.warm").unwrap()).unwrap()["device"], json!(true));
         assert!(serde_json::to_value(desktop.get("header.title").unwrap()).unwrap().get("device").is_none());
+    }
+
+    #[test]
+    fn broken_vault_settings_are_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(".baluk/settings.json");
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let text = "{\n  \"view.numbering\": \n";
+        fs::write(&path, text).unwrap();
+        let vault = VaultSettings::open_or_broken(Some(path.clone()), &schema());
+        let problem = vault.problem().unwrap();
+        assert_eq!(problem.path, path.display().to_string());
+        assert_eq!(problem.line, Some(3));
+        // Changes stay in memory, the file is not touched.
+        vault.update(&schema(), json!({"appearance.font_size": 19}).as_object().unwrap()).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), text);
+        let fine = VaultSettings::open_or_broken(Some(dir.path().join("none.json")), &schema());
+        assert!(fine.problem().is_none());
     }
 
     #[test]

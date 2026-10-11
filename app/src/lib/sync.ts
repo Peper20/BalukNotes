@@ -27,11 +27,48 @@ export function stateText(v: SyncVault, now: number): string {
       return "нет связи с сервером";
     case "sign-in":
       return "нужен вход";
+    case "held":
+      return "приостановлено - нужно подтверждение";
     case "error":
-      return v.error ? `ошибка: ${v.error}` : "ошибка";
+      return v.error ? roundError(v.error) : "ошибка";
     case "idle":
       return v.last_sync == null ? "ждёт первой синхронизации" : `синхронизировано ${ago(now - v.last_sync)}`;
   }
+}
+
+/** What a held vault waits for, in words (null: it does not); the buttons follow `v.held.side`. */
+export function heldText(v: SyncVault): string | null {
+  const held = v.held;
+  if (v.state !== "held" || !held) return null;
+  const files = `${held.count} из ${held.total} ${plural(held.total, "файла", "файлов", "файлов")}`;
+  return held.side === "server"
+    ? `Пропали ${files}. На сервере они пока целы - удалить их там или вернуть сюда?`
+    : `На сервере удалены ${files}. Здесь они пока целы - убрать их с этого устройства? (Или выключите и включите синхронизацию: файлы загрузятся на сервер.)`;
+}
+
+/**
+ * A failed round in plain Russian. The core's error is one English line (`notes-device/src/error.rs`,
+ * `notes-store/src/sync/error.rs`), recognised by its start; the line itself is shown small under
+ * the sentence (`SyncSettings.svelte`), an unknown one gets the general sentence.
+ */
+export function roundError(error: string): string {
+  const rules: [RegExp, string][] = [
+    [/^(cannot reach|network error)/, "Нет связи с сервером хранилища"],
+    [/^(the session ended|not signed in|unauthorized)/, "Сессия закончилась - войдите снова"],
+    [/^wrong login/, "Неверный логин или пароль"],
+    [/^invalid server address/, "Неверный адрес сервера"],
+    [/^the hub answered 429/, "Сервер хранилища просит подождать: слишком много запросов"],
+    [/^the hub answered/, "Сервер хранилища ответил ошибкой"],
+    [/is not on the server|^not found:/, "Хранилища нет на сервере - отключите синхронизацию и включите снова"],
+    [/^the folder of vault .* is missing/, "Папка хранилища не найдена на устройстве"],
+    [/bytes is over the limit/, "Файл слишком большой для синхронизации"],
+    [/not a valid file/, "Служебный файл синхронизации повреждён"],
+    [/refused a forced write/, "Сервер отказался принять изменения"],
+    [/^sync of ".*" is already running/, "Синхронизация уже идёт"],
+    [/^\/|No such file|Permission denied|os error/, "Не удалось прочитать или записать файл на устройстве"],
+  ];
+  const hit = rules.find(([re]) => re.test(error));
+  return hit ? hit[1] : "Не удалось синхронизировать";
 }
 
 /** The server address as the person knows it: without "https://". */
@@ -105,6 +142,8 @@ export function actionMessage(e: unknown): string {
       if (text.startsWith("not signed in")) return "Нужен вход";
       if (text.startsWith("the session ended")) return "Сессия закончилась - войдите снова";
       if (/^sync of ".*" is already running/.test(text)) return "Синхронизация уже идёт";
+      if (/^sync of ".*" is paused/.test(text)) return "Синхронизация приостановлена: подтвердите удаление или верните файлы";
+      if (/^nothing of ".*" waits for a confirmation/.test(text)) return "Подтверждать уже нечего";
       return text || "Не удалось";
     default:
       return text || "Не удалось";
