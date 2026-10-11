@@ -180,6 +180,8 @@ before M7 starts.
       the version it replaces
 - [x] HTTPS - the reverse proxy (user's decision: nginx is already on the
       VPS); how to deploy - `docs/server.md`
+- [x] One-command update of the hub on the VPS: `tools/deploy-hub.sh` (the VPS
+      builds, a root helper installs; `docs/server.md`, "Updating")
 - [ ] Put the hub on the VPS (the user's machine: by the user, with
       `docs/server.md`)
 
