@@ -619,3 +619,125 @@ fn random_edits_converge() {
         assert!(devices.iter_mut().all(|d| d.sync(&hub).is_idle()), "seed {seed}");
     }
 }
+
+/// `n` notes `n0.typ` ... in a folder, as `(path, text)` pairs.
+fn notes(n: usize) -> Vec<(String, String)> {
+    (0..n).map(|i| (format!("d/n{i}.typ"), format!("note {i}"))).collect()
+}
+
+fn pair_of(n: usize) -> (tempfile::TempDir, HubVault, Device, Device) {
+    let items = notes(n);
+    let items: Vec<(&str, &str)> = items.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect();
+    pair(&items)
+}
+
+impl Device {
+    fn round(&mut self, remote: &dyn Remote, deletions: Deletions) -> Result<Report> {
+        sync_with(&self.tree, &mut self.state, remote, &Options { prefer: self.prefer, deletions })
+    }
+}
+
+fn held(result: Result<Report>) -> Held {
+    match result {
+        Err(Error::DeletionsHeld(held)) => held,
+        other => panic!("expected a held round, got {other:?}"),
+    }
+}
+
+#[test]
+fn small_deletions_are_not_held() {
+    // 3 of 5: below the number of files.
+    let (_dir, hub, mut a, mut b) = pair_of(5);
+    for i in 0..3 {
+        a.tree.delete(&format!("d/n{i}.typ"));
+    }
+    assert_eq!(a.sync(&hub).removed_remote, 3);
+    assert_eq!(b.sync(&hub).removed_local, 3);
+    // 20 of 200: below the share.
+    let (_dir, hub, mut a, mut b) = pair_of(200);
+    for i in 0..20 {
+        a.tree.delete(&format!("d/n{i}.typ"));
+    }
+    assert_eq!(a.sync(&hub).removed_remote, 20);
+    assert_eq!(b.sync(&hub).removed_local, 20);
+    assert_eq!(hub_files(&hub).len(), 180);
+}
+
+#[test]
+fn mass_deletion_waits_for_a_confirmation() {
+    let (_dir, hub, mut a, mut b) = pair_of(30);
+    let seq = hub.seq();
+    // The folder is emptied by hand.
+    for i in 0..30 {
+        a.tree.delete(&format!("d/n{i}.typ"));
+    }
+    let first = held(sync(&a.tree, &mut a.state, &hub, a.prefer));
+    assert_eq!((first.side, first.count, first.total), (Side::Server, 30, 30));
+    assert_eq!(first.to_string(), "30 of 30 files are gone from this device and would be deleted on the server");
+    // Nothing reached the server, and asking again changes nothing.
+    assert_eq!((hub.seq(), hub_files(&hub).len()), (seq, 30));
+    assert_eq!(held(a.round(&hub, Deletions::Guard)), first);
+    assert_eq!(hub.seq(), seq);
+    // The other device is not touched either.
+    assert_eq!(b.sync(&hub).downloaded, 0);
+    assert_eq!(b.files().len(), 30);
+
+    // A confirmation of another set is not this one's.
+    let wrong = Deletions::Confirmed("0".repeat(64));
+    assert_eq!(held(a.round(&hub, wrong)), first);
+    assert_eq!(hub_files(&hub).len(), 30);
+
+    // The confirmed set goes through, and it is gone for the other device (mirror
+    // guard: it holds that one in turn).
+    let report = a.round(&hub, Deletions::Confirmed(first.fingerprint.clone())).unwrap();
+    assert_eq!(report.removed_remote, 30);
+    assert!(hub_files(&hub).is_empty());
+    let mirror = held(b.round(&hub, Deletions::Guard));
+    assert_eq!((mirror.side, mirror.count, mirror.total), (Side::Device, 30, 30));
+    assert_eq!(b.files().len(), 30, "the files are still here");
+    let kept = b.files();
+    let report = b.round(&hub, Deletions::Confirmed(mirror.fingerprint)).unwrap();
+    assert_eq!(report.removed_local, 30);
+    assert!(b.files().is_empty());
+    assert_eq!(b.removed().len(), 30, "removed files are kept aside");
+
+    // Linking this device's copy again (a new state) puts the files back on
+    // the server: the other way to undo a deletion that came from there.
+    let mut relinked = Device::new(Prefer::Remote);
+    for (path, data) in &kept {
+        relinked.tree.set(path, data);
+    }
+    assert_eq!(relinked.sync(&hub).uploaded, 30);
+    assert_eq!(hub_files(&hub), kept);
+}
+
+#[test]
+fn a_confirmation_does_not_cover_more_deletions() {
+    let (_dir, hub, mut a, _b) = pair_of(40);
+    for i in 0..20 {
+        a.tree.delete(&format!("d/n{i}.typ"));
+    }
+    let first = held(a.round(&hub, Deletions::Guard));
+    assert_eq!(first.count, 20);
+    // More files vanish before the confirmation arrives.
+    a.tree.delete("d/n20.typ");
+    let second = held(a.round(&hub, Deletions::Confirmed(first.fingerprint)));
+    assert_eq!(second.count, 21);
+    assert_eq!(hub_files(&hub).len(), 40);
+}
+
+#[test]
+fn restore_brings_the_files_back() {
+    let (_dir, hub, mut a, _b) = pair_of(30);
+    let seq = hub.seq();
+    for i in 0..30 {
+        a.tree.delete(&format!("d/n{i}.typ"));
+    }
+    held(a.round(&hub, Deletions::Guard));
+    let report = a.round(&hub, Deletions::Restore).unwrap();
+    assert_eq!((report.downloaded, report.removed_remote), (30, 0));
+    assert_eq!(a.files().len(), 30);
+    assert_eq!((hub.seq(), hub_files(&hub).len()), (seq, 30));
+    // Back to normal: the next round has nothing to do.
+    assert!(a.sync(&hub).is_idle());
+}

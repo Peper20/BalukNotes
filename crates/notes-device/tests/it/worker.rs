@@ -16,6 +16,7 @@ const LONG: Duration = Duration::from_secs(15);
 fn fast() -> Timing {
     Timing {
         debounce: Duration::from_millis(100),
+        held_recheck: Duration::from_millis(300),
         poll_wait: Duration::from_secs(3),
         backoff_min: Duration::from_millis(100),
         backoff_max: Duration::from_millis(400),
@@ -160,4 +161,60 @@ fn an_unreachable_server_is_retried_and_reported() {
     let started = Instant::now();
     sync.stop();
     assert!(started.elapsed() < Duration::from_secs(2));
+}
+
+/// Twenty notes in a linked vault of a running worker, the worker idle.
+fn twenty(device: &Device, sync: &DeviceSync, vault: &str) {
+    for i in 0..20 {
+        device.write(vault, &format!("n{i}.typ"), &format!("= {i}"));
+    }
+    sync.link(vault).unwrap();
+    wait_for("idle", LONG, || state_of(sync, vault).0 == WorkState::Idle);
+}
+
+fn empty(device: &Device, vault: &str) {
+    for i in 0..20 {
+        std::fs::remove_file(device.folder(vault).join(format!("n{i}.typ"))).unwrap();
+    }
+}
+
+#[test]
+fn an_emptied_vault_waits_for_a_confirmation_or_a_restore() {
+    let a = Device::new();
+    let sync = service(&a, fast());
+    a.sign_in_directly("fedor");
+    twenty(&a, &sync, "emptied");
+
+    // The folder is emptied by hand: the worker stops and says why.
+    empty(&a, "emptied");
+    wait_for("the held state", LONG, || state_of(&sync, "emptied").0 == WorkState::Held);
+    let (_, error) = state_of(&sync, "emptied");
+    let error = error.unwrap();
+    assert!(error.contains("20 of 20 files are gone from this device"), "{error}");
+    assert!(error.contains("notes sync confirm --vault \"emptied\""), "{error}");
+    let status = sync.status(false).unwrap();
+    let held = status.vaults[0].held.clone().unwrap();
+    assert_eq!((held.count, held.total), (20, 20));
+
+    // It stays held: looking again does not flip the state.
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_millis(1200) {
+        assert_eq!(state_of(&sync, "emptied").0, WorkState::Held);
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    // Restored: the server still had everything, the worker is idle again.
+    let round = sync.restore("emptied").unwrap();
+    assert_eq!((round.report.downloaded, round.report.removed_remote), (20, 0));
+    assert_eq!(a.read("emptied", "n7.typ").as_deref(), Some("= 7"));
+    wait_for("idle", LONG, || state_of(&sync, "emptied") == (WorkState::Idle, None));
+
+    // Emptied again, and now confirmed: the deletion goes through.
+    empty(&a, "emptied");
+    wait_for("the held state again", LONG, || state_of(&sync, "emptied").0 == WorkState::Held);
+    let round = sync.confirm("emptied").unwrap();
+    assert_eq!(round.report.removed_remote, 20);
+    wait_for("idle", LONG, || state_of(&sync, "emptied") == (WorkState::Idle, None));
+    assert_eq!(sync.confirm("emptied").unwrap_err().to_string(), "nothing of \"emptied\" waits for a confirmation");
+    sync.stop();
 }

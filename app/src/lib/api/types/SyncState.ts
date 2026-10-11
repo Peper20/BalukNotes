@@ -3,4 +3,4 @@
 /**
  * What a linked vault's worker is doing (`idle` for one that is not linked).
  */
-export type SyncState = "idle" | "syncing" | "error" | "sign-in" | "offline";
+export type SyncState = "idle" | "syncing" | "error" | "sign-in" | "offline" | "held";

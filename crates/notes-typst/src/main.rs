@@ -263,6 +263,10 @@ enum ServiceAction {
         /// Sign-in by login and password, as `notes serve --auth`.
         #[arg(long)]
         auth: bool,
+        /// With --auth: a session ends after this many days without requests
+        /// (as `notes serve --session-days`).
+        #[arg(long, default_value_t = DEFAULT_SESSION_DAYS, value_parser = clap::value_parser!(u64).range(1..=3650))]
+        session_days: u64,
     },
     /// Stop and remove the service.
     Remove,
@@ -397,11 +401,11 @@ fn run(cli: Cli) -> Result<ExitCode> {
         }
         Command::Service { action } => {
             match action {
-                ServiceAction::Install { addr, auth } => {
+                ServiceAction::Install { addr, auth, session_days } => {
                     // The service must start: check what `serve` checks, here and now.
                     check_sign_in(Some(*addr), *auth)?;
                     if *auth {
-                        open_auth(&data_dir(cli.data.as_deref())?, DEFAULT_SESSION_DAYS)?;
+                        open_auth(&data_dir(cli.data.as_deref())?, *session_days)?;
                     }
                     let exe = std::env::current_exe().context("path of the notes binary")?;
                     if cfg!(debug_assertions) {
@@ -409,7 +413,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
                             "warning: a debug build; the service will run it (usually: tools/install.sh and notes from PATH)"
                         );
                     }
-                    service::install(&exe, &service_args(&cli, *addr, *auth)?, *addr)?;
+                    service::install(&exe, &service_args(&cli, *addr, *auth, *session_days)?, *addr)?;
                 }
                 ServiceAction::Remove => service::remove()?,
                 ServiceAction::Status => service::status()?,
@@ -504,14 +508,14 @@ fn run(cli: Cli) -> Result<ExitCode> {
 
 /// Arguments of the service: `serve --addr ...` and the global flags of this
 /// run (absolute paths: the service has its own working directory).
-fn service_args(cli: &Cli, addr: SocketAddr, auth: bool) -> Result<Vec<String>> {
+fn service_args(cli: &Cli, addr: SocketAddr, auth: bool, session_days: u64) -> Result<Vec<String>> {
     let absolute = |p: &PathBuf| -> Result<String> {
         Ok(std::path::absolute(p).with_context(|| format!("path {}", p.display()))?.to_string_lossy().into_owned())
     };
     // The socket lets the `notes app` window use the service's core instead of starting a second one.
     let mut args = vec!["serve".to_owned(), "--addr".to_owned(), addr.to_string(), "--socket".to_owned()];
     if auth {
-        args.push("--auth".to_owned());
+        args.extend(["--auth".to_owned(), "--session-days".to_owned(), session_days.to_string()]);
     }
     if let Some(data) = &cli.data {
         args.extend(["--data".to_owned(), absolute(data)?]);
@@ -972,6 +976,27 @@ mod tests {
                 assert!(cli.find_subcommand(command).is_none(), "command {command} belongs to the part {}", part.bin);
             }
         }
+    }
+
+    #[test]
+    fn service_carries_the_serve_options() {
+        let args = |line: &[&str]| {
+            let cli =
+                Cli::try_parse_from(["notes", "--data", "/srv/notes"].into_iter().chain(line.iter().copied())).unwrap();
+            let Command::Service { action: ServiceAction::Install { addr, auth, session_days } } = &cli.command else {
+                panic!("not a service install");
+            };
+            service_args(&cli, *addr, *auth, *session_days).unwrap()
+        };
+        let with_auth = args(&["service", "install", "--addr", "0.0.0.0:8421", "--auth", "--session-days", "7"]);
+        assert_eq!(
+            with_auth,
+            ["serve", "--addr", "0.0.0.0:8421", "--socket", "--auth", "--session-days", "7", "--data", "/srv/notes"]
+        );
+        // The default is written out too: the unit does not change if the default does.
+        assert!(args(&["service", "install", "--auth"]).join(" ").contains("--auth --session-days 30"));
+        // Without --auth the option has nothing to say.
+        assert!(!args(&["service", "install", "--session-days", "7"]).iter().any(|a| a == "--session-days"));
     }
 
     #[test]

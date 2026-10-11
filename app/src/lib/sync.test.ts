@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { SyncVault } from "./api";
-import { actionMessage, ago, conflictText, isBusy, isInsecure, loginMessage, serverLabel, serverOnly, stateText } from "./sync";
+import { actionMessage, ago, conflictText, heldText, isBusy, isInsecure, loginMessage, serverLabel, serverOnly, stateText } from "./sync";
 
 const vault = (over: Partial<SyncVault> = {}): SyncVault => ({
   name: "v",
@@ -11,6 +11,7 @@ const vault = (over: Partial<SyncVault> = {}): SyncVault => ({
   last_sync: null,
   error: null,
   report: null,
+  held: null,
   ...over,
 });
 
@@ -42,6 +43,7 @@ it("stateText: every state in words", () => {
   expect(stateText(vault({ state: "sign-in" }), now)).toBe("нужен вход");
   expect(stateText(vault({ state: "error", error: "disk full" }), now)).toBe("ошибка: disk full");
   expect(stateText(vault({ state: "error" }), now)).toBe("ошибка");
+  expect(stateText(vault({ state: "held" }), now)).toBe("приостановлено - нужно подтверждение");
 });
 
 it("isBusy and serverOnly", () => {
@@ -101,4 +103,18 @@ it("serverLabel drops https:// only", () => {
   expect(serverLabel("http://127.0.0.1:8461")).toBe("http://127.0.0.1:8461");
   expect(serverLabel("https://example.org/")).toBe("example.org");
   expect(serverLabel(null)).toBe("");
+});
+
+it("heldText: what waits, by the side", () => {
+  expect(heldText(vault())).toBeNull();
+  expect(heldText(vault({ state: "held", held: null }))).toBeNull();
+  const server = vault({ state: "held", held: { side: "server", count: 120, total: 130 } });
+  expect(heldText(server)).toBe("Пропали 120 из 130 файлов. На сервере они пока целы - удалить их там или вернуть сюда?");
+  expect(heldText(vault({ state: "held", held: { side: "server", count: 12, total: 12 } }))).toContain("12 из 12 файлов");
+  expect(heldText(vault({ state: "held", held: { side: "device", count: 30, total: 31 } }))).toContain("На сервере удалены 30 из 31 файла");
+});
+
+it("actionMessage: a paused sync and nothing to confirm", () => {
+  expect(actionMessage({ status: 409, message: 'sync of "v" is paused: 12 of 12 files are gone' })).toContain("приостановлена");
+  expect(actionMessage({ status: 409, message: 'nothing of "v" waits for a confirmation' })).toBe("Подтверждать уже нечего");
 });

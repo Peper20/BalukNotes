@@ -10,7 +10,7 @@ use notes_device::{Account, Paths, account};
 
 /// Accounts of the tests: one per test that changes sessions or lists vaults.
 const LOGINS: &[&str] =
-    &["ivan", "anna", "pavel", "lena", "wera", "olga", "kira", "dana", "vera", "gleb", "mark", "nina"];
+    &["ivan", "anna", "pavel", "lena", "wera", "olga", "kira", "dana", "vera", "gleb", "mark", "nina", "emil", "fedor"];
 
 pub static HUB: LazyLock<TestHub> = LazyLock::new(|| TestHub::start(LOGINS));
 
@@ -29,6 +29,17 @@ impl Device {
     pub fn login(&self, login: &str) -> Account {
         let server = account::parse_server(&HUB.url).unwrap();
         notes_device::login(&self.paths, &server, login, PASSWORD).unwrap()
+    }
+
+    /// Signed in with a session made on the hub directly: no login request, so
+    /// it does not count against the hub's limit on sign-in attempts (all
+    /// tests of this binary share one hub).
+    pub fn sign_in_directly(&self, login: &str) {
+        let token = HUB.hub.auth().sessions().create(login, notes_store::sessions::now()).unwrap();
+        let account = serde_json::json!({ "server": HUB.url, "login": login, "token": token });
+        let file = self.paths.account_file();
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, serde_json::to_vec(&account).unwrap()).unwrap();
     }
 
     #[expect(clippy::unused_self, reason = "reads as the device's vault, like folder()")]

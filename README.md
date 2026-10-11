@@ -47,7 +47,7 @@ with sign-in (`docs/roadmap.md`); in a browser it works through `notes serve`.
 ```sh
 notes app [--vault "Name" ["Path"]]          # the app window; on a vault or a note
 notes serve                                  # the browser version / self-hosting; --auth - sign-in (required beyond localhost); --socket - a socket for the window
-notes sync login <server> --login <name>     # sync with a storage server: then link --vault "Name", now, status, unlink, logout
+notes sync login <server> --login <name>     # sync with a storage server: then link --vault "Name", now, status, confirm, restore, unlink, logout
 notes users add <login> | list | passwd | remove   # accounts for sign-in (notes serve --auth, notes hub)
 notes hub serve                              # the storage server without Typst, for a VPS: docs/server.md
 notes service install | remove | status      # autostart of notes serve for self-hosting (systemd); log - journalctl --user -u baluk-notes

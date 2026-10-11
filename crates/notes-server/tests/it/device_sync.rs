@@ -20,13 +20,14 @@ use tower::ServiceExt;
 
 use crate::common::NOTES;
 
-static HUB: LazyLock<TestHub> = LazyLock::new(|| TestHub::start(&["ivan", "pavel", "anna", "dana"]));
+static HUB: LazyLock<TestHub> = LazyLock::new(|| TestHub::start(&["ivan", "pavel", "anna", "dana", "boris"]));
 
 const LONG: Duration = Duration::from_secs(15);
 
 fn fast() -> Timing {
     Timing {
         debounce: Duration::from_millis(100),
+        held_recheck: Duration::from_millis(300),
         poll_wait: Duration::from_secs(3),
         backoff_min: Duration::from_millis(100),
         backoff_max: Duration::from_millis(400),
@@ -312,6 +313,48 @@ async fn renaming_or_deleting_a_linked_vault_unlinks_it() {
     assert_eq!(status, StatusCode::CONFLICT, "the name is taken");
     assert!(state_file("keep").is_file());
     wait_for("idle", || futures_status(&app, "keep") == "idle");
+    app.sync.stop();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_emptied_vault_waits_for_confirm_or_restore() {
+    let app = App::new();
+    app.login("boris").await;
+    let empty = |app: &App| {
+        for i in 0..12 {
+            std::fs::remove_file(app.data.path().join("vaults/wipe").join(format!("n{i}.typ"))).unwrap();
+        }
+    };
+    for i in 0..12 {
+        app.write("wipe", &format!("n{i}.typ"), &format!("= {i}\n"));
+    }
+    let (status, _) = app.call("POST", "/api/device/sync/vaults/wipe/link", None).await;
+    assert_eq!(status, StatusCode::OK);
+    wait_for("idle", || futures_status(&app, "wipe") == "idle");
+
+    empty(&app);
+    wait_for("held", || futures_status(&app, "wipe") == "held");
+    let row = app.vault_status("wipe").await;
+    assert_eq!(row["held"], json!({"side": "server", "count": 12, "total": 12}));
+    assert!(row["error"].as_str().unwrap().contains("12 of 12 files are gone from this device"), "{row}");
+    let (status, body) = app.call("POST", "/api/device/sync/vaults/wipe/now", None).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+
+    // Back from the server.
+    let (status, body) = app.call("POST", "/api/device/sync/vaults/wipe/restore", None).await;
+    assert_eq!((status, body["downloaded"].clone()), (StatusCode::OK, 12.into()), "{body}");
+    assert_eq!(app.read("wipe", "n3.typ").as_deref(), Some("= 3\n"));
+    wait_for("idle", || futures_status(&app, "wipe") == "idle");
+    assert_eq!(app.vault_status("wipe").await["held"], Value::Null);
+
+    // Deleted for good.
+    empty(&app);
+    wait_for("held again", || futures_status(&app, "wipe") == "held");
+    let (status, body) = app.call("POST", "/api/device/sync/vaults/wipe/confirm", None).await;
+    assert_eq!((status, body["removed_remote"].clone()), (StatusCode::OK, 12.into()), "{body}");
+    wait_for("idle again", || futures_status(&app, "wipe") == "idle");
+    let (status, _) = app.call("POST", "/api/device/sync/vaults/wipe/confirm", None).await;
+    assert_eq!(status, StatusCode::CONFLICT, "nothing waits any more");
     app.sync.stop();
 }
 
