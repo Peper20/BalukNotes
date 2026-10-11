@@ -6,7 +6,7 @@
 use notes_core::diag::Diagnostic;
 use notes_core::graph::Backlink;
 use notes_core::search::TaggedChapter;
-use notes_core::settings::Schema;
+use notes_core::settings::{Schema, SettingsProblem};
 use notes_core::{NoteId, NoteKind, VaultName};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -135,6 +135,10 @@ pub struct VaultSettingsResponse {
     pub shared: Map<String, Value>,
     #[cfg_attr(feature = "ts", ts(type = "Record<string, number | string | boolean>"))]
     pub own: Map<String, Value>,
+    /// The vault's settings file is broken: changes are not saved until it is fixed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(feature = "ts", ts(optional))]
+    pub problem: Option<SettingsProblem>,
 }
 
 /// An error body. `errors` are compile errors (for a PDF), otherwise empty.

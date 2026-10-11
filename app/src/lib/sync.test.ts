@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { SyncVault } from "./api";
-import { actionMessage, ago, conflictText, isBusy, isInsecure, loginMessage, serverLabel, serverOnly, stateText } from "./sync";
+import { actionMessage, ago, conflictText, isBusy, isInsecure, loginMessage, roundError, serverLabel, serverOnly, stateText } from "./sync";
 
 const vault = (over: Partial<SyncVault> = {}): SyncVault => ({
   name: "v",
@@ -40,7 +40,8 @@ it("stateText: every state in words", () => {
   expect(stateText(vault({ state: "syncing" }), now)).toBe("идёт синхронизация");
   expect(stateText(vault({ state: "offline" }), now)).toBe("нет связи с сервером");
   expect(stateText(vault({ state: "sign-in" }), now)).toBe("нужен вход");
-  expect(stateText(vault({ state: "error", error: "disk full" }), now)).toBe("ошибка: disk full");
+  expect(stateText(vault({ state: "error", error: "disk full" }), now)).toBe("Не удалось синхронизировать");
+  expect(stateText(vault({ state: "error", error: "cannot reach the server https://x: refused" }), now)).toBe("Нет связи с сервером хранилища");
   expect(stateText(vault({ state: "error" }), now)).toBe("ошибка");
 });
 
@@ -94,6 +95,15 @@ it("actionMessage: the 409 cases of link and sync-now", () => {
   expect(actionMessage({ status: 502, message: "cannot reach the server x: y" })).toBe("Сервер хранилища недоступен");
   expect(actionMessage({ status: 502, message: "the hub answered 500: boom" })).toBe("the hub answered 500: boom");
   expect(actionMessage({ status: 0, message: "x" })).toBe("Нет связи с приложением");
+});
+
+it("roundError: the core's lines in Russian", () => {
+  expect(roundError("the session ended: sign in again: notes sync login https://x --login a")).toBe("Сессия закончилась - войдите снова");
+  expect(roundError("the hub answered 500: boom")).toBe("Сервер хранилища ответил ошибкой");
+  expect(roundError("the hub answered 429: slow")).toMatch(/слишком много/);
+  expect(roundError("n.typ: Permission denied (os error 13)")).toBe("Не удалось прочитать или записать файл на устройстве");
+  expect(roundError('vault "v" is not on the server: unlink it and link it again')).toMatch(/нет на сервере/);
+  expect(roundError("something new")).toBe("Не удалось синхронизировать");
 });
 
 it("serverLabel drops https:// only", () => {

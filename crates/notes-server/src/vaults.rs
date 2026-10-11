@@ -206,10 +206,10 @@ impl OpenVault {
     fn new(name: VaultName, notes: Arc<Notes>, schema: &Schema) -> Self {
         let path = notes.dir().map(|d| d.join(notes_core::vaults::SETTINGS_FILE));
         // A broken file is not overwritten: the vault settings stay in memory only.
-        let settings = VaultSettings::open(path, schema).unwrap_or_else(|e| {
-            tracing::warn!("settings of vault \"{name}\": {e}; going without them for now");
-            VaultSettings::in_memory()
-        });
+        let settings = VaultSettings::open_or_broken(path, schema);
+        if let Some(p) = settings.problem() {
+            tracing::warn!("settings of vault \"{name}\": {}; going without them for now", p.message);
+        }
         let events = Arc::new(VaultEvents::new());
         let log = events.clone();
         notes.on_change(move |c| log.push(ChangeEvent { seq: c.seq, paths: c.paths.clone() }));

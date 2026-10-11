@@ -292,7 +292,10 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   setting has "for all vaults" (write it as shared), theme and font size -
   "only for this vault"; the settings window shows where a value comes from
   (only this vault, changed for all, default). The server takes the result for
-  a vault (figures: `figures.*`).
+  a vault (figures: `figures.*`). A file with a JSON error is not
+  overwritten: the vault goes without its settings, changes stay in memory,
+  and the response carries `problem` (path, line, column) - the settings
+  window warns.
 - **Device settings** (group `device`): warm-up, simultaneous builds, Typst
   memory, cache limits - each device has its own, defaults by platform
   (computer or phone), not carried over by sync; the look is shared. The core

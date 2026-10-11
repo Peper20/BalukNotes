@@ -160,6 +160,7 @@
               </button>
             {/if}
             {#if conflicts}<span class="sync-extra">{conflicts}</span>{/if}
+            {#if v.linked && v.state === "error" && v.error}<span class="sync-extra sync-detail">{v.error}</span>{/if}
             {#if sync.rowError[v.name]}<span class="sync-extra sync-error" role="alert">{sync.rowError[v.name]}</span>{/if}
           </li>
         {:else}
