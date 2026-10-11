@@ -3,14 +3,17 @@
 
 An edit is Edit/Write/MultiEdit of a .rs file or a Bash command that writes
 to a .rs file (sed -i, perl -i, > file.rs, tee, a write from python). The
-skill counts as loaded when the session transcript (transcript_path) has a
-Skill call with it or the /rust-best-practices command after the last context
-compaction: a compaction summarizes the skill text away, so it is loaded again
-in full. Otherwise the edit is denied with an explanation. A failure of the
-hook itself never blocks the edit.
+skill counts as loaded when the transcript has a Skill call with it or the
+/rust-best-practices command after the last context compaction: a compaction
+summarizes the skill text away, so it is loaded again in full. A subagent
+(agent_id) has its own context and its own transcript, next to the session's
+(transcript_path): <session>/subagents/agent-<id>.jsonl - the skill has to be
+loaded there, the session's load does not count. Otherwise the edit is denied
+with an explanation. A failure of the hook itself never blocks the edit.
 """
 
 import json
+import os
 import re
 import sys
 
@@ -58,11 +61,21 @@ def skill_loaded(transcript: str) -> bool:
     return loaded
 
 
+def own_transcript(event: dict) -> str | None:
+    """The transcript of whoever makes the call: the subagent's, else the session's."""
+    session = event.get("transcript_path")
+    agent = str(event.get("agent_id") or "")
+    if not session or not re.fullmatch(r"[\w-]+", agent):
+        return session
+    path = os.path.join(session.removesuffix(".jsonl"), "subagents", f"agent-{agent}.jsonl")
+    return path if os.path.isfile(path) else session
+
+
 def main() -> None:
     event = json.load(sys.stdin)
     if not touches_rust(event.get("tool_name", ""), event.get("tool_input") or {}):
         return
-    transcript = event.get("transcript_path")
+    transcript = own_transcript(event)
     if not transcript or skill_loaded(transcript):
         return
     print(
