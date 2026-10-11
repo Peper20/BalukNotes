@@ -425,10 +425,30 @@ How to put it on a VPS - `docs/server.md`.
   on a computer, the server wins on a phone). A local file that sync replaces
   or removes is moved to `<data>/sync/removed/` (kept 30 days), never just
   deleted.
+- **The guard against mass deletion** (`notes_store::sync::guard`): a
+  deletion is a change like any other, so a slip (`rm -rf` in the wrong
+  folder, an unmounted disk) would wipe a vault everywhere. A round plans
+  everything before it executes anything; if the plan deletes more than 10
+  files and more than 20 % of the vault - or the whole vault, when it has at
+  least two files - it stops with `DeletionsHeld` having uploaded, downloaded
+  and deleted nothing (constants `MIN_FILES`, `MIN_SHARE_PERCENT`). Both
+  directions are checked: files gone from the device (would be deleted on the
+  server) and files gone from the server (would be removed from the device;
+  they would go to `sync/removed/`). The device keeps the held set in
+  `status/<vault>.json` (`held`: side, count, total, a fingerprint of the
+  paths). `confirm` runs a round that lets exactly that set through: if
+  more or other files are gone by then, the round is held again. `restore`
+  turns the device's deletions into downloads (the files come back from the
+  server); for the other direction the way back is to unlink and link the
+  vault again, which uploads the device's files. The worker shows the state
+  `held`, logs it once per set, looks again every 30 s (a `confirm` from the
+  console shows up then) and has no backoff; while it waits, the server's
+  changes are not applied. `notes sync confirm | restore --vault`; in the app
+  settings the vault row says how many files of how many and has the buttons.
 - **The device side** (`crates/notes-device`; the core stays free of HTTP for
   WASM): `<data>/sync/` holds the account (server, login, session token), the
   state of every linked vault, the last result and a lock per vault. `notes
-  sync login | link | now | status | unlink | logout`; `notes serve` (so the
+  sync login | link | now | status | confirm | restore | unlink | logout`; `notes serve` (so the
   window's core too) runs a worker per linked vault: a round at start, 2 s
   after a local change (the file watcher), on a server change (long polling
   `changes?after=&wait=`), a retry with a growing pause when the server is

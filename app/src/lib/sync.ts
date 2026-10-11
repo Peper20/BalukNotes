@@ -27,11 +27,23 @@ export function stateText(v: SyncVault, now: number): string {
       return "нет связи с сервером";
     case "sign-in":
       return "нужен вход";
+    case "held":
+      return "приостановлено - нужно подтверждение";
     case "error":
       return v.error ? roundError(v.error) : "ошибка";
     case "idle":
       return v.last_sync == null ? "ждёт первой синхронизации" : `синхронизировано ${ago(now - v.last_sync)}`;
   }
+}
+
+/** What a held vault waits for, in words (null: it does not); the buttons follow `v.held.side`. */
+export function heldText(v: SyncVault): string | null {
+  const held = v.held;
+  if (v.state !== "held" || !held) return null;
+  const files = `${held.count} из ${held.total} ${plural(held.total, "файла", "файлов", "файлов")}`;
+  return held.side === "server"
+    ? `Пропали ${files}. На сервере они пока целы - удалить их там или вернуть сюда?`
+    : `На сервере удалены ${files}. Здесь они пока целы - убрать их с этого устройства? (Или выключите и включите синхронизацию: файлы загрузятся на сервер.)`;
 }
 
 /**
@@ -130,6 +142,8 @@ export function actionMessage(e: unknown): string {
       if (text.startsWith("not signed in")) return "Нужен вход";
       if (text.startsWith("the session ended")) return "Сессия закончилась - войдите снова";
       if (/^sync of ".*" is already running/.test(text)) return "Синхронизация уже идёт";
+      if (/^sync of ".*" is paused/.test(text)) return "Синхронизация приостановлена: подтвердите удаление или верните файлы";
+      if (/^nothing of ".*" waits for a confirmation/.test(text)) return "Подтверждать уже нечего";
       return text || "Не удалось";
     default:
       return text || "Не удалось";

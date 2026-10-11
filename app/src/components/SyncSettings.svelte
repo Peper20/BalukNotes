@@ -11,7 +11,7 @@
   import type { SyncVault } from "../lib/api";
   import { settings } from "../lib/state";
   import { sync } from "../lib/state/sync.svelte";
-  import { conflictText, isInsecure, serverLabel, serverOnly, stateText } from "../lib/sync";
+  import { conflictText, heldText, isInsecure, serverLabel, serverOnly, stateText } from "../lib/sync";
   import { ui } from "../lib/ui.svelte";
 
   $effect(() => sync.watch(ui.settingsOpen));
@@ -67,6 +67,10 @@
         return "отключение…";
       case "now":
         return "идёт синхронизация";
+      case "confirm":
+        return "удаление…";
+      case "restore":
+        return "возвращаем файлы…";
       default:
         return stateText(v, sync.now);
     }
@@ -158,6 +162,19 @@
               >
                 <RefreshCw {...icon} />
               </button>
+            {/if}
+            {#if heldText(v)}
+              <span class="sync-extra sync-held" role="alert">{heldText(v)}</span>
+              <span class="sync-extra sync-held-actions">
+                <button type="button" class="sync-button" disabled={Boolean(sync.busy[v.name])} onclick={() => sync.confirmDeletion(v.name)}>
+                  {v.held?.side === "server" ? "Удалить на сервере" : "Убрать с устройства"}
+                </button>
+                {#if v.held?.side === "server"}
+                  <button type="button" class="sync-button primary" disabled={Boolean(sync.busy[v.name])} onclick={() => sync.restoreFiles(v.name)}>
+                    Вернуть файлы с сервера
+                  </button>
+                {/if}
+              </span>
             {/if}
             {#if conflicts}<span class="sync-extra">{conflicts}</span>{/if}
             {#if v.linked && v.state === "error" && v.error}<span class="sync-extra sync-detail">{v.error}</span>{/if}

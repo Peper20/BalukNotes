@@ -15,7 +15,7 @@ use notes_core::VaultName;
 use notes_hub::api::VaultInfo;
 use notes_hub::client::{self, HttpRemote};
 use notes_store::fsutil::write_atomic;
-use notes_store::sync::{DirTree, Prefer, Report, State, sync};
+use notes_store::sync::{Deletions, DirTree, Held, Options, Prefer, Report, State, sync_with};
 use serde::{Deserialize, Serialize};
 
 use crate::account::Account;
@@ -78,6 +78,10 @@ pub struct LastRound {
     /// Why it failed; `None`: it succeeded.
     pub error: Option<String>,
     pub report: Option<ReportInfo>,
+    /// The round stopped to ask before deleting a large part of the vault
+    /// (`error` says so, too); `confirm` names this set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held: Option<Held>,
 }
 
 impl LastRound {
@@ -141,17 +145,44 @@ impl Lock {
     }
 }
 
-/// One round for a vault that is linked. The vault folder must exist.
+/// One round for a vault that is linked. The vault folder must exist. A round
+/// that would delete a large part of the vault stops first ([`Error::Held`]).
 ///
 /// # Errors
 /// [`Error::NotSignedIn`], [`Error::SessionEnded`], [`Error::Unreachable`],
-/// [`Error::NotLinked`], [`Error::Busy`], ... (see [`Error`]).
+/// [`Error::NotLinked`], [`Error::Busy`], [`Error::Held`], ... (see [`Error`]).
 pub fn sync_linked(paths: &Paths, vault: &VaultName, prefer: Prefer) -> Result<Round> {
     let account = Account::require(paths)?;
-    run(paths, &account, vault, prefer, true)
+    run(paths, &account, vault, &Options::new(prefer), true)
 }
 
-fn run(paths: &Paths, account: &Account, vault: &VaultName, prefer: Prefer, linked: bool) -> Result<Round> {
+/// A round that deletes the set of files it last stopped at (shown by the
+/// status as `held`), after the user confirmed. Another set - more files gone,
+/// or fewer - is held again.
+///
+/// # Errors
+/// [`Error::NothingHeld`] if no round waits; the others as [`sync_linked`].
+pub fn confirm(paths: &Paths, vault: &VaultName, prefer: Prefer) -> Result<Round> {
+    let account = Account::require(paths)?;
+    let held = LastRound::read(paths, vault).and_then(|last| last.held);
+    let Some(held) = held else {
+        return Err(Error::NothingHeld(vault.to_string()));
+    };
+    let options = Options { prefer, deletions: Deletions::Confirmed(held.fingerprint) };
+    run(paths, &account, vault, &options, true)
+}
+
+/// A round that gets back from the server the files missing here, instead of
+/// deleting them there.
+///
+/// # Errors
+/// As [`sync_linked`].
+pub fn restore(paths: &Paths, vault: &VaultName, prefer: Prefer) -> Result<Round> {
+    let account = Account::require(paths)?;
+    run(paths, &account, vault, &Options { prefer, deletions: Deletions::Restore }, true)
+}
+
+fn run(paths: &Paths, account: &Account, vault: &VaultName, options: &Options, linked: bool) -> Result<Round> {
     let dir = paths.vault_dir(vault);
     if !dir.is_dir() {
         return Err(Error::FolderMissing(vault.to_string()));
@@ -165,12 +196,15 @@ fn run(paths: &Paths, account: &Account, vault: &VaultName, prefer: Prefer, link
     let mut state = State::open(paths.state_file(vault))?;
     let tree = DirTree::new(&dir, paths.removed_dir(vault));
     let remote = HttpRemote::new(&account.server, account.token(), vault.as_str());
-    let result = sync(&tree, &mut state, &remote, prefer);
+    let result = sync_with(&tree, &mut state, &remote, options);
     // The user-facing words, not the engine's ("unauthorized").
     let result = result.map_err(|e| Error::from_sync(account, e, Some(vault.as_str())));
     let last = match &result {
-        Ok(report) => LastRound { at: now_secs(), error: None, report: Some(report.into()) },
-        Err(e) => LastRound { at: now_secs(), error: Some(e.to_string()), report: None },
+        Ok(report) => LastRound { at: now_secs(), error: None, report: Some(report.into()), held: None },
+        Err(e) => {
+            let held = if let Error::Held { held, .. } = e { Some(held.clone()) } else { None };
+            LastRound { at: now_secs(), error: Some(e.to_string()), report: None, held }
+        }
     };
     last.write(paths, vault);
     result.map(|report| Round { report: (&report).into(), remote_seq: state.remote_seq })
@@ -201,7 +235,7 @@ pub fn link(paths: &Paths, vault: &VaultName, prefer: Prefer) -> Result<Round> {
         (true, true) => {}
     }
     let was_linked = paths.is_linked(vault);
-    let result = run(paths, &account, vault, prefer, false);
+    let result = run(paths, &account, vault, &Options::new(prefer), false);
     if result.is_err() && !was_linked {
         forget(paths, vault);
     }

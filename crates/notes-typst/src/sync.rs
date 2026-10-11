@@ -8,10 +8,17 @@
 //!   notes sync link --vault <name>      first sync; the vault is created on the side that lacks it
 //!   notes sync unlink --vault <name>    forget the link; files stay on both sides
 //!   notes sync now [--vault <name>]     one round for one or all linked vaults
+//!   notes sync confirm --vault <name>   go on with the deletions a round stopped at
+//!   notes sync restore --vault <name>   get those files back from the server instead
 //!
 //! The same files and rules as the sync in `notes serve` (`<data>/sync/`);
 //! a round waits for a running round of the same vault. Who wins a file
 //! changed on both sides is the setting `device.sync_prefer`.
+//!
+//! A round that would delete a large part of a vault (on the server because
+//! the files are gone from this device, or here because they are gone from
+//! the server) stops before it deletes anything, `status` and `now` say so, and
+//! it goes on only after `confirm`; `restore` brings the files back instead.
 
 use std::io::BufRead as _;
 use std::path::Path;
@@ -58,6 +65,15 @@ pub enum SyncAction {
     /// One sync round for `--vault <name>`, or for every linked vault. Exit
     /// code 1 if a vault failed.
     Now,
+    /// Delete the files that a round of `--vault <name>` stopped at (many
+    /// files gone: on the server if they are gone from this device, here if
+    /// they are gone from the server). Only that very set: if more files have
+    /// gone since, the round stops again.
+    Confirm,
+    /// Get back from the server the files that are gone from this device and
+    /// that a round of `--vault <name>` stopped at, instead of deleting them
+    /// there.
+    Restore,
 }
 
 /// Runs a `notes sync` command in the data directory `data`.
@@ -71,6 +87,8 @@ pub fn run(data: &Path, vault: Option<&str>, action: SyncAction) -> Result<ExitC
         SyncAction::Link => link(&paths, &vault_name(vault)?, prefer),
         SyncAction::Unlink => unlink(&paths, &vault_name(vault)?),
         SyncAction::Now => now(&paths, vault, prefer),
+        SyncAction::Confirm => confirm(&paths, &vault_name(vault)?, prefer),
+        SyncAction::Restore => restore(&paths, &vault_name(vault)?, prefer),
     }
 }
 
@@ -170,6 +188,9 @@ fn vault_line(v: &VaultStatus) -> String {
     }
     let when = v.last_sync.map(format_time);
     let mut line = match (&v.error, &when, &v.report) {
+        (Some(error), _, _) if v.state == WorkState::Held => {
+            format!("{name}: linked, PAUSED, nothing is deleted: {error}")
+        }
         (Some(error), Some(when), _) => format!("{name}: linked, the last sync failed ({when}): {error}"),
         (Some(error), None, _) => format!("{name}: linked, not synced yet: {error}"),
         (None, Some(when), Some(report)) => format!("{name}: linked, synced {when}: {report}"),
@@ -243,6 +264,18 @@ fn now(paths: &Paths, vault: Option<&str>, prefer: Prefer) -> Result<ExitCode> {
         }
     }
     Ok(if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS })
+}
+
+fn confirm(paths: &Paths, vault: &VaultName, prefer: Prefer) -> Result<ExitCode> {
+    let round = notes_device::confirm(paths, vault, prefer)?;
+    out!("{vault}: {}", round.report);
+    Ok(ExitCode::SUCCESS)
+}
+
+fn restore(paths: &Paths, vault: &VaultName, prefer: Prefer) -> Result<ExitCode> {
+    let round = notes_device::restore(paths, vault, prefer)?;
+    out!("{vault}: {}", round.report);
+    Ok(ExitCode::SUCCESS)
 }
 
 #[cfg(test)]

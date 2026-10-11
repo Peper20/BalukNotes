@@ -1,0 +1,40 @@
+#!/bin/bash
+# Installs the freshly built `notes` and `notes-hub` and restarts the storage
+# server. Runs as root through sudo for the deploy user (docs/server.md,
+# "Updating"); takes no arguments: what it copies is fixed here.
+#
+# Install: copy to /usr/local/sbin/baluk-notes-hub-install (root:root, 0755)
+# with the DEPLOY_USER line below set to the deploy user.
+set -euo pipefail
+
+DEPLOY_USER=deploy
+SERVICE=baluk-notes-hub
+DEST=/usr/local/bin
+
+if [ "$#" -ne 0 ]; then
+    echo "baluk-notes-hub-install: takes no arguments" >&2
+    exit 2
+fi
+
+home=$(getent passwd "$DEPLOY_USER" | cut -d: -f6)
+[ -n "$home" ] || { echo "no such user: $DEPLOY_USER" >&2; exit 1; }
+release="$home/baluk-notes/target/release"
+
+# The build folder belongs to the deploy user: copy only real files from a
+# path without symlinks (a link to /etc/shadow would be copied world-readable).
+[ "$(realpath -e "$release")" = "$release" ] || { echo "not a plain path: $release" >&2; exit 1; }
+for name in notes notes-hub; do
+    f="$release/$name"
+    if [ -L "$f" ] || [ ! -f "$f" ]; then
+        echo "not a regular file: $f" >&2
+        exit 1
+    fi
+done
+
+# A temporary name, then a rename: a running binary can be replaced this way.
+for name in notes notes-hub; do
+    install -m 755 "$release/$name" "$DEST/.$name.new"
+    mv -f "$DEST/.$name.new" "$DEST/$name"
+done
+
+systemctl restart "$SERVICE"

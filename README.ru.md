@@ -47,7 +47,7 @@
 ```sh
 notes app [--vault "Имя" ["Путь"]]           # окно приложения; на хранилище или заметке
 notes serve                                  # версия для браузера / свой сервер; --auth - вход (обязателен не на localhost); --socket - сокет для окна
-notes sync login <сервер> --login <имя>      # синхронизация с сервером-хранилищем: затем link --vault "Имя", now, status, unlink, logout
+notes sync login <сервер> --login <имя>      # синхронизация с сервером-хранилищем: затем link --vault "Имя", now, status, confirm, restore, unlink, logout
 notes users add <логин> | list | passwd | remove   # учётные записи для входа (notes serve --auth, notes hub)
 notes hub serve                              # сервер-хранилище без Typst, для VPS: docs/server.md
 notes service install | remove | status      # автозапуск notes serve для своего сервера (systemd); лог - journalctl --user -u baluk-notes

@@ -176,10 +176,15 @@ before M7 starts.
 - [x] Sync in the app settings (the section "Синхронизация"): the server
       address and sign-in, which vaults are synced (a vault only on the
       server - download), the state and the conflicts of the last round
+- [x] A guard against mass deletion in sync: a round that deletes a large
+      part of the vault waits for `notes sync confirm` or the buttons in the
+      settings; `restore` brings the files back (architecture §9)
 - [ ] An edit lock (one writer at a time) - groundwork only: a write names
       the version it replaces
 - [x] HTTPS - the reverse proxy (user's decision: nginx is already on the
       VPS); how to deploy - `docs/server.md`
+- [x] One-command update of the hub on the VPS: `tools/deploy-hub.sh` (the VPS
+      builds, a root helper installs; `docs/server.md`, "Updating")
 - [ ] Put the hub on the VPS (the user's machine: by the user, with
       `docs/server.md`)
 

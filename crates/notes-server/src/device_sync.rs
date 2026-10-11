@@ -11,7 +11,12 @@
 //! | `POST /api/device/sync/vaults/{vault}/link`   | link and run the first round -> [`SyncReport`] |
 //! | `POST /api/device/sync/vaults/{vault}/unlink` | 204; files stay on both sides |
 //! | `POST /api/device/sync/vaults/{vault}/now`    | a round now -> [`SyncReport`] |
+//! | `POST /api/device/sync/vaults/{vault}/confirm` | delete what a held round stopped at -> [`SyncReport`] |
+//! | `POST /api/device/sync/vaults/{vault}/restore` | get that back from the server instead -> [`SyncReport`] |
 //!
+//! A round that would delete a large part of a vault does not (architecture
+//! §9): the vault's `state` is `held`, `held` says how many files of how many,
+//! `now` answers 409, and the sync goes on after `confirm` or `restore`.
 //! The status asks the server for its vault list with a short timeout; when it
 //! does not answer, `remote` of the vaults is `null` and `server_error` says
 //! why. The background workers (`DeviceSync`, started by [`crate::serve`])
@@ -34,7 +39,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use notes_device::{DeviceSync, Error as SyncError, ReportInfo, Round, Status, VaultStatus, WorkState};
+use notes_device::{DeviceSync, Error as SyncError, Held, ReportInfo, Round, Side, Status, VaultStatus, WorkState};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
@@ -48,6 +53,8 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/device/sync/vaults/{vault}/link", post(link))
         .route("/api/device/sync/vaults/{vault}/unlink", post(unlink))
         .route("/api/device/sync/vaults/{vault}/now", post(now))
+        .route("/api/device/sync/vaults/{vault}/confirm", post(confirm))
+        .route("/api/device/sync/vaults/{vault}/restore", post(restore))
 }
 
 /// `GET /api/device/sync`.
@@ -84,6 +91,31 @@ pub struct SyncVault {
     pub error: Option<String>,
     /// What the last successful round did.
     pub report: Option<SyncReport>,
+    /// The deletions that wait for `confirm` or `restore` (state `held`).
+    pub held: Option<SyncHeld>,
+}
+
+/// A set of deletions the sync stopped at.
+#[derive(Debug, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub struct SyncHeld {
+    /// Where they would happen.
+    pub side: SyncHeldSide,
+    /// How many files.
+    pub count: usize,
+    /// Of how many in the vault.
+    pub total: usize,
+}
+
+/// Where held deletions would happen.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]
+pub enum SyncHeldSide {
+    /// The files are gone from this device; the sync would delete them on the storage server.
+    Server,
+    /// The files are gone from the storage server; the sync would remove them from this device.
+    Device,
 }
 
 /// What a linked vault's worker is doing (`idle` for one that is not linked).
@@ -99,6 +131,8 @@ pub enum SyncState {
     SignIn,
     /// The server cannot be reached; retrying.
     Offline,
+    /// A large part of the vault would be deleted: waiting for `confirm` or `restore`.
+    Held,
 }
 
 /// What a round did: the answer of `link` and `now`, and `report` of a vault.
@@ -164,7 +198,18 @@ impl From<WorkState> for SyncState {
             WorkState::Error => Self::Error,
             WorkState::SignIn => Self::SignIn,
             WorkState::Offline => Self::Offline,
+            WorkState::Held => Self::Held,
         }
+    }
+}
+
+impl From<Held> for SyncHeld {
+    fn from(h: Held) -> Self {
+        let side = match h.side {
+            Side::Server => SyncHeldSide::Server,
+            Side::Device => SyncHeldSide::Device,
+        };
+        Self { side, count: h.count, total: h.total }
     }
 }
 
@@ -179,6 +224,7 @@ impl From<VaultStatus> for SyncVault {
             last_sync: v.last_sync,
             error: v.error,
             report: v.report.map(Into::into),
+            held: v.held.map(Into::into),
         }
     }
 }
@@ -207,7 +253,9 @@ fn api_error(e: SyncError) -> ApiError {
         | SyncError::Busy(_)
         | SyncError::NotLinked(_)
         | SyncError::RemoteMissing(_)
-        | SyncError::FolderMissing(_) => StatusCode::CONFLICT,
+        | SyncError::FolderMissing(_)
+        | SyncError::Held { .. }
+        | SyncError::NothingHeld(_) => StatusCode::CONFLICT,
         SyncError::WrongLogin => StatusCode::UNPROCESSABLE_ENTITY,
         SyncError::Unreachable { .. } | SyncError::Sync(_) => StatusCode::BAD_GATEWAY,
         SyncError::InvalidServer(..) => StatusCode::BAD_REQUEST,
@@ -277,6 +325,14 @@ async fn unlink(State(s): State<AppState>, Path(vault): Path<String>) -> ApiResu
 
 async fn now(State(s): State<AppState>, Path(vault): Path<String>) -> ApiResult<Json<SyncReport>> {
     Ok(report(run(&s, move |sync| sync.now(&vault)).await?))
+}
+
+async fn confirm(State(s): State<AppState>, Path(vault): Path<String>) -> ApiResult<Json<SyncReport>> {
+    Ok(report(run(&s, move |sync| sync.confirm(&vault)).await?))
+}
+
+async fn restore(State(s): State<AppState>, Path(vault): Path<String>) -> ApiResult<Json<SyncReport>> {
+    Ok(report(run(&s, move |sync| sync.restore(&vault)).await?))
 }
 
 /// Before a vault's folder is renamed or deleted: its worker stops. Returns
