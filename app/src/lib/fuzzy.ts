@@ -29,7 +29,7 @@ export function fuzzy(query: string, text: string): Match | null {
   for (const needle of [typed, q.join("")]) {
     const at = folded.indexOf(needle);
     if (at < 0) continue;
-    const positions = [...Array(needle.length).keys()].map((i) => at + i).filter((i) => tf[i] !== " ");
+    const positions = [...Array(needle.length).keys()].map((i) => at + i);
     return { score: 100 + (at === 0 ? 50 : isBoundary(t[at - 1]) ? 30 : 0) - t.length / 10, positions };
   }
 

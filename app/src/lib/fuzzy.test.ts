@@ -25,8 +25,10 @@ describe("fuzzy search", () => {
     const title = "Поиск в этой заметке или книге";
     const m = fuzzy("в этой заметке или книге", title)!;
     expect(m).not.toBeNull();
-    expect(m.positions).toHaveLength("в этой заметке или книге".replace(/ /g, "").length);
-    expect(highlight(title, m.positions).map((p) => p.text.trim())).toEqual(["Поиск", "в этой заметке или книге"]);
+    expect(highlight(title, m.positions)).toEqual([
+      { text: "Поиск ", hit: false },
+      { text: "в этой заметке или книге", hit: true },
+    ]);
     expect(rank("этой заметке", ["Заметки этой книги", title, "Другая"])[0]).toBe(title);
   });
 
