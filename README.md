@@ -5,9 +5,9 @@ English | [Русский](README.ru.md)
 Notes on Typst with the beauty of printed lecture notes and the convenience of
 Obsidian: links, a graph, quick switching, search - and interactivity a PDF
 does not have. A Rust core builds a vault of `.typ` files into HTML (light and
-dark themes) and PDF on the device itself; today that is `notes serve` and a
-browser, next - Tauri apps for desktop and Android, the core in WASM and a
-storage server with sign-in (`docs/roadmap.md`).
+dark themes) and PDF on the device itself; today that is the desktop window
+(`notes app`), next - an Android app, the core in WASM and a storage server
+with sign-in (`docs/roadmap.md`); in a browser it works through `notes serve`.
 
 ## Quick start
 
@@ -18,16 +18,18 @@ storage server with sign-in (`docs/roadmap.md`).
    repository update): `tools/install.sh` (the first build takes a few
    minutes). Then `notes` works from any folder. `notes` is a thin command: it
    hands work to the parts in its folder (`notes-typst` - building and all
-   commands below; the `notes-app` window - in progress); which are installed -
-   `notes --version`.
+   commands below; `notes-app` - the window); which are installed - `notes
+   --version`.
 3. **Vault**: `notes vaults new "Notes"` (or in the app).
-4. **App**: `notes service install` - a background server that starts at login
-   (a systemd user service, no root; remove - `notes service remove`) ->
-   http://127.0.0.1:8421. Without the service - `notes serve` (stop - Ctrl+C).
-   A note is built when first opened (a book with figures - seconds), then it
-   comes from the cache.
+4. **App**: the window "baluk notes" from the menu, or `notes app` (`notes app
+   --vault "Notes"` - on a vault, `notes app --vault "Notes" "Path"` - on a
+   note). It starts its own core and stops it on exit; a second launch focuses
+   the open window. A note is built when first opened (a book with figures -
+   seconds), then it comes from the cache. A browser version for one's own
+   machine or home server - `notes serve` (below).
 5. **Note**: `notes new --vault "Notes" --title "My note"` (a book - `--book`)
-   prints the file path; edit it, the app picks it up by itself:
+   prints the file path and the command that opens it in the app; edit the file,
+   the window picks it up by itself:
    ```typst
    #import "/_baluk/lib.typ": *
    #show: note.with(title: [My note])
@@ -42,8 +44,9 @@ storage server with sign-in (`docs/roadmap.md`).
 ## Commands
 
 ```sh
-notes service install | remove | status      # app autostart (systemd); log - journalctl --user -u baluk-notes
-notes serve                                  # the app without the service; --token - token only; --socket - a socket for the window
+notes app [--vault "Name" ["Path"]]          # the app window; on a vault or a note
+notes serve                                  # the browser version / self-hosting; --token - token only; --socket - a socket for the window
+notes service install | remove | status      # autostart of notes serve for self-hosting (systemd); log - journalctl --user -u baluk-notes
 notes vaults [new "Name"]                    # vaults
 notes new --vault "Name" --title "Title"     # a stub; also --folder, --book, --tag, --lang
 notes list --vault "Name" | notes tags --vault "Name"

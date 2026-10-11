@@ -34,9 +34,12 @@ directory - read the file.
 - The user's vaults are in the data directory (`notes info`): copies of their
   notes, they may be edited. Never touch the originals
   (`~/Documents/abstract/...`).
-- Do not decide disputable things (interface look, behavior for the user, the
-  public library API) without the user: a default option + a question in
-  `docs/questions.md`.
+- How to make a feature (interface look, behavior, names) - decide yourself
+  and do it: the user sees the result while testing and asks for a fix if they
+  disagree. A question to the user (`docs/questions.md`) has a high bar: only
+  what is expensive to redo or cannot be undone (architecture, security, data
+  loss, actions on the user's machine or server) and has no obvious answer -
+  then a default option + the question. New features - only on request.
 
 ## Iteration
 

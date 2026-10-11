@@ -1,6 +1,9 @@
 # Questions to the user
 
-Disputable decisions taken by default: what is decided and what to ask.
+Decisions taken by default that the user has to confirm: what is decided and
+what to ask. The bar is high (`.claude/rules/project.md`, "Essentials"): two
+thirds of the earlier questions had an obvious answer. Do not add a question
+about how to make a feature - decide, the user corrects it while testing.
 Questions are grouped into blocks with shared context - the user answers a
 block at a time. Got an answer - fix the code and documents (or record it in
 the roadmap or tech debt), delete the item.

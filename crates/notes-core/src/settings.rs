@@ -264,6 +264,7 @@ impl Schema {
                 Group { key: "panels", label: "Панели" },
                 Group { key: "graph", label: "Граф" },
                 Group { key: "refresh", label: "Обновление" },
+                Group { key: "vaults", label: "Хранилища" },
                 Group { key: "device", label: "Это устройство" },
             ],
             settings: vec![
@@ -365,6 +366,14 @@ impl Schema {
                     json!("auto"),
                 )
                 .help("Автоматически — сразу после правки файла и при возврате в окно"),
+                SettingDef::new(
+                    "vaults.open",
+                    "Другое хранилище открывать",
+                    choices(&[("this", "в этом окне"), ("new", "в новом окне")]),
+                    json!("this"),
+                )
+                .help("Правый клик по хранилищу в меню — выбрать на месте, Ctrl+клик — всегда в новом окне")
+                .shared(),
                 SettingDef::new(
                     "device.warm",
                     "Собирать заметки заранее",
@@ -689,6 +698,16 @@ mod tests {
             assert!(s.groups.iter().any(|g| g.key == group), "{} has no group", d.key);
             assert_eq!(s.validate(d.key, &d.default).unwrap(), d.default, "{}: invalid default", d.key);
         }
+    }
+
+    #[test]
+    fn vaults_open_is_a_shared_choice() {
+        let s = schema();
+        let def = s.get("vaults.open").unwrap();
+        assert!(def.shared && !def.device);
+        assert_eq!(def.default, json!("this"));
+        assert!(s.validate("vaults.open", &json!("new")).is_ok());
+        assert!(s.validate("vaults.open", &json!("tab")).is_err());
     }
 
     #[test]

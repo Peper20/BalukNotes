@@ -3,7 +3,8 @@
 # repository: the `notes` command with the parts `notes-typst` (release build:
 # the baluk library, the client and fonts are embedded) and `notes-app` (the
 # window, with a menu entry and an icon), the Claude Code skill /baluk-note.
-# Run again after project changes.
+# The window is the app: it starts its own core, no service is needed. Run
+# again after project changes.
 #
 #   tools/install.sh
 #
@@ -82,28 +83,18 @@ case ":$PATH:" in
   *":$bin:"*) ;;
   *) echo "Warning: $bin is not in PATH - add it, otherwise there is no notes command." >&2 ;;
 esac
-# The autostart service (`notes service`, unit baluk-notes.service) moves to
-# the new version; a `notes serve` started by hand is restarted by the user.
-# A unit with the default flags (with or without `--socket`) is rewritten:
-# new flags and texts of the unit; without `--socket` the `notes app` window
-# does not find the service core and starts a second one. A unit with own
-# flags is only restarted (without `--socket` - a hint).
-unit=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/baluk-notes.service
+# The window starts its own core, so the autostart service (`notes service`,
+# unit baluk-notes.service) is not installed or rewritten here. One that is
+# still active is restarted to run the new binary. A core or `notes serve`
+# started earlier keeps running the old version until it is restarted.
 service_pid=0
 if systemctl --user -q is-active baluk-notes.service 2>/dev/null; then
-  if grep -Eq '^ExecStart=.* serve --addr 127\.0\.0\.1:8421( --socket)?$' "$unit"; then
-    "$bin/notes" service install >/dev/null 2>&1
-    echo "  baluk-notes service: unit rewritten, restarted"
-  else
-    systemctl --user restart baluk-notes.service
-    echo "  baluk-notes service restarted"
-    grep -q -- '--socket' "$unit" ||
-      echo "The service has no --socket: the window will start its own core. To update - notes service install with its flags." >&2
-  fi
+  systemctl --user restart baluk-notes.service
+  echo "  baluk-notes service restarted (the window does not need it: notes service remove)"
   service_pid=$(systemctl --user show -p MainPID --value baluk-notes.service)
 fi
 if pgrep -x notes-typst | grep -vqx "$service_pid"; then
-  echo "An old version of notes serve is running - restart it."
+  echo "An old notes-typst is running (the window's core or notes serve) - close the window or restart it."
 fi
 echo
 "$bin/notes" info

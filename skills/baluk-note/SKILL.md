@@ -3,7 +3,7 @@ name: baluk-note
 description: BalukNotes notes in Typst - create a note or a book, add a chapter, edit or rename a note (or name a folder) by the vault rules. Runs from any folder, often the one with the sources (lectures, problems).
 disable-model-invocation: true
 argument-hint: "[тема, книга ..., допиши ... или переименуй ...]"
-allowed-tools: Bash(notes info:*), Bash(notes vaults:*), Bash(notes docs:*), Bash(notes list:*), Bash(notes tags:*), Bash(notes new:*), Bash(notes check:*), Bash(notes rename:*), Bash(notes pdf:*), Bash(notes png:*), Bash(pgrep -x notes-typst), Read, Glob, Grep
+allowed-tools: Bash(notes info:*), Bash(notes vaults:*), Bash(notes docs:*), Bash(notes list:*), Bash(notes tags:*), Bash(notes new:*), Bash(notes check:*), Bash(notes rename:*), Bash(notes pdf:*), Bash(notes png:*), Bash(notes serve:*), Read, Glob, Grep
 ---
 
 # BalukNotes note
@@ -20,7 +20,7 @@ This is your task: work through it with the process below. If the request is emp
 
 ## Context
 
-BalukNotes keeps notes as Typst files in a **vault** (a folder the user owns). The app (`notes serve`) renders them as web pages, `notes pdf` prints them, and the `baluk` library provides the layout: templates, text blocks, figures, interactive plots. The user reads notes mostly in the app, on a desktop or a phone, in a light or dark theme; the PDF is the same text for print. So the web page is the main result, and everything has to work in both themes.
+BalukNotes keeps notes as Typst files in a **vault** (a folder the user owns). The app (a desktop window; a phone and a browser later) renders them as web pages, `notes pdf` prints them, and the `baluk` library provides the layout: templates, text blocks, figures, interactive plots. The user reads notes mostly in the app, on a desktop or a phone, in a light or dark theme; the PDF is the same text for print. So the web page is the main result, and everything has to work in both themes.
 
 Everything you need is in the skill folder ("Base directory" at the top, usually `~/.claude/skills/baluk-note`):
 - this file: the process, paths, Typst basics, `notes check` errors, rules for good notes;
@@ -50,9 +50,9 @@ Work only in the chosen vault; never touch other vaults. In it, create or change
    notes new --vault "Name" --title "Title" --folder "Folder" --tag tag1 --tag tag2   # A. note
    notes new --vault "Name" --book --title "Title" --folder "Folder" --tag tag        # B. book
    ```
-   Add `--lang en` (ISO 639 code) when the note is not in Russian: it sets `lang:` in the template, so block words become "Definition", "Fig." instead of Russian ones. The file name is derived from the title. Output: line 1 is the file on disk (read and edit it), line 2 is the note path ("Path" below: for `notes check`, `notes pdf`, `#see`), line 3 is the app URL. Exit code 1 (`invalid note path`, `empty title`): report the message to the user and leave existing files alone. Exit code 2: wrong arguments, see `notes new --help`.
+   Add `--lang en` (ISO 639 code) when the note is not in Russian: it sets `lang:` in the template, so block words become "Definition", "Fig." instead of Russian ones. The file name is derived from the title. Output: line 1 is the file on disk (read and edit it), line 2 is the note path ("Path" below: for `notes check`, `notes pdf`, `#see`), line 3 is the command that opens the note in the app (`notes app --vault "Name" "Path"`). Exit code 1 (`invalid note path`, `empty title`): report the message to the user and leave existing files alone. Exit code 2: wrong arguments, see `notes new --help`.
 6. `notes check --vault "Name" "Path"`: the fresh stub is clean (`errors: 0, warnings: 0`). Add the progress header at the top of the new file (a book: `main.typ`), see "The file".
-7. **Where to look.** If `pgrep -x notes-typst` prints something, the app runs and the page at the URL from step 5 refreshes on every save; otherwise suggest `notes serve` to the user (or `notes service install`, which keeps it running in the background and starts it at login).
+7. **Where to look.** The user reads the note in the app window, which refreshes on every save. Give the user the open command from step 5 (once is enough); do not launch the window yourself unless asked, since a window that appears uninvited interrupts their work.
 8. **Plan.** First read `reference.md` and every file in `examples/` in full, once per session (skip this for task E and small fixes): the plan should use the figures and blocks the library actually has, and the samples show how a finished note looks. Then find out the goal (exam, contest, lab, "understand it") and the reader: what they know well and what poorly, since weak spots deserve more room. Propose sections (a book: chapters, then sections) with the figures, examples and hard spots of each, and wait for approval. If the user already said what the note must contain ("one parabola plot with a slider"), that is the plan.
 9. **Write** one section (chapter) at a time, see "Editing the file" and "Writing a good note". Start each call from its sample in `examples/`; `reference.md` lists every parameter and allowed value. The samples show the calls, not the limits: combine features and draw your own figures (see "Figures").
 10. **Check** after each section: `notes check --vault "Name" "Path"`, then fix and repeat until `errors: 0, warnings: 0, broken links: 0`. The "Errors" list below explains the usual messages; for an unclear one compare your call with the sample and the signature in `reference.md`.
@@ -63,8 +63,14 @@ Work only in the chosen vault; never touch other vaults. In it, create or change
     notes png --vault "Name" "Path" -o $TMP/pages --theme night    # dark theme; --pages 3-5 for a few pages of a book
     ```
     The pages are exactly the PDF (`notes pdf` makes the file itself, when the user wants one).
-    `$TMP` is the session temp folder (or `/tmp`), never the vault or a sources folder. If you have a browser tool and the app runs, also open the app URL: light and dark theme (switch at the top right), a narrow window (about 400 px), and the interactive parts (sliders, frames, rotation).
-13. **Report**: file path, app URL, what is done, what is left.
+    `$TMP` is the session temp folder (or `/tmp`), never the vault or a sources folder. If you have a browser tool, also look at the page. A browser tool cannot drive the app window, so start a temporary server of your own on a port nobody else uses, and stop it afterwards:
+    ```sh
+    notes serve --addr 127.0.0.1:8439     # run in the background, remember its PID; if the port is busy, take another
+    # open http://127.0.0.1:8439/v/<Vault>/n/<Path> (vault and path percent-encoded; this address, not the app's)
+    kill <PID>                            # when done; not pkill, it could hit the user's processes
+    ```
+    Check the light and dark theme (switch at the top right), a narrow window (about 400 px), and the interactive parts (sliders, frames, rotation).
+13. **Report**: file path, the `notes app ...` command that opens it, what is done, what is left.
 
 **C. Chapter.** Instead of steps 5-6 create the chapter file by hand (`notes new` does not create chapters): the book folder on disk (vault folder + book path) + `NN-topic.typ`, NN following the existing chapters. It starts with `#import "/_baluk/lib.typ": *`, then `#show: chapter.with(title: [Chapter title], tags: (...))` when the chapter has tags of its own, otherwise `= Chapter title` (sample: `examples/book/01-idea.typ`). Add `#include "NN-topic.typ"` to the book's `main.typ` after the last `#include`. Check with `notes check --vault "Name" "Book path"`.
 
@@ -81,7 +87,7 @@ Check with `notes check --vault "Name"` without a path, since folder errors appe
 
 ## Title and path
 
-**Title**: `title: [...]` in the file (a book: `main.typ`), any text, shown to readers in the tree, tabs, graph and links (a formula there shows as its source, `sum 1/n^2`, so prefer words). **Path**: where the file is, from the vault root, `/`-separated, without `.typ`: `Math/Parabola`. `notes new` (line 2) and `notes list` (first on each line) print it; it is the same in `notes check`, `notes pdf`, `#see(...)` and the app URL. Folders are created automatically.
+**Title**: `title: [...]` in the file (a book: `main.typ`), any text, shown to readers in the tree, tabs, graph and links (a formula there shows as its source, `sum 1/n^2`, so prefer words). **Path**: where the file is, from the vault root, `/`-separated, without `.typ`: `Math/Parabola`. `notes new` (line 2) and `notes list` (first on each line) print it; it is the same in `notes check`, `notes pdf`, `#see(...)`, `notes app` and the page address. Folders are created automatically.
 
 **Folder title**: `_folder.toml` in the folder, one line `title = "Networks and protocols"`; other keys are errors. Without it the folder shows its name. Write it only when the user asks to name a folder.
 
@@ -215,7 +221,7 @@ Figures by subject, as a starting point:
 - listings of at most 25 lines, code compiled and tested;
 - numbers recomputed independently;
 - `pitfalls`, `summary`, `quiz` at the end;
-- `notes check` clean for your note (problems in other notes: tell the user, do not fix them silently); PDF and, if possible, the app page viewed in both themes and a narrow window;
+- `notes check` clean for your note (problems in other notes: tell the user, do not fix them silently); PDF and, if possible, the page viewed in both themes and a narrow window;
 - the header says what is done and what is next.
 
 ## Common calls

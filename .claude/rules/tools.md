@@ -8,9 +8,10 @@ paths:
 | File | What |
 |---|---|
 | `check.sh` | the full check |
-| `install.sh` | `notes` and its parts (`notes-typst`, the `notes-app` window with a menu entry and icon) into `~/.local/bin` and the skill into `~/.claude/skills` in one version, the `notes service` service is restarted; run again after changes |
+| `install.sh` | `notes` and its parts (`notes-typst`, the `notes-app` window with a menu entry and icon) into `~/.local/bin` and the skill into `~/.claude/skills` in one version (the autostart service is not installed; one still active is restarted); run again after changes |
 | `test-env.sh` | a server on `tests/vault` (data `tests/.data`, port 8432) |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
+| `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; opens a visible window for a moment |
 
 ## Checks
 
@@ -63,8 +64,8 @@ tools/shot.mjs URL out.png --print 'document.getElementById("page").scrollTop'  
 - A debug build takes `baluk/` and `app/dist` from disk; Rust edits need a
   restart of `notes serve`.
 - Stop the test server by port: `fuser -k -TERM 8432/tcp`. Not
-  `pgrep -x notes-typst`: it also finds the user's `notes serve` service
-  (port 8421). Not `pkill -f ...`, and do not wait for a process via
+  `pgrep -x notes-typst`: it also finds the core of the user's open window.
+  Not `pkill -f ...`, and do not wait for a process via
   `pgrep -f ...`: the pattern matches the command line of the shell itself
   (it kills it or waits forever).
 

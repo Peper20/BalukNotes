@@ -1,7 +1,10 @@
 //! The core for the window: `notes-typst serve --socket` (default socket:
 //! `notes::default_socket`). Something answers on the socket (the service,
 //! another window): connect to it; otherwise start our own core from the parts
-//! directory and wait for its socket.
+//! directory with the global flags of the command line (`launch::Launch::core_args`:
+//! `--data`, ..., and `--vault` for a vault given by a directory) and wait for its
+//! socket. Our own core serves all vaults of the data directory unless `--vault`
+//! narrows it to a directory. It stops when the app exits.
 
 use std::ffi::OsString;
 use std::os::unix::net::UnixStream;

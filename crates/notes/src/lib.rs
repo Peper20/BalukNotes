@@ -39,10 +39,22 @@ pub const PARTS: &[Part] = &[TYPST, APP];
 /// the command is `list`. A `notes-typst` test checks them against `clap`.
 pub const VALUE_FLAGS: &[&str] = &["--data", "--vault", "--trash", "--library", "--font-path"];
 
+/// Directory of the sockets: `$XDG_RUNTIME_DIR/baluk-notes`.
+fn runtime_dir() -> Option<PathBuf> {
+    std::env::var_os("XDG_RUNTIME_DIR").map(|dir| PathBuf::from(dir).join("baluk-notes"))
+}
+
 /// Default core socket (`notes serve --socket`):
 /// `$XDG_RUNTIME_DIR/baluk-notes/notes.sock`. The `notes-app` window looks for it.
 pub fn default_socket() -> Option<PathBuf> {
-    std::env::var_os("XDG_RUNTIME_DIR").map(|dir| PathBuf::from(dir).join("baluk-notes").join("notes.sock"))
+    runtime_dir().map(|dir| dir.join("notes.sock"))
+}
+
+/// Socket of the running `notes-app` window, next to the core socket:
+/// `$XDG_RUNTIME_DIR/baluk-notes/app.sock`. A second `notes app` hands its
+/// start page to the running window over it.
+pub fn app_socket() -> Option<PathBuf> {
+    runtime_dir().map(|dir| dir.join("app.sock"))
 }
 
 /// Version of the `notes` that called a part: an environment variable of the part.
@@ -101,5 +113,16 @@ mod tests {
         assert_eq!(part_for(&["--data", "d", "app"]), APP);
         assert_eq!(part_for(&["list", "app"]), TYPST);
         assert_eq!(part_for::<&str>(&[]), TYPST);
+    }
+
+    #[test]
+    fn sockets_share_a_directory() {
+        let (core, app) = (default_socket(), app_socket());
+        assert_eq!(core.is_some(), app.is_some());
+        if let (Some(core), Some(app)) = (core, app) {
+            assert_eq!(core.parent(), app.parent());
+            assert_eq!(core.file_name().and_then(|n| n.to_str()), Some("notes.sock"));
+            assert_eq!(app.file_name().and_then(|n| n.to_str()), Some("app.sock"));
+        }
     }
 }
