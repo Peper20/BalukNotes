@@ -317,10 +317,9 @@ it. Extended at the end of every iteration, closed items are deleted.
   (`lib/details.ts`), among equal ones - by index: a new block above an opened
   one with the same text opens instead of it.
 - **Fuzzy search is greedy** (`lib/fuzzy.ts`): a query letter jumps to the
-  start of the next word, and a multi-word query may miss a title where the
-  words go in a row ("в этой заметке или книге" does not find "Поиск в этой
-  заметке или книге"). How to close: a substring without spaces or a search
-  with backtracking.
+  start of the next word; if that fails, a second pass takes the first
+  occurrences, but the pick is not the best one by score (no full
+  backtracking).
 - **"Нет связи" depends on a server answer** (`api.onReach`): an error
   response (502 of a reverse proxy, M4) counts as connected. The probe request
   is `GET /api/vaults` every 3 s while disconnected.
