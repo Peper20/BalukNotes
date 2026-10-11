@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>baluk notes</title>
+<meta name="description" content="Заметки на Typst: красота печатных конспектов и удобство Obsidian.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #faf9f6; --text: #1f1d1a; --muted: #6b665e; --line: #dedad2; --accent: #2f5d8a; --card: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #17181a; --text: #e8e6e1; --muted: #9a968e; --line: #2e3033; --accent: #8fb8e0; --card: #1e2022; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  }
+  main { max-width: 46rem; margin: 0 auto; padding: 4rem 1rem 3rem; }
+  header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; }
+  header img { width: 64px; height: 64px; }
+  h1 { font-size: 2.2rem; line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
+  .lead { font-size: 1.25rem; line-height: 1.5; margin: 0 0 2.5rem; }
+  h2 { font-size: 1.05rem; margin: 2.5rem 0 0.75rem; color: var(--muted); font-weight: 600; }
+  ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.75rem; }
+  li { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem 1.1rem; }
+  li b { display: block; }
+  li span { color: var(--muted); }
+  a { color: var(--accent); }
+  code { font: 0.92em ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+  .status { border-left: 3px solid var(--accent); padding: 0.1rem 0 0.1rem 1rem; margin: 0; }
+  footer { margin-top: 3rem; padding-top: 1.25rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.95rem; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icon.svg" alt="">
+    <h1>baluk notes</h1>
+  </header>
+
+  <p class="lead">Заметки на Typst: красота печатных конспектов и удобство Obsidian. Формулы, рисунки и книги выглядят на экране так же, как в PDF.</p>
+
+  <h2>Что это</h2>
+  <ul>
+    <li><b>Заметки - обычные файлы <code>.typ</code></b><span>Они остаются у вас в папке и открываются любым редактором; приложение их молча не меняет.</span></li>
+    <li><b>Ссылки, граф, поиск</b><span>Переходы между заметками, обратные ссылки, граф хранилища, быстрый переход и поиск по тексту.</span></li>
+    <li><b>Интерактив, которого нет в PDF</b><span>Графики с ползунками, вращаемые поверхности, пошаговые рисунки.</span></li>
+    <li><b>Сборка на самом устройстве</b><span>Ядро на Rust собирает заметки в HTML (светлая и тёмная темы) и PDF без сервера.</span></li>
+    <li><b>Синхронизация между устройствами</b><span>Сервер хранит файлы хранилищ и раздаёт изменения; заметки при этом работают и без связи.</span></li>
+  </ul>
+
+  <h2>Что работает сейчас</h2>
+  <p class="status">Приложение для Linux и синхронизация через этот сервер. Версии для Android и для браузера - в планах; открыть заметки прямо на этом сайте пока нельзя.</p>
+
+  <h2>Попробовать</h2>
+  <p>Исходный код и установка - на <a href="https://github.com/Peper20/BalukNotes">GitHub</a>. Этот сервер - хранилище для синхронизации: приложение подключается к его поддомену <code>api</code>, вход по учётной записи.</p>
+
+  <footer>baluk notes - открытый проект. <a href="https://github.com/Peper20/BalukNotes">github.com/Peper20/BalukNotes</a></footer>
+</main>
+</body>
+</html>

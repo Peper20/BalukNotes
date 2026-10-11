@@ -185,8 +185,9 @@ before M7 starts.
       VPS); how to deploy - `docs/server.md`
 - [x] One-command update of the hub on the VPS: `tools/deploy-hub.sh` (the VPS
       builds, a root helper installs; `docs/server.md`, "Updating")
-- [ ] Put the hub on the VPS (the user's machine: by the user, with
-      `docs/server.md`)
+- [x] The hub on the VPS (`docs/server.md`): the API on a subdomain, the
+      main name shows the front page `landing/` (user's decision; a first
+      version, to polish)
 
 ## M5. Desktop - Tauri with the core inside
 

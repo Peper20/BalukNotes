@@ -208,6 +208,31 @@ The key is the only secret of this scheme; protect it (a passphrase). The
 parts are matched by version number only (`notes --version`), not by a
 signature or a hash.
 
+## The front page
+
+`landing/` is a static page about the project (Russian, one HTML file and the
+icon, no scripts) for the main name of the server, with the hub on a
+subdomain (`api.`). nginx serves it from `/var/www/baluk-notes`:
+
+```sh
+# install -D -m 644 -t /var/www/baluk-notes landing/index.html landing/icon.svg
+```
+
+```nginx
+server {
+    listen 80;
+    server_name example.org;
+    root /var/www/baluk-notes;
+    index index.html;
+    add_header Content-Security-Policy "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'" always;
+    location / { try_files $uri $uri/ =404; }
+}
+```
+
+The page names no address: its text says the app connects to the `api`
+subdomain. `tools/deploy-hub.sh` does not update the page - copy it again
+after an edit.
+
 ## The browser version with Typst
 
 On a machine that can build notes (a home server), the full app in a browser:
