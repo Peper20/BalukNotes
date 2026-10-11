@@ -68,6 +68,13 @@ fi
 args=()
 [ "$1" = 0 ] || args=(--jobs "$1")
 export CARGO_TARGET_DIR="$HOME/baluk-notes/target"
+# cargo never removes old builds (another compiler or dependency version leaves
+# its files): over the limit - start from an empty folder, a full build.
+target_mb=$(du -sm "$CARGO_TARGET_DIR" 2>/dev/null | cut -f1)
+if [ "${target_mb:-0}" -gt 1024 ]; then
+    echo "target/ is $target_mb MB, over 1024: removing it, this build is a full one"
+    rm -rf "$CARGO_TARGET_DIR"
+fi
 # The site on the same machine stays responsive: the lowest CPU and disk priority.
 low=(nice -n 19)
 command -v ionice >/dev/null && low=(ionice -c3 nice -n 19)

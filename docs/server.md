@@ -192,8 +192,13 @@ Measured on the laptop for these two packages (release):
 
 A build with one job suits one core and fits in the memory of a small
 machine with swap; on 1 GB RAM without swap add swap first. The times on the
-VPS are an estimate, not a measurement. To reclaim disk, delete
-`~/baluk-notes/target` (the next build is a full one).
+VPS are an estimate, not a measurement.
+
+The build folder does not grow without bound: cargo leaves the files of old
+compiler and dependency versions in it, so before a build the script removes
+`~/baluk-notes/target` once it is over 1 GB (that build is a full one). The
+crates cache `~/.cargo/registry` grows by a few MB per updated dependency and
+is not cleaned; it can be deleted at any time.
 
 ### Trust
 
