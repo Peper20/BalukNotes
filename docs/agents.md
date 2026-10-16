@@ -64,6 +64,12 @@ waits. Requirements to both documents - `.claude/rules/docs.md`.
   CPUs (default 9, `tools/lib/cpu-cap.sh`). Measurements are run the same
   way: `nice -n 2`, within the cap. The test server of an agent takes its own
   port (`PORT=... tools/test-env.sh`).
+- An agent never opens a window on the user's display: anything that needs a
+  window (the `notes-app` window, WebKitGTK) runs inside a headless gamescope
+  (`tools/shot-webkit.py`, `tools/app-smoke.sh`; rules - `.claude/rules/tools.md`,
+  "No windows on the user's display"). gamescope exits 0 even when the command
+  fails: check the command's own result; if gamescope fails or is missing,
+  report it, never fall back to a visible window.
 - Agents do not touch the user's notes, the installed `notes` service beyond
   `tools/install.sh`, or the VPS: `tools/deploy-hub.sh` runs only on the
   user's word.
