@@ -22,6 +22,8 @@ export default defineConfig({
   reporter: [["list"]],
   use: {
     baseURL: `http://127.0.0.1:${port}`,
+    // Never a window on the user's display (`.claude/rules/tools.md`).
+    headless: true,
     launchOptions: { executablePath: process.env.CHROMIUM ?? "/usr/bin/chromium" },
     viewport: { width: 1300, height: 900 },
   },

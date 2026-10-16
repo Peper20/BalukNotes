@@ -411,11 +411,14 @@ it. The format and rules - `.claude/rules/docs.md`.
   (WebKitGTK 2.52.6) - the system writes the dump for about a minute, the
   machine lags. Workaround: the window kills its WebKit process before exit
   (`notes-app` `quit`, SIGKILL from WebKit) - so `exit()` never runs there
-  (the user closed the window - no crash report). In a test compositor
-  (`kwin_wayland --virtual`) the crash does not reproduce; such a compositor
-  only inside `dbus-run-session`: on the user's bus it turns off KWin global
-  shortcuts (Alt+Tab) after exit. The WebKit bug remains: a report to WebKit
-  if it can be reproduced.
+  (the user closed the window - no crash report). A test run of the window
+  goes only into a headless gamescope (`.claude/rules/tools.md`, "No windows
+  on the user's display"; `tools/app-smoke.sh`): there the window quits by the
+  workaround, so the crash path is not exercised, and whether a WebKit process
+  that exits by itself crashes in gamescope is not checked. A nested
+  `kwin_wayland --virtual` is not used: it did not reproduce the crash, and
+  on the user's bus it turns off KWin global shortcuts (Alt+Tab) after exit.
+  The WebKit bug remains: a report to WebKit if it can be reproduced.
 - **`glib 0.18` with a vulnerability (Dependabot #1)**: it comes via the
   window (`tauri` -> `wry`/`tao` -> `gtk 0.18`); the fix is in `glib 0.20`,
   and `gtk 0.18` is the last GTK3 binding, Tauri 2 on Linux uses it. No

@@ -14,7 +14,8 @@ paths:
 | `lib/worktree-target.sh` | in a linked worktree (agents) - the build dir shared by all worktrees |
 | `lib/cpu-cap.sh` | the CPU cap `CHECK_JOBS` and the lock of heavy work, sourced by `check.sh`, `install.sh`, `test-env.sh` |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
-| `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; opens a visible window for a moment |
+| `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; runs itself inside a headless gamescope |
+| `app-smoke.sh` | a smoke launch of the `notes-app` window inside a headless gamescope: it opens, loads the fixture vault, quits cleanly (~6 s); not in `check.sh` (needs gamescope and an installed or built `notes-app`) |
 
 ## Checks
 
@@ -108,6 +109,40 @@ tools/shot.mjs URL out.png --print 'document.getElementById("page").scrollTop'  
   Not `pkill -f ...`, and do not wait for a process via
   `pgrep -f ...`: the pattern matches the command line of the shell itself
   (it kills it or waits forever).
+
+## No windows on the user's display
+
+No script, check or agent run opens a window on the display of the user: it
+covers the screen they work on. Whatever needs a window (WebKitGTK, the
+`notes-app` window) runs inside a headless gamescope:
+
+```sh
+gamescope --backend headless -W <width> -H <height> -- <command>
+```
+
+- The output is at least as large as the window asked for.
+- gamescope exits with 0 even when the command fails: check the result of the
+  command itself (`shot-webkit.py` and `app-smoke.sh` read an exit code the
+  command writes to a file; a command that leaves none is a failure). When
+  gamescope fails or is not installed, report it and stop: never fall back to
+  a visible window.
+- Inside, GTK must use the X server of gamescope: gamescope gives the command
+  `DISPLAY` and removes `WAYLAND_DISPLAY`, so without `GDK_BACKEND=x11` GTK
+  falls back to the default socket `wayland-0` of the user's session (an
+  unprotected run drew at the user's scale 2, not at the scale 1 of
+  gamescope). Set `GDK_BACKEND=x11` and unset `WAYLAND_DISPLAY` for the
+  command; the scripts here do it and refuse to run outside gamescope.
+- Rootless Xwayland: a grab of the X root window is black, there is no
+  screenshot of the whole screen. A page is captured by the engine itself
+  (`shot-webkit.py`).
+- Isolate a run of the app from the session of the user: its own
+  `XDG_RUNTIME_DIR` (the single-instance socket and the core socket there: a
+  window the user has open is not handed anything and not stopped),
+  `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, a copy of the vault
+  and its own `--data`: `app-smoke.sh` does it.
+- Chromium (`lib/browser.mjs`: `--headless=new`; Playwright: `headless: true`
+  in `app/playwright.config.ts`) has no window; do not pass `--headed`.
+  `test-env.sh`, `check.sh` and `install.sh` start no window.
 
 ## Cloud environment
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """A page screenshot or a measurement in WebKitGTK (the engine of the desktop window).
 
-Counterpart of tools/shot.mjs for WebKit: opens the URL in a real (visible,
-briefly shown on the desktop) Gtk.Window - a hidden OffscreenWindow without GL
-crashes WebKit - waits for <html data-state="ready"> and document.fonts.ready,
-then saves a PNG and/or prints the value of a JS expression.
+Counterpart of tools/shot.mjs for WebKit: opens the URL in a Gtk.Window inside
+a headless gamescope (no window ever appears on the user's display), waits for
+<html data-state="ready"> and document.fonts.ready, then saves a PNG and/or
+prints the value of a JS expression.
 
   tools/shot-webkit.py <url> [out.png] [--size 1300x900] [--dark|--light] [--wait 300]
                        [--eval 'JS'] [--print 'JS expression']
@@ -14,20 +14,34 @@ then saves a PNG and/or prints the value of a JS expression.
   --eval   run before the screenshot / measurement (e.g. open the settings)
   --print  print the JSON value of a synchronous JS expression (a promise is not awaited)
 
-Needs python `gi` with WebKit2 4.1 and Gtk 3 (webkit2gtk-4.1) and a graphical
-session. Exit code 1 on a timeout.
+The script starts itself again under `gamescope --backend headless -W <w> -H
+<h>` (the output is the size of --size) and passes the result on: gamescope
+exits with 0 even when its child fails, so the child writes its exit code to a
+temporary file, which the first process reads; a child that left no code
+(a crash, a gamescope failure) is an error. Output of gamescope and of the
+child is kept in the temporary directory and shown only on failure; the
+--print value goes to stdout. Without gamescope (/usr/bin/gamescope) the script
+fails with exit code 2: it never opens a visible window.
+
+Needs python `gi` with WebKit2 4.1 and Gtk 3 (webkit2gtk-4.1) and gamescope.
+Exit code 1 on a timeout or a JS error, 2 when it cannot start.
 """
 
 import argparse
 import json
+import os
+import shutil
+import subprocess
 import sys
+import tempfile
+import signal
+from pathlib import Path
 from urllib.parse import quote
 
-import gi
-
-gi.require_version("Gtk", "3.0")
-gi.require_version("WebKit2", "4.1")
-from gi.repository import GLib, Gtk, WebKit2  # noqa: E402
+# Set in the process that runs inside gamescope: the path of the directory where it leaves its results.
+GUARD = "SHOT_WEBKIT_GAMESCOPE"
+# How long the whole run may take; the page itself has 60 s (see `shoot`).
+RUN_LIMIT = 120
 
 # The window follows the system scheme (dark on the author's desktop and not overridable from here):
 # --dark/--light make `matchMedia("(prefers-color-scheme: ...)")` answer for the page, which is how the client picks a theme.
@@ -48,7 +62,7 @@ SCHEME_SCRIPT = """
 READY = 'document.documentElement.dataset.state === "ready" && document.fonts.status === "loaded"'
 
 
-def main() -> int:
+def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("url")
     ap.add_argument("out", nargs="?")
@@ -59,9 +73,97 @@ def main() -> int:
     ap.add_argument("--eval", dest="eval_js")
     ap.add_argument("--print", dest="print_js")
     args = ap.parse_args()
-    width, height = (int(x) for x in args.size.split("x"))
+    try:
+        args.width, args.height = (int(x) for x in args.size.split("x"))
+    except ValueError:
+        ap.error("--size must look like 1300x900")
+    return args
 
 
+def in_gamescope(args: argparse.Namespace) -> int:
+    """Starts this script again inside a headless gamescope and returns the child's exit code."""
+    gamescope = shutil.which("gamescope")
+    if gamescope is None:
+        print(
+            "error: gamescope is not installed; the page is shown only inside a headless gamescope "
+            "(never on the user's display)",
+            file=sys.stderr,
+        )
+        return 2
+    with tempfile.TemporaryDirectory(prefix="shot-webkit-") as tmp:
+        out = Path(tmp)
+        env = {**os.environ, GUARD: tmp}
+        command = [
+            gamescope, "--backend", "headless", "-W", str(args.width), "-H", str(args.height),
+            "--", sys.executable, os.path.abspath(__file__), *sys.argv[1:],
+        ]
+        log = open(out / "gamescope.log", "wb")
+        # Its own process group: a hung run is killed together with the gamescope's children.
+        proc = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        try:
+            proc.wait(timeout=RUN_LIMIT)
+        except subprocess.TimeoutExpired:
+            print(f"error: no result within {RUN_LIMIT} s, stopped", file=sys.stderr)
+        finally:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)  # whatever is left
+            except ProcessLookupError:
+                pass
+            proc.wait()
+        log.close()
+        # gamescope exits with 0 whatever its child did: the code is in the file the child wrote.
+        try:
+            code = int((out / "status").read_text())
+        except (OSError, ValueError):
+            code = None
+        if (out / "stdout").exists():
+            sys.stdout.write((out / "stdout").read_text())
+        if code != 0:
+            if (out / "stderr").exists():
+                sys.stderr.write((out / "stderr").read_text())
+            if code is None:
+                sys.stderr.write((out / "gamescope.log").read_text(errors="replace"))
+                print("error: the child left no result (gamescope or WebKit failed)", file=sys.stderr)
+                return 1
+        return code
+
+
+def run_child(args: argparse.Namespace) -> int:
+    """The part inside gamescope: its stdout and stderr and the exit code go to files of the first process."""
+    out = Path(os.environ[GUARD])
+    if "GAMESCOPE_WAYLAND_DISPLAY" not in os.environ:
+        print("error: not inside gamescope, refusing to open a window", file=sys.stderr)
+        return 2
+    sys.stdout.flush()
+    for name, fd in (("stdout", 1), ("stderr", 2)):
+        os.dup2(os.open(out / name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), fd)
+    # The X server of gamescope only: never the user's Wayland session.
+    os.environ.pop("WAYLAND_DISPLAY", None)
+    os.environ["GDK_BACKEND"] = "x11"
+    code = 1
+    try:
+        code = shoot(args)
+    except BaseException as err:  # the code must be written whatever happens
+        print(f"error: {err!r}", file=sys.stderr)
+    finally:
+        sys.stdout.flush()
+        (out / "status").write_text(str(code))
+    return code
+
+
+def main() -> int:
+    args = parse_args()
+    return run_child(args) if os.environ.get(GUARD) else in_gamescope(args)
+
+
+def shoot(args: argparse.Namespace) -> int:
+    import gi
+
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("WebKit2", "4.1")
+    from gi.repository import GLib, Gtk, WebKit2
+
+    width, height = args.width, args.height
     win = Gtk.Window(title="shot-webkit")
     win.set_default_size(width, height)
     content = WebKit2.UserContentManager()
@@ -158,8 +260,18 @@ def main() -> int:
         if event == WebKit2.LoadEvent.FINISHED:
             GLib.timeout_add(100, poll)
 
+    def on_failed(_view, _event, uri, error):
+        print(f"error: loading {uri}: {error.message}", file=sys.stderr)
+        finish(1)
+        return True
+
+    def on_timeout():
+        print("error: the page was not ready in 60 s", file=sys.stderr)
+        finish(1)
+
     view.connect("load-changed", on_load)
-    GLib.timeout_add_seconds(60, lambda: finish(1))
+    view.connect("load-failed", on_failed)
+    GLib.timeout_add_seconds(60, on_timeout)
     view.load_uri(quote(args.url, safe=":/?&=#%@+,;~!$'()*"))
     Gtk.main()
     return code["value"]

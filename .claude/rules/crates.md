@@ -16,7 +16,7 @@ How it works and why - `docs/architecture.md`; here - code rules of `crates/`.
 | `notes-assets` | the client `app/dist` for the server |
 | `notes` | the thin `notes` command: calls the parts from its own folder, no dependencies (architecture §1) |
 | `notes-typst` | the part that builds with Typst: every command except those of other parts |
-| `notes-app` | the window (Tauri 2) without Typst: the `notes://` scheme -> the core over a Unix socket; needs WebKitGTK |
+| `notes-app` | the window (Tauri 2) without Typst: the `notes://` scheme -> the core over a Unix socket; needs WebKitGTK; a launch by an agent or a check - only in a headless gamescope (`tools/app-smoke.sh`, `.claude/rules/tools.md`) |
 | `notes-store` | the light part without Typst, HTTP or async: data directory rules, vault names, accounts, sessions, the sync engine |
 | `notes-hub` | the storage server without Typst (`notes hub serve`, `notes users`): sign-in (`auth`, also mounted by `notes-server`), the sync API, the device's HTTP client (feature `client`) |
 | `notes-device` | the device side of sync: account, linked vaults, rounds, the background worker (uses `notes-hub`'s client, so not in the core) |
