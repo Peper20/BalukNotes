@@ -128,10 +128,10 @@ gamescope --backend headless -W <width> -H <height> -- <command>
   a visible window.
 - Inside, GTK must use the X server of gamescope: gamescope gives the command
   `DISPLAY` and removes `WAYLAND_DISPLAY`, so without `GDK_BACKEND=x11` GTK
-  falls back to the default socket `wayland-0` of the user's session (an
-  unprotected run drew at the user's scale 2, not at the scale 1 of
-  gamescope). Set `GDK_BACKEND=x11` and unset `WAYLAND_DISPLAY` for the
-  command; the scripts here do it and refuse to run outside gamescope.
+  falls back to the default socket `wayland-0` of the user's session. Set
+  `GDK_BACKEND=x11` and unset `WAYLAND_DISPLAY` for the command; the scripts
+  here do it, and refuse to run outside gamescope or when `DISPLAY` is the
+  user's own (the outer part passes it as `BALUK_ORIG_DISPLAY`).
 - Rootless Xwayland: a grab of the X root window is black, there is no
   screenshot of the whole screen. A page is captured by the engine itself
   (`shot-webkit.py`).

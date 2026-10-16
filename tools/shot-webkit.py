@@ -17,14 +17,18 @@ prints the value of a JS expression.
 The script starts itself again under `gamescope --backend headless -W <w> -H
 <h>` (the output is the size of --size) and passes the result on: gamescope
 exits with 0 even when its child fails, so the child writes its exit code to a
-temporary file, which the first process reads; a child that left no code
-(a crash, a gamescope failure) is an error. Output of gamescope and of the
+temporary file, which the first process reads. Output of gamescope and of the
 child is kept in the temporary directory and shown only on failure; the
---print value goes to stdout. Without gamescope (/usr/bin/gamescope) the script
-fails with exit code 2: it never opens a visible window.
+--print value goes to stdout. The first process passes its DISPLAY on as
+BALUK_ORIG_DISPLAY: the child refuses to run unless it is inside gamescope
+(GAMESCOPE_WAYLAND_DISPLAY) and its DISPLAY is set and differs from that one
+(an Xwayland that failed to start would leave the user's DISPLAY in place).
 
 Needs python `gi` with WebKit2 4.1 and Gtk 3 (webkit2gtk-4.1) and gamescope.
-Exit code 1 on a timeout or a JS error, 2 when it cannot start.
+Exit codes: 0 done; 1 the run failed (a timeout, a JS error, a page that does
+not load, a child that crashed, or gamescope ran but left no result); 2 it
+cannot start (no gamescope, or the refusal above). It never opens a visible
+window.
 """
 
 import argparse
@@ -40,6 +44,8 @@ from urllib.parse import quote
 
 # Set in the process that runs inside gamescope: the path of the directory where it leaves its results.
 GUARD = "SHOT_WEBKIT_GAMESCOPE"
+# Set for the process inside gamescope: the user's DISPLAY. Inside gamescope DISPLAY must be another one.
+ORIG_DISPLAY = "BALUK_ORIG_DISPLAY"
 # How long the whole run may take; the page itself has 60 s (see `shoot`).
 RUN_LIMIT = 120
 
@@ -92,7 +98,7 @@ def in_gamescope(args: argparse.Namespace) -> int:
         return 2
     with tempfile.TemporaryDirectory(prefix="shot-webkit-") as tmp:
         out = Path(tmp)
-        env = {**os.environ, GUARD: tmp}
+        env = {**os.environ, GUARD: tmp, ORIG_DISPLAY: os.environ.get("DISPLAY", "")}
         command = [
             gamescope, "--backend", "headless", "-W", str(args.width), "-H", str(args.height),
             "--", sys.executable, os.path.abspath(__file__), *sys.argv[1:],
@@ -128,22 +134,36 @@ def in_gamescope(args: argparse.Namespace) -> int:
         return code
 
 
+def guard_error() -> str | None:
+    """Why the part inside gamescope must not open a window, or None when it may."""
+    if "GAMESCOPE_WAYLAND_DISPLAY" not in os.environ:
+        return "not inside gamescope"
+    if ORIG_DISPLAY not in os.environ:
+        return f"{ORIG_DISPLAY} is not set"
+    display = os.environ.get("DISPLAY", "")
+    if not display or display == os.environ[ORIG_DISPLAY]:
+        return f"DISPLAY ({display or 'empty'}) is not the X server of gamescope"
+    return None
+
+
 def run_child(args: argparse.Namespace) -> int:
     """The part inside gamescope: its stdout and stderr and the exit code go to files of the first process."""
     out = Path(os.environ[GUARD])
-    if "GAMESCOPE_WAYLAND_DISPLAY" not in os.environ:
-        print("error: not inside gamescope, refusing to open a window", file=sys.stderr)
-        return 2
     sys.stdout.flush()
     for name, fd in (("stdout", 1), ("stderr", 2)):
         os.dup2(os.open(out / name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), fd)
-    # The X server of gamescope only: never the user's Wayland session.
-    os.environ.pop("WAYLAND_DISPLAY", None)
-    os.environ["GDK_BACKEND"] = "x11"
-    code = 1
+    code = 2  # stays 2 for a refusal ("cannot start"); the code is written whatever happens
     try:
-        code = shoot(args)
-    except BaseException as err:  # the code must be written whatever happens
+        refusal = guard_error()
+        if refusal:
+            print(f"error: {refusal}, refusing to open a window", file=sys.stderr)
+        else:
+            # The X server of gamescope only: never the user's Wayland session.
+            os.environ.pop("WAYLAND_DISPLAY", None)
+            os.environ["GDK_BACKEND"] = "x11"
+            code = shoot(args)
+    except BaseException as err:
+        code = 1
         print(f"error: {err!r}", file=sys.stderr)
     finally:
         sys.stdout.flush()

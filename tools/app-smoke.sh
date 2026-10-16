@@ -21,14 +21,28 @@
 # gamescope exits with 0 whatever its child does, so the inner script writes
 # the result to a file, which this one checks: the app quit with code 0 on
 # SIGTERM, created its window, started its core and the client's script ran and
-# loaded the notes of the vault from the core (the proxy logs the requests of the page). Without
-# gamescope the script fails (exit 2): it never opens a visible window.
+# loaded the notes of the vault from the core (the proxy logs the requests of the page).
+# Exit codes: 0 the smoke passed; 1 it failed; 2 it cannot run (no gamescope,
+# or the inside part refuses to open a window). It never opens a visible window.
 set -euo pipefail
 
 if [[ -n ${APP_SMOKE_DIR:-} ]]; then
   # The inner part: inside gamescope. Everything it needs is in the
   # environment; the result goes to $APP_SMOKE_DIR/status.
   tmp=$APP_SMOKE_DIR
+  # Checked before anything starts: a refusal is written to the status file
+  # (the outer part reports it), the window is never opened.
+  refuse() {
+    echo "error: $1, refusing to open a window" >&2
+    echo refused >"$tmp/status"
+    exit 2
+  }
+  [[ -n ${GAMESCOPE_WAYLAND_DISPLAY:-} ]] || refuse "not inside gamescope"
+  # BALUK_ORIG_DISPLAY is the user's DISPLAY, passed by the outer part. If the
+  # Xwayland of gamescope failed to start, DISPLAY is still the user's: refuse.
+  [[ -v BALUK_ORIG_DISPLAY ]] || refuse "BALUK_ORIG_DISPLAY is not set"
+  [[ -n ${DISPLAY:-} && $DISPLAY != "$BALUK_ORIG_DISPLAY" ]] \
+    || refuse "DISPLAY (${DISPLAY:-empty}) is not the X server of gamescope"
   unset WAYLAND_DISPLAY   # only the X server of gamescope, never the user's session
   export GDK_BACKEND=x11
   # gamescope itself keeps the real XDG_RUNTIME_DIR (its sockets); only the app is isolated.
@@ -88,18 +102,23 @@ mkdir -p "$tmp/run" "$tmp/data" "$tmp/config" "$tmp/cache" "$tmp/notes-data"
 chmod 700 "$tmp/run"
 cp -r tests/vault "$tmp/vault"
 
-APP_SMOKE_DIR=$tmp APP_SMOKE_BIN=$bin APP_SMOKE_SECONDS=$seconds \
+APP_SMOKE_DIR=$tmp APP_SMOKE_BIN=$bin APP_SMOKE_SECONDS=$seconds BALUK_ORIG_DISPLAY=${DISPLAY-} \
   timeout 120 nice -n 2 gamescope --backend headless -W 1300 -H 900 -- "$PWD/tools/app-smoke.sh" \
   >"$tmp/gamescope.log" 2>&1 || true
 
 fail() {
   echo "app smoke FAILED: $1" >&2
   [[ -f $tmp/app.log ]] && sed 's/^/  app: /' "$tmp/app.log" | tail -n 30 >&2
-  [[ -f $tmp/status ]] || sed 's/^/  gamescope: /' "$tmp/gamescope.log" | tail -n 20 >&2
+  [[ -f $tmp/app.log && -f $tmp/status ]] || sed 's/^/  gamescope: /' "$tmp/gamescope.log" | tail -n 20 >&2
   exit 1
 }
 [[ -f $tmp/status ]] || fail "no result: gamescope did not run the script"
 status=$(<"$tmp/status")
+if [[ $status == refused ]]; then
+  sed 's/^/  gamescope: /' "$tmp/gamescope.log" | tail -n 20 >&2
+  echo "app smoke refused: the window runs only inside a headless gamescope (exit 2)" >&2
+  exit 2
+fi
 [[ $status == 0 ]] || fail "the app did not quit cleanly (exit status: $status)"
 log=$tmp/app.log
 grep -q "core started" "$log" || fail "the app did not start its core"
