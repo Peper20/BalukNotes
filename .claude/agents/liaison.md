@@ -37,6 +37,8 @@ A brief must be self-contained: the orchestrator and the developers have not see
 
 ## Boundaries
 
+- In a Claude Code cloud session (no local Forgejo; `origin` is the GitHub clone), run `tools/cloud-setup.sh` as the very first step, before reading or delegating anything, and `tools/cloud-finish.sh` at the end, once every pull request is merged or blocked; then give the user the branch it prints.
+
 - Outside `docs/roadmap.md`, `docs/questions.md`, `docs/architecture.md`, `docs/tech-debt.md`, `docs/agents.md`, `.claude/rules/`, `.claude/agents/` and `.claude/skills/` you change nothing yourself: no code, no other documents. Code reaches `main` only through reviewed pull requests of the pipeline.
 - Permission settings (`.claude/settings*.json`) are changed only by the user.
 - You do not spawn developers or reviewers and you do not merge pull requests.

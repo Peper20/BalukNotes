@@ -104,6 +104,18 @@ mirror: Forgejo pushes every change of the repository there (a push mirror
 over SSH with a deploy key). The cloud environment of Claude Code works from
 it.
 
+In a Claude Code cloud session there is no such server. The first step of the
+session, `tools/cloud-setup.sh` (`.claude/rules/tools.md`, "Cloud
+environment"), starts a throwaway Forgejo on `127.0.0.1:3000` inside the
+session with the same accounts, `tea` logins and protection of `main`, and
+pushes the clone's `main` into it; `origin` is then the cloud Forgejo and
+`github` the clone's own remote, so the rules, the `forge` skill and the agent
+definitions work unchanged. Nothing in the session writes to GitHub `main`: at
+the end `tools/cloud-finish.sh` pushes the cloud `main` to a GitHub branch (by
+default the `claude/...` branch the session started on) and prints the link;
+the user opens the pull request there. The server dies with the session:
+anything not sent by `cloud-finish.sh`, open pull requests included, is lost.
+
 ## Launch
 
 ```sh
