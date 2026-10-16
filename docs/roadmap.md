@@ -41,7 +41,7 @@ line (how it works - `docs/architecture.md`), open questions -
 - [x] A compiler over the vault: virtual `/_baluk/`, embedded fonts, packages
       from the cache or network; note and book
 - [x] A chain of HTML passes; figures - one SVG for all themes, shared glyphs,
-      rounding ("Матан" 3.7 -> 1.7 MB, 0.2 MB over the network)
+      rounding
 - [x] Memory and disk cache, warm-up, parallel builds, a watcher
 - [x] Link index, backlinks, graph, full-text search
 - [x] `notes` from any folder: `serve`, `new`, `list`, `tags`, `check`, `pdf`, `png`,

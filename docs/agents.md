@@ -58,8 +58,12 @@ waits. Requirements to both documents - `.claude/rules/docs.md`.
   (`tools/lib/worktree-target.sh`): a build from scratch is ~8 min and tens of
   GB. The `orchestrator` removes it between requests when it is over 30 GB.
   The main checkout keeps its own `target/`.
-- e2e listens on fixed ports: parallel runs take turns on a lock. The test
-  server of an agent takes its own port (`PORT=... tools/test-env.sh`).
+- The heavy steps of all runs (`tools/check.sh`, the builds in
+  `tools/install.sh` and `tools/test-env.sh`) take turns on one lock,
+  `~/.cache/baluk-notes/heavy.lock`, and each run is capped at `CHECK_JOBS`
+  CPUs (default 9, `tools/lib/cpu-cap.sh`). Measurements are run the same
+  way: `nice -n 2`, within the cap. The test server of an agent takes its own
+  port (`PORT=... tools/test-env.sh`).
 - Agents do not touch the user's notes, the installed `notes` service beyond
   `tools/install.sh`, or the VPS: `tools/deploy-hub.sh` runs only on the
   user's word.
