@@ -192,12 +192,75 @@ gamescope --backend headless -W <width> -H <height> -- <command>
 
 ## Cloud environment
 
-- Chromium is the wrapper `/usr/local/bin/chromium` with `--no-sandbox`
-  (installed by the environment setup script); fonts are embedded;
-  `packages.typst.org` is allowed (CeTZ). There is no user vault - work on
-  `tests/vault`.
-- The disk is small: build with `CARGO_PROFILE_DEV_DEBUG=line-tables-only`
-  (full debug info is tens of GB); out of space - `cargo clean`.
+A Claude Code cloud session clones the GitHub mirror, runs as root, has a
+small disk and no Forgejo. The pipeline works there as it does locally:
+`tools/cloud-setup.sh` starts a throwaway Forgejo inside the session with the
+same accounts, `tea` logins and protection of `main` (`docs/agents.md`,
+"Server"), so the rules, skills and agent definitions stay as they are;
+`tools/cloud-finish.sh` sends the result to GitHub.
+
+**Session start** (the liaison, before anything else): `tools/cloud-setup.sh`.
+It prints a summary; from then on `origin` is the cloud Forgejo and `github`
+is the clone's own remote, and `git`, `tea` and the `forge` skill work as
+locally. The session may be resumed or restarted with the server gone:
+run the script again. At the end: `tools/cloud-finish.sh`, and give the user
+the branch it prints.
+
+**Environment setup script** (Bash, root, before Claude Code starts, cached in
+a snapshot): only what needs root or gains from the cache. Today it installs
+the wrapper `/usr/local/bin/chromium` with `--no-sandbox` (from
+`/opt/pw-browsers`). The network policy allows `packages.typst.org` (CeTZ)
+and, for `tools/cloud-setup.sh`, `codeberg.org` (Forgejo) and `dl.gitea.com`
+(`tea`), both without redirects. If the script sees the checkout,
+`tools/cloud-setup.sh --install` there caches the two downloads (~150 MB) in
+the snapshot; otherwise the first run downloads them.
+
+**`tools/cloud-setup.sh`** (idempotent; needs `git`, `curl`, `sha256sum`,
+`awk`; no `jq`, here or in the checks; `--install` only downloads):
+
+- Installs the pinned releases (versions and sha256 in the script; a mismatch
+  stops it): Forgejo into `$FORGEJO_HOME/bin`, `tea` into `/usr/local/bin`
+  (root) or `~/.local/bin` (`FORGEJO_BIN_DIR`) unless a `tea` is present.
+- Initialises Forgejo on `127.0.0.1:$FORGEJO_PORT` (default 3000) with SQLite,
+  registration disabled, no email, no SSH, data in `$FORGEJO_HOME` (default
+  `~/.cache/baluk-notes/forgejo`; random passwords in its `credentials`, 0600).
+  Forgejo refuses to run as root; the script sets its override for this
+  throwaway server.
+- Creates `ibaluk` (admin), `agent-dev`, `agent-reviewer`, the `tea` logins
+  `owner`, `dev`, `reviewer`, the repository `ibaluk/baluk-notes` (squash
+  merges only), pushes the clone's `main` into it (a shallow clone is
+  completed first) and protects `main` as the local server does.
+- Remotes: `origin` is the cloud Forgejo, `github` is the clone's former
+  `origin`. git signs in as `ibaluk` through a helper that reads `credentials`,
+  and does not use an environment proxy for the loopback address.
+- Refuses, changing nothing, when the port is taken by another program, when
+  `$FORGEJO_HOME` is not its own, when `origin` is already a Forgejo
+  repository or `github` exists, or when the `tea` config has `owner`, `dev`
+  or `reviewer` that the script did not make for this server: it never
+  touches the user's own Forgejo. On the user's machine `origin` and the
+  logins have exactly the URL of the default port, so a rerun is accepted
+  only with the proof in `$FORGEJO_HOME` (`remotes-done`, `tea-logins`)
+  that the script itself arranged them. `--stop` stops its server.
+- Nothing is mirrored to GitHub, and nothing writes to GitHub `main`.
+
+**`tools/cloud-finish.sh [--branch NAME]`**: fetches `main` of the cloud
+Forgejo and pushes it to a GitHub branch: `--branch`, else `$CLOUD_BRANCH`,
+else the `claude/...` branch the session started on (recorded by the setup),
+else `cloud/<date>`. It refuses `main`, never forces, reports a rejected push
+(the branch has commits the session lacks) with the ways out, warns about
+pull requests still open on the server (they are not sent) and prints the
+link for the user to open a pull request from.
+
+Working in the session:
+
+- There is no user vault - work on `tests/vault`. Fonts are embedded.
+- The disk is small (full debug info is tens of GB): `tools/*.sh` set
+  `CARGO_PROFILE_DEV_DEBUG=line-tables-only` themselves (`lib/build-env.sh`,
+  see "Checks"). That a session counts as a cloud one rests on
+  `CLAUDE_CODE_REMOTE=true`, which is an unconfirmed assumption; the explicit
+  switch is `BALUK_CLOUD=1`, and `tools/cloud-setup.sh` prints in its summary
+  which of them it sees and, if neither, the line to export. A `cargo` by hand
+  needs the variable itself; out of space - `cargo clean`.
 - Time: a Rust build from scratch ~8 min, `cargo test` ~1 min, e2e ~1.5 min.
 - Not for the cloud (needs the user or their machine): the Tauri and Android
   apps, authorization, replacing font files, updating Typst.
