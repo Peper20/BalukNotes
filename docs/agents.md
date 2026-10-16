@@ -107,11 +107,13 @@ it.
 ## Launch
 
 ```sh
-claude --agent liaison
+claude
 ```
 
-From the project root. A plain `claude` session is an assistant outside the
-pipeline: it follows the project rules and does not run the roles.
+From the project root. `"agent": "liaison"` in `.claude/settings.json` makes the
+main session the `liaison`, locally and in a cloud session (the cloud session
+reads the file from the clone; the model of a cloud session is chosen in its
+interface, not by the agent definition). `claude --agent <name>` overrides it.
 
 ## Known limits
 
