@@ -1,7 +1,7 @@
 # Tech debt
 
 What is postponed or simplified: **what** - why so - the risk - how to close
-it. Extended at the end of every iteration, closed items are deleted.
+it. The format and rules - `.claude/rules/docs.md`.
 
 ## Rendering
 
@@ -22,9 +22,9 @@ it. Extended at the end of every iteration, closed items are deleted.
   release, almost all of it CeTZ figures). After a restart - the disk cache;
   after a chapter edit the Typst memo provides unchanged figures (0.05-0.17 s
   instead of 2.6-6.8 s, E2). Slow remains an edit while the server was not
-  running, and after 10 builds of other notes (`comemo::evict(10)` in
-  `world.rs`). How to close: evict the memo more gently (by memory, keep the
-  open note longer), the number of builds as a device setting.
+  running, and after 10 builds of other notes (the device setting
+  `device.memo`, default 10, 3 on a phone). How to close: evict the memo more
+  gently (by memory, keep the open note longer).
 - **Book chapters are cut from the HTML text** (`book.rs`): there is no tree
   after figure processing. The code relies on `typst-html` closing tags and
   escaping `<`; anything unclear - the whole book.
@@ -62,10 +62,6 @@ it. Extended at the end of every iteration, closed items are deleted.
 - **The typst-html tree changes after introspection** (typst#7951): links
   inside moved figure variants resolve against the base document. There are no
   links inside figures yet.
-- **Passes are three lists** (`passes::TREE`, `passes::TEXT`,
-  `finish::FINISH`): dependencies between them are not checked (there are
-  none now); every tree pass is a separate traversal (fractions of a
-  millisecond).
 - **Shared frame parts are only whole SVG subtrees** longer than 96 bytes,
   seen twice in a group. Over the network there is almost no gain (gzip
   compressed the repeats), the gain is in memory and browser parsing.
@@ -130,7 +126,7 @@ it. Extended at the end of every iteration, closed items are deleted.
   style); the font role (formulas or text) comes from the theme lists, not
   from the file. How to close: not needed while Chrome rejects the CFF of New
   Computer Modern; check on Typst updates.
-- **Layout fonts are embedded whole** (4.6 MB) from Debian packages (small
+- **Layout fonts are embedded whole** (4.7 MB) from Debian packages (small
   differences from the JetBrains release are possible); embedded families
   cannot be replaced by system ones (only `--font-path`). How to close:
   official releases and new snapshots - with the user.
@@ -139,16 +135,13 @@ it. Extended at the end of every iteration, closed items are deleted.
 
 - **The rendering code tag is computed from the core sources** (`build.rs`):
   an edit of any `src/` file outside `AFTER_CACHE` (even a comment) means a
-  full warm-up. The fonts in the tag are families and the number of styles,
-  not the content.
+  full warm-up. The embedded fonts are in the tag by content, the system ones
+  only by family and number of styles (`Fonts::fingerprint`).
 - **The embedded library is not part of note versions** (its files have no
   path on disk): its hash is in the cache tag, a new library - everything
   anew.
 - **Only `notes serve` cleans the disk cache** (when the warm-up starts); new
   limits apply from the next cleaning.
-- **Device settings live in the same `settings.json`**, the `device` flag
-  tells them apart: sync (M4) must take it into account. Phone defaults are
-  guessed (roadmap).
 - **Changing figure settings reads the raw rendering from disk** ("Матан" -
   ~3 MB of JSON, tens of ms). Debug and release builds (and the installed
   `notes`) share the data directory and overwrite each other's cache - an
@@ -197,15 +190,12 @@ it. Extended at the end of every iteration, closed items are deleted.
 - **PDF and PNG on every request without a cache** ("Матан" ~2 s): a plain
   `typst compile` cannot build the vault. `notes png` compiles the whole note
   even for one page (`--pages`), and the pages are rendered one after another.
-- HTML is sanitized (see the architecture): dangerous tags and attributes are
-  removed, the CSP forbids inline/eval scripts. Left: refine the allowlist as
-  blocks are added to the library, make sure fonts and themes do not need
-  `style-src` without `unsafe-inline`.
-- `<style>` and `style=` in a note can restyle the whole app UI (spoofing:
-  fake dialogs, covering buttons): sanitization cuts XSS but does not limit
-  the style scope to the note. How to close: note style isolation
-  (scope/shadow/rewriting selectors).
-- DOM clobbering via `id`/`name`: a note can set names that conflict with
+- **`<style>` and `style=` in a note can restyle the whole app UI**
+  (spoofing: fake dialogs, covering buttons): the sanitizer cuts XSS but does
+  not limit the style scope to the note, and the CSP has to allow
+  `style-src 'unsafe-inline'`. How to close: note style isolation
+  (scope/shadow/rewriting selectors), then drop `unsafe-inline`.
+- **DOM clobbering via `id`/`name`**: a note can set names that conflict with
   global document properties. How to close: the client must not rely on
   `window.<id>` and `document.<name>`, only explicit
   `querySelector`/`getElementById` in its container.
@@ -229,9 +219,8 @@ it. Extended at the end of every iteration, closed items are deleted.
   What is skipped is built on request.
 - **Deleting goes only to the system trash**: there is none on Android and in
   WASM (an error); restoring is only from the Dolphin trash; the folder of the
-  last deleted note stays (empty - in the tree). With sync (M4) a deletion
-  must become a versioned change, otherwise the note comes back from the
-  server. How to close: a vault trash `.trash/`.
+  last deleted note stays (empty - in the tree). How to close: a vault trash
+  `.trash/`.
 
 ## Sign-in and sync
 
@@ -264,17 +253,9 @@ it. Extended at the end of every iteration, closed items are deleted.
   over 20 % of the vault, or all of it) are constants, not a device setting.
   A renamed or moved large folder is deletions plus uploads and asks for a
   confirmation (no rename detection by content). A held round stops the whole
-  vault, not just the deletions: the other uploads and the server's changes
-  wait for `confirm` or `restore`, and the worker looks again every 30 s. A
-  failed `confirm` round (no network) forgets the held set; the next round
-  holds it again. For files gone from the server there is no `restore` (the
-  way back is unlink and link, which uploads the device's files); the
-  guard does not see a file emptied inside, only deleted ones.
-- **Sign-in attempts count even when they succeed**: the hub's throttle adds
-  every login request to the "recent attempts" window and removes it only for
-  that login, so about 20 sign-ins within a minute slow down everyone (tests
-  of `notes-device` live within this limit and sign in with a ready session
-  where they can). How to close: take a successful attempt out of the window.
+  vault, not just the deletions. A failed `confirm` round (no network)
+  forgets the held set; the next round holds it again. The guard does not see
+  a file emptied inside, only deleted ones.
 - **Rename or delete of a linked vault in the app unlinks it**: the server
   copy stays under the old name, there is no rename on the server and no
   re-link. Unlinking from the console while `notes serve` runs - its worker
@@ -283,8 +264,8 @@ it. Extended at the end of every iteration, closed items are deleted.
   line recognised by its start in `lib/sync.ts` (`roundError`; a new error
   text there needs a rule, otherwise "Не удалось синхронизировать" and the
   line under it), no progress of a large download, conflicts are the file
-  names of the last round; the state is read while the settings window is open. The "plain
-  http" warning repeats the core's rule in `lib/sync.ts`.
+  names of the last round; the state is read while the settings window is
+  open. The "plain http" warning repeats the core's rule in `lib/sync.ts`.
 - **Extra sync rounds**: every pulled file and every server echo of an own
   upload wakes the worker for one more cheap round. `.baluk/settings.json`
   (a hidden path for the watcher) goes with the next round, not at once.
@@ -298,9 +279,7 @@ it. Extended at the end of every iteration, closed items are deleted.
 - **The core layout takes ~60 ms per 1000 nodes** (release, first time;
   repeated - cache), measurements - `docs/research/E6.md`. The area per node is
   a constant for an average label: a graph of long labels is cramped
-  (spreading - no more than 80 passes), of short ones - roomy. Folders cluster
-  because nodes are ordered by path: the initial layout goes in order, a
-  "toward own folder" force is not needed.
+  (spreading - no more than 80 passes), of short ones - roomy.
 - **Client physics are springs to the core layout, not core forces**:
   otherwise an untouched graph would drift. A dragged node pushes away only
   those it ran into. The grid (from 200 nodes) has a cell sized by the largest
@@ -311,10 +290,6 @@ it. Extended at the end of every iteration, closed items are deleted.
 - **Label width is by the number of characters**: the layout is the same
   everywhere, gaps at wide letters are inexact; on a phone labels may overlap;
   the Typst picture of a large graph makes labels tiny.
-- **Tapping a node on a phone opens the note at once**, neighbors highlight
-  only on hover. The user decides (M6).
-- **Without motion (`prefers-reduced-motion`)** neighbors do not follow,
-  transitions are instant.
 - **Books as chapters only on `/graph`**: the home page and `#vault-graph` in
   a note have no checkbox (user's decision: not needed yet). A chapter vertex
   is `<book>/.<number>`: insert a chapter - the numbers of the following ones
@@ -333,7 +308,7 @@ it. Extended at the end of every iteration, closed items are deleted.
   occurrences, but the pick is not the best one by score (no full
   backtracking).
 - **"Нет связи" depends on a server answer** (`api.onReach`): an error
-  response (502 of a reverse proxy, M4) counts as connected. The probe request
+  response (502 of a reverse proxy) counts as connected. The probe request
   is `GET /api/vaults` every 3 s while disconnected.
 - **Only the open vault can be renamed and deleted**: another one - open it
   first. Tabs and reading positions move only in this browser; the disk cache
@@ -341,8 +316,6 @@ it. Extended at the end of every iteration, closed items are deleted.
   former cache is deleted as foreign (`device.foreign_days`).
 - **Key hints hide on `(pointer: coarse)`**: a tablet with a keyboard does not
   get them either.
-- **On a phone tabs only scroll** - no swipe and no list. For Android (M6) -
-  rethink.
 - **The first-frame theme is browser memory** (`k-theme@<vault>`): a new
   browser or a vault with its own theme opened for the first time - the first
   frame is in the last shown (or system) theme, then it switches.
@@ -356,10 +329,6 @@ it. Extended at the end of every iteration, closed items are deleted.
   by one, a failure in the middle leaves part of the edits. Only literal
   `#see("path")` are rewritten: computed paths and `#import`/`#include` of
   other files by an absolute path are not.
-- **Tabs and reading positions of the previous client version** (keys without
-  a vault) are not carried over.
-- **Another vault - a page reload** (in this window) or a new window (tab) -
-  the setting `vaults.open`.
 
 ## Vault and tools
 
@@ -390,8 +359,6 @@ it. Extended at the end of every iteration, closed items are deleted.
 - **`/_vault/title/...` without a watcher walks the vault** for every title
   (`notes check`: 10 links - 10 `stat` walks, tens of ms). How to close: a
   walk cache for the duration of a command.
-- **User vaults are outside git and have no copies**: losing the directory is
-  losing the notes. How to close: a git repository for the vault or sync (M4).
 - **The e2e warm-up adds 20 s to a run** (`e2e/global-setup.ts`) for the sake
   of short waits; `01-switch` checks a repeated long build, not the first.
 - **`tools/check.sh` is sequential** (~3.5 min with e2e): `cargo test` ~35 s
@@ -430,10 +397,10 @@ it. Extended at the end of every iteration, closed items are deleted.
   activation token of the launcher (`XDG_ACTIVATION_TOKEN`): a launch from a
   terminal without it only asks for attention. Maximized/fullscreen is
   remembered per window label (`main`, `w2`...).
-- **WebKitGTK in the window: memory and a crash on exit.** For the user, after
-  11 minutes of work the window processes reached 1.7 GB (walking all "Демо"
-  notes - WebKit ~550 MB without growth, 40 drags of a graph node - without
-  growth). `WebKitWebProcess`, exiting by itself, crashed in `exit()`: the
+- **WebKitGTK in the window: memory and a crash on exit.** The window
+  processes once reached 1.7 GB in 11 minutes of the user's work; walking all
+  "Демо" notes (WebKit ~550 MB) and dragging a graph node 40 times did not
+  reproduce growth. `WebKitWebProcess`, exiting by itself, crashed in `exit()`: the
   destructor of `libEGL.so.1` (libglvnd; both Mesa and NVIDIA are loaded)
   tears down EGL while the WebKit render thread is still in `libEGL_mesa`
   (WebKitGTK 2.52.6) - the system writes the dump for about a minute, the

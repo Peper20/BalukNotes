@@ -11,7 +11,6 @@ have. Platforms: browser, desktop, Android (iOS - if there is time left).
 3. Interactivity: a 2D/3D graphing calculator, animations, sliders.
 4. A server online - storage and sync (HTTPS, sign-in); the core on devices:
    desktop and Android (Tauri), browser (WASM).
-5. Some day: a built-in editor, version history, backups, encryption.
 
 Notes are written mostly by Claude Code, the app **shows** them: files on disk
 are the source of truth.
@@ -44,14 +43,13 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   - Browser on a computer - `notes serve` (self-hosting, checks; in the
     background - a systemd user service, `notes service`, the CLI writes the
     unit, no root). The window does not need either.
-  - Android - the same window, the core inside the app (there is no console):
-    the scheme is served by the same `Router` in-process
-    (`docs/research/E7.md`).
+  - Android (not built yet, roadmap M6) - the same window, the core inside
+    the app (there is no console): the scheme is served by the same `Router`
+    in-process (`docs/research/E7.md`).
   - There is no separate API over Tauri IPC. A scheme response is only whole,
     so events use long polling, not SSE.
-  - A browser without installation - the core in WASM (a Web Worker), the API
-    transport is messages to the worker. The hardest parts (Typst speed and
-    memory on a phone, fonts and packages in the browser) - research E4 first.
+  - A browser without installation (not built yet, roadmap M7) - the core in
+    WASM (a Web Worker), the API transport is messages to the worker.
 - **The server online** - vault files, their versions, change events,
   sessions; without Typst.
 - **Self-hosted and web version** (user's decision): `notes serve` with Typst
@@ -78,8 +76,8 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   vault (settings - shared and per vault, §6). One browser tab - one vault (as
   an Obsidian window): another opens by navigating with a reload, and is
   chosen before the state loads, so tabs and reading positions in
-  `localStorage` are separate for each. An address without a vault (`/`, the
-  former `/n/...`) - the last one opened in this browser, otherwise the choice
+  `localStorage` are separate for each. An address without a vault (`/`,
+  `/n/...`) - the last one opened in this browser, otherwise the choice
   screen (`VaultPicker`: list and creation). The core sets `#see` links
   without a vault (`/n/...`, one HTML for all addresses), the client adds
   `/v/<vault>`. The server opens a vault on the first request (each has its
@@ -124,7 +122,7 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   `trait Storage` (`DirStorage`, `MemStorage` in tests): replacing it with a
   database touches one place.
 - **There are several vaults**, as in Obsidian: the name is the folder name
-  in `vaults/` (`notes-core::vaults::VaultName`: no `/`, characters forbidden
+  in `vaults/` (`notes_store::names::VaultName`: no `/`, characters forbidden
   on Windows, or internal `_`/`.`). Each has its own notes, links, graph,
   cache, tabs and reading positions. **There is no default vault** (user's
   decision): even the first one is created and named by the user (in the app
@@ -247,9 +245,9 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   differ only in colors are merged into one SVG with `--kfN` variables per
   theme (the page `<style>`, the tag `data-k-figs`); label glyphs - one shared
   `<svg class="k-glyphs">`; coordinates are rounded (the setting "Рисунки ->
-  точность", 0.01 pt by default) without accumulating error. Not merged
-  (different geometry, gradients) - the variants stay, CSS shows the right
-  one. "Матан": 3.7 MB -> 1.66 MB, 0.21 MB over the network with brotli.
+  Точность координат", 0.01 pt by default) without accumulating error. Not
+  merged (different geometry, gradients) - the variants stay, CSS shows the
+  right one. "Матан": 3.7 MB -> 1.66 MB, 0.21 MB over the network with brotli.
 - Figure processing depends on settings, so the raw rendering is cached, and
   memory holds one processed copy: changing the precision does not recompile
   the note, settings are part of the page version.
@@ -274,7 +272,6 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   client (`Frames.svelte`) adds a slider, buttons and playback and switches
   `data-current` without redrawing. Typst computes everything - the library
   style is kept. In PDF - the default frame or a row (`pdf: (1, 4, 8)`).
-- Later (some day): algorithm animation and running code.
 
 ### 6. Settings - in the client, the schema - in the core
 
@@ -317,9 +314,9 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   (memory + disk `cache.rs`) -> `pages` (a page on request: one build per
   note, an error over the previous rendering) -> `warm` (warm-up) -> `notes`
   (the facade for the server and CLI). Each layer is tested without Typst.
-- The memory cache is pages in an LRU limited by bytes (64 MB) plus small
-  records for every note (version, files, errors, build time): the version and
-  "is it built" without reading pages.
+- The memory cache is pages in an LRU limited by bytes (a device setting, 64
+  MB by default) plus small records for every note (version, files, errors,
+  build time): the version and "is it built" without reading pages.
 - **The disk cache** (`<data>/cache/pages/<vault>/`, `notes-core::cache`): a
   note record (version and files, errors, build time) and the raw rendering
   in a separate file. Valid with the same rendering code (the tag: format
@@ -371,8 +368,8 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   shown over the last successful version.
 - **Warm-up** (`notes-core::warm`): all notes are built ahead of time into the
   disk cache (not kept in memory, figures are processed on opening) - first
-  those hinted by the client (`POST /api/warm`: tabs, recent), then never
-  built ones (small first), then the rest by the time of the last build, new
+  those hinted by the client (`POST /api/vaults/<vault>/warm`: tabs, recent),
+  then never built ones (small first), then the rest by the time of the last build, new
   books last; what is built (also with an error) is skipped; a user request
   goes out of turn. The mode is a device setting (all, only hinted, off).
   After a large pass Typst memory is freed; also, after a series of builds and
@@ -431,33 +428,30 @@ How to put it on a VPS - `docs/server.md`.
   everything before it executes anything; if the plan deletes more than 10
   files and more than 20 % of the vault - or the whole vault, when it has at
   least two files - it stops with `DeletionsHeld` having uploaded, downloaded
-  and deleted nothing (constants `MIN_FILES`, `MIN_SHARE_PERCENT`). Both
-  directions are checked: files gone from the device (would be deleted on the
-  server) and files gone from the server (would be removed from the device;
-  they would go to `sync/removed/`). The device keeps the held set in
-  `status/<vault>.json` (`held`: side, count, total, a fingerprint of the
-  paths). `confirm` runs a round that lets exactly that set through: if
-  more or other files are gone by then, the round is held again. `restore`
-  turns the device's deletions into downloads (the files come back from the
-  server); for the other direction the way back is to unlink and link the
-  vault again, which uploads the device's files. The worker shows the state
-  `held`, logs it once per set, looks again every 30 s (a `confirm` from the
-  console shows up then) and has no backoff; while it waits, the server's
-  changes are not applied. `notes sync confirm | restore --vault`; in the app
-  settings the vault row says how many files of how many and has the buttons.
+  and deleted nothing. Both directions are checked: files gone from the
+  device (would be deleted on the server) and files gone from the server
+  (would be removed from the device, into `sync/removed/`). The device keeps
+  the held set (side, count, a fingerprint of the paths) in
+  `status/<vault>.json`. `confirm` runs a round that lets exactly that set
+  through: if more or other files are gone by then, the round is held again. `restore` turns the device's deletions into downloads;
+  for the other direction the way back is to unlink and link the vault again,
+  which uploads the device's files. The worker shows the state `held`, looks
+  again every 30 s (a `confirm` from the console shows up then) and has no
+  backoff; while it waits, the server's changes are not applied. `notes sync
+  confirm | restore --vault`; the app settings show the count and have the
+  buttons.
 - **The device side** (`crates/notes-device`; the core stays free of HTTP for
   WASM): `<data>/sync/` holds the account (server, login, session token), the
   state of every linked vault, the last result and a lock per vault. `notes
-  sync login | link | now | status | confirm | restore | unlink | logout`; `notes serve` (so the
-  window's core too) runs a worker per linked vault: a round at start, 2 s
-  after a local change (the file watcher), on a server change (long polling
-  `changes?after=&wait=`), a retry with a growing pause when the server is
-  unreachable. Pulled files are ordinary file changes: open notes refresh by
-  themselves (§8). The client gets the state and the actions at
-  `/api/device/sync...`.
+  sync login | link | now | status | confirm | restore | unlink | logout`;
+  `notes serve` (so the window's core too) runs a worker per linked vault: a
+  round at start, 2 s after a local change (the file watcher), on a server
+  change (long polling `changes?after=&wait=`), a retry with a growing pause
+  when the server is unreachable. Pulled files are ordinary file changes:
+  open notes refresh by themselves (§8). The client gets the state and the
+  actions at `/api/device/sync...`.
 - **A vault from the server is untrusted**: note HTML is sanitized, the client
   sets a strict CSP. See the section below.
-- Reading the history, backups - later. Encryption - far away.
 
 ### 10. Fonts
 
