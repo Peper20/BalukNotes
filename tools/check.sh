@@ -38,20 +38,10 @@ source tools/lib/worktree-target.sh
 # CHECK_JOBS: the CPU cap of the run, and the lock shared with other runs.
 source tools/lib/cpu-cap.sh
 
-# target/ grows without limit: cargo does not remove old variants of our crates
-# (a new one appears after a Cargo.toml edit, a cache tag, another worktree path).
-# Over TARGET_LIMIT_GB (30) - cargo clean first. Someone else's CARGO_TARGET_DIR
-# is left alone: others (agents in worktrees) may be building in it right now.
-limit_target() {
-  local limit=${TARGET_LIMIT_GB:-30} size
-  [[ -z ${CARGO_TARGET_DIR:-} && -d target ]] || return 0
-  size=$(du -s --block-size=1G target | cut -f1)
-  if (( size > limit )); then
-    echo "target/ is $size GB, over the limit of $limit GB: cargo clean"
-    cargo clean
-  fi
-}
-limit_target
+# The shared build dir grows without limit: pruning and the size limit
+# (tools/lib/target-limit.sh) run first, under the lock of heavy work.
+source tools/lib/target-limit.sh
+heavy limit_target
 
 logs=tests/.data/check
 rm -rf "$logs"
@@ -119,7 +109,7 @@ api_types() {
 
 # Copies of foreign crates with patches (.claude/rules/vendor.md) - their own tests.
 vendor_tests() {
-  CARGO_TARGET_DIR=target/vendor cargo test -q --manifest-path vendor/comemo/Cargo.toml --features testing || return 1
+  CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$PWD/target}/vendor cargo test -q --manifest-path vendor/comemo/Cargo.toml --features testing || return 1
   rm -f vendor/comemo/Cargo.lock
 }
 

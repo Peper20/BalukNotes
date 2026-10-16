@@ -50,13 +50,33 @@ export VITEST_MAX_WORKERS=$(below 1)
 # server left running) does not hold it either.
 HEAVY_LOCK=${HEAVY_LOCK:-${XDG_CACHE_HOME:-$HOME/.cache}/baluk-notes/heavy.lock}
 
+# freshen_sources: set the file times of every tracked file the Rust build can
+# read to now. Cargo judges our own crates fresh by source mtime against its
+# outputs, and the build dir is shared by all checkouts without the path in
+# the unit hash: a build of another checkout, newer than these files, would be
+# taken for ours (measured: a crate built from another worktree's edit was
+# reused). With fresh times cargo recompiles our crates against this tree;
+# dependencies from the registry and the foreign copies in vendor/ are not
+# touched and stay built. Called under
+# the lock by heavy_acquire.
+freshen_sources() {
+  git ls-files -z -- crates baluk fonts docs/writing.md Cargo.toml Cargo.lock .cargo clippy.toml |
+    xargs -0 -r touch -c
+}
+
 # heavy_acquire: wait for the lock (say so, if it is taken); heavy_release.
+# The first holder after a different run freshens the sources (above): a run
+# that held the lock in between may have built its own tree into the shared dir.
 heavy_acquire() {
   mkdir -p "$(dirname "$HEAVY_LOCK")"
   exec {HEAVY_FD}>"$HEAVY_LOCK"
   if ! flock -n "$HEAVY_FD"; then
     echo "  waiting for another run (lock $HEAVY_LOCK)" >&2
     flock "$HEAVY_FD"
+  fi
+  if [[ $(cat "$HEAVY_LOCK.last" 2>/dev/null) != "$$" ]]; then
+    echo "$$" >"$HEAVY_LOCK.last"
+    freshen_sources
   fi
 }
 heavy_release() {

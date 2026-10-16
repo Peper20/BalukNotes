@@ -11,8 +11,9 @@ paths:
 | `install.sh` | `notes` and its parts (`notes-typst`, `notes-hub`, the `notes-app` window with a menu entry and icon) into `~/.local/bin` and the skill into `~/.claude/skills` in one version (the autostart service is not installed; one still active is restarted); run again after changes |
 | `deploy-hub.sh` | updates `notes-hub` on the VPS in one command: sends the sources of a commit over SSH, the VPS builds, a root helper (`server/baluk-notes-hub-install`, installed by hand) installs and restarts (`docs/server.md`, "Updating") |
 | `test-env.sh` | a server on `tests/vault` (data `tests/.data`, port 8432, another - `PORT=...`) |
-| `lib/worktree-target.sh` | in a linked worktree (agents) - the build dir shared by all worktrees |
-| `lib/cpu-cap.sh` | the CPU cap `CHECK_JOBS` and the lock of heavy work, sourced by `check.sh`, `install.sh`, `test-env.sh` |
+| `lib/worktree-target.sh` | in a linked worktree (agents) - the build dir of the main checkout, `<root>/target` |
+| `lib/target-limit.sh` | pruning and the size limit of that dir, sourced by `check.sh` |
+| `lib/cpu-cap.sh` | the CPU cap `CHECK_JOBS` and the lock of heavy work and `freshen_sources`, sourced by `check.sh`, `install.sh`, `test-env.sh` |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 | `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; runs itself inside a headless gamescope |
 | `app-smoke.sh` | a smoke launch of the `notes-app` window inside a headless gamescope: it opens, loads the fixture vault, quits cleanly (~6 s); not in `check.sh` (needs gamescope and an installed or built `notes-app`) |
@@ -39,13 +40,36 @@ non-zero exit code on any failure, logs in `tests/.data/check/`. e2e needs a
 system Chromium (`/usr/bin/chromium`, another one - `CHROMIUM=...`). The
 `notes-app` window is built if WebKitGTK is present (`pkg-config
 webkit2gtk-4.1`), otherwise it is excluded from the cargo steps (cloud).
-Before the steps: `target/` over 30 GB (`TARGET_LIMIT_GB`) - `cargo clean`,
-cargo does not remove old builds itself; with an own `CARGO_TARGET_DIR`
-(shared by worktrees) - no cleaning. In a linked worktree `check.sh` and
-`test-env.sh` build into `~/.cache/baluk-notes/worktree-target`
-(`lib/worktree-target.sh`); without `app/dist` (a fresh checkout) the client
-is built before the Rust steps - server tests serve it. e2e listens on fixed
-ports: the lock of heavy work (below) keeps runs from overlapping.
+In a linked worktree `check.sh` and `test-env.sh` build into the `target/` of
+the main checkout (`lib/worktree-target.sh`, an absolute `CARGO_TARGET_DIR`;
+your own value is kept), so the dependencies built once serve every worktree;
+only our own crates are rebuilt in a new worktree. Prefix a `cargo` by hand
+with the same `CARGO_TARGET_DIR`, or it builds from scratch into the
+worktree's own `target/`. A worktree is inside the main checkout, so cargo
+reads `.cargo/config.toml` twice there and the `rustflags` differ from a build
+in the main checkout: that build makes its own copy of the dependencies. A
+`cargo` by hand in the main checkout takes no lock of ours; cargo's own
+build-dir lock keeps it from overlapping a check (they wait for each other).
+The unit hash of our crates does not contain the checkout path and cargo
+judges them fresh by file times, so a build of another checkout, newer than
+your files, would be taken for yours: whoever takes the lock of heavy work
+after a different run (`check.sh` steps, `install.sh`, `test-env.sh`) first
+sets the times of the tracked sources to now (`freshen_sources` in
+`lib/cpu-cap.sh`), and cargo recompiles our crates against this tree;
+dependencies and the foreign copies in `vendor/` stay built (after an edit
+under `vendor/`, `touch` the file or `cargo clean -p` that crate). A plain `cargo` by hand is exposed to this: run
+`freshen_sources` first (after `source tools/lib/cpu-cap.sh`) or use the
+scripts.
+Before the steps, under the lock of heavy work, `lib/target-limit.sh` keeps
+the dir bounded (cargo removes nothing itself): units of our own crates that
+cargo has not rebuilt for `TARGET_PRUNE_DAYS` (3) are removed
+(`TARGET_PRUNE_DRY=1` - only list them), dependencies stay; then over 30 GB
+(`TARGET_LIMIT_GB`) - `cargo clean`. Both skip someone else's
+`CARGO_TARGET_DIR`; the pruning skips a profile while cargo holds its build
+lock. The vendored `comemo` tests build into `vendor/` of the same dir.
+Without `app/dist` (a fresh checkout) the
+client is built before the Rust steps - server tests serve it. e2e listens on
+fixed ports: the lock of heavy work (below) keeps runs from overlapping.
 
 ## CPU cap
 
@@ -71,8 +95,9 @@ above (`nice` 2 and 1); the cap is on top of it.
   their builds. Steps of different runs take turns, so together they stay
   within the cap, and one run does not rewrite artifacts under the tests of
   another. The kernel releases the lock when its holder dies; child processes
-  do not inherit it. Do not take it inside a step (no nesting). `cargo` and
-  `npm` started by hand are outside the cap.
+  do not inherit it. Do not take it inside a step (no nesting): pruning and
+  cleaning of the shared build dir are a locked step of their own at the start
+  of `check.sh`. `cargo` and `npm` started by hand are outside the cap.
 - Measured on the 12-CPU laptop (CPU time of the whole run in a cgroup, windows
   of 0.5 s): a full run at the default peaks at 8.9 busy cores from an empty
   target dir (before: 11.2); `CHECK_JOBS=4` on `--app` - 5.8 (the e2e browser

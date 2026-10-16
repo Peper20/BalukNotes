@@ -40,7 +40,7 @@ heavy cargo build --release -p notes -p notes-typst -p notes-app -p notes-hub
 # The parts go to the same folder as notes (it looks for them there).
 mkdir -p "$bin"
 for name in notes notes-typst notes-app notes-hub; do
-  install -m755 "target/release/$name" "$bin/.$name.new"
+  install -m755 "${CARGO_TARGET_DIR:-target}/release/$name" "$bin/.$name.new"
   mv -f "$bin/.$name.new" "$bin/$name"
   echo "  $bin/$name"
 done

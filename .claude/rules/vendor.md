@@ -33,7 +33,7 @@ as before. Test - `test_evict_release`.
 Checking the copy:
 
 ```sh
-CARGO_TARGET_DIR=target/vendor cargo test --manifest-path vendor/comemo/Cargo.toml --features testing
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/target}/vendor" cargo test --manifest-path vendor/comemo/Cargo.toml --features testing
 ```
 
 Proposing the patch to `typst/comemo` is the user's decision (a PR in their
