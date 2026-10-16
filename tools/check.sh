@@ -37,6 +37,8 @@ ionice -c 2 -n 5 -p $$ >/dev/null 2>&1 || true
 source tools/lib/worktree-target.sh
 # CHECK_JOBS: the CPU cap of the run, and the lock shared with other runs.
 source tools/lib/cpu-cap.sh
+# The build settings of a small disk and a cloud session (CARGO_PROFILE_DEV_DEBUG).
+source tools/lib/build-env.sh
 
 # The shared build dir grows without limit: pruning and the size limit
 # (tools/lib/target-limit.sh) run first, under the lock of heavy work.
@@ -143,10 +145,13 @@ in_app() { (cd app && "$@"); }
 
 # The notes-app window (Tauri) - only with WebKitGTK; without it (cloud) - skipped.
 no_webkit=()
-if ! pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
+if ! has_webkit; then
   no_webkit=(--exclude notes-app)
   echo "no webkit2gtk-4.1 - notes-app is not built"
 fi
+
+# The shell libraries of tools/lib (target limit, build settings, lock): no cargo build.
+step tools-libs tools/test-libs.sh
 
 if [[ $rust == 1 ]]; then
   # Server tests serve the client from app/dist (a debug build reads it from

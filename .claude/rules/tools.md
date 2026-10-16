@@ -12,8 +12,10 @@ paths:
 | `deploy-hub.sh` | updates `notes-hub` on the VPS in one command: sends the sources of a commit over SSH, the VPS builds, a root helper (`server/baluk-notes-hub-install`, installed by hand) installs and restarts (`docs/server.md`, "Updating") |
 | `test-env.sh` | a server on `tests/vault` (data `tests/.data`, port 8432, another - `PORT=...`) |
 | `lib/worktree-target.sh` | in a linked worktree (agents) - the build dir of the main checkout, `<root>/target` |
-| `lib/target-limit.sh` | pruning and the size limit of that dir, sourced by `check.sh` |
+| `lib/target-limit.sh` | pruning and the size limit of that dir, sourced by `check.sh` (the crate list by python3, no `jq`) |
 | `lib/cpu-cap.sh` | the CPU cap `CHECK_JOBS` and the lock of heavy work and `freshen_sources`, sourced by `check.sh`, `install.sh`, `test-env.sh` |
+| `lib/build-env.sh` | the build settings of a small disk and a cloud session (`CARGO_PROFILE_DEV_DEBUG`) and the WebKitGTK check, sourced by `check.sh`, `install.sh`, `test-env.sh` |
+| `test-libs.sh` | tests of the libraries above without a cargo build - the first step of `check.sh` |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 | `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; runs itself inside a headless gamescope |
 | `app-smoke.sh` | a smoke launch of the `notes-app` window inside a headless gamescope: it opens, loads the fixture vault, quits cleanly (~6 s); not in `check.sh` (needs gamescope and an installed or built `notes-app`) |
@@ -52,24 +54,39 @@ in the main checkout: that build makes its own copy of the dependencies. A
 build-dir lock keeps it from overlapping a check (they wait for each other).
 The unit hash of our crates does not contain the checkout path and cargo
 judges them fresh by file times, so a build of another checkout, newer than
-your files, would be taken for yours: whoever takes the lock of heavy work
-after a different run (`check.sh` steps, `install.sh`, `test-env.sh`) first
-sets the times of the tracked sources to now (`freshen_sources` in
-`lib/cpu-cap.sh`), and cargo recompiles our crates against this tree;
-dependencies and the foreign copies in `vendor/` stay built (after an edit
-under `vendor/`, `touch` the file or `cargo clean -p` that crate). A plain `cargo` by hand is exposed to this: run
+your files, would be taken for yours. The lock of heavy work (below) records
+the checkout that held it last: the first holder after a run of another
+checkout (`check.sh` steps, `install.sh`, `test-env.sh`) sets the times of the
+tracked sources to now (`freshen_sources` in `lib/cpu-cap.sh`), and cargo
+recompiles our crates against this tree. A repeated run of the same checkout
+does not, so our crates are not rebuilt. Dependencies and the foreign copies
+in `vendor/` stay built (after an edit under `vendor/`, `touch` the file or
+`cargo clean -p` that crate). A plain `cargo` by hand is exposed to this: run
 `freshen_sources` first (after `source tools/lib/cpu-cap.sh`) or use the
 scripts.
 Before the steps, under the lock of heavy work, `lib/target-limit.sh` keeps
 the dir bounded (cargo removes nothing itself): units of our own crates that
 cargo has not rebuilt for `TARGET_PRUNE_DAYS` (3) are removed
-(`TARGET_PRUNE_DRY=1` - only list them), dependencies stay; then over 30 GB
-(`TARGET_LIMIT_GB`) - `cargo clean`. Both skip someone else's
-`CARGO_TARGET_DIR`; the pruning skips a profile while cargo holds its build
-lock. The vendored `comemo` tests build into `vendor/` of the same dir.
-Without `app/dist` (a fresh checkout) the
-client is built before the Rust steps - server tests serve it. e2e listens on
-fixed ports: the lock of heavy work (below) keeps runs from overlapping.
+(`TARGET_PRUNE_DRY=1` - only list them), dependencies stay. The list of the
+crates comes from `cargo metadata`, read by python3 (no `jq` needed); without
+python3 the pruning is skipped with a `WARNING` and the size limit still
+applies. Then over the limit - `cargo clean`. The limit is `TARGET_LIMIT_GB`
+or, by default, half of what the dir could hold (its size plus the free space
+of its disk), at most 30 GB: on a disk with little free space it is lower, and
+a line `target limit:` says so. A limit that cannot be measured or cleaned is
+a `WARNING` on stderr. Both skip someone else's `CARGO_TARGET_DIR`; the
+pruning skips a profile while cargo holds its build lock. The vendored
+`comemo` tests build into `vendor/` of the same dir.
+`lib/build-env.sh` (sourced after `cpu-cap.sh`) sets
+`CARGO_PROFILE_DEV_DEBUG=line-tables-only` (not in `Cargo.toml`) when the file
+system of the build dir is under `SMALL_DISK_GB` (100) in total, or in a cloud
+session (`CLAUDE_CODE_REMOTE=true` or `BALUK_CLOUD=1`); a value set by hand is
+kept. It also answers whether WebKitGTK is installed (`has_webkit`).
+`tools/test-libs.sh`, the first step of `check.sh`, tests these libraries
+without a cargo build, with shims for `jq`, `df`, `python3` and `pkg-config`.
+Without `app/dist` (a fresh checkout) the client is built before the Rust
+steps - server tests serve it. e2e listens on fixed ports: the lock of heavy
+work (below) keeps runs from overlapping.
 
 ## CPU cap
 
@@ -168,6 +185,10 @@ gamescope --backend headless -W <width> -H <height> -- <command>
 - Chromium (`lib/browser.mjs`: `--headless=new`; Playwright: `headless: true`
   in `app/playwright.config.ts`) has no window; do not pass `--headed`.
   `test-env.sh`, `check.sh` and `install.sh` start no window.
+- Without gamescope or WebKitGTK (a cloud session) the window tools refuse
+  with exit 2 and a message (`app-smoke.sh`, `shot-webkit.py`); `check.sh`,
+  `install.sh` and `test-env.sh` do not need them: without WebKitGTK the
+  `notes-app` window is left out of the builds (`has_webkit`).
 
 ## Cloud environment
 

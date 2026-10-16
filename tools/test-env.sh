@@ -13,6 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 source tools/lib/worktree-target.sh
 source tools/lib/cpu-cap.sh
+source tools/lib/build-env.sh
 
 port="${PORT:-8432}"
 profile=()

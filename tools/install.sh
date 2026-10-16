@@ -2,10 +2,10 @@
 # Install BalukNotes for use from any folder - one version from this
 # repository: the `notes` command with the parts `notes-typst` (release build:
 # the baluk library, the client and fonts are embedded), `notes-hub` (accounts,
-# the storage server) and `notes-app` (the
-# window, with a menu entry and an icon), the Claude Code skill /baluk-note.
-# The window is the app: it starts its own core, no service is needed. Run
-# again after project changes.
+# the storage server) and `notes-app` (the window, with a menu entry and an
+# icon; only with WebKitGTK 4.1, otherwise it is left out), the Claude Code
+# skill /baluk-note. The window is the app: it starts its own core, no service
+# is needed. Run again after project changes.
 #
 #   tools/install.sh
 #
@@ -23,23 +23,37 @@ renice -n 1 -p $$ >/dev/null 2>&1 || true
 ionice -c 2 -n 5 -p $$ >/dev/null 2>&1 || true
 
 # At most CHECK_JOBS (9) CPUs for the builds, taking turns with the other heavy
-# runs of the machine (tools/lib/cpu-cap.sh).
+# runs of the machine (tools/lib/cpu-cap.sh); the build settings of a small disk
+# and a cloud session (tools/lib/build-env.sh).
 source tools/lib/cpu-cap.sh
+source tools/lib/build-env.sh
 
 bin=${BIN:-$HOME/.local/bin}
 skills=${CLAUDE_SKILLS:-$HOME/.claude/skills}
+
+# The window needs WebKitGTK 4.1; without it (a cloud session) it is not built.
+bins=(notes notes-typst notes-hub)
+window=0
+if has_webkit; then
+  bins+=(notes-app)
+  window=1
+else
+  echo "no webkit2gtk-4.1 - the notes-app window is not built or installed"
+fi
 
 echo "▶ client (app/dist)"
 [[ -d app/node_modules ]] || heavy npm --prefix app ci
 heavy npm --prefix app run -s build
 
 echo "▶ notes, release build"
-heavy cargo build --release -p notes -p notes-typst -p notes-app -p notes-hub
+args=()
+for name in "${bins[@]}"; do args+=(-p "$name"); done
+heavy cargo build --release "${args[@]}"
 
 # Via a temporary file: a running `notes serve` does not block the replacement.
 # The parts go to the same folder as notes (it looks for them there).
 mkdir -p "$bin"
-for name in notes notes-typst notes-app notes-hub; do
+for name in "${bins[@]}"; do
   install -m755 "${CARGO_TARGET_DIR:-target}/release/$name" "$bin/.$name.new"
   mv -f "$bin/.$name.new" "$bin/$name"
   echo "  $bin/$name"
@@ -47,12 +61,13 @@ done
 
 # The window's menu entry and icon. The entry file name is the application id
 # (tauri.conf.json): KDE and GNOME find the window icon by it.
-app_id=$(sed -n 's/.*"identifier": "\(.*\)".*/\1/p' crates/notes-app/tauri.conf.json)
-data=${XDG_DATA_HOME:-$HOME/.local/share}
-install -Dm644 app/public/assets/icon.svg "$data/icons/hicolor/scalable/apps/$app_id.svg"
-install -Dm644 crates/notes-app/icons/icon.png "$data/icons/hicolor/256x256/apps/$app_id.png"
-mkdir -p "$data/applications"
-cat >"$data/applications/$app_id.desktop" <<DESKTOP
+if (( window )); then
+  app_id=$(sed -n 's/.*"identifier": "\(.*\)".*/\1/p' crates/notes-app/tauri.conf.json)
+  data=${XDG_DATA_HOME:-$HOME/.local/share}
+  install -Dm644 app/public/assets/icon.svg "$data/icons/hicolor/scalable/apps/$app_id.svg"
+  install -Dm644 crates/notes-app/icons/icon.png "$data/icons/hicolor/256x256/apps/$app_id.png"
+  mkdir -p "$data/applications"
+  cat >"$data/applications/$app_id.desktop" <<DESKTOP
 [Desktop Entry]
 Type=Application
 Name=baluk notes
@@ -63,7 +78,8 @@ Terminal=false
 Categories=Office;Education;
 StartupWMClass=$app_id
 DESKTOP
-echo "  $data/applications/$app_id.desktop"
+  echo "  $data/applications/$app_id.desktop"
+fi
 
 # The skill is replaced entirely by the copy from the repository (skills/baluk-note).
 target=$skills/baluk-note

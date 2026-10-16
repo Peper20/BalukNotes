@@ -65,17 +65,21 @@ freshen_sources() {
 }
 
 # heavy_acquire: wait for the lock (say so, if it is taken); heavy_release.
-# The first holder after a different run freshens the sources (above): a run
-# that held the lock in between may have built its own tree into the shared dir.
+# The record in $HEAVY_LOCK.last is the checkout that held the lock last. The
+# first holder after a run of another checkout freshens the sources (above): that
+# run may have built its own tree into the shared dir. A repeated run of the
+# same checkout keeps its artifacts (nothing else was built in between).
 heavy_acquire() {
+  local here
   mkdir -p "$(dirname "$HEAVY_LOCK")"
   exec {HEAVY_FD}>"$HEAVY_LOCK"
   if ! flock -n "$HEAVY_FD"; then
     echo "  waiting for another run (lock $HEAVY_LOCK)" >&2
     flock "$HEAVY_FD"
   fi
-  if [[ $(cat "$HEAVY_LOCK.last" 2>/dev/null) != "$$" ]]; then
-    echo "$$" >"$HEAVY_LOCK.last"
+  here=$(git rev-parse --show-toplevel 2>/dev/null) || here=$PWD
+  if [[ $(cat "$HEAVY_LOCK.last" 2>/dev/null) != "$here" ]]; then
+    echo "$here" >"$HEAVY_LOCK.last"
     freshen_sources
   fi
 }

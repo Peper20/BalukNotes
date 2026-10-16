@@ -437,16 +437,11 @@ it. The format and rules - `.claude/rules/docs.md`.
 - **The hint "the path starts with the vault directory name"** in `notes new`
   is a heuristic on the first segment; it does not catch other path mistakes.
 - **Dependency variants in `target/` do not shrink** (`tools/lib/target-limit.sh`):
-  only the stale units of our own crates are pruned; over 30 GB `check.sh`
-  cleans `target/` whole and the next check builds everything again (~8 min).
-  How to close: remove old dependency variants (`cargo-sweep`) if full
+  only the stale units of our own crates are pruned; over the limit
+  (`TARGET_LIMIT_GB`: 30 GB, less when the disk has little free space)
+  `check.sh` cleans `target/` whole and the next check builds everything again
+  (~8 min). How to close: remove old dependency variants (`cargo-sweep`) if full
   rebuilds get in the way.
-- **The target limit needs `jq`** (`tools/lib/target-limit.sh` takes the crate
-  names from `cargo metadata` with it): without `jq` (a cloud or foreign
-  machine) the 30 GB limit and the pruning silently do not run, and `target/`
-  grows without a warning. How to close: say so loudly and skip the step with
-  a message, or parse `cargo metadata` without `jq`; mention `jq` in
-  `.claude/rules/tools.md`.
 
 ## The `/baluk-note` skill
 

@@ -3,7 +3,20 @@
 # only under the lock of heavy work (`heavy limit_target`): no check, install
 # or test-server build of ours runs then. A `cargo` started by hand takes no
 # lock of ours; prune_target skips a profile while cargo holds its build lock,
-# and `cargo clean` waits for that lock itself.
+# and `cargo clean` waits for that lock itself. Needs build-env.sh (fs_gb).
+
+# target_warn <text>: a limit that cannot be kept - loud, on stderr. The run goes on.
+target_warn() {
+  echo "WARNING: $*" >&2
+}
+
+# workspace_crates: the names of the workspace packages joined with |, from
+# `cargo metadata` (python3 reads the JSON: no jq needed).
+workspace_crates() {
+  local meta
+  meta=$(cargo metadata --no-deps --format-version 1) || return 1
+  printf '%s' "$meta" | python3 -c 'import json, sys; print("|".join(p["name"] for p in json.load(sys.stdin)["packages"]))'
+}
 
 # prune_target <dir>: remove the units of our own crates that cargo has not
 # rebuilt for TARGET_PRUNE_DAYS (default 3; a unit that is still needed costs
@@ -15,10 +28,14 @@
 # keeps its old time); the hash names the unit's files in `deps/` and its dir
 # in `build/`. Rustc's incremental state (`incremental/`, path crates only)
 # goes by its dir time.
-# TARGET_PRUNE_DRY=1 only prints what would go.
+# TARGET_PRUNE_DRY=1 only prints what would go. Without the list of the
+# workspace crates (no python3, or cargo metadata fails) nothing is pruned.
 prune_target() {
   local dir=$1 days=${TARGET_PRUNE_DAYS:-3} pkgs profile
-  pkgs=$(cargo metadata --no-deps --format-version 1 | jq -r '[.packages[].name] | join("|")') || return 1
+  if ! pkgs=$(workspace_crates) || [[ -z $pkgs ]]; then
+    target_warn "not pruned: $dir keeps the units of the old crates (cargo metadata and python3 are needed); the size limit still applies"
+    return 1
+  fi
   for profile in "$dir"/*/; do
     if [[ -d $profile.fingerprint ]]; then prune_profile "${profile%/}" "$days" "$pkgs"; fi
   done
@@ -59,16 +76,47 @@ prune_profile() {
   exec {fd}>&-
 }
 
-# limit_target: prune, then over TARGET_LIMIT_GB (default 30) - cargo clean
-# (a full build afterwards). Only the shared dir; someone else's
-# CARGO_TARGET_DIR is left alone.
+# target_limit_gb <free GB> <size GB>: the limit of the dir. It may take half
+# of what it could hold (its size plus the free space of its disk), at most
+# 30 GB: on a disk with little free space the limit is lower.
+target_limit_gb() {
+  local limit=$(( ($1 + $2) / 2 ))
+  echo $(( limit < 30 ? limit : 30 ))
+}
+
+# limit_target: prune, then over the limit - cargo clean (a full build
+# afterwards). The limit is TARGET_LIMIT_GB, or target_limit_gb. Only the
+# shared dir; someone else's CARGO_TARGET_DIR is left alone. A pruning that
+# cannot run does not skip the size limit; a limit that cannot be applied is a
+# warning.
 limit_target() {
-  local limit=${TARGET_LIMIT_GB:-30} dir=${CARGO_TARGET_DIR:-$SHARED_TARGET} size
+  local dir=${CARGO_TARGET_DIR:-$SHARED_TARGET} size free limit
   [[ $dir == "$SHARED_TARGET" && -d $dir ]] || return 0
-  prune_target "$dir" || return 1
+  prune_target "$dir" || true
   size=$(du -s --block-size=1G "$dir" | cut -f1)
+  if [[ ! $size =~ ^[0-9]+$ ]]; then
+    target_warn "cannot measure $dir: its size limit is NOT enforced"
+    return 1
+  fi
+  if [[ -n ${TARGET_LIMIT_GB:-} ]]; then
+    limit=$TARGET_LIMIT_GB
+  else
+    free=$(fs_gb 4 "$dir" 2>/dev/null) || free=
+    if [[ $free =~ ^[0-9]+$ ]]; then
+      limit=$(target_limit_gb "$free" "$size")
+      if (( limit < 30 )); then
+        echo "target limit: $limit GB, below the default 30 GB: the disk has $free GB free"
+      fi
+    else
+      target_warn "cannot read the free space of the disk of $dir: the limit is the default 30 GB"
+      limit=30
+    fi
+  fi
   if (( size > limit )); then
     echo "$dir is $size GB, over the limit of $limit GB: cargo clean"
-    [[ -n ${TARGET_PRUNE_DRY:-} ]] || cargo clean --target-dir "$dir"
+    if [[ -z ${TARGET_PRUNE_DRY:-} ]] && ! cargo clean --target-dir "$dir"; then
+      target_warn "cargo clean of $dir failed: it stays at $size GB, over the limit of $limit GB"
+      return 1
+    fi
   fi
 }
