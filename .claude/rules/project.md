@@ -58,7 +58,7 @@ directory - read the file.
 ## Pipeline
 
 `liaison` (the main session, `claude --agent liaison`) -> `orchestrator` ->
-`developer`, `developer-senior`, `developer-expert` -> `reviewer`;
+`developer-1`, `developer-2`, `developer-3` -> `reviewer`;
 definitions - `.claude/agents/`, how it works - `docs/agents.md`. The
 repository is on a local Forgejo server (`origin`, the `forge` skill), GitHub
 is its mirror. Code and the documents that change with it reach `main` only

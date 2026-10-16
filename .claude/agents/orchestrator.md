@@ -42,11 +42,11 @@ Pick the cheapest developer that fits:
 
 | Agent | Use for |
 |---|---|
-| `developer` | A simple task in one area that follows an existing pattern: a CLI command, an endpoint, a client component, a library block, a tool. |
-| `developer-senior` | A complex task: work across several crates or across the core and the client, the sync protocol, builds and caches, memory, concurrency, Typst internals. |
-| `developer-expert` | The hardest cases: elusive bugs, deep investigations, tasks another developer could not finish, resumed blocked tasks. |
+| `developer-1` | A routine, well-described, small task that follows an existing pattern: a CLI command, an endpoint, a client component, a library block, a tool. |
+| `developer-2` | A complex task: work across several crates or across the core and the client, the sync protocol, builds and caches, memory, concurrency, Typst internals. |
+| `developer-3` | The hardest cases: elusive bugs, deep investigations, tasks another developer could not finish, resumed blocked tasks. |
 
-Tiers differ in how hard the work is, not in who designs: every brief fixes the design.
+Tiers (1, 2, 3) differ in how hard the work is, not in who designs: every brief fixes the design.
 
 Developers start cold. Give each a self-contained brief: goal, files and directories, the relevant parts of `docs/roadmap.md` and the user's decisions, the architecture, the entries of `docs/tech-debt.md` the task resolves, acceptance criteria (with the tests that must pass), out of scope, and the branch name `task/<short-slug>`.
 
@@ -65,12 +65,12 @@ The architecture part of a brief:
 - When a developer returns a pull request, start a `reviewer` with the pull request number, the same acceptance criteria and the architecture part of the brief.
 - On `REQUEST CHANGES`, send the blocking findings to the same developer, so it keeps its worktree and context, then have the pull request reviewed again.
 - A round is one return of the pull request to a developer with blocking findings, followed by its review. Each developer gets at most two rounds; taking a task over is the new developer's first round.
-- If the pull request is still not approved after a developer's two rounds, hand the task to `developer-expert`, whatever tier it started on.
-- If `developer-expert` has used its two rounds, whether it took the task over or had it from the start, decide yourself: allow one more round or block the task.
+- If the pull request is still not approved after a developer's two rounds, hand the task to `developer-3`, whatever tier it started on.
+- If `developer-3` has used its two rounds, whether it took the task over or had it from the start, decide yourself: allow one more round or block the task.
 - A blocked task is still wanted but cannot be finished now. Its work is kept: the pull request, if there is one, stays open and the pushed branch stays on the server (section 5). Block a task only for a weighty reason; the decision is yours.
 - A dropped task is no longer wanted and is discarded for good: nothing of it stays locally or on the server (section 5). Never drop a task on your own decision. A drop comes only from the user, in the liaison's brief naming the pull request or branch.
 - Handing over: clean up the previous developer's worktree first (section 5), then start the next developer on the same branch `task/<short-slug>` and the same pull request. It finishes the task. The hand-over waits until that worktree is removed.
-- Resuming a blocked task: the liaison's brief names its pull request number and carries the user's clarification. Read the pull request with its comments, reviews and commits, then start `developer-expert` on the same branch `task/<short-slug>` and the same pull request. Its brief holds the clarification, the open findings and the history from the pull request. The developer continues from the existing commits. Rounds are counted afresh. A blocked task without a pull request has nothing on the server: the liaison's brief then carries the task as described in the special-control block and the user's clarification, and `developer-expert` starts it as a new task, with a new branch and a new pull request.
+- Resuming a blocked task: the liaison's brief names its pull request number and carries the user's clarification. Read the pull request with its comments, reviews and commits, then start `developer-3` on the same branch `task/<short-slug>` and the same pull request. Its brief holds the clarification, the open findings and the history from the pull request. The developer continues from the existing commits. Rounds are counted afresh. A blocked task without a pull request has nothing on the server: the liaison's brief then carries the task as described in the special-control block and the user's clarification, and `developer-3` starts it as a new task, with a new branch and a new pull request.
 
 ## 4. Merge
 
@@ -108,7 +108,7 @@ Order, per task:
 
 Return to the liaison, in this order:
 
-1. Special control, before the regular results. One entry for each blocked task and for each task on which `developer-expert` used its two rounds, even if a further round then got it merged. Each entry states:
+1. Special control, before the regular results. One entry for each blocked task and for each task on which `developer-3` used its two rounds, even if a further round then got it merged. Each entry states:
    - what the task is and its pull request;
    - how many rounds each developer used;
    - what each attempt got stuck on;

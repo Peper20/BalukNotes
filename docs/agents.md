@@ -10,9 +10,9 @@ in its definition (`.claude/agents/`); this document is the map.
 |---|---|---|---|
 | `liaison` | the session's | Talks to the user in Russian, makes the goal and acceptance criteria clear, keeps `docs/roadmap.md`, `docs/questions.md`, this file and `.claude/rules/`, `.claude/agents/`, `.claude/skills/`, writes the orchestrator's brief in English, reports | Write code, edit `docs/architecture.md` or `docs/tech-debt.md`, run developers, merge |
 | `orchestrator` | Sonnet, medium | Owns the architecture and designs what the request needs, decides on the tech debt, splits the request into tasks, picks the developer, runs the review, merges approved pull requests, cleans up, runs `tools/install.sh` | Edit files |
-| `developer` | Sonnet, medium | Simple tasks in one area along an existing pattern | Merge, design the architecture |
-| `developer-senior` | Sonnet, high | Complex tasks: several crates or the core with the client, sync, builds and caches, memory, concurrency, Typst internals | Merge, design the architecture |
-| `developer-expert` | Opus, medium | The hardest: elusive bugs, investigations, tasks another developer could not finish, resumed blocked tasks | Merge, design the architecture |
+| `developer-1` | Haiku, xhigh | Routine, well-described, small tasks along an existing pattern | Merge, design the architecture |
+| `developer-2` | Sonnet, high | Complex tasks: several crates or the core with the client, sync, builds and caches, memory, concurrency, Typst internals | Merge, design the architecture |
+| `developer-3` | Opus, medium | The hardest: elusive bugs, investigations, tasks another developer could not finish, resumed blocked tasks | Merge, design the architecture |
 | `reviewer` | Sonnet, medium | Builds the pull request, runs `tools/check.sh`, reads the change, approves or requests changes | Edit files |
 
 The user talks only to the `liaison`. Agents talk to each other in English.
@@ -33,14 +33,14 @@ The user talks only to the `liaison`. Agents talk to each other in English.
    `tools/check.sh` and opens a pull request (the `dev-workflow` skill).
 5. **Review.** The `reviewer` builds and checks the pull request in its own
    worktree and gives the verdict. Blocking findings go back to the same
-   developer; at most two rounds per developer, then `developer-expert`. A
+   developer; at most two rounds per developer, then `developer-3`. A
    task that cannot be finished is blocked (its pull request stays open) by
    the `orchestrator`; dropped (deleted everywhere) only by the user.
 6. **Merge.** The `orchestrator` squashes an approved pull request into
    `main`, deletes the branch, removes worktrees, and runs `tools/install.sh`
    when the request changed what it installs.
 7. **Report.** The `liaison` reports to the user in Russian: blocked tasks and
-   tasks that took `developer-expert` two rounds first, then the results, the
+   tasks that took `developer-3` two rounds first, then the results, the
    tech debt, what to look at.
 
 The `orchestrator` owns the architecture (`docs/architecture.md`); developers
