@@ -1,4 +1,5 @@
 {
+  "agent": "liaison",
   "hooks": {
     "PreToolUse": [
       {
