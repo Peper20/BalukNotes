@@ -74,12 +74,12 @@ the accounts with the `nexus` project:
 | Account | `tea` login | Used by | For |
 |---|---|---|---|
 | `ibaluk` | `owner` | the user, every `git push` | owner, administrator |
-| `nexus-dev` | `dev` | `orchestrator`, developers | opens and merges pull requests |
-| `nexus-reviewer` | `reviewer` | `reviewer` | approves or requests changes |
+| `agent-dev` | `dev` | `orchestrator`, developers | opens and merges pull requests |
+| `agent-reviewer` | `reviewer` | `reviewer` | approves or requests changes |
 
 Separate accounts make the review formal: the server does not let an account
 approve its own pull request. Protection of `main`: a merge needs an approval
-of `nexus-reviewer`, a new commit makes it stale; `nexus-dev` merges; only
+of `agent-reviewer`, a new commit makes it stale; `agent-dev` merges; only
 `ibaluk` pushes to `main` directly. All pushes go as `ibaluk`, so the ban on
 developers pushing to `main` rests on the agents' rules.
 
