@@ -35,6 +35,8 @@ renice -n 2 -p $$ >/dev/null 2>&1 || true
 ionice -c 2 -n 5 -p $$ >/dev/null 2>&1 || true
 
 source tools/lib/worktree-target.sh
+# CHECK_JOBS: the CPU cap of the run, and the lock shared with other runs.
+source tools/lib/cpu-cap.sh
 
 # target/ grows without limit: cargo does not remove old variants of our crates
 # (a new one appears after a Cargo.toml edit, a cache tag, another worktree path).
@@ -58,12 +60,16 @@ mkdir -p "$logs"
 names=() results=() times=()
 failed=0
 
-# step <name> <command...>: run it, record the result and time.
+# step <name> <command...>: run it under the lock of heavy work (steps of all
+# runs on the machine take turns: together they stay within CHECK_JOBS), record
+# the result and time (the wait for the lock is not counted).
 step() {
   local name="$1"; shift
-  local log="$logs/$name.log" start=$SECONDS
+  local log="$logs/$name.log" start
   echo "▶ $name: $*"
-  if "$@" >"$log" 2>&1; then
+  heavy_acquire
+  start=$SECONDS
+  if "$@" >"$log" 2>&1 {HEAVY_FD}>&-; then
     results+=("ok")
   else
     results+=("failed")
@@ -71,6 +77,7 @@ step() {
     echo "  ✗ $name failed - tail of $log:"
     tail -n 25 "$log" | sed 's/^/    /'
   fi
+  heavy_release
   names+=("$name")
   times+=("$((SECONDS - start))")
 }
@@ -144,11 +151,6 @@ baluk_note() {
 
 in_app() { (cd app && "$@"); }
 
-# e2e listens on fixed ports (8433, 8461, 8462): runs in parallel worktrees take turns.
-e2e() {
-  (flock 9 && cd app && npm run -s e2e) 9>"${XDG_RUNTIME_DIR:-/tmp}/baluk-notes-e2e.lock"
-}
-
 # The notes-app window (Tauri) - only with WebKitGTK; without it (cloud) - skipped.
 no_webkit=()
 if ! pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
@@ -185,7 +187,9 @@ if [[ $app == 1 ]]; then
   else
     step build in_app npm run -s build
     if [[ ${results[-1]} == "ok" ]]; then
-      step e2e e2e
+      # e2e listens on fixed ports (8433, 8461, 8462): runs in parallel
+      # worktrees must not overlap - the lock of the step takes care of it.
+      step e2e in_app npm run -s e2e
     else
       skip e2e "the client did not build"
     fi

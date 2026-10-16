@@ -16,21 +16,25 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# One step lower than normal priority (cargo, npm, e2e inherit it): a build on
-# all cores yields to work at the computer (nice 1; ionice - scale 0-7,
-# normal 4) and takes idle CPU just the same.
+# One step lower than normal priority (cargo, npm inherit it): a build yields
+# to work at the computer (nice 1; ionice - scale 0-7, normal 4) and takes
+# idle CPU just the same.
 renice -n 1 -p $$ >/dev/null 2>&1 || true
 ionice -c 2 -n 5 -p $$ >/dev/null 2>&1 || true
+
+# At most CHECK_JOBS (9) CPUs for the builds, taking turns with the other heavy
+# runs of the machine (tools/lib/cpu-cap.sh).
+source tools/lib/cpu-cap.sh
 
 bin=${BIN:-$HOME/.local/bin}
 skills=${CLAUDE_SKILLS:-$HOME/.claude/skills}
 
 echo "▶ client (app/dist)"
-[[ -d app/node_modules ]] || npm --prefix app ci
-npm --prefix app run -s build
+[[ -d app/node_modules ]] || heavy npm --prefix app ci
+heavy npm --prefix app run -s build
 
 echo "▶ notes, release build"
-cargo build --release -p notes -p notes-typst -p notes-app -p notes-hub
+heavy cargo build --release -p notes -p notes-typst -p notes-app -p notes-hub
 
 # Via a temporary file: a running `notes serve` does not block the replacement.
 # The parts go to the same folder as notes (it looks for them there).

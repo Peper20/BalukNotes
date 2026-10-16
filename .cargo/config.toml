@@ -3,3 +3,14 @@
 TS_RS_EXPORT_DIR = { value = "app/src/lib/api/types", relative = true }
 # usize/u64 in JSON are plain numbers, not bigint.
 TS_RS_LARGE_INT = "number"
+
+# The linker of the stable toolchain on Linux is lld (the default since Rust
+# 1.90): it takes a thread per CPU, and cargo links all test binaries at once, so
+# the end of a build is a burst on all cores (6 links x 2 threads = 10 cores for
+# a second). One thread per link is one core per cargo job, which keeps a build
+# within the CPU cap of tools/check.sh (`.claude/rules/tools.md`, "CPU cap"); a
+# 400 MB test binary links in 1.3 s instead of 0.6 s, with half the CPU time.
+# Set in the config, not in the RUSTFLAGS of the script: a flag change rebuilds
+# everything, and a build by hand and a check must share the artifacts.
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-Wl,--threads=1"]

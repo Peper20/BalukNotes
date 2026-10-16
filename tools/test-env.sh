@@ -12,6 +12,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source tools/lib/worktree-target.sh
+source tools/lib/cpu-cap.sh
 
 port="${PORT:-8432}"
 profile=()
@@ -24,6 +25,9 @@ for arg in "$@"; do
 done
 mkdir -p tests/.data
 
+# The build takes turns with other heavy runs and stays within CHECK_JOBS
+# (tools/lib/cpu-cap.sh); the server then runs without the lock.
+heavy cargo build -q "${profile[@]}" -p notes-typst
 echo "test environment: http://127.0.0.1:$port  (vault tests/vault, data tests/.data)"
 exec cargo run -q "${profile[@]}" -p notes-typst -- \
   --data tests/.data --vault tests/vault serve --addr "127.0.0.1:$port"

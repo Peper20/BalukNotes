@@ -361,14 +361,19 @@ it. The format and rules - `.claude/rules/docs.md`.
   walk cache for the duration of a command.
 - **The e2e warm-up adds 20 s to a run** (`e2e/global-setup.ts`) for the sake
   of short waits; `01-switch` checks a repeated long build, not the first.
-- **`tools/check.sh` is sequential** (~3.5 min with e2e): `cargo test` ~35 s
-  (crate binaries run in turn, the longest is the core unit tests, ~13 s),
-  e2e ~80 s (20 s of it is the warm-up). Rebuilding tests after a core edit
-  takes ~3 s (end-to-end tests are one binary per crate), the release in
-  `install.sh` ~35 s. A new dependency or feature changes the feature set of
-  shared crates - the Typst stack is rebuilt in all profiles (minutes, once).
-  What else could speed it up: e2e already has a warm-up and one worker (a
-  shared server).
+- **`tools/check.sh` is sequential** (~3 min warm with e2e, ~16 min from an
+  empty target dir): e2e is ~105 s of it (one Playwright worker on one server,
+  20 s of it the warm-up), `cargo test` ~43 s (test binaries run in turn, the
+  longest are ~15 s), the other steps are seconds each. The run uses ~2.5 CPUs
+  on average of the 9 it may (`.claude/rules/tools.md`, "CPU cap"), but steps
+  do not overlap even inside one run: the lock of heavy work is per step. A
+  new dependency or feature changes the feature set of shared crates - the
+  Typst stack is rebuilt in all profiles (minutes, once); `cargo run -p
+  notes-typst` (`notes check`, e2e) and `cargo test --workspace` unify features
+  differently and build the web stack twice (~20 s from scratch). How to close:
+  run the client steps (Vitest, build, e2e) next to the Rust ones, replacing
+  the one lock by a budget of `CHECK_JOBS` slots shared by all runs, and split
+  the e2e files over workers with their own servers and ports (~1 min saved).
 - **The installed `notes` and skill are a snapshot at `tools/install.sh`
   time**: without reinstalling they lag behind the repository; an open window
   (its core) and a `notes serve` started by hand run the old version until a

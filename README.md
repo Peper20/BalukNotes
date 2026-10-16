@@ -16,7 +16,8 @@ with sign-in (`docs/roadmap.md`); in a browser it works through `notes serve`.
    build of a note with a figure.
 2. **Install** `notes` and the Claude Code skill `/baluk-note` (and after every
    repository update): `tools/install.sh` (the first build takes a few
-   minutes). Then `notes` works from any folder. `notes` is a thin command: it
+   minutes; at most 9 CPUs are busy, `CHECK_JOBS=N` changes it). Then
+   `notes` works from any folder. `notes` is a thin command: it
    hands work to the parts in its folder (`notes-typst` - building and all
    commands below; `notes-app` - the window; `notes-hub` - accounts and the
    storage server); which are installed - `notes
