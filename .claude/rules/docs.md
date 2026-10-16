@@ -7,7 +7,7 @@ paths:
 # docs/architecture.md and docs/tech-debt.md
 
 Both change only through reviewed pull requests, together with the code they
-describe; the `orchestrator` decides on them (`docs/agents.md`).
+describe; the `liaison` decides on them (`docs/agents.md`).
 
 ## docs/architecture.md
 

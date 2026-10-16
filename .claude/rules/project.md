@@ -62,9 +62,10 @@ directory - read the file.
 definitions - `.claude/agents/`, how it works - `docs/agents.md`. The
 repository is on a local Forgejo server (`origin`, the `forge` skill), GitHub
 is its mirror. Code and the documents that change with it reach `main` only
-through a reviewed pull request; the `orchestrator` owns the architecture.
-The liaison commits `docs/roadmap.md`, `docs/questions.md`, `docs/agents.md`
-and `.claude/rules/`, `.claude/agents/`, `.claude/skills/` straight to `main`.
+through a reviewed pull request; the `liaison` owns the architecture.
+The liaison commits `docs/roadmap.md`, `docs/questions.md`, `docs/agents.md`,
+the design decisions in `docs/architecture.md` and `docs/tech-debt.md` that no
+code yet follows, and `.claude/rules/`, `.claude/agents/`, `.claude/skills/` straight to `main`.
 Permission settings (`.claude/settings*.json`) are changed only by the user.
 
 ## Language

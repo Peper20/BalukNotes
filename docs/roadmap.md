@@ -254,6 +254,11 @@ before M7 starts.
 
 ## Later
 
+- Spec-driven development (user's plan): every task is written to a file in
+  the repository (spec, acceptance criteria, files) that the developer reads;
+  the liaison writes the specs, the briefs point to them. How the files are
+  laid out and when they are removed - to decide when it starts
+
 - Public notes (to think through): a note opens by a link for everyone, in the
   full client (not a static site); it is visible which ones are public. Who
   builds HTML for a reader without the app - to decide (a server without

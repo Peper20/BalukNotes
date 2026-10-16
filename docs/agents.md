@@ -8,8 +8,8 @@ in its definition (`.claude/agents/`); this document is the map.
 
 | Agent | Model | Does | Does not |
 |---|---|---|---|
-| `liaison` | the session's | Talks to the user in Russian, makes the goal and acceptance criteria clear, keeps `docs/roadmap.md`, `docs/questions.md`, this file and `.claude/rules/`, `.claude/agents/`, `.claude/skills/`, writes the orchestrator's brief in English, reports | Write code, edit `docs/architecture.md` or `docs/tech-debt.md`, run developers, merge |
-| `orchestrator` | Sonnet, medium | Owns the architecture and designs what the request needs, decides on the tech debt, splits the request into tasks, picks the developer, runs the review, merges approved pull requests, cleans up, runs `tools/install.sh` | Edit files |
+| `liaison` | Opus, medium | Talks to the user in Russian, owns the architecture and the specification (`docs/architecture.md`), decides on the tech debt, splits requests into tasks and picks the developer of each, writes the orchestrator's brief in English, keeps `docs/roadmap.md`, `docs/questions.md`, `docs/tech-debt.md`, this file and `.claude/rules/`, `.claude/agents/`, `.claude/skills/`, reports | Write code, run developers, merge |
+| `orchestrator` | Sonnet, medium | Runs the pipeline: starts the tasks of the brief, waits for them, runs the review, merges approved pull requests, cleans up, runs `tools/install.sh`, relays questions to the liaison | Design, split or change tasks, decide on the tech debt, edit files |
 | `developer-1` | Haiku, xhigh | Routine, well-described, small tasks along an existing pattern | Merge, design the architecture |
 | `developer-2` | Sonnet, high | Complex tasks: several crates or the core with the client, sync, builds and caches, memory, concurrency, Typst internals | Merge, design the architecture |
 | `developer-3` | Opus, medium | The hardest: elusive bugs, investigations, tasks another developer could not finish, resumed blocked tasks | Merge, design the architecture |
@@ -21,13 +21,16 @@ The user talks only to the `liaison`. Agents talk to each other in English.
 
 1. **Request.** The user describes the task to the `liaison`; it makes the goal
    and acceptance criteria clear (how a feature looks is decided, not asked -
-   `.claude/rules/project.md`, "Essentials") and takes the related tech debt
-   into the brief.
-2. **Brief.** Goal, context, acceptance criteria, out of scope. The brief is
-   self-contained: the `orchestrator` has not seen the conversation.
-3. **Plan.** The `orchestrator` designs the change, decides which tech debt is
-   done now and splits the request into tasks: one task per coherent change,
-   independent ones in parallel.
+   `.claude/rules/project.md`, "Essentials").
+2. **Design and tasks.** The `liaison` designs the change, decides which tech
+   debt is done now, works out the change to `docs/architecture.md`, splits
+   the request into tasks (one per coherent change) and picks the developer
+   of each.
+3. **Brief.** Goal, context, design, tasks (each with its developer, files,
+   tech debt entries, architecture change and acceptance criteria), out of
+   scope. The brief is self-contained: the `orchestrator` and the developers
+   have not seen the conversation. The `orchestrator` runs independent tasks
+   in parallel.
 4. **Development.** A developer starts cold in its own worktree with the
    design fixed in its brief, works on the branch `task/<slug>`, runs
    `tools/check.sh` and opens a pull request (the `dev-workflow` skill).
@@ -43,11 +46,11 @@ The user talks only to the `liaison`. Agents talk to each other in English.
    tasks that took `developer-3` two rounds first, then the results, the
    tech debt, what to look at.
 
-The `orchestrator` owns the architecture (`docs/architecture.md`); developers
-apply its changes to the document in the same pull request as the code. Tech
-debt (`docs/tech-debt.md`) changes only in pull requests: a developer may defer
-a large unforeseen problem with an entry, the `orchestrator` decides whether it
-waits. Requirements to both documents - `.claude/rules/docs.md`.
+The `liaison` owns the architecture (`docs/architecture.md`); developers apply
+its changes to the document in the same pull request as the code. Tech debt
+(`docs/tech-debt.md`) entries change in the pull requests of the code: a
+developer may defer a large unforeseen problem with an entry, the `liaison`
+decides whether it waits (the `orchestrator` relays). Requirements to both documents - `.claude/rules/docs.md`.
 
 ## Isolation
 
