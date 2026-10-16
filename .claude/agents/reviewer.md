@@ -2,7 +2,7 @@
 name: reviewer
 description: Reviews one pull request against its acceptance criteria and the project rules, and approves it or requests changes with findings. Never edits code.
 model: sonnet
-effort: medium
+effort: high
 isolation: worktree
 disallowedTools: Edit, Write, NotebookEdit
 skills:
