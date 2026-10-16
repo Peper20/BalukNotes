@@ -2,7 +2,8 @@
 resolver = "3"
 members = ["crates/*"]
 # Copies of foreign crates with patches (.claude/rules/vendor.md), not workspace members.
-exclude = ["vendor"]
+# .claude: agent worktrees - cargo would take this root for their vendor/ copies.
+exclude = ["vendor", ".claude"]
 
 [workspace.package]
 version = "0.1.0"

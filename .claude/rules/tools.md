@@ -10,7 +10,8 @@ paths:
 | `check.sh` | the full check |
 | `install.sh` | `notes` and its parts (`notes-typst`, `notes-hub`, the `notes-app` window with a menu entry and icon) into `~/.local/bin` and the skill into `~/.claude/skills` in one version (the autostart service is not installed; one still active is restarted); run again after changes |
 | `deploy-hub.sh` | updates `notes-hub` on the VPS in one command: sends the sources of a commit over SSH, the VPS builds, a root helper (`server/baluk-notes-hub-install`, installed by hand) installs and restarts (`docs/server.md`, "Updating") |
-| `test-env.sh` | a server on `tests/vault` (data `tests/.data`, port 8432) |
+| `test-env.sh` | a server on `tests/vault` (data `tests/.data`, port 8432, another - `PORT=...`) |
+| `lib/worktree-target.sh` | in a linked worktree (agents) - the build dir shared by all worktrees |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 | `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; opens a visible window for a moment |
 
@@ -38,7 +39,11 @@ system Chromium (`/usr/bin/chromium`, another one - `CHROMIUM=...`). The
 webkit2gtk-4.1`), otherwise it is excluded from the cargo steps (cloud).
 Before the steps: `target/` over 30 GB (`TARGET_LIMIT_GB`) - `cargo clean`,
 cargo does not remove old builds itself; with an own `CARGO_TARGET_DIR`
-(shared by worktrees) - no cleaning.
+(shared by worktrees) - no cleaning. In a linked worktree `check.sh` and
+`test-env.sh` build into `~/.cache/baluk-notes/worktree-target`
+(`lib/worktree-target.sh`); without `app/dist` (a fresh checkout) the client
+is built before the Rust steps - server tests serve it; e2e listens on fixed
+ports, so parallel runs take turns on a lock.
 
 **Reference snapshots** `tests/snapshots/`: the HTML of every fixture
 (`*.snap`), the public library names, the search reference. A test failed -

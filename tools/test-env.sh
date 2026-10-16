@@ -11,6 +11,7 @@
 # also finds the `notes serve` service).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source tools/lib/worktree-target.sh
 
 port="${PORT:-8432}"
 profile=()

@@ -34,6 +34,8 @@ fi
 renice -n 2 -p $$ >/dev/null 2>&1 || true
 ionice -c 2 -n 5 -p $$ >/dev/null 2>&1 || true
 
+source tools/lib/worktree-target.sh
+
 # target/ grows without limit: cargo does not remove old variants of our crates
 # (a new one appears after a Cargo.toml edit, a cache tag, another worktree path).
 # Over TARGET_LIMIT_GB (30) - cargo clean first. Someone else's CARGO_TARGET_DIR
@@ -142,6 +144,11 @@ baluk_note() {
 
 in_app() { (cd app && "$@"); }
 
+# e2e listens on fixed ports (8433, 8461, 8462): runs in parallel worktrees take turns.
+e2e() {
+  (flock 9 && cd app && npm run -s e2e) 9>"${XDG_RUNTIME_DIR:-/tmp}/baluk-notes-e2e.lock"
+}
+
 # The notes-app window (Tauri) - only with WebKitGTK; without it (cloud) - skipped.
 no_webkit=()
 if ! pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
@@ -150,6 +157,12 @@ if ! pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
 fi
 
 if [[ $rust == 1 ]]; then
+  # Server tests serve the client from app/dist (a debug build reads it from
+  # disk): a fresh checkout (a worktree) builds the client first.
+  if [[ ! -f app/dist/index.html ]]; then
+    [[ -d app/node_modules ]] || step npm-ci in_app npm ci
+    step client-dist in_app npm run -s build
+  fi
   step cargo-test cargo test --workspace "${no_webkit[@]}"
   # With the measure feature - also the heavy memory measurements (they do not run as tests).
   step clippy cargo clippy --workspace "${no_webkit[@]}" --all-targets --features notes-core/measure -- -D warnings
@@ -172,7 +185,7 @@ if [[ $app == 1 ]]; then
   else
     step build in_app npm run -s build
     if [[ ${results[-1]} == "ok" ]]; then
-      step e2e in_app npm run -s e2e
+      step e2e e2e
     else
       skip e2e "the client did not build"
     fi

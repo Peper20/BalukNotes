@@ -12,6 +12,7 @@ PDF, a Svelte client shows the notes.
 | the plan and the user's decisions on it | `docs/roadmap.md` |
 | tech debt: what is simplified, the risk, how to close it | `docs/tech-debt.md` |
 | open questions to the user | `docs/questions.md` |
+| the development pipeline: agents, pull requests, review | `docs/agents.md` |
 | how to write notes | `docs/writing.md` (= `notes docs writing`) |
 | the storage server on a VPS: service, nginx | `docs/server.md` |
 | research measurements | `docs/research/` |
@@ -22,7 +23,8 @@ Directory rules - `.claude/rules/<name>.md`, Claude Code loads them itself when
 working with files of the directory (the `paths` field): `crates` (core,
 server, CLI), `app` (client), `baluk` (editing the library), `skills`
 (skills), `tools` (checks, screenshots, cloud environment), `tests-vault` (the
-fixture vault), `vendor` (copies of foreign crates). Need the rules of another
+fixture vault), `vendor` (copies of foreign crates), `docs` (the architecture
+and tech debt documents). Need the rules of another
 directory - read the file.
 
 ## Essentials
@@ -50,8 +52,20 @@ directory - read the file.
   same change fix `docs/writing.md` and the `/baluk-note` skill (`SKILL.md`,
   `examples/`, `reference.md`; what the tests check -
   `.claude/rules/skills.md`), then `tools/install.sh`.
-- At the end: mark what is done in the roadmap, add tech debt, delete what is
-  closed.
+- At the end: mark what is done in the roadmap; tech debt is added and closed
+  in the pull requests.
+
+## Pipeline
+
+`liaison` (the main session, `claude --agent liaison`) -> `orchestrator` ->
+`developer`, `developer-senior`, `developer-expert` -> `reviewer`;
+definitions - `.claude/agents/`, how it works - `docs/agents.md`. The
+repository is on a local Forgejo server (`origin`, the `forge` skill), GitHub
+is its mirror. Code and the documents that change with it reach `main` only
+through a reviewed pull request; the `orchestrator` owns the architecture.
+The liaison commits `docs/roadmap.md`, `docs/questions.md`, `docs/agents.md`
+and `.claude/rules/`, `.claude/agents/`, `.claude/skills/` straight to `main`.
+Permission settings (`.claude/settings*.json`) are changed only by the user.
 
 ## Language
 
