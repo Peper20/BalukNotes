@@ -436,9 +436,11 @@ it. The format and rules - `.claude/rules/docs.md`.
   error).
 - **The hint "the path starts with the vault directory name"** in `notes new`
   is a heuristic on the first segment; it does not catch other path mistakes.
-- **`target/` is cleaned whole** (`check.sh`, over 30 GB): after a cleaning
-  the first check builds everything again (~10 min). How to close: remove only
-  old variants (`cargo-sweep`) if full rebuilds get in the way.
+- **Dependency variants in `target/` do not shrink** (`tools/lib/target-limit.sh`):
+  only the stale units of our own crates are pruned; over 30 GB `check.sh`
+  cleans `target/` whole and the next check builds everything again (~8 min).
+  How to close: remove old dependency variants (`cargo-sweep`) if full
+  rebuilds get in the way.
 
 ## The `/baluk-note` skill
 

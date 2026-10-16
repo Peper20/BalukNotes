@@ -57,10 +57,13 @@ decides whether it waits (the `orchestrator` relays). Requirements to both docum
 - Each developer and reviewer works in its own git worktree in
   `.claude/worktrees/` (not in git), on its own branch. The `liaison` and the
   `orchestrator` work in the main checkout.
-- Worktrees build into one shared dir `~/.cache/baluk-notes/worktree-target`
+- Worktrees build into the `target/` of the main checkout
   (`tools/lib/worktree-target.sh`): a build from scratch is ~8 min and tens of
-  GB. The `orchestrator` removes it between requests when it is over 30 GB.
-  The main checkout keeps its own `target/`.
+  GB, and the dependencies built once serve every worktree. `tools/check.sh`
+  prunes the stale units of our own crates and cleans the dir over 30 GB
+  itself, under the lock of heavy work (`.claude/rules/tools.md`, "Checks"). A
+  build by hand in the main checkout uses other rustflags, so it builds its own
+  copy of the dependencies.
 - The heavy steps of all runs (`tools/check.sh`, the builds in
   `tools/install.sh` and `tools/test-env.sh`) take turns on one lock,
   `~/.cache/baluk-notes/heavy.lock`, and each run is capped at `CHECK_JOBS`
