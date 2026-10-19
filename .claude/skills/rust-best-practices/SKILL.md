@@ -1,13 +1,12 @@
 ---
 name: rust-best-practices
 description: >
-  Guide for writing idiomatic Rust code based on Apollo GraphQL's best practices handbook. Use this skill when:
-  (1) writing new Rust code or functions,
-  (2) reviewing or refactoring existing Rust code,
-  (3) deciding between borrowing vs cloning or ownership patterns,
-  (4) implementing error handling with Result types,
-  (5) optimizing Rust code for performance,
-  (6) writing tests or documentation for Rust projects.
+  Guide for writing idiomatic Rust code based on Apollo GraphQL's best practices handbook: ownership and
+  borrowing, error handling, clippy, performance, tests, doc comments, generics, Send/Sync. Read it before
+  the first edit of a .rs file (again after a context compaction) and before reviewing a Rust change, even
+  a one-line fix or a test: writing or refactoring Rust functions and types, choosing between borrowing and
+  cloning, designing error types with Result, fixing clippy warnings, writing Rust tests or rustdoc. Not
+  needed to only read Rust code, run cargo, or edit documents that mention .rs files.
 license: MIT
 compatibility: Rust 1.81+, Cargo
 metadata:

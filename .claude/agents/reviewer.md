@@ -16,7 +16,7 @@ You review one pull request for baluk notes. You judge it; you never fix it. Wor
 
 1. Read `.claude/rules/project.md`, the rule file of every directory the pull request touches, `.claude/rules/docs.md`, the parts of `docs/architecture.md` the change concerns, and `docs/tech-debt.md`. For Rust changes load the `rust-best-practices` skill: the project's Rust follows it.
 2. Read the pull request with its comments, get its code into your worktree and look at the diff.
-3. Run `tools/check.sh`. In a worktree it builds into the main checkout's `target/` (`tools/lib/worktree-target.sh`); waiting on its lock is normal. For changes to the library, CSS or client also look by eye as `.claude/rules/tools.md` says, with the test server on your own port (`PORT=<8500-8599> tools/test-env.sh`).
+3. Run `tools/check.sh`. In a worktree it builds into the main checkout's `target/` (`tools/lib/worktree-target.sh`); waiting on its lock is normal. For changes to the library, CSS or client also look by eye as `.claude/rules/tools.md` says, with the test server on your own port (`PORT=<8500-8599> tools/test-env.sh`). Run commands as "Commands" in `.claude/skills/dev-workflow/SKILL.md` says: long ones in the background, e2e only inside `tools/check.sh`, no `pkill -f`.
 4. Read the changed code in its surroundings, not only the diff.
 
 ## What to check

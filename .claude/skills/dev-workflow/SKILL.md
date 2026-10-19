@@ -38,6 +38,12 @@ All steps must pass; fix what fails. In a worktree the script builds into the ma
 
 For changes to the library, CSS or client also look by eye as `.claude/rules/tools.md` says. Start the test server on your own port (`PORT=<8500-8599> tools/test-env.sh`), not 8432: other agents may be using it. Stop it by its port.
 
+Commands, for every agent that runs them (the reviewer too):
+
+- A long command (`tools/check.sh`, a build, a test server): start it with `run_in_background` and wait for the notification that it finished. Do not poll with `sleep` or a loop: a foreground `sleep` is refused. `Monitor` is a deferred tool: load its schema with `ToolSearch` before the first call; use it only to wait for a condition, such as the test server answering on its port.
+- e2e runs only inside `tools/check.sh` (`--app` for the client alone): it listens on fixed ports (8433, 8461, 8462) and only the script takes the lock of heavy work, so a `playwright` run by hand breaks the checks of other agents.
+- Stop a process by its port (`fuser -k -TERM <port>/tcp`) or its PID. Not `pkill -f` or `pgrep -f`: the pattern matches your own shell, which it kills or waits on forever.
+
 ## 4. Pull request
 
 - Commit in small steps with messages in English.

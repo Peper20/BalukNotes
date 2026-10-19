@@ -2,7 +2,11 @@
 """PreToolUse hook: Rust edits only after the rust-best-practices skill.
 
 An edit is Edit/Write/MultiEdit of a .rs file or a Bash command that writes
-to a .rs file (sed -i, perl -i, > file.rs, tee, a write from python). The
+to a .rs file: one part of the command (between ;, &&, ||, | and new lines)
+both writes (sed -i, perl -i, tee, a write from python) and names a .rs file,
+or the command redirects into one (> file.rs). A part that only mentions a .rs
+file while writing another file (a document about the code) is not an edit;
+nor is a file outside the project (a scratch .rs in /tmp). The
 skill counts as loaded when the transcript has a Skill call with it or the
 /rust-best-practices command after the last context compaction: a compaction
 summarizes the skill text away, so it is loaded again in full. A subagent
@@ -19,25 +23,47 @@ import sys
 
 SKILL = "rust-best-practices"
 
-# Signs of writing a file in a shell command (reading - grep, sed -n, cat - is not).
+# Signs of writing a file in one part of a shell command (reading - grep, sed -n, cat - is not).
 WRITES = re.compile(
     r"sed\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*i"
     r"|perl\s+-[a-zA-Z]*i"
-    r"|>>?\s*['\"]?[^\s'\"|;&]*\.rs\b"
     r"|\btee\b"
     r"|\.write\(|write_text\(|open\([^)]*['\"][wa]"
 )
 
-# A context compaction in the transcript (a system record).
-COMPACTION = '"subtype":"compact_boundary"'
+# A redirect into a .rs file: a write by itself.
+REDIRECT = re.compile(r">>?\s*['\"]?([^\s'\"|;&<>]*\.rs)\b")
+
+# A .rs path in a command.
+RUST_PATH = re.compile(r"([^\s'\"|;&<>()=,]*\.rs)\b")
+
+# Where one part of a shell command ends.
+PARTS = re.compile(r"&&|\|\||[;|\n]")
+
+PROJECT = os.path.realpath(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
 
 
-def touches_rust(tool: str, data: dict) -> bool:
+def in_project(path: str, cwd: str) -> bool:
+    """Whether the path (relative to the command's cwd) is inside the project."""
+    full = os.path.realpath(os.path.join(cwd, os.path.expanduser(path)))
+    return full == PROJECT or full.startswith(PROJECT + os.sep)
+
+
+def bash_writes_rust(command: str, cwd: str) -> bool:
+    if any(in_project(path, cwd) for path in REDIRECT.findall(command)):
+        return True
+    return any(
+        WRITES.search(part) and any(in_project(path, cwd) for path in RUST_PATH.findall(part))
+        for part in PARTS.split(command)
+    )
+
+
+def touches_rust(tool: str, data: dict, cwd: str) -> bool:
     if tool in ("Edit", "Write", "MultiEdit"):
-        return str(data.get("file_path", "")).endswith(".rs")
+        path = str(data.get("file_path", ""))
+        return path.endswith(".rs") and in_project(path, cwd)
     if tool == "Bash":
-        command = str(data.get("command", ""))
-        return re.search(r"\.rs\b", command) is not None and WRITES.search(command) is not None
+        return bash_writes_rust(str(data.get("command", "")), cwd)
     return False
 
 
@@ -73,7 +99,8 @@ def own_transcript(event: dict) -> str | None:
 
 def main() -> None:
     event = json.load(sys.stdin)
-    if not touches_rust(event.get("tool_name", ""), event.get("tool_input") or {}):
+    cwd = str(event.get("cwd") or os.getcwd())
+    if not touches_rust(event.get("tool_name", ""), event.get("tool_input") or {}, cwd):
         return
     transcript = own_transcript(event)
     if not transcript or skill_loaded(transcript):

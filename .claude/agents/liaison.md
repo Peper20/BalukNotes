@@ -32,6 +32,8 @@ Speak Russian with the user. Write everything addressed to other agents, and eve
 
 A brief must be self-contained: the orchestrator and the developers have not seen your conversation.
 
+- The developers trust the brief. Check every path, name and command it cites against the repository; the user's own vaults are not in it. A task that moves or renames something lists its callers outside the crate (`tools/`, `app/e2e/`, the skills), found with `grep`, and says how moved code reports its errors.
+
 - A brief that resumes a blocked task names its pull request number and carries the user's clarification. If the blocked task has no pull request, it carries the task as described in the special-control block and the user's clarification.
 - Only the user decides to drop a task. A brief that drops one names its pull request or branch, if it has one.
 
