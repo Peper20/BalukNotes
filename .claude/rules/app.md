@@ -36,6 +36,8 @@ npm test        # Vitest; also check, e2e
   `notes.folderTitle(path)` (`lib/state/notes.svelte.ts`).
 - Note HTML is inserted into the DOM directly (`NoteView.svelte`), not by a
   template.
+- The document only through `lib/dom.ts`, never `document.<name>` or
+  `window.<id>`: a note's `id`/`name` can shadow them (DOM clobbering).
 - A view setting = an entry in `notes-core::settings::Schema`
   (`.attr("data-...")` or `.var("--...", "px")`) + a CSS rule; `appearance.ts`
   applies it by the schema.

@@ -167,8 +167,11 @@ before M7 starts.
       sessions, vault files with versions and history, change long polling;
       the light crate `notes-store` (data directory rules, vault names,
       accounts, sessions, the sync engine)
-- [ ] The rest of the core split: storage, paths, settings and the watcher
-      move to the light crate when light commands move into `notes`
+- [x] The rest of the core split: storage and its watcher, the vault list,
+      note paths, the platform and the sync preference are in `notes-store`
+      (`notes-device` without Typst); the light commands (`docs`, `vaults`,
+      `sync`, `service`) run in the thin `notes`. The settings schema stays in
+      the core: it is built from the library themes
 - [x] Sync: a copy on the device, file versions, changes on events; who wins
       a conflict - `device.sync_prefer` (the computer writes first, the others
       receive - user's decision); `notes sync`, a background worker in the
@@ -196,8 +199,8 @@ before M7 starts.
       `notes://` scheme and the same `Router` works fully; SSE through the
       scheme is impossible
 - [x] Parts (user's decision, architecture §1): the thin `notes` calls
-      `notes-typst` (all current commands) from its folder and passes the
-      version; light commands move into `notes` with the core split (M4)
+      `notes-typst` from its folder and passes the version; light commands
+      run in `notes` itself
 - [x] Events by long polling instead of SSE (one way for the browser and the
       window); `notes serve --socket` - a Unix socket without a token, the
       service listens on it too
@@ -246,7 +249,7 @@ before M7 starts.
 
 ## M7. Browser - the core in WASM
 
-- [ ] Research E4: `notes-core` for `wasm32` (no threads, `notify`, `std::fs` -
+- [~] Research E4 (PR #14, not merged: needs a review and a full check): `notes-core` for `wasm32` (no threads, `notify`, `std::fs` -
       `Storage` in OPFS/IndexedDB), build time and memory of the demo and a
       large book in Chromium and on a phone, the weight of fonts and packages;
       report - `docs/research/E4.md`
