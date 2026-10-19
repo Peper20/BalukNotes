@@ -1,8 +1,10 @@
 use axum::body::Body;
 use axum::http::Request;
-use notes_core::settings::{Platform, Schema, SettingsStore};
-use notes_core::{Notes, VaultName};
+use notes_core::Notes;
+use notes_core::settings::{Schema, SettingsStore};
 use notes_server::{AppState, VaultSet, router};
+use notes_store::names::VaultName;
+use notes_store::platform::Platform;
 use std::sync::Arc;
 use tower::ServiceExt;
 

@@ -33,8 +33,8 @@ use serde::{Deserialize, Serialize};
 use crate::diag::Diagnostic;
 use crate::fsutil::write_atomic;
 use crate::render::{LinkRef, Rendered};
-use crate::vault::NoteId;
 use crate::version::{Dep, StableHasher};
+use notes_store::note_id::NoteId;
 
 /// The record format version: change it on any change of [`Record`] or
 /// [`Rendered`].
@@ -113,7 +113,7 @@ pub struct Pruned {
 }
 
 impl DiskCache {
-    /// `vault` is where the vault is ([`crate::storage::Storage::location`]):
+    /// `vault` is where the vault is ([`notes_store::storage::Storage::location`]):
     /// different vaults may have notes with the same paths.
     pub fn new(root: impl Into<PathBuf>, vault: &str, stamp: String) -> Self {
         let root = root.into();

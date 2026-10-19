@@ -5,7 +5,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 
 use notes_core::figures::FigureOptions;
-use notes_core::{LibrarySource, NoteId, NotePage, Notes, NotesConfig};
+use notes_core::{LibrarySource, NotePage, Notes, NotesConfig};
+use notes_store::note_id::NoteId;
 
 pub fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")

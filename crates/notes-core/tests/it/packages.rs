@@ -2,8 +2,10 @@
 //! of allowed ones changes, only notes that read packages are rebuilt.
 
 use notes_core::figures::FigureOptions;
-use notes_core::settings::{Platform, Schema, SettingsStore};
-use notes_core::{LibrarySource, NoteId, Notes, NotesConfig};
+use notes_core::settings::{Schema, SettingsStore};
+use notes_core::{LibrarySource, Notes, NotesConfig};
+use notes_store::note_id::NoteId;
+use notes_store::platform::Platform;
 
 use crate::common::repo;
 

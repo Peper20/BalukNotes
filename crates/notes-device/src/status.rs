@@ -4,7 +4,7 @@
 use std::collections::BTreeSet;
 use std::time::Duration;
 
-use notes_core::VaultName;
+use notes_store::names::VaultName;
 use notes_store::sync::Held;
 use serde::Serialize;
 

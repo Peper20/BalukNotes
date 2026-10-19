@@ -1,6 +1,6 @@
 [package]
 name = "notes-store"
-description = "The light part of the core, without Typst: names, files, accounts, sessions, sync"
+description = "The light part of the core, without Typst: names, vault files and their watcher, accounts, sessions, sync"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -27,6 +27,15 @@ thiserror.workspace = true
 toml.workspace = true
 tracing.workspace = true
 ts-rs = { workspace = true, optional = true }
+
+# The vault watcher (`storage.rs`); browsers have none.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+notify.workspace = true
+
+# The system trash for deleted notes (`storage.rs`); phones and browsers have
+# none.
+[target.'cfg(not(any(target_os = "android", target_os = "ios", target_family = "wasm")))'.dependencies]
+trash.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -3,7 +3,9 @@
 use std::io;
 use std::path::PathBuf;
 
+use notes_store::names::InvalidName;
 use notes_store::sync::{Error as SyncError, Held, Side};
+use notes_store::vaults;
 
 use crate::account::Account;
 
@@ -53,8 +55,12 @@ pub enum Error {
     #[error(transparent)]
     Sync(#[from] SyncError),
 
+    /// The vault list of the data directory failed (not found, exists, I/O).
     #[error(transparent)]
-    Core(#[from] notes_core::Error),
+    Vaults(#[from] vaults::Error),
+
+    #[error(transparent)]
+    InvalidVault(#[from] InvalidName),
 
     #[error("{}: {source}", path.display())]
     Io {

@@ -9,7 +9,8 @@ use std::fs;
 use std::time::{Duration, Instant};
 
 use notes_core::world::LibrarySource;
-use notes_core::{NoteId, Notes, NotesConfig};
+use notes_core::{Notes, NotesConfig};
+use notes_store::note_id::NoteId;
 
 fn rss_hwm_kib() -> (u64, u64) {
     // /proc/self/status: the VmRSS and VmHWM lines, in KiB.
@@ -50,7 +51,7 @@ fn measure_memory_and_reopen_time() {
     // Limit the page cache memory (less noise in measurements): applied directly.
     let device = notes_core::settings::Device {
         warm: notes_core::warm::WarmMode::All,
-        sync_prefer: notes_core::settings::SyncPrefer::Local,
+        sync_prefer: notes_store::platform::SyncPrefer::Local,
         builds: 2,
         memory: 8 * 1024 * 1024,
         disk: notes_core::cache::DiskLimits::default(),

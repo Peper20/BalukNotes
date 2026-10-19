@@ -28,9 +28,7 @@ const AFTER_CACHE: &[&str] = &[
     "pages.rs",
     "search.rs",
     "settings.rs",
-    "vaults.rs", // vaults by name: outside the build
     "warm.rs",
-    "watch.rs",    // the file watcher
     "webfonts.rs", // fonts for the browser
 ];
 

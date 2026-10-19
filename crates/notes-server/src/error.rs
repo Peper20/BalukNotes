@@ -34,6 +34,12 @@ impl From<notes_core::Error> for ApiError {
     }
 }
 
+impl From<notes_store::note_id::InvalidId> for ApiError {
+    fn from(e: notes_store::note_id::InvalidId) -> Self {
+        notes_core::Error::from(e).into()
+    }
+}
+
 pub(crate) type ApiResult<T> = Result<T, ApiError>;
 
 /// Blocking core work, on a blocking thread.

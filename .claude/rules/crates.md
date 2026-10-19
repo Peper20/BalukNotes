@@ -11,15 +11,15 @@ How it works and why - `docs/architecture.md`; here - code rules of `crates/`.
 
 | Crate | What |
 |---|---|
-| `notes-core` | the core without async or HTTP: vault, Typst compiling, HTML processing, cache, warm-up, links, graph, search, settings |
+| `notes-core` | the core without async or HTTP: vault (notes and books), Typst compiling, HTML processing, cache, warm-up, links, graph, search, settings |
 | `notes-server` | HTTP API (axum) and serving the client |
 | `notes-assets` | the client `app/dist` for the server |
 | `notes` | the thin `notes` command: calls the parts from its own folder, no dependencies (architecture §1) |
 | `notes-typst` | the part that builds with Typst: every command except those of other parts |
 | `notes-app` | the window (Tauri 2) without Typst: the `notes://` scheme -> the core over a Unix socket; needs WebKitGTK; a launch by an agent or a check - only in a headless gamescope (`tools/app-smoke.sh`, `.claude/rules/tools.md`) |
-| `notes-store` | the light part without Typst, HTTP or async: data directory rules, vault names, accounts, sessions, the sync engine |
+| `notes-store` | the light part without Typst, HTTP or async: data directory rules, vault names and list, note paths (`NoteId`), `trait Storage` and the watcher, platform and sync preference, accounts, sessions, the sync engine |
 | `notes-hub` | the storage server without Typst (`notes hub serve`, `notes users`): sign-in (`auth`, also mounted by `notes-server`), the sync API, the device's HTTP client (feature `client`) |
-| `notes-device` | the device side of sync: account, linked vaults, rounds, the background worker (uses `notes-hub`'s client, so not in the core) |
+| `notes-device` | the device side of sync: account, linked vaults, rounds, the background worker (uses `notes-hub`'s client, so not in the core); no Typst |
 
 Logic lives in the core, the other crates are thin wrappers. A new app part is
 a binary `notes-<name>` and a line in `notes::PARTS` (its commands); shared
@@ -87,7 +87,7 @@ Where the project differs from the skill:
   layer tests without Typst (`pages::tests::Setup`: a fake build +
   `MemStorage`).
 - Performance settings are device settings (`device.*`, `SettingDef::device`,
-  defaults by `settings::Platform`); the core applies them on the fly
+  defaults by `notes_store::platform::Platform`); the core applies them on the fly
   (`Notes::apply_device`), not as constants.
 - **The disk cache** is valid while the rendering code has not changed: the tag
   is a hash of the core sources (`crates/notes-core/build.rs`). A module that

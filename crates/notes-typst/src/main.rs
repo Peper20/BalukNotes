@@ -34,10 +34,14 @@ use notes_core::check::{Report, check, check_note};
 use notes_core::new_note::NewNote;
 use notes_core::rename::RenameKind;
 use notes_core::search::{TaggedChapter, tagged_chapters};
-use notes_core::settings::{Platform, Schema, SettingsStore};
+use notes_core::settings::{Schema, SettingsStore};
 use notes_core::vault::NoteKind;
-use notes_core::{LibrarySource, NoteId, Notes, NotesConfig, VaultName, Vaults};
+use notes_core::{LibrarySource, Notes, NotesConfig};
 use notes_store::config;
+use notes_store::names::VaultName;
+use notes_store::note_id::NoteId;
+use notes_store::platform::Platform;
+use notes_store::vaults::Vaults;
 
 /// `println!` that exits quietly (code 0) when the reader closed the pipe
 /// (`notes list | head`): Rust ignores SIGPIPE, and `println!` would panic.
@@ -697,7 +701,7 @@ fn serve(
         // Themes and fonts are the same for all vaults (the library): a core
         // without a vault, so that the server works with no vaults at all.
         let library =
-            Notes::with_storage(Arc::new(notes_core::storage::MemStorage::new()), &config).context("style library")?;
+            Notes::with_storage(Arc::new(notes_store::storage::MemStorage::new()), &config).context("style library")?;
         let settings = Arc::new(open_settings(&library, data)?);
         tracing::info!("vaults: {}", vaults.root().display());
         notes_server::VaultSet::registry(vaults, config, Arc::new(library), settings)

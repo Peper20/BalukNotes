@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
-use notes_core::VaultName;
 use notes_device::testing::{PASSWORD, TestHub};
 use notes_device::{Account, Paths, account};
+use notes_store::names::VaultName;
 
 /// Accounts of the tests: one per test that changes sessions or lists vaults.
 const LOGINS: &[&str] =

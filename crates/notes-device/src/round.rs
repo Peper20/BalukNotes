@@ -11,11 +11,12 @@ use std::io;
 use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime};
 
-use notes_core::VaultName;
 use notes_hub::api::VaultInfo;
 use notes_hub::client::{self, HttpRemote};
 use notes_store::fsutil::write_atomic;
+use notes_store::names::VaultName;
 use notes_store::sync::{Deletions, DirTree, Held, Options, Prefer, Report, State, sync_with};
+use notes_store::vaults::Vaults;
 use serde::{Deserialize, Serialize};
 
 use crate::account::Account;
@@ -226,7 +227,7 @@ pub fn link(paths: &Paths, vault: &VaultName, prefer: Prefer) -> Result<Round> {
     match (local, remote) {
         (false, false) => return Err(Error::NoSuchVault(vault.to_string())),
         (false, true) => {
-            notes_core::Vaults::new(paths.data()).create(vault)?;
+            Vaults::new(paths.data()).create(vault)?;
         }
         (true, false) => {
             client::create_vault(&account.server, account.token(), vault.as_str())

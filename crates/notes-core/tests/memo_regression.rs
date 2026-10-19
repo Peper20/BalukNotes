@@ -11,7 +11,8 @@ use std::fs;
 use std::time::{Duration, Instant};
 
 use notes_core::world::LibrarySource;
-use notes_core::{NoteId, Notes, NotesConfig};
+use notes_core::{Notes, NotesConfig};
+use notes_store::note_id::NoteId;
 
 fn largest_note_id(vault: &std::path::Path) -> NoteId {
     fn walk(dir: &std::path::Path, acc: &mut Vec<(std::path::PathBuf, u64)>) {
@@ -35,7 +36,7 @@ fn largest_note_id(vault: &std::path::Path) -> NoteId {
     NoteId::new(id).unwrap()
 }
 
-fn load_vault_to_mem(mem: &notes_core::storage::MemStorage, dir: &std::path::Path, rel: &std::path::Path) {
+fn load_vault_to_mem(mem: &notes_store::storage::MemStorage, dir: &std::path::Path, rel: &std::path::Path) {
     for entry in fs::read_dir(dir).unwrap() {
         let entry = entry.unwrap();
         let path = entry.path();
@@ -55,7 +56,7 @@ fn load_vault_to_mem(mem: &notes_core::storage::MemStorage, dir: &std::path::Pat
 fn rebuild_times_with_and_without_idle_release() {
     // The vault is in memory: edits do not touch the repository.
     let vault_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/vault");
-    let mem = std::sync::Arc::new(notes_core::storage::MemStorage::new());
+    let mem = std::sync::Arc::new(notes_store::storage::MemStorage::new());
     load_vault_to_mem(&mem, &vault_dir, std::path::Path::new(""));
     let cache_dir = tempfile::tempdir().unwrap();
     let cfg = NotesConfig {

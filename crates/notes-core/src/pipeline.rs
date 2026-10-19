@@ -18,10 +18,11 @@ use crate::finish;
 use crate::fonts::Fonts;
 use crate::render::{self, LinkResolver, Rendered};
 use crate::themes::ThemeSet;
-use crate::vault::{Entry, NoteId, Vault};
+use crate::vault::{Entry, Vault};
 use crate::version::{Dep, combine};
 use crate::world::Compiler;
 pub use crate::world::Priority;
+use notes_store::note_id::NoteId;
 
 /// The result of a build.
 #[derive(Debug)]

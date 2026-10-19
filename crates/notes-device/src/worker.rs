@@ -33,9 +33,9 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use notes_core::VaultName;
-use notes_core::storage::{ChangeSink, DirStorage, Storage as _, WatchGuard};
 use notes_hub::client::HttpRemote;
+use notes_store::names::VaultName;
+use notes_store::storage::{ChangeSink, DirStorage, Storage as _, WatchGuard};
 use notes_store::sync::Error as SyncError;
 use notes_store::sync::path::is_synced;
 use parking_lot::Mutex;

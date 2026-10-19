@@ -3,17 +3,17 @@
 //! [`Changes`] starts the vault watcher ([`Storage::watch`]) and hands the
 //! changes to those who need them:
 //!
-//! - the **link index** ([`crate::graph::SourceIndex`]) does not scan the
+//! - the **link index** (`notes_core::graph::SourceIndex`) does not scan the
 //!   vault while [`Changes::seq`] stays the same (the counter grows at once
 //!   on an event);
-//! - **warming** ([`crate::warm`]) wakes up on a change, not once a minute;
+//! - **warming** (`notes_core::warm`) wakes up on a change, not once a minute;
 //! - the **server** answers the client's waiting events request
 //!   (`GET /api/vaults/{vault}/events`): the client checks the note version
 //!   instead of polling every N seconds.
 //!
 //! Listeners get changes in batches, after the pause [`SETTLE`]: an editor
 //! saves a file in several steps. Note versions are still the `stat` of
-//! their files (a few calls per note, see [`crate::version`]).
+//! their files (a few calls per note, see `notes_core::version`).
 //!
 //! Besides the vault, another directory can be watched ([`Changes::also`]):
 //! the styling library on disk (`/_baluk/` of a debug build); its paths come

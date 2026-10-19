@@ -11,7 +11,7 @@
 //! vaults with no requests and no waiting events after [`IDLE_CLOSE`]; the
 //! next request opens them again.
 //!
-//! The vaults come from the data directory (`notes_core::vaults`, on request;
+//! The vaults come from the data directory (`notes_store::vaults`, on request;
 //! there may be none at all - the first is created in the client) or from one
 //! vault opened ahead (`notes serve --vault ...`, tests): then no new ones are
 //! created, and that one is neither renamed nor deleted. Themes and fonts are
@@ -33,7 +33,9 @@ use axum::{Json, Router};
 use notes_core::figures::FigureOptions;
 use notes_core::settings::{Schema, SettingsStore, VaultSettings};
 use notes_core::warm::WarmMode;
-use notes_core::{Notes, NotesConfig, SharedAssets, VaultName, Vaults};
+use notes_core::{Notes, NotesConfig, SharedAssets};
+use notes_store::names::VaultName;
+use notes_store::vaults::Vaults;
 use tokio::sync::watch;
 
 use crate::AppState;
@@ -204,7 +206,7 @@ impl Drop for EventsWait {
 
 impl OpenVault {
     fn new(name: VaultName, notes: Arc<Notes>, schema: &Schema) -> Self {
-        let path = notes.dir().map(|d| d.join(notes_core::vaults::SETTINGS_FILE));
+        let path = notes.dir().map(|d| d.join(notes_store::vaults::SETTINGS_FILE));
         // A broken file is not overwritten: the vault settings stay in memory only.
         let settings = VaultSettings::open_or_broken(path, schema);
         if let Some(p) = settings.problem() {
@@ -517,10 +519,12 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
+    use notes_core::LibrarySource;
     use notes_core::figures::FigureOptions;
-    use notes_core::settings::{Platform, Schema};
-    use notes_core::storage::MemStorage;
-    use notes_core::{LibrarySource, NoteId};
+    use notes_core::settings::Schema;
+    use notes_store::note_id::NoteId;
+    use notes_store::platform::Platform;
+    use notes_store::storage::MemStorage;
 
     use super::*;
 

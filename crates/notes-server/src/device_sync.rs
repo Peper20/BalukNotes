@@ -244,7 +244,8 @@ impl From<Status> for SyncStatus {
 
 fn api_error(e: SyncError) -> ApiError {
     let e = match e {
-        SyncError::Core(core) => return core.into(),
+        SyncError::Vaults(e) => return notes_core::Error::from(e).into(),
+        SyncError::InvalidVault(e) => return notes_core::Error::from(e).into(),
         other => other,
     };
     let code = match &e {
@@ -260,7 +261,9 @@ fn api_error(e: SyncError) -> ApiError {
         SyncError::Unreachable { .. } | SyncError::Sync(_) => StatusCode::BAD_GATEWAY,
         SyncError::InvalidServer(..) => StatusCode::BAD_REQUEST,
         SyncError::NoSuchVault(_) => StatusCode::NOT_FOUND,
-        SyncError::Core(_) | SyncError::Io { .. } | SyncError::Corrupt { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+        SyncError::Vaults(_) | SyncError::InvalidVault(_) | SyncError::Io { .. } | SyncError::Corrupt { .. } => {
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
     };
     if code == StatusCode::INTERNAL_SERVER_ERROR {
         tracing::error!("sync: {e}");

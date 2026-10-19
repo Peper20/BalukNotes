@@ -21,7 +21,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use notes_core::VaultName;
+use notes_store::names::VaultName;
 use parking_lot::Mutex;
 
 use crate::account::{self, Account};
@@ -43,7 +43,7 @@ impl std::fmt::Debug for DeviceSync {
 }
 
 fn name(vault: &str) -> Result<VaultName> {
-    Ok(VaultName::new(vault).map_err(notes_core::Error::from)?)
+    Ok(VaultName::new(vault)?)
 }
 
 impl DeviceSync {

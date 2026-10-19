@@ -15,8 +15,9 @@
 use std::collections::HashSet;
 use std::fmt::Write;
 
-use crate::vault::{BOOK_MAIN, NoteId, NoteKind, Vault};
+use crate::vault::{BOOK_MAIN, NoteKind, Vault};
 use crate::{Error, Result};
+use notes_store::note_id::NoteId;
 
 /// What to create.
 #[derive(Debug, Clone)]
@@ -251,7 +252,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::storage::{MemStorage, Storage};
+    use notes_store::storage::{MemStorage, Storage};
 
     fn new(kind: NoteKind) -> NewNote {
         NewNote { kind, title: None, tags: vec![], lang: None }

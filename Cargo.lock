@@ -3331,7 +3331,6 @@ dependencies = [
  "fontcull",
  "kurbo 0.13.1",
  "notes-store",
- "notify",
  "parking_lot",
  "rust-embed",
  "rustix",
@@ -3343,7 +3342,6 @@ dependencies = [
  "thiserror 2.0.21",
  "toml 0.8.23",
  "tracing",
- "trash",
  "ts-rs",
  "ttf-parser",
  "ttf2woff2",
@@ -3361,7 +3359,6 @@ dependencies = [
 name = "notes-device"
 version = "0.1.0"
 dependencies = [
- "notes-core",
  "notes-device",
  "notes-hub",
  "notes-store",
@@ -3409,6 +3406,7 @@ dependencies = [
  "notes-core",
  "notes-device",
  "notes-hub",
+ "notes-store",
  "serde",
  "serde_json",
  "tempfile",
@@ -3426,6 +3424,7 @@ dependencies = [
  "argon2",
  "base64 0.22.1",
  "dirs 6.0.0",
+ "notify",
  "parking_lot",
  "rand",
  "serde",
@@ -3435,6 +3434,7 @@ dependencies = [
  "thiserror 2.0.21",
  "toml 0.8.23",
  "tracing",
+ "trash",
  "ts-rs",
 ]
 

@@ -3,11 +3,13 @@
 //! With the `ts` feature they are all exported to TypeScript for the `app/` client:
 //! `cd app && npm run types`.
 
+use notes_core::NoteKind;
 use notes_core::diag::Diagnostic;
 use notes_core::graph::Backlink;
 use notes_core::search::TaggedChapter;
 use notes_core::settings::{Schema, SettingsProblem};
-use notes_core::{NoteId, NoteKind, VaultName};
+use notes_store::names::VaultName;
+use notes_store::note_id::NoteId;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -149,7 +151,7 @@ pub struct ErrorResponse {
     pub errors: Vec<Diagnostic>,
 }
 
-/// A change of vault files (batched, see `notes_core::watch`): time for the
+/// A change of vault files (batched, see `notes_store::watch`): time for the
 /// client to check the note version.
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS), ts(export))]

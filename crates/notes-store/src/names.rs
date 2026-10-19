@@ -86,6 +86,16 @@ impl From<VaultName> for String {
     }
 }
 
+/// Vault names in quotes separated by commas (for messages); `none` for an
+/// empty list.
+#[must_use]
+pub fn quoted_list(list: &[VaultName]) -> String {
+    if list.is_empty() {
+        return "none".into();
+    }
+    list.iter().map(|n| format!("\"{n}\"")).collect::<Vec<_>>().join(", ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -9,9 +9,10 @@ use notes_core::passes;
 use notes_core::pipeline::encode;
 use notes_core::render::{LinkResolver, render_with};
 use notes_core::themes::ThemeSet;
-use notes_core::vault::{NoteId, Vault};
+use notes_core::vault::Vault;
 use notes_core::version::Versions;
 use notes_core::world::{Compiler, Priority};
+use notes_store::note_id::NoteId;
 
 use crate::common::{compile, repo};
 

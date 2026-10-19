@@ -12,7 +12,6 @@ publish.workspace = true
 testing = ["dep:tokio", "dep:tempfile"]
 
 [dependencies]
-notes-core.workspace = true
 notes-store.workspace = true
 notes-hub = { workspace = true, features = ["client"] }
 parking_lot.workspace = true

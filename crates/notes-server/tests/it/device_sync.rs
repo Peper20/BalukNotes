@@ -10,11 +10,14 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use notes_core::settings::{Platform, Schema, SettingsStore};
-use notes_core::{LibrarySource, NotesConfig, VaultName, Vaults};
+use notes_core::settings::{Schema, SettingsStore};
+use notes_core::{LibrarySource, NotesConfig};
 use notes_device::testing::{PASSWORD, TestHub};
 use notes_device::{DeviceSync, Paths, Prefer, Timing};
 use notes_server::{AppState, VaultSet, router};
+use notes_store::names::VaultName;
+use notes_store::platform::Platform;
+use notes_store::vaults::Vaults;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 

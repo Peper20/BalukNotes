@@ -27,9 +27,10 @@ use typst::syntax::{LinkedNode, SyntaxKind, ast};
 
 use crate::folders::FOLDER_FILE;
 use crate::new_note::{file_name, free_id, markup};
-use crate::storage::is_typ;
-use crate::vault::{BOOK_MAIN, NoteId, NoteKind, Vault};
+use crate::vault::{BOOK_MAIN, NoteKind, Vault};
 use crate::{Error, Result};
+use notes_store::note_id::NoteId;
+use notes_store::storage::is_typ;
 
 /// The link function from `baluk/links.typ`.
 const LINK_FN: &str = "see";
@@ -338,7 +339,7 @@ mod tests {
 
     use super::*;
     use crate::folders::parse_folder;
-    use crate::storage::{MemStorage, Storage};
+    use notes_store::storage::{MemStorage, Storage};
 
     fn id(s: &str) -> NoteId {
         NoteId::new(s).unwrap()

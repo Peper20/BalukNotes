@@ -18,7 +18,8 @@ use serde::Serialize;
 use crate::graph::Snapshot;
 use crate::outline::{Outline, Section};
 use crate::render::{slug, unique};
-use crate::vault::{NoteId, NoteKind};
+use crate::vault::NoteKind;
+use notes_store::note_id::NoteId;
 
 /// How many sections of one note to show.
 const PER_NOTE: usize = 3;

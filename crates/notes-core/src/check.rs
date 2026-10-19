@@ -10,8 +10,8 @@ use crate::diag::Diagnostic;
 use crate::figures::FigureOptions;
 use crate::notes::Notes;
 use crate::render::{LinkRef, slug};
-use crate::vault::NoteId;
 use crate::{Error, Result};
+use notes_store::note_id::NoteId;
 
 /// Result of a check: notes and folders with problems.
 #[derive(Debug, Serialize)]

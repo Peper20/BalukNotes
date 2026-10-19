@@ -62,8 +62,11 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   Parts: `notes-typst` (building, `check`, `pdf`, `serve`, `sync`),
   `notes-app` (the window, without Typst), `notes-hub` (the storage server and
   `notes users`, without Typst). Typst only in `notes-typst`. What the parts
-  share without Typst (the data directory rules, vault names, accounts,
-  sessions, the sync engine) is the light crate `notes-store`.
+  share without Typst is the light crate `notes-store`: the data directory
+  rules, vault names and the vault list, note paths (`NoteId`), the vault
+  storage (`trait Storage`) and its watcher, the platform and the sync
+  preference, accounts, sessions, the sync engine. The settings schema stays
+  in the core: it is built from the library themes.
 - **Every device has a copy of the vault** with sync (§9): notes are read
   without a network, Claude Code writes to the copy on the computer.
 - Typst is a Rust library in the core with a pinned version: the HTML export
@@ -118,9 +121,9 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   `~/.local/share/baluk-notes` (`notes info` - where). It holds
   `vaults/<name>/` - vaults, `settings.json`, `cache/` (can be deleted).
   `notes` works from any folder: the library, client and fonts are embedded.
-  Code reaches data only through `notes-core`, the core reaches files through
-  `trait Storage` (`DirStorage`, `MemStorage` in tests): replacing it with a
-  database touches one place.
+  Code reaches vault files only through `trait Storage`
+  (`notes_store::storage`: `DirStorage`, `MemStorage` in tests): replacing it
+  with a database touches one place.
 - **There are several vaults**, as in Obsidian: the name is the folder name
   in `vaults/` (`notes_store::names::VaultName`: no `/`, characters forbidden
   on Windows, or internal `_`/`.`). Each has its own notes, links, graph,
@@ -309,11 +312,12 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   pool, the number is a device setting, 2 by default): a note can be opened
   while a book is building. A warm-up build does themes in turn in one thread
   with lowered priority.
-- The core is layers (`notes-core`): `storage` -> `pipeline` (compiling per
-  theme -> rendering -> figures; behind `trait Pipeline`) -> `page_cache`
-  (memory + disk `cache.rs`) -> `pages` (a page on request: one build per
-  note, an error over the previous rendering) -> `warm` (warm-up) -> `notes`
-  (the facade for the server and CLI). Each layer is tested without Typst.
+- The core is layers (`notes-core`, over `notes_store::storage`): `pipeline`
+  (compiling per theme -> rendering -> figures; behind `trait Pipeline`) ->
+  `page_cache` (memory + disk `cache.rs`) -> `pages` (a page on request: one
+  build per note, an error over the previous rendering) -> `warm` (warm-up)
+  -> `notes` (the facade for the server and CLI). Each layer is tested
+  without Typst.
 - The memory cache is pages in an LRU limited by bytes (a device setting, 64
   MB by default) plus small records for every note (version, files, errors,
   build time): the version and "is it built" without reading pages.
@@ -348,7 +352,7 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   client checks the version on the "Обновить" button, and in the "automatic"
   mode (`refresh.mode`) - also on a server event and when returning to the
   window.
-- **The watcher** (`notes-core::watch`, in the server): `notify` watches the
+- **The watcher** (`notes_store::watch`, in the server): `notify` watches the
   vault (`Storage::watch`) and the library if it is on disk; changes come as
   a batch after a 100 ms pause. While nothing changes, the link index does not
   walk the vault (but at least once in 10 minutes), `DirStorage` remembers the
@@ -440,14 +444,15 @@ How to put it on a VPS - `docs/server.md`.
   backoff; while it waits, the server's changes are not applied. `notes sync
   confirm | restore --vault`; the app settings show the count and have the
   buttons.
-- **The device side** (`crates/notes-device`; the core stays free of HTTP for
-  WASM): `<data>/sync/` holds the account (server, login, session token), the
-  state of every linked vault, the last result and a lock per vault. `notes
-  sync login | link | now | status | confirm | restore | unlink | logout`;
-  `notes serve` (so the window's core too) runs a worker per linked vault: a
-  round at start, 2 s after a local change (the file watcher), on a server
-  change (long polling `changes?after=&wait=`), a retry with a growing pause
-  when the server is unreachable. Pulled files are ordinary file changes:
+- **The device side** (`crates/notes-device`, without Typst: `notes-store` and
+  the hub client; the core stays free of HTTP for WASM): `<data>/sync/` holds
+  the account (server, login, session token), the state of every linked
+  vault, the last result and a lock per vault. `notes sync login | link | now
+  | status | confirm | restore | unlink | logout`; `notes serve` (so the
+  window's core too) runs a worker per linked vault: a round at start, 2 s
+  after a local change (the file watcher), on a server change (long polling
+  `changes?after=&wait=`), a retry with a growing pause when the server is
+  unreachable. Pulled files are ordinary file changes:
   open notes refresh by themselves (§8). The client gets the state and the
   actions at `/api/device/sync...`.
 - **A vault from the server is untrusted**: note HTML is sanitized, the client

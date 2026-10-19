@@ -26,7 +26,7 @@
 //!   the client hinted (open notes) or off.
 //!
 //! A pass repeats on a new hint, on a change of vault files
-//! ([`Warmer::poke`] from the watcher, [`crate::watch`]) and, just in case,
+//! ([`Warmer::poke`] from the watcher, [`notes_store::watch`]) and, just in case,
 //! once per [`RESCAN`] (without the watcher - once per [`RESCAN_UNWATCHED`]):
 //! new and changed notes get built in advance too. Checking an unchanged
 //! note is a few `stat` calls. When the background thread starts, the disk
@@ -38,7 +38,8 @@ use std::time::{Duration, Instant};
 use parking_lot::{Condvar, Mutex};
 
 use crate::pages::Pages;
-use crate::vault::{Entry, NoteId, NoteKind};
+use crate::vault::{Entry, NoteKind};
+use notes_store::note_id::NoteId;
 
 /// How often to check for something unbuilt while the file watcher works
 /// (insurance against a lost event).

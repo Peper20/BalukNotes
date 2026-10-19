@@ -10,7 +10,8 @@ use notes_core::figures::FigureOptions;
 use notes_core::vault_graph::GraphFilter;
 
 use crate::common::{NOTES, repo};
-use notes_core::{LibrarySource, NoteId, NoteKind, Notes, NotesConfig};
+use notes_core::{LibrarySource, NoteKind, Notes, NotesConfig};
+use notes_store::note_id::NoteId;
 
 const OPTS: FigureOptions = FigureOptions { precision: Some(2) };
 
@@ -435,7 +436,7 @@ fn decoration_words_follow_note_language() {
 
 #[test]
 fn storage_in_memory_compiles_and_follows_edits() {
-    let mem = std::sync::Arc::new(notes_core::storage::MemStorage::new());
+    let mem = std::sync::Arc::new(notes_store::storage::MemStorage::new());
     let head = "#import \"/_baluk/lib.typ\": *\n#show: note.with(title: [x])\n";
     mem.write("A.typ", format!("{head}= Раз\n#include \"часть.typ\"\n"));
     mem.write("часть.typ", "первая часть");
@@ -461,7 +462,7 @@ fn storage_in_memory_compiles_and_follows_edits() {
 /// update at once (with a watcher that keeps the walk too).
 #[test]
 fn delete_note_and_book() {
-    let mem = std::sync::Arc::new(notes_core::storage::MemStorage::new());
+    let mem = std::sync::Arc::new(notes_store::storage::MemStorage::new());
     let head = "#import \"/_baluk/lib.typ\": *\n#show: note.with(title: [x])\n";
     mem.write("A.typ", format!("{head}#see(\"Сеть/B\")"));
     mem.write("Сеть/B.typ", head);
@@ -485,7 +486,7 @@ fn delete_note_and_book() {
 
     notes.delete(&id("Книга")).unwrap();
     assert!(
-        notes_core::storage::Storage::list(&*mem).unwrap().iter().all(|f| !f.starts_with("Книга/")),
+        notes_store::storage::Storage::list(&*mem).unwrap().iter().all(|f| !f.starts_with("Книга/")),
         "a book goes as a whole folder"
     );
     let ids: Vec<String> = notes.entries().unwrap().into_iter().map(|e| e.id.to_string()).collect();

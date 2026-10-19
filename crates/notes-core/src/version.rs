@@ -20,8 +20,8 @@ use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{FileMeta, Storage};
 use crate::vault_data::VaultData;
+use notes_store::storage::{FileMeta, Storage};
 
 /// A stable hash: the algorithm and the byte order are fixed.
 #[derive(Debug, Default, Clone)]
@@ -155,7 +155,7 @@ pub fn combine(deps: &[(Dep, Token)]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::MemStorage;
+    use notes_store::storage::MemStorage;
 
     #[test]
     fn stable_hash_is_fixed() {

@@ -44,7 +44,6 @@ typst-render.workspace = true
 typst-kit.workspace = true
 comemo.workspace = true
 ecow.workspace = true
-notify.workspace = true
 parking_lot.workspace = true
 rust-embed.workspace = true
 serde.workspace = true
@@ -60,11 +59,6 @@ ts-rs = { workspace = true, optional = true }
 # version typst-kit already pulls in.
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 rustix = { version = "1", features = ["process", "thread"] }
-
-# The system trash for deleted notes (`storage.rs`); phones and browsers have
-# none.
-[target.'cfg(not(any(target_os = "android", target_os = "ios", target_family = "wasm")))'.dependencies]
-trash.workspace = true
 
 [build-dependencies]
 # A label of the rendering code for the disk cache (build.rs).

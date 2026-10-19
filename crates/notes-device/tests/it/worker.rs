@@ -4,10 +4,10 @@
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
-use notes_core::storage::DirStorage;
-use notes_core::watch::Changes;
 use notes_device::testing::{PASSWORD, TestHub};
 use notes_device::{DeviceSync, Prefer, Timing, WorkState, link, sync_linked};
+use notes_store::storage::DirStorage;
+use notes_store::watch::Changes;
 
 use crate::common::{Device, HUB, wait_for};
 

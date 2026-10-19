@@ -2,7 +2,7 @@
 //!
 //! Layers (each with its own tests, without compiling Typst):
 //!
-//! - [`crate::storage`]: vault files ([`Storage`]: a directory on disk, in
+//! - [`notes_store::storage`]: vault files ([`Storage`]: a directory on disk, in
 //!   tests - memory);
 //! - [`crate::pipeline`]: the build - source -> compilation per theme ->
 //!   rendering, figure processing;
@@ -13,7 +13,7 @@
 //! - [`crate::warm`]: warming on top of `pages`.
 //!
 //! Here they come together, plus the source index (links, search) and PDF.
-//! Only the server starts the file watcher ([`crate::watch`],
+//! Only the server starts the file watcher ([`notes_store::watch`],
 //! [`Notes::watch`]): the index does not scan an unchanged vault, warming
 //! wakes up on changes; the CLI does without it.
 
@@ -29,16 +29,17 @@ use crate::graph::{Snapshot, SourceIndex};
 use crate::page_cache::{MEMORY_BUDGET, PageCache};
 use crate::pages::Pages;
 use crate::pipeline::TypstPipeline;
-use crate::storage::Storage;
 use crate::themes::ThemeSet;
-use crate::vault::{Entry, NoteId, NoteKind, Vault};
+use crate::vault::{Entry, NoteKind, Vault};
 use crate::vault_data::VaultData;
 use crate::vault_graph::{GraphData, GraphFilter, GraphLayout, Layouts};
 use crate::version::Versions;
 use crate::warm::{RESCAN, RESCAN_UNWATCHED, WarmStats, Warmer};
-use crate::watch::{Change, Changes};
 use crate::world::{Compiler, LibrarySource, PngPages};
 use crate::{Error, Result};
+use notes_store::note_id::NoteId;
+use notes_store::storage::Storage;
+use notes_store::watch::{Change, Changes};
 
 pub use crate::pages::NotePage;
 pub use crate::pipeline::encode;
@@ -98,7 +99,7 @@ impl Notes {
     /// The same, with shared fonts and themes (the server).
     pub fn open_with_shared(config: &NotesConfig, shared: &SharedAssets) -> Result<Self> {
         let root = &config.vault;
-        let storage = crate::storage::DirStorage::open(root).map_err(|e| Error::io(root, e))?;
+        let storage = notes_store::storage::DirStorage::open(root).map_err(|e| Error::io(root, e))?;
         let storage = storage.with_trash(config.trash.clone());
         let mut notes = Self::with_vault(Vault::new(Arc::new(storage)), config, shared)?;
         notes.dir = Some(root.clone());
@@ -350,7 +351,7 @@ impl Notes {
         self.warmer.forever(&self.pages, move || if changes.watching() { RESCAN } else { RESCAN_UNWATCHED });
     }
 
-    // -- Vault changes (see crate::watch) -------------------------------------
+    // -- Vault changes (see notes_store::watch) -------------------------------------
 
     /// Starts the watcher of the vault files (the server), and of the library
     /// directory if it is on disk. `false`: the storage cannot watch or it
@@ -361,7 +362,7 @@ impl Notes {
         }
         // An edit of the library is a change too: notes rebuild by themselves.
         if let Some(dir) = &self.library_dir {
-            match crate::storage::DirStorage::open(dir) {
+            match notes_store::storage::DirStorage::open(dir) {
                 Ok(lib) => {
                     self.changes.also(&lib, crate::world::LIB_DIR);
                 }

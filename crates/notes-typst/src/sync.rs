@@ -27,9 +27,11 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use clap::Subcommand;
-use notes_core::VaultName;
-use notes_core::settings::{Platform, SettingsStore, stored_sync_prefer};
+use notes_core::settings::SettingsStore;
 use notes_device::{Account, DeviceSync, Paths, Prefer, Status, VaultStatus, WorkState};
+use notes_store::names::VaultName;
+use notes_store::platform::Platform;
+use notes_store::platform::stored_sync_prefer;
 
 #[derive(Debug, Subcommand)]
 pub enum SyncAction {

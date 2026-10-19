@@ -2,7 +2,7 @@
 //!
 //! All access to vault files goes through [`Storage`]: the file list, reading,
 //! file info (size and modification time make the note version, see
-//! [`crate::version`]). Today the vault is a directory on disk
+//! `notes_core::version`). Today the vault is a directory on disk
 //! ([`DirStorage`]); later (M5, sync) a database will stand next to it, and the
 //! rest of the core will not have to change. Core layer tests run on
 //! [`MemStorage`]: in memory, without a disk.
@@ -14,7 +14,7 @@
 //!
 //! Paths are relative, separated by `/`, with no leading `/`: `Network/SSH.typ`.
 //! The design library (`/_baluk/`) and Typst packages are not the vault: the
-//! compiler reads them ([`crate::world`]).
+//! compiler reads them (`notes_core::world`).
 
 use std::any::Any;
 use std::collections::BTreeMap;
@@ -26,6 +26,8 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use parking_lot::Mutex;
+
+use crate::names::is_hidden;
 
 /// Info about a vault file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,11 +124,6 @@ fn read_only() -> io::Error {
 /// A Typst source (`.typ`).
 pub fn is_typ(path: &str) -> bool {
     Path::new(path).extension().is_some_and(|e| e == "typ")
-}
-
-/// An internal name (the `_baluk` library, `.git`): not in the file list.
-pub fn is_hidden(name: &str) -> bool {
-    name.starts_with('_') || name.starts_with('.')
 }
 
 /// A vault that is a directory on disk.
@@ -244,6 +241,7 @@ impl Storage for DirStorage {
         Ok(dirs)
     }
 
+    #[cfg(not(target_family = "wasm"))]
     fn watch(&self, sink: ChangeSink) -> io::Result<Option<WatchGuard>> {
         use notify::event::{EventKind, ModifyKind};
         use notify::{RecursiveMode, Watcher};
@@ -406,11 +404,13 @@ fn system_trash(_path: &Path) -> io::Result<()> {
 }
 
 /// Stops the watcher: the file list is not kept any more.
+#[cfg(not(target_family = "wasm"))]
 struct Unwatch {
     _watcher: notify::RecommendedWatcher,
     listed: Arc<Mutex<Listed>>,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl Drop for Unwatch {
     fn drop(&mut self) {
         let mut state = self.listed.lock();
@@ -653,6 +653,7 @@ mod tests {
     }
 
     /// Waits until `ok()` becomes true (OS events do not come at once).
+    #[cfg(not(target_family = "wasm"))]
     fn eventually(ok: impl Fn() -> bool) -> bool {
         (0..200).any(|_| {
             ok() || {
@@ -662,6 +663,7 @@ mod tests {
         })
     }
 
+    #[cfg(not(target_family = "wasm"))]
     #[test]
     fn dir_watch_reports_changes_and_keeps_list() {
         let dir = tempfile::tempdir().unwrap();

@@ -4,8 +4,8 @@
 use axum::extract::{Path, Query, State};
 use axum::routing::get;
 use axum::{Json, Router};
-use notes_core::NoteId;
 use notes_core::search::SearchHit;
+use notes_store::note_id::NoteId;
 
 use crate::AppState;
 use crate::error::{ApiResult, blocking};

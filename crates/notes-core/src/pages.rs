@@ -28,7 +28,8 @@ use crate::figures::FigureOptions;
 use crate::page_cache::{PageCache, Raw, page_version};
 use crate::pipeline::{Build, Pipeline, Priority};
 use crate::render::Rendered;
-use crate::vault::{Entry, NoteId, NoteKind, Vault};
+use crate::vault::{Entry, NoteKind, Vault};
+use notes_store::note_id::NoteId;
 
 /// A note ready to be shown.
 #[derive(Debug, Serialize)]
@@ -273,8 +274,8 @@ pub(crate) mod tests {
     use super::*;
     use crate::cache::DiskCache;
     use crate::page_cache::MEMORY_BUDGET;
-    use crate::storage::MemStorage;
     use crate::version::{Dep, Versions};
+    use notes_store::storage::MemStorage;
 
     /// A build without Typst: the rendering is the text of the main file, and
     /// `ошибка` ("error") in the text means a compile error.

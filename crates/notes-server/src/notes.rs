@@ -8,9 +8,9 @@ use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use notes_core::NoteId;
 use notes_core::book::{Select, chapter_page};
 use notes_core::search::{Preview, tagged_chapters};
+use notes_store::note_id::NoteId;
 
 use crate::AppState;
 use crate::api::{

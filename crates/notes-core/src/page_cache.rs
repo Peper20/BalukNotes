@@ -22,8 +22,9 @@ use crate::cache::{DiskCache, DiskLimits, Pruned, Record};
 use crate::figures::FigureOptions;
 use crate::pages::NotePage;
 use crate::render::{LinkRef, Rendered};
-use crate::vault::{Entry, NoteId};
+use crate::vault::Entry;
 use crate::version::Versions;
+use notes_store::note_id::NoteId;
 
 /// The default limit of pages in memory (a computer; a device setting changes
 /// it: [`PageCache::set_limits`]).
@@ -298,9 +299,9 @@ mod tests {
     use std::path::PathBuf;
 
     use super::*;
-    use crate::storage::MemStorage;
     use crate::vault::NoteKind;
     use crate::version::Dep;
+    use notes_store::storage::MemStorage;
 
     fn rendered(body: &str) -> Rendered {
         Rendered {

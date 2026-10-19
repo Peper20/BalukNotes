@@ -20,7 +20,7 @@
 //! page cache) are added to those found in the source, so they get into the
 //! backlinks and the graph. Until the note is rebuilt, its old links stay.
 //!
-//! With the file watcher ([`crate::watch::Changes`], the server) the index
+//! With the file watcher ([`notes_store::watch::Changes`], the server) the index
 //! does not scan the vault while nothing in it changed: the parse of all
 //! notes comes from memory (and is refreshed at least every [`MAX_AGE`],
 //! just in case).
@@ -37,8 +37,9 @@ use crate::Result;
 use crate::folders::{FOLDER_FILE, Folder, ancestors, parse_folder};
 use crate::outline::{Outline, parse_outline};
 use crate::render::LinkRef;
-use crate::vault::{Entry, NoteId, NoteKind, Vault};
-use crate::watch::Changes;
+use crate::vault::{Entry, NoteKind, Vault};
+use notes_store::note_id::NoteId;
+use notes_store::watch::Changes;
 
 /// With the watcher, scan the vault at least this often (insurance against a
 /// lost event).
@@ -637,7 +638,7 @@ mod tests {
 
     #[test]
     fn with_watcher_walks_only_after_change() {
-        use crate::storage::MemStorage;
+        use notes_store::storage::MemStorage;
         let mem = Arc::new(MemStorage::new());
         mem.write("A.typ", r#"#see("B")"#);
         mem.write("B.typ", "");
@@ -680,7 +681,7 @@ mod tests {
 
     #[test]
     fn titles_of_notes_and_folders() {
-        use crate::storage::MemStorage;
+        use notes_store::storage::MemStorage;
         let note = |title: &str| format!("#show: note.with(title: [{title}])");
         let mem = Arc::new(MemStorage::new());
         mem.write("Сеть/ssh.typ", note("SSH: основы"));

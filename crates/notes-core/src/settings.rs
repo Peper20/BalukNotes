@@ -25,6 +25,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use notes_store::platform::{Platform, SyncPrefer};
 use parking_lot::RwLock;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
@@ -188,73 +189,6 @@ pub struct Schema {
 
 fn choice(value: &str, label: &str) -> Choice {
     Choice { value: value.into(), label: label.into() }
-}
-
-/// The device the defaults of device settings are picked for: what is fine on
-/// a computer is not on a phone.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Platform {
-    Desktop,
-    Phone,
-}
-
-impl Platform {
-    /// The build platform.
-    pub fn current() -> Self {
-        if cfg!(any(target_os = "android", target_os = "ios")) { Self::Phone } else { Self::Desktop }
-    }
-
-    /// The default for this platform.
-    fn pick<T>(self, desktop: T, phone: T) -> T {
-        match self {
-            Self::Desktop => desktop,
-            Self::Phone => phone,
-        }
-    }
-}
-
-/// Who wins when a file changed on this device and on the server (sync, the
-/// device setting `device.sync_prefer`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SyncPrefer {
-    /// This device's edit (the computer that writes first).
-    Local,
-    /// The server's version (the devices that receive).
-    Remote,
-}
-
-impl SyncPrefer {
-    /// The default of a platform: a computer writes first, a phone receives.
-    pub fn default_for(platform: Platform) -> Self {
-        platform.pick(Self::Local, Self::Remote)
-    }
-
-    /// Setting value: `local`, `remote`.
-    pub fn key(self) -> &'static str {
-        match self {
-            Self::Local => "local",
-            Self::Remote => "remote",
-        }
-    }
-
-    pub fn from_key(key: &str) -> Option<Self> {
-        match key {
-            "local" => Some(Self::Local),
-            "remote" => Some(Self::Remote),
-            _ => None,
-        }
-    }
-}
-
-/// `device.sync_prefer` from a settings file, without the schema (and so
-/// without a core: the `notes sync` commands do not open one). A missing or
-/// unreadable file, or a bad value, gives the platform's default.
-pub fn stored_sync_prefer(path: &Path, platform: Platform) -> SyncPrefer {
-    fs::read(path)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Map<String, Value>>(&bytes).ok())
-        .and_then(|values| values.get("device.sync_prefer")?.as_str().and_then(SyncPrefer::from_key))
-        .unwrap_or_else(|| SyncPrefer::default_for(platform))
 }
 
 /// Device settings as the core applies them (`Notes::apply_device`).
@@ -943,15 +877,6 @@ mod tests {
         store.update(&changes).unwrap();
         assert_eq!(store.device().sync_prefer, SyncPrefer::Remote);
         assert!(store.update(&Map::from_iter([("device.sync_prefer".to_owned(), json!("both"))])).is_err());
-        // Read without the schema: a stored value, else the platform's default.
-        let file = dir.path().join("settings.json");
-        assert_eq!(stored_sync_prefer(&file, Platform::Phone), SyncPrefer::Remote);
-        assert_eq!(stored_sync_prefer(&dir.path().join("none.json"), Platform::Desktop), SyncPrefer::Local);
-        assert_eq!(stored_sync_prefer(&dir.path().join("none.json"), Platform::Phone), SyncPrefer::Remote);
-        fs::write(&file, r#"{"device.sync_prefer": "local"}"#).unwrap();
-        assert_eq!(stored_sync_prefer(&file, Platform::Phone), SyncPrefer::Local);
-        fs::write(&file, r#"{"device.sync_prefer": "sideways"}"#).unwrap();
-        assert_eq!(stored_sync_prefer(&file, Platform::Desktop), SyncPrefer::Local);
         assert_eq!(store.device().memory, 128 << 20);
         assert_eq!(serde_json::to_value(desktop.get("device.warm").unwrap()).unwrap()["device"], json!(true));
         assert!(serde_json::to_value(desktop.get("header.title").unwrap()).unwrap().get("device").is_none());

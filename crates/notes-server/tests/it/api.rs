@@ -6,10 +6,13 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use notes_core::settings::{Platform, Schema, SettingsStore};
-use notes_core::storage::MemStorage;
-use notes_core::{LibrarySource, Notes, NotesConfig, VaultName, Vaults};
+use notes_core::settings::{Schema, SettingsStore};
+use notes_core::{LibrarySource, Notes, NotesConfig};
 use notes_server::{AppState, VaultSet, router};
+use notes_store::names::VaultName;
+use notes_store::platform::Platform;
+use notes_store::storage::MemStorage;
+use notes_store::vaults::Vaults;
 use serde_json::Value;
 use tower::ServiceExt;
 

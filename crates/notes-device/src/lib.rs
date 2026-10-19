@@ -34,7 +34,7 @@
 //! # Rules
 //!
 //! - Who wins a conflict is the device setting `device.sync_prefer`
-//!   (`notes_core::settings::SyncPrefer`); the caller gives the [`Prefer`].
+//!   (`notes_store::platform::SyncPrefer`); the caller gives the [`Prefer`].
 //! - Only one round runs for a vault at a time, across processes: the lock
 //!   file is an OS lock, so a crash releases it. A second round waits for
 //!   [`LOCK_WAIT`] and then says that the sync is already running.
@@ -68,7 +68,7 @@ pub mod worker;
 
 pub use account::{Account, Server, login, logout, parse_server};
 pub use error::{Error, Result};
-pub use notes_core::settings::SyncPrefer;
+pub use notes_store::platform::SyncPrefer;
 pub use notes_store::sync::{Held, Prefer, Side};
 pub use paths::Paths;
 pub use round::{

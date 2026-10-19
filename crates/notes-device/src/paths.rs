@@ -4,7 +4,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use notes_core::VaultName;
+use notes_store::names::VaultName;
+use notes_store::vaults::Vaults;
 
 use crate::{Error, Result};
 
@@ -65,12 +66,12 @@ impl Paths {
     /// The vault folder: `<data>/vaults/<vault>`.
     #[must_use]
     pub fn vault_dir(&self, vault: &VaultName) -> PathBuf {
-        notes_core::Vaults::new(&self.data).path(vault)
+        Vaults::new(&self.data).path(vault)
     }
 
     /// The vaults of this data directory.
     pub fn local_vaults(&self) -> Result<Vec<VaultName>> {
-        Ok(notes_core::Vaults::new(&self.data).list()?)
+        Ok(Vaults::new(&self.data).list()?)
     }
 
     #[must_use]

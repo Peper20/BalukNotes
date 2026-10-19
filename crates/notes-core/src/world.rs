@@ -47,8 +47,8 @@ use typst_layout::PagedDocument;
 use crate::diag::Diagnostic;
 use crate::fonts::Fonts;
 use crate::packages::PackagePolicy;
-use crate::storage::Storage;
 use crate::version::{Dep, StableHasher, Token, Versions};
+use notes_store::storage::Storage;
 
 /// The name of the virtual directory of the design library in the vault.
 pub const LIB_DIR: &str = "_baluk";

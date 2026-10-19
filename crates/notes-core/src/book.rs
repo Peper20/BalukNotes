@@ -460,7 +460,7 @@ mod tests {
             html: None,
         };
         NotePage {
-            id: crate::NoteId::new("Книга").unwrap(),
+            id: notes_store::note_id::NoteId::new("Книга").unwrap(),
             kind: crate::NoteKind::Book,
             version: "v".into(),
             rendered: Some(Arc::new(Rendered {
