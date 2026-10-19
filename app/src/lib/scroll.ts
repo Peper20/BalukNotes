@@ -3,9 +3,11 @@
 // (WebKitGTK) scrolling the document re-lays the fixed layers on every frame,
 // and with fractional screen scaling they jitter by a pixel.
 
+import { htmlEl, inApp } from "./dom";
+
 /** The column that scrolls; before it appears (the vault picker screen), the document. */
 export function scroller(): HTMLElement {
-  return document.getElementById("page") ?? document.documentElement;
+  return inApp("#page") ?? htmlEl;
 }
 
 /** Column scroll from the top, px. */

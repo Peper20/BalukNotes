@@ -6,6 +6,7 @@
 
 import { api, ApiError, type NotePage } from "../api";
 import { scrollToTop, scrollTop } from "../scroll";
+import { htmlEl, setTitle } from "../dom";
 import { ChapterCache } from "../chapters";
 import type { Place } from "../places";
 import { chapterSelect, scrollIntent, tocItems, type ScrollIntent } from "../reading";
@@ -58,7 +59,7 @@ class Reader {
     this.failure = null;
     this.version = null;
     this.#chapters.clear();
-    document.title = "Заметки";
+    setTitle("Заметки");
   }
 
   #cancel(): void {
@@ -94,9 +95,9 @@ class Reader {
     }
     this.failure = null;
     this.pending = { id, since: Date.now() };
-    document.documentElement.dataset.state = "loading";
+    htmlEl.dataset.state = "loading";
     this.setStatus("собираю…", true);
-    document.title = `${notes.title(id)} — Заметки`;
+    setTitle(`${notes.title(id)} — Заметки`);
     const place = this.#place;
     this.#place = null;
     const where = { keepScroll, current: this.chapter, anchor: router.anchor, place };
@@ -119,12 +120,12 @@ class Reader {
       this.page = page;
       this.#chapters.shown(page);
       places.visited(id);
-      document.title = `${page.rendered?.title ?? notes.title(id)} — Заметки`;
+      setTitle(`${page.rendered?.title ?? notes.title(id)} — Заметки`);
       this.setStatus(`${updated ? "книга обновлена" : "собрано"} ${new Date().toLocaleTimeString("ru-RU")}`);
     } catch (e) {
       if (this.#ctrl !== ctrl) return; // cancelled or stale
       const offline = e instanceof ApiError && e.offline;
-      document.documentElement.dataset.state = "ready";
+      htmlEl.dataset.state = "ready";
       // No connection while a note is on screen (an update, another chapter):
       // it stays, better the previous one than an empty page.
       if (offline && this.page?.id === id) {

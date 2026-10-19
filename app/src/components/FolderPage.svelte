@@ -1,6 +1,7 @@
 <!-- A folder page: what is in it (subfolders, notes) and a link to the graph of its subtree. -->
 <script lang="ts">
   import { notes } from "../lib/state";
+  import { htmlEl, setTitle } from "../lib/dom";
   import { folderGraphHref, folderHref, homeHref, noteHref } from "../lib/ids";
   import { plural } from "../lib/plural";
   import { countNotes, findFolder, type Folder } from "../lib/tree";
@@ -13,8 +14,8 @@
   const total = $derived(folder ? countNotes(folder) : 0);
 
   $effect(() => {
-    document.title = `${notes.folderTitle(path)} — Заметки`;
-    document.documentElement.dataset.state = "ready";
+    setTitle(`${notes.folderTitle(path)} — Заметки`);
+    htmlEl.dataset.state = "ready";
   });
 </script>
 

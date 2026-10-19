@@ -1,0 +1,47 @@
+id: Особые случаи/Имена элементов
+kind: Note
+title: Имена элементов
+tags: фикстура
+headings:
+  2 #location [location] location
+  2 #cookie [cookie] cookie
+  2 #forms [forms] forms
+  2 #body [body] body
+  2 #localStorage [localStorage] localStorage
+  2 #fetch [fetch] fetch
+links:
+  Сеть/SSH
+styles: 0 bytes, fnv cbf29ce484222325
+---
+<article class="k-doc" data-doc="note" lang="ru">
+<header class="k-title">
+<h1>Имена элементов</h1>
+<ul class="k-tags">
+<li>фикстура</li></ul></header>
+<p>Заголовки и элементы здесь названы как части документа, которые читает клиент: <code>location</code>, <code>body</code>, <code>getElementById</code> и другие. Клиент не должен на них сбиваться: заметка открывается, оглавление, поиск, вкладки и переходы работают, ошибок страницы нет (<code>app/e2e/clobbering.spec.ts</code>). Проверочная фраза именованных элементов.</p>
+<p>
+<img name="getElementById" hidden alt> 
+<img name="querySelector" hidden alt> 
+<img name="documentElement" hidden alt> 
+<img name="body" hidden alt> 
+<img name="title" hidden alt> 
+<img name="fonts" hidden alt> 
+<img name="elementFromPoint" hidden alt></p>
+<h2 class="k-h k-h2" id="location" data-k-anchor="location"><span class="k-num">1</span>location</h2>
+<p>Раздел с <code>id="location"</code>. Ссылка на другую заметку: <a class="k-link" data-k-target="Сеть/SSH" href="/n/Сеть/SSH">SSH</a>; здесь же обычный текст, чтобы заметка была выше окна и оглавление могло прокручиваться.</p>
+<p>Второй абзац раздела: он нужен только для высоты страницы, как в обычных заметках с длинным текстом.</p>
+<h2 class="k-h k-h2" id="cookie" data-k-anchor="cookie"><span class="k-num">2</span>cookie</h2>
+<p>Раздел с <code>id="cookie"</code>. Оглавление должно подсветить именно его, когда читатель пришел сюда по ссылке из оглавления.</p>
+<p>Второй абзац раздела: текст для высоты страницы, чтобы раздел не оказался у самого низа заметки.</p>
+<h2 class="k-h k-h2" id="forms" data-k-anchor="forms"><span class="k-num">3</span>forms</h2>
+<p>Раздел с <code>id="forms"</code>. Здесь обычный текст из двух строк, как в любой заметке, чтобы между разделами были промежутки.</p>
+<p>Второй абзац раздела: еще строка текста для высоты страницы.</p>
+<h2 class="k-h k-h2" id="body" data-k-anchor="body"><span class="k-num">4</span>body</h2>
+<p>Раздел с <code>id="body"</code>. Имя совпадает с <code>document.body</code>, поэтому элемент <code>&lt;img name="body"></code> выше тоже здесь.</p>
+<p>Второй абзац раздела: текст для высоты страницы.</p>
+<h2 class="k-h k-h2" id="localStorage" data-k-anchor="localStorage"><span class="k-num">5</span>localStorage</h2>
+<p>Раздел с <code>id="localStorage"</code>. Имя совпадает со свойством окна, которое клиент читает для вкладок и мест чтения.</p>
+<p>Второй абзац раздела: текст для высоты страницы.</p>
+<h2 class="k-h k-h2" id="fetch" data-k-anchor="fetch"><span class="k-num">6</span>fetch</h2>
+<p>Раздел с <code>id="fetch"</code>, последний в заметке. Сюда клиент попадает по ссылке из оглавления последним, поэтому здесь нет подсветки раздела ниже.</p>
+<p>Второй абзац раздела: текст для высоты страницы.</p></article>

@@ -6,6 +6,7 @@
   import { isAppPath } from "./lib/ids";
   import { typing } from "./lib/keys";
   import { mobile, ui } from "./lib/ui.svelte";
+  import { htmlEl, inApp } from "./lib/dom";
   import Backlinks from "./components/Backlinks.svelte";
   import ChapterNav from "./components/ChapterNav.svelte";
   import FolderPage from "./components/FolderPage.svelte";
@@ -36,12 +37,12 @@
       .catch((e: Error) => (fatal = e.message));
   });
 
-  $effect(() => settings.apply(document.documentElement));
+  $effect(() => settings.apply(htmlEl));
 
   // Height of the top panel (bar + tabs), for the outline's place under it.
   let chromeBox: ResizeObserverSize[] | undefined = $state();
   const chromeHeight = $derived(chromeBox?.[0]?.blockSize ?? 0);
-  $effect(() => document.documentElement.style.setProperty("--chrome-h", `${chromeHeight}px`));
+  $effect(() => htmlEl.style.setProperty("--chrome-h", `${chromeHeight}px`));
 
   // The reading place while scrolling (by "back" the history entry is already another).
   let rememberTimer: ReturnType<typeof setTimeout> | undefined;
@@ -85,7 +86,7 @@
     if (ui.palette || e.defaultPrevented || e.repeat) return;
     const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
     if (plain && typing(e)) return;
-    if (document.querySelector("dialog[open]") && plain) return;
+    if (inApp("dialog[open]") && plain) return;
     for (const c of commands()) {
       if (!c.keys?.some((k) => k.test(e)) || !((c.keysAvailable ?? c.available)?.() ?? true)) continue;
       e.preventDefault();

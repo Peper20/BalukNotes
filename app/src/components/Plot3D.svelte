@@ -7,6 +7,7 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import { compile } from "../lib/plot/formula";
+  import { fontSet, htmlEl } from "../lib/dom";
   import { faces, mixHex, turn, view, Z, type P3 } from "../lib/plot/geometry";
   import { colorVar, defaults, PT_PER_CM, SMALL_PT, TEXT_PT, type Plot3D } from "../lib/plot/spec";
   import PlotSliders from "./PlotSliders.svelte";
@@ -148,12 +149,12 @@
   onMount(() => {
     const again = () => theme++;
     const obs = new MutationObserver(again);
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
-    document.fonts.addEventListener("loadingdone", again);
-    void document.fonts.ready.then(again);
+    obs.observe(htmlEl, { attributes: true, attributeFilter: ["data-theme"] });
+    fontSet.addEventListener("loadingdone", again);
+    void fontSet.ready.then(again);
     return () => {
       obs.disconnect();
-      document.fonts.removeEventListener("loadingdone", again);
+      fontSet.removeEventListener("loadingdone", again);
     };
   });
 </script>

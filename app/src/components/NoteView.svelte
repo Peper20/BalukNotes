@@ -15,6 +15,7 @@
   import { inVault } from "../lib/vault";
   import Loading from "./Loading.svelte";
   import { scroller, scrollToTop } from "../lib/scroll";
+  import { createElement, fontSet, focusedEl, htmlEl } from "../lib/dom";
 
   let content: HTMLDivElement | undefined = $state();
   let seenAnchorSeq = 0;
@@ -68,15 +69,15 @@
     else if (intent.mode === "anchor" && scrollToAnchor(router.anchor)) holdAnchor(page.id);
     else scrollToTop(0);
     // Scroll keys (space, PgDn) go to the note column unless the focus is in an input.
-    if (!document.activeElement?.closest("input, select, textarea, [contenteditable], dialog")) scroller().focus({ preventScroll: true });
-    document.documentElement.dataset.state = "ready";
+    if (!focusedEl()?.closest("input, select, textarea, [contenteditable], dialog")) scroller().focus({ preventScroll: true });
+    htmlEl.dataset.state = "ready";
   }
 
   /** Tags in the note header are links to the tag page. */
   function linkTags(root: Element) {
     for (const li of root.querySelectorAll(".k-tags li")) {
       const tag = li.textContent?.trim();
-      if (tag) li.replaceChildren(Object.assign(document.createElement("a"), { href: tagHref(tag), textContent: tag }));
+      if (tag) li.replaceChildren(Object.assign(createElement("a"), { href: tagHref(tag), textContent: tag }));
     }
   }
 
@@ -98,7 +99,7 @@
       if (!reader.pending) reader.showChapter(k, { mode: "anchor" });
       return true;
     }
-    const el = document.getElementById(name) ?? content.querySelector(`[data-k-anchor="${CSS.escape(name)}"]`);
+    const el = content.querySelector(`#${CSS.escape(name)}`) ?? content.querySelector(`[data-k-anchor="${CSS.escape(name)}"]`);
     el?.scrollIntoView();
     return Boolean(el);
   }
@@ -111,9 +112,9 @@
   function holdAnchor(id: string) {
     const anchor = router.anchor;
     const again = () => reader.page?.id === id && router.anchor === anchor && scrollToAnchor(anchor);
-    document.fonts.addEventListener("loadingdone", again);
-    requestAnimationFrame(() => void document.fonts.ready.then(again));
-    setTimeout(() => document.fonts.removeEventListener("loadingdone", again), 2000);
+    fontSet.addEventListener("loadingdone", again);
+    requestAnimationFrame(() => void fontSet.ready.then(again));
+    setTimeout(() => fontSet.removeEventListener("loadingdone", again), 2000);
   }
 </script>
 

@@ -5,6 +5,7 @@
   import { graphHref, noteHref } from "../lib/ids";
   import { plural } from "../lib/plural";
   import { vault } from "../lib/vault";
+  import { htmlEl } from "../lib/dom";
   import Graph from "./Graph.svelte";
   import GraphLegend from "./GraphLegend.svelte";
 
@@ -12,12 +13,12 @@
   let graphFailed = $state(false);
 
   $effect(() => {
-    document.documentElement.dataset.state = "loading";
+    htmlEl.dataset.state = "loading";
     api
       .graphLayout()
       .then((g) => (graph = g))
       .catch(() => (graphFailed = true))
-      .finally(() => requestAnimationFrame(() => (document.documentElement.dataset.state = "ready")));
+      .finally(() => requestAnimationFrame(() => (htmlEl.dataset.state = "ready")));
   });
 
   const books = $derived(notes.all.filter((n) => n.kind === "book").length);

@@ -9,6 +9,7 @@
   import { ui } from "../lib/ui.svelte";
   import BookInfo from "./BookInfo.svelte";
   import { atBottom, scroller } from "../lib/scroll";
+  import { inApp } from "../lib/dom";
 
   let nav: HTMLElement | undefined = $state();
 
@@ -16,12 +17,13 @@
 
   /** The section being read: the last heading above the window top. */
   function markCurrent() {
-    const visible = shown.map((h) => document.getElementById(h.id)).filter((el): el is HTMLElement => el?.isConnected ?? false);
+    const note = inApp("#note");
+    const visible = shown.map((h) => note?.querySelector<HTMLElement>(`#${CSS.escape(h.id)}`)).filter((el): el is HTMLElement => el?.isConnected ?? false);
     let current: HTMLElement | undefined;
     // Scrolled to the end: the last sections will not reach the window top.
     if (atBottom()) current = visible.at(-1);
     else {
-      const top = (document.querySelector(".chrome")?.getBoundingClientRect().bottom ?? 50) + 40;
+      const top = (inApp(".chrome")?.getBoundingClientRect().bottom ?? 50) + 40;
       for (const el of visible) {
         if (el.getBoundingClientRect().top > top) break;
         current = el;
@@ -32,7 +34,7 @@
 
   /** Whether there is room for the outline to the right of the note column. */
   function layout() {
-    const note = document.getElementById("note");
+    const note = inApp("#note");
     if (!note) return;
     const room = innerWidth - note.getBoundingClientRect().right;
     ui.tocRoom = room >= 200;
@@ -60,7 +62,7 @@
     };
     const page = scroller();
     page.addEventListener("scroll", onScroll, { passive: true });
-    const main = document.querySelector(".main");
+    const main = inApp(".main");
     const ro = new ResizeObserver(layout);
     if (main) ro.observe(main);
     return () => {

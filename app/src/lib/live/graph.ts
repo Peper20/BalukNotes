@@ -4,6 +4,7 @@
 import { mount, unmount } from "svelte";
 import Graph from "../../components/Graph.svelte";
 import type { GraphLayout } from "../api";
+import { createElement } from "../dom";
 import type { LiveBlock } from "./block";
 import { SELECTORS } from "./selectors";
 
@@ -13,7 +14,7 @@ export const graph: LiveBlock = {
   mount(el, { open }) {
     const layout = JSON.parse(el.dataset.kGraph ?? "") as GraphLayout;
     if (!Array.isArray(layout.nodes) || !layout.nodes.length) return null;
-    const target = el.appendChild(Object.assign(document.createElement("div"), { className: "k-graph-live" }));
+    const target = el.appendChild(Object.assign(createElement("div"), { className: "k-graph-live" }));
     const m = mount(Graph, { target, props: { layout, onopen: open } });
     return () => void unmount(m);
   },

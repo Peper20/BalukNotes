@@ -195,10 +195,20 @@ it. The format and rules - `.claude/rules/docs.md`.
   not limit the style scope to the note, and the CSP has to allow
   `style-src 'unsafe-inline'`. How to close: note style isolation
   (scope/shadow/rewriting selectors), then drop `unsafe-inline`.
-- **DOM clobbering via `id`/`name`**: a note can set names that conflict with
-  global document properties. How to close: the client must not rely on
-  `window.<id>` and `document.<name>`, only explicit
-  `querySelector`/`getElementById` in its container.
+- **Named `<img>` of a note reaches the Svelte runtime**: `name` shadows
+  `document.<name>` for the whole page, and Svelte's runtime
+  (`node_modules/svelte/.../client/dom/`) reads `document.createElement`,
+  `createTextNode`, `createComment`, `createDocumentFragment`, `importNode` and
+  `activeElement` by name, so such a note breaks mounting of components. The
+  client itself reads the document only through `app/src/lib/dom.ts`. How to
+  close: drop `name` from the note HTML in `NoteView.svelte` (the sanitizer
+  allows it, `passes/sanitize.rs`, `HTML_ATTRS`; a decision on what notes may
+  emit).
+- **App lookups by id or class search the whole body**: `inApp("#backlinks")`,
+  `".chrome"`, `".main"` (`app/src/lib/dom.ts`) return the first match, so a
+  note heading with the same id or an element with the same class can answer
+  for the app element. How to close: the components keep a reference to their
+  element (`bind:this`), or the note ids get a prefix in the library.
 - **No CORS**: `config.ts` has `base`, but the server rejects a foreign
   `Origin`. The core talks to the storage server, not the page - CORS is
   needed only if a page from another origin calls the server itself.

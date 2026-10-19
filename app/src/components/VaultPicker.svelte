@@ -10,6 +10,7 @@
   import { api, ApiError, type VaultsResponse } from "../lib/api";
   import { vaultHref } from "../lib/boot";
   import { settings } from "../lib/state/settings.svelte";
+  import { htmlEl } from "../lib/dom";
 
   let { list }: { list: VaultsResponse } = $props();
   let name = $state("");
@@ -22,9 +23,9 @@
     void settings
       .load()
       .catch(() => {})
-      .finally(() => (document.documentElement.dataset.state = "ready"));
+      .finally(() => (htmlEl.dataset.state = "ready"));
   });
-  $effect(() => settings.apply(document.documentElement));
+  $effect(() => settings.apply(htmlEl));
 
   async function create(e: SubmitEvent) {
     e.preventDefault();

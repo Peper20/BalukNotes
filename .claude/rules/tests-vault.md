@@ -28,7 +28,7 @@ changes, the "Total" line.
 The total is the last output line; `tools/check.sh` and the test
 `check_finds_exactly_the_planted_problems` compare it:
 
-Total: `notes: 22, errors: 2, warnings: 4, broken links: 4`
+Total: `notes: 23, errors: 2, warnings: 4, broken links: 4`
 
 ## Catalog
 
@@ -44,6 +44,7 @@ Total: `notes: 22, errors: 2, warnings: 4, broken links: 4`
 | `Особые случаи/Ошибка компиляции.typ` | an error with file and line; the "Не собралось" stub; links are checked from the source |
 | `Особые случаи/Предупреждение.typ` | a Typst warning (fractional `h`) and `lint` (a language without a dictionary, `;`, `$0,5$`); absolute `#h`/`#v` -> `span.k-h`/`div.k-v` (negative too), `quad` in a formula is left alone |
 | `Особые случаи/Запасные шрифты.typ` | glyphs missing from the theme main fonts: text from New Computer Modern (whole file), code from DejaVu Sans Mono (in parts); bold and italic |
+| `Особые случаи/Имена элементов.typ` | headings `location`, `cookie`, `forms`, `body`, `localStorage`, `fetch` and `img` elements whose `name` is a document member the client reads (`body`, `getElementById`, `title`...): the client does not read them by named access (`app/e2e/clobbering.spec.ts`) |
 | `Особые случаи/English/` | a book with `lang: "en"`: layout words from `i18n.typ`, `lang` on `<article>` |
 | `Особые случаи/Свои слова.typ` | `lang: "de"` with own `words:`; what `words:` lacks comes from the English dictionary; no warning |
 | `Особые случаи/Ссылки.typ` | all kinds of `#see`: by text, by label, into a book chapter, to names with `+ # %`, to a section with symbols, deep, a computed path; broken ones; repeated headings; `\;` after a call |

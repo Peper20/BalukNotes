@@ -17,7 +17,8 @@ declare global {
 
 const normalize = (c: Partial<ApiConfig> = {}): ApiConfig => ({ base: (c.base ?? "").replace(/\/+$/, "") });
 
-let config = normalize(globalThis.__NOTES_API__);
+// Read as an own property: an element with the same id would be the global by name (named access on window).
+let config = normalize(Object.getOwnPropertyDescriptor(globalThis, "__NOTES_API__")?.value as Partial<ApiConfig> | undefined);
 
 export const apiConfig = (): ApiConfig => config;
 

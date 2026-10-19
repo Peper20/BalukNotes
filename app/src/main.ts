@@ -1,4 +1,6 @@
 import { mount, unmount } from "svelte";
+// First: the document's nodes are taken before any note is in the page (lib/dom.ts).
+import { bodyEl, createElement } from "./lib/dom";
 import { api, onSignInRequired, signInRequired } from "./lib/api";
 import { pickVault } from "./lib/boot";
 import { session } from "./lib/state/session.svelte";
@@ -12,8 +14,8 @@ let shown: Record<string, unknown> | undefined;
 async function showSignIn() {
   const { default: SignIn } = await import("./components/SignIn.svelte");
   if (shown) unmount(shown);
-  document.body.replaceChildren();
-  shown = mount(SignIn, { target: document.body });
+  bodyEl.replaceChildren();
+  shown = mount(SignIn, { target: bodyEl });
 }
 onSignInRequired(() => void showSignIn());
 
@@ -27,14 +29,14 @@ try {
   const choose = await pickVault();
   if (choose) {
     const { default: VaultPicker } = await import("./components/VaultPicker.svelte");
-    if (!signInRequired()) shown = mount(VaultPicker, { target: document.body, props: { list: choose } });
+    if (!signInRequired()) shown = mount(VaultPicker, { target: bodyEl, props: { list: choose } });
   } else {
     const { default: App } = await import("./App.svelte");
-    if (!signInRequired()) shown = mount(App, { target: document.body });
+    if (!signInRequired()) shown = mount(App, { target: bodyEl });
   }
 } catch (e) {
   if (!signInRequired()) {
-    const p = Object.assign(document.createElement("p"), { className: "fatal", textContent: `Не удалось запустить клиент: ${(e as Error).message}` });
-    document.body.replaceChildren(p);
+    const p = Object.assign(createElement("p"), { className: "fatal", textContent: `Не удалось запустить клиент: ${(e as Error).message}` });
+    bodyEl.replaceChildren(p);
   }
 }

@@ -22,6 +22,7 @@
   import { untrack } from "svelte";
   import { fade } from "svelte/transition";
   import type { GraphLayout } from "../lib/api";
+  import { elementAt } from "../lib/dom";
   import { Pointers } from "../lib/graph-gesture";
   import { anyMoving, blendView, Frames, glide, introDelays } from "../lib/graph-motion";
   import { DRAG, extentOf, Physics, type Drag, type Point, type Rect } from "../lib/graph-physics";
@@ -305,7 +306,7 @@
     dragging = false;
     releaseNode();
     // The node hit the frame and the pointer went further: remove the highlight.
-    if (g?.kind === "node" && g.far && document.elementFromPoint(e.clientX, e.clientY)?.closest<SVGElement>(".graph-node")?.dataset.id !== g.id)
+    if (g?.kind === "node" && g.far && elementAt(e.clientX, e.clientY)?.closest<SVGElement>(".graph-node")?.dataset.id !== g.id)
       focused = null;
     if (g?.kind === "node" && !g.far && e.type === "pointerup") {
       const node = graph.nodes.find((n) => n.id === g.id);

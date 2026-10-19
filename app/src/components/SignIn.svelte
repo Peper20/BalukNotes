@@ -10,6 +10,7 @@
   import { onMount } from "svelte";
   import { api, signInMessage } from "../lib/api";
   import { resolveTheme } from "../lib/appearance";
+  import { htmlEl } from "../lib/dom";
 
   let login = $state("");
   let password = $state("");
@@ -17,7 +18,7 @@
   let busy = $state(false);
 
   onMount(() => {
-    const root = document.documentElement;
+    const root = htmlEl;
     root.dataset.state = "ready";
     if (root.dataset.theme) return;
     // A first visit: no remembered theme, so no colors; the system's light or dark one.

@@ -6,6 +6,7 @@ import { notes, places, reader, router, session, settings, tabs, updates } from 
 import { graphHref, homeHref, noteHref, parseRoute, tagHref } from "./ids";
 import { combo, type Combo } from "./keys";
 import { movedId } from "./rename";
+import { inApp } from "./dom";
 import { mobile, ui } from "./ui.svelte";
 
 export interface Command {
@@ -104,7 +105,7 @@ export function commands(): Command[] {
     { id: "copy-link", group: "Заметка", title: "Скопировать ссылку #see(…) на заметку", available: () => router.currentId != null, run: () => void copyLink() },
     { id: "rename-note", group: "Заметка", title: "Переименовать заметку…", available: () => router.currentNote != null, run: () => (ui.renaming = router.currentId ? { kind: "note", id: router.currentId } : null) },
     { id: "delete-note", group: "Заметка", title: "Удалить заметку…", available: () => router.currentNote != null, run: () => (ui.deleting = router.currentId ? { kind: "note", id: router.currentId } : null) },
-    { id: "backlinks", group: "Заметка", title: "Кто ссылается сюда", available: hasNote, run: () => document.getElementById("backlinks")?.scrollIntoView({ behavior: "smooth" }) },
+    { id: "backlinks", group: "Заметка", title: "Кто ссылается сюда", available: hasNote, run: () => inApp("#backlinks")?.scrollIntoView({ behavior: "smooth" }) },
 
     { id: "settings", group: "Приложение", title: "Настройки", keys: keys("Ctrl+Comma"), run: () => (ui.settingsOpen = true) },
     { id: "help", group: "Приложение", title: "Горячие клавиши", keys: keys("?"), run: () => (ui.helpOpen = true) },

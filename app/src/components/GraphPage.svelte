@@ -24,6 +24,7 @@
   import GraphForces from "./GraphForces.svelte";
   import GraphLegend from "./GraphLegend.svelte";
   import { scroller } from "../lib/scroll";
+  import { htmlEl, inApp, setTitle } from "../lib/dom";
 
   let { route }: { route: { around: string | null; depth: number; folder: string | null } } = $props();
 
@@ -56,7 +57,7 @@
   /** The forces panel slides out by a button; it is hidden on every visit to the graph. */
   let forcesOpen = $state(false);
   function onkeydown(e: KeyboardEvent) {
-    if (e.key === "Escape" && forcesOpen && !e.defaultPrevented && !document.querySelector("dialog[open]")) forcesOpen = false;
+    if (e.key === "Escape" && forcesOpen && !e.defaultPrevented && !inApp("dialog[open]")) forcesOpen = false;
   }
   async function saveForce(key: string, value: number) {
     await settings.save({ [key]: value });
@@ -73,11 +74,11 @@
   let failed = $state(false);
   let first = true;
   $effect(() => {
-    document.title = "Граф — Заметки";
+    setTitle("Граф — Заметки");
   });
   $effect(() => {
     const filter: Partial<GraphFilter> = { ...$state.snapshot(prefs), around: route.around, depth: route.depth, folder: route.folder, ...(forces && { forces: JSON.parse(forces) as Forces }) };
-    if (first) document.documentElement.dataset.state = "loading";
+    if (first) htmlEl.dataset.state = "loading";
     let stale = false;
     api
       .graphLayout(filter)
@@ -86,7 +87,7 @@
       .finally(() => {
         if (!first || stale) return;
         first = false;
-        requestAnimationFrame(() => (document.documentElement.dataset.state = "ready"));
+        requestAnimationFrame(() => (htmlEl.dataset.state = "ready"));
       });
     return () => (stale = true);
   });

@@ -1,6 +1,7 @@
 <!-- Tags: all tags with the number of notes; the chosen tag - its notes and book chapters. -->
 <script lang="ts">
   import { notes } from "../lib/state";
+  import { htmlEl, setTitle } from "../lib/dom";
   import { noteHref, tagHref } from "../lib/ids";
   import { noteTags, tagIndex } from "../lib/tags";
 
@@ -10,8 +11,8 @@
   const tagged = $derived(tag ? (byTag.find((e) => e.tag === tag)?.places ?? []) : []);
 
   $effect(() => {
-    document.title = tag ? `#${tag} — Заметки` : "Теги — Заметки";
-    document.documentElement.dataset.state = "ready";
+    setTitle(tag ? `#${tag} — Заметки` : "Теги — Заметки");
+    htmlEl.dataset.state = "ready";
   });
 </script>
 
