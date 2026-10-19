@@ -27,9 +27,12 @@ file - the principles of any skill.
 ## Self-sufficiency
 
 - The skill is called **from any folder**, usually the one with the sources
-  (lectures, problems). Everything needed is in the skill directory:
-  `SKILL.md`, samples, the reference; BalukNotes sources and online docs are
-  not needed, and the skill says so directly.
+  (lectures, problems). Everything needed is in the skill directory
+  (`SKILL.md`, samples, the reference) and in `notes docs writing` (the rules
+  for the content of notes, `docs/writing.md`, built into `notes`); BalukNotes
+  sources and online docs are not needed, and the skill says so directly.
+  The content rules live only in `docs/writing.md`: `SKILL.md` names them as a
+  step, it does not copy them.
 - Work goes only through the **public `notes` command** and editing note
   files. A capability is missing - first a CLI command, then the skill.
 - `allowed-tools` - only the needed `notes` commands and reading files.
@@ -94,8 +97,9 @@ file - the principles of any skill.
 - the progress header (goal, plan, what next) is written by the model per the
   skill, not by the `notes new` template (user's decision);
 - order: language, context (what the program is, where the result goes),
-  choosing the task, steps, reference (paths, syntax, CLI errors), quality
-  rules, common calls, an index of samples.
+  choosing the task, steps (one of them reads `notes docs writing`, the content
+  rules), reference (paths, syntax, CLI errors), common calls, an index of
+  samples.
 
 Together the samples use **every** public library name; comments say what a
 call does and why (parameters are in the reference). The model reads them in

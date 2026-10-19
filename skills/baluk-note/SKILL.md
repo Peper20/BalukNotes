@@ -20,10 +20,10 @@ This is your task: work through it with the process below. If the request is emp
 
 ## Context
 
-BalukNotes keeps notes as Typst files in a **vault** (a folder the user owns). The app (a desktop window; a phone and a browser later) renders them as web pages, `notes pdf` prints them, and the `baluk` library provides the layout: templates, text blocks, figures, interactive plots. The user reads notes mostly in the app, on a desktop or a phone, in a light or dark theme; the PDF is the same text for print. So the web page is the main result, and everything has to work in both themes.
+BalukNotes keeps notes as Typst files in a **vault** (a folder the user owns). The app (a desktop window; a phone and a browser later) renders them as web pages, `notes pdf` prints them, and the `baluk` library provides the layout: templates, text blocks, figures, interactive plots. The user reads notes mostly in the app, on a desktop or a phone, in a light or dark theme; the PDF is the same text for print. So the web page is the main result.
 
-Everything you need is in the skill folder ("Base directory" at the top, usually `~/.claude/skills/baluk-note`):
-- this file: the process, paths, Typst basics, `notes check` errors, rules for good notes;
+Everything you need is in the skill folder ("Base directory" at the top, usually `~/.claude/skills/baluk-note`), and the writing rules come from `notes docs writing`:
+- this file: the process, paths, Typst basics, `notes check` errors;
 - `examples/`: whole notes and a book that together use every library function; each builds without errors;
 - `reference.md`: full signatures of all library functions with allowed values.
 
@@ -53,11 +53,12 @@ Work only in the chosen vault; never touch other vaults. In it, create or change
    Add `--lang en` (ISO 639 code) when the note is not in Russian: it sets `lang:` in the template, so block words become "Definition", "Fig." instead of Russian ones. The file name is derived from the title. Output: line 1 is the file on disk (read and edit it), line 2 is the note path ("Path" below: for `notes check`, `notes pdf`, `#see`), line 3 is the command that opens the note in the app (`notes app --vault "Name" "Path"`). Exit code 1 (`invalid note path`, `empty title`): report the message to the user and leave existing files alone. Exit code 2: wrong arguments, see `notes new --help`.
 6. `notes check --vault "Name" "Path"`: the fresh stub is clean (`errors: 0, warnings: 0`). Add the progress header at the top of the new file (a book: `main.typ`), see "The file".
 7. **Where to look.** The user reads the note in the app window, which refreshes on every save. Give the user the open command from step 5 (once is enough); do not launch the window yourself unless asked, since a window that appears uninvited interrupts their work.
-8. **Plan.** First read `reference.md` and every file in `examples/` in full, once per session (skip this for task E and small fixes): the plan should use the figures and blocks the library actually has, and the samples show how a finished note looks. Then find out the goal (exam, contest, lab, "understand it") and the reader: what they know well and what poorly, since weak spots deserve more room. Propose sections (a book: chapters, then sections) with the figures, examples and hard spots of each, and wait for approval. If the user already said what the note must contain ("one parabola plot with a slider"), that is the plan.
-9. **Write** one section (chapter) at a time, see "Editing the file" and "Writing a good note". Start each call from its sample in `examples/`; `reference.md` lists every parameter and allowed value. The samples show the calls, not the limits: combine features and draw your own figures (see "Figures").
-10. **Check** after each section: `notes check --vault "Name" "Path"`, then fix and repeat until `errors: 0, warnings: 0, broken links: 0`. The "Errors" list below explains the usual messages; for an unclear one compare your call with the sample and the signature in `reference.md`.
-11. **Header.** Update the progress header (see "The file") after each section: work is often interrupted, and the next session starts from it. When everything is done, delete the header.
-12. **Look at the result.** Numbers and `notes check` do not show overlapping labels, invisible lines in the dark theme or a table wider than a phone. If you can read images:
+8. **Rules.** Run `notes docs writing` and read it in full before planning, once per session (not for a rename). It holds the rules for what a note explains, how it is written and how it is checked: the text, the figures, the code, the checks and the process. Follow it; the rest of this file gives the mechanics (commands, paths, syntax).
+9. **Plan.** First read `reference.md` and every file in `examples/` in full, once per session (skip this for task E and small fixes): the plan should use the figures and blocks the library actually has, and the samples show how a finished note looks. Then find out the goal and the reader as the writing rules say (step 8). Propose sections (a book: chapters, then sections) with the figures, examples and hard spots of each, and wait for approval. If the user already said what the note must contain ("one parabola plot with a slider"), that is the plan.
+10. **Write** one section (chapter) at a time, see "Editing the file" and the writing rules (step 8). Start each call from its sample in `examples/`; `reference.md` lists every parameter and allowed value. The samples show the calls, not the limits: combine features and draw your own figures, following the writing rules.
+11. **Check** after each section: `notes check --vault "Name" "Path"`, then fix and repeat until `errors: 0, warnings: 0, broken links: 0`. The "Errors" list below explains the usual messages; for an unclear one compare your call with the sample and the signature in `reference.md`.
+12. **Header.** Update the progress header (see "The file") after each section: work is often interrupted, and the next session starts from it. When everything is done, delete the header.
+13. **Look at the result.** Numbers and `notes check` do not show overlapping labels, invisible lines in the dark theme or a table wider than a phone: go through the "By eye" list of the writing rules. If you can read images:
     ```sh
     notes png --vault "Name" "Path" -o $TMP/pages                  # prints one PNG per page: open them
     notes png --vault "Name" "Path" -o $TMP/pages --theme night    # dark theme; --pages 3-5 for a few pages of a book
@@ -70,7 +71,7 @@ Work only in the chosen vault; never touch other vaults. In it, create or change
     kill <PID>                            # when done; not pkill, it could hit the user's processes
     ```
     Check the light and dark theme (switch at the top right), a narrow window (about 400 px), and the interactive parts (sliders, frames, rotation).
-13. **Report**: file path, the `notes app ...` command that opens it, what is done, what is left.
+14. **Report**: file path, the `notes app ...` command that opens it, what is done, what is left.
 
 **C. Chapter.** Instead of steps 5-6 create the chapter file by hand (`notes new` does not create chapters): the book folder on disk (vault folder + book path) + `NN-topic.typ`, NN following the existing chapters. It starts with `#import "/_baluk/lib.typ": *`, then `#show: chapter.with(title: [Chapter title], tags: (...))` when the chapter has tags of its own, otherwise `= Chapter title` (sample: `examples/book/01-idea.typ`). Add `#include "NN-topic.typ"` to the book's `main.typ` after the last `#include`. Check with `notes check --vault "Name" "Book path"`.
 
@@ -87,7 +88,7 @@ Check with `notes check --vault "Name"` without a path, since folder errors appe
 
 ## Title and path
 
-**Title**: `title: [...]` in the file (a book: `main.typ`), any text, shown to readers in the tree, tabs, graph and links (a formula there shows as its source, `sum 1/n^2`, so prefer words). **Path**: where the file is, from the vault root, `/`-separated, without `.typ`: `Math/Parabola`. `notes new` (line 2) and `notes list` (first on each line) print it; it is the same in `notes check`, `notes pdf`, `#see(...)`, `notes app` and the page address. Folders are created automatically.
+**Title**: `title: [...]` in the file (a book: `main.typ`), any text, shown to readers in the tree, tabs, graph and links (a formula there shows as its source, `sum 1/n^2`). **Path**: where the file is, from the vault root, `/`-separated, without `.typ`: `Math/Parabola`. `notes new` (line 2) and `notes list` (first on each line) print it; it is the same in `notes check`, `notes pdf`, `#see(...)`, `notes app` and the page address. Folders are created automatically.
 
 **Folder title**: `_folder.toml` in the folder, one line `title = "Networks and protocols"`; other keys are errors. Without it the folder shows its name. Write it only when the user asks to name a folder.
 
@@ -97,7 +98,7 @@ Common path mistakes:
 - No `.typ` at the end.
 - Names starting with `_` or `.` are reserved for the app.
 
-Spaces and non-Latin letters are fine; quote the path in commands. Folder (`--folder`): an existing one from `notes list`, or a new short one in the note language. Tags: lowercase, in the note language, reusing those from `notes tags`, because tags are shared across the vault.
+Spaces and non-Latin letters are fine; quote the path in commands. Folder (`--folder`): an existing one from `notes list`, or a new short one in the note language. Tags: reuse the existing ones from `notes tags`, since tags are shared across the vault (the writing rules say how they look).
 
 ## The file
 
@@ -106,7 +107,7 @@ A note file has three parts, in order:
 - `#import "/_baluk/lib.typ": *` and `#show: note.with(title: [...], tags: (...))`: the template that styles the whole note. Keep them; you may change the fields `title`, `description`, `tags` and add others from `reference.md` (`lang`, `words`). The text goes after the closing `)` of `#show`.
 - the text: sections, blocks, figures.
 
-A book's `main.typ` has `book` instead of `note` and `#include "01-topic.typ"` lines after `#show`; the text lives in chapter files. `main.typ` is the book root: its `lang`, `words` and `tags` apply to every chapter, so tags of the whole topic go there and a chapter's own tags go in its `chapter.with` (the first chapter is an ordinary chapter).
+A book's `main.typ` has `book` instead of `note` and `#include "01-topic.typ"` lines after `#show`; the text lives in chapter files. `main.typ` is the book root (what goes there and into a chapter: the writing rules).
 
 A header in progress (keys as here, values in the note language):
 
@@ -167,62 +168,6 @@ Typst is neither LaTeX nor Markdown: `\frac`, `\begin`, `**bold**`, `# Heading` 
 - `_folder.toml: unknown field`: only `title = "Title"` is allowed.
 - `package ... is not whitelisted`: notes may import only whitelisted Typst packages (the library already brings CeTZ). Draw with the library instead; if a package is really needed, ask the user - only they can allow it in the device settings.
 - Other messages come from the library and say what to change.
-
-## Writing a good note
-
-A note **explains** rather than lists: the reader wants to understand the topic from scratch and then solve problems. A dense cheat sheet (tables of "construct: meaning", walls of code) is a separate note (`book.with(kind: [Cheat sheet], ...)`), not a replacement for an explanation.
-
-**Note or book.** A note is one topic (a definition, a technique, a tool, a problem): `=` is a section, numbering runs through the note. A book is a course or a large topic: `=` is a chapter ("Chapter N") that starts a new PDF page and is shown separately in the app, with a title page and contents in the PDF. A short topic is therefore a section, not a chapter; aim for a chapter of at least 3 PDF pages. Short notes on one idea, linked with `#see`, work well: the app builds backlinks and a graph from the links.
-
-**Structure of a chapter (a section of a note is the same without `plan`):**
-- `#lead[...]`: 2-4 sentences, why this matters and what it builds on; `#plan(...)` in a book chapter.
-- Each `== Section`: motivation, intuition with a figure, then rigor (`#definition`, `#theorem`, `#proof`), a worked `#example` with `#step`s and `#answer`, and the main `#pitfall` right after the example.
-- At the end: `#pitfalls(...)`, `#summary(...)` (3-6 points to remember), `#quiz(...)`.
-- Every definition and theorem gets at least one worked example.
-
-**Text.**
-- Why first, then what, then how to use it. Hard parts get more room than easy ones: evenly compressed text fails exactly where the reader struggles. A hard spot gets 2-3 examples from simple to harder, a step-by-step trace, a proof sketch and the typical mistake.
-- A lively "we" voice ("let us split", "note that"). A new term in `*bold*` with its explanation right next to it.
-- No bare formulas: before one say what it means, after it how to use it. The key formula of a section goes in `#formula[...]`, one or two per section.
-- Callouts (`remark`, `idea`, `pitfall`, `margin-note`) are seasoning: about one per half page, or they stop standing out.
-- Recompute every number independently (Python, sympy, brute force, simulation), and check each figure caption against the figure's own coordinates.
-
-**The web page is the main view.**
-- Layout only through library blocks: `side-by-side` (text and a small figure), `in-row` (figures in a row), `fig`, `data-table`. The Typst HTML export drops `grid`, `stack`, `align`, `place` and fractional `h`/`v`, so such layout silently disappears in the app.
-- No own HTML, JavaScript or styles, and no fixed colors (`rgb(...)`) or font sizes (`set text(size: ...)`): the theme sets colors and sizes, and the reader switches themes. Interactivity comes only from library blocks.
-
-**Figures.** Add them without being asked: 2-3 per chapter, and at least one in every section about geometry, a graph, a data structure, an algorithm or a scheme, placed next to the text that refers to it.
-- The caption is a statement about what is visible, not a name: not "Region D" but "The spoke enters D through the parabola and leaves through the line: these are the limits of the inner integral".
-- An algorithm is shown as `frames` (a slider and playback in the app, a storyboard `pdf: (1, 4, 8)` in the PDF); one static picture is not enough. A dependence on a parameter is an `interactive-plot` or `interactive-surface`.
-- Highlight the main thing with one theme color, `"second"`, not a rainbow; labels no smaller than the defaults.
-- A large figure can float in the PDF (`fig(..., floating: true)`); a small one sits next to its paragraph with `side-by-side`.
-- Use library helpers where they exist (axes, plots, 3D, arrays, matrices, graphs, trees, charts, the vault graph) instead of redrawing them. Beyond them, draw freely with CeTZ inside `canvas(theme => { ... })`: lines, polygons, arcs, labels, 3D points via `p3`, loops and own helper functions, always in theme colors (`reference.md`, "Own lines"). If the note needs a whole new kind of figure or layout that other notes would reuse, draw it for now and tell the user it belongs in the library.
-- Check figures in the dark theme too: a color outside the theme is invisible there.
-
-Figures by subject, as a starting point:
-- analysis: spokes for integration limits, graphs, 3D surfaces, solids and sections, Riemann sums as frames;
-- algorithms and data structures: arrays with blocks, pointers and arcs, algorithm frames, graphs with the current step, DP tables with arrows;
-- databases: the data before a query and the result, matched rows of a join, the window frame;
-- computer architecture: block diagrams, the memory hierarchy, a pipeline by cycles, address fields;
-- probability: geometric probability, outcome trees, density and distribution functions;
-- any subject: measurements and comparisons as a `chart`, not a table of numbers.
-
-**Code.**
-- Code comes after the idea and does not replace it; never two listings in a row without text between them.
-- A `listing` has at most 25 lines; mark key lines with `highlight:` and `callouts:` and refer to them in the text ("line #callout(1) ..."); add `complexity:` and a sample input and output.
-- Working code lives in the vault next to the book (`Folder/Book/code/...`), is compiled and tested (random tests against a naive solution), and a chapter takes a region of it with `code-from-file` (path from the vault root).
-- SQL: every query is followed by its result (the first 3-5 rows as a table).
-
-**Before calling a chapter done:**
-- lead and plan; each section has motivation, a figure and a worked example;
-- hard spots covered in more detail than easy ones;
-- 2-3 figures, each with a statement caption and a reference from the text;
-- algorithms as frames, SQL with results;
-- listings of at most 25 lines, code compiled and tested;
-- numbers recomputed independently;
-- `pitfalls`, `summary`, `quiz` at the end;
-- `notes check` clean for your note (problems in other notes: tell the user, do not fix them silently); PDF and, if possible, the page viewed in both themes and a narrow window;
-- the header says what is done and what is next.
 
 ## Common calls
 

@@ -461,9 +461,6 @@ it. The format and rules - `.claude/rules/docs.md`.
   only by building the samples. Signatures are described twice:
   `baluk/README.md` and `reference.md`. How to close: generate `reference.md`
   from `///` comments at installation.
-- **Content rules live in two places**: `docs/writing.md` and `SKILL.md`
-  ("Writing a good note"). Edit a rule - edit both. How to close: one source,
-  `SKILL.md` refers to `notes docs writing` or includes it at installation.
 - **The skill is made for Claude Code**: `allowed-tools`,
   `disable-model-invocation`, "Base directory" are its concepts; other shells
   (opencode) read `SKILL.md` as text, the path to `examples/` comes from "Base

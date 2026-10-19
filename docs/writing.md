@@ -33,7 +33,8 @@ the same text for printing.
 - The hard parts get more detail than the easy ones; uniformly compressed text
   is a failure.
 - A dense reference (tables "construct -> meaning", walls of code) is a cheat
-  sheet, a separate note (`book.with(kind: [Шпаргалка], ...)`).
+  sheet, a separate note (`book.with(kind: [Шпаргалка], ...)`; in an English
+  note `kind: [Cheat sheet]`), not a replacement for the explanation.
 
 ## Note or book
 
@@ -59,8 +60,8 @@ in it: `title = "Сети и протоколы"` (no file - the folder name).
   `#see("Математика/Производная")`, a section - `anchor: "Heading"`. "Links
   here" and the graph are built from links. A link to an unwritten note is
   broken: write the note or do not link.
-- Tags - `tags: ("матан", "интегралы")`: lowercase, in Russian, shared across
-  the vault (existing ones - `notes tags`).
+- Tags - `tags: ("матан", "интегралы")`: lowercase, in the note's language,
+  shared across the vault (existing ones - `notes tags`).
 - **Book and chapter properties.** `main.typ` is the book root:
   `book.with(...)` sets what all chapters share (language, words, tags of the
   whole topic), a chapter inherits it. A chapter's own properties, as of a
@@ -76,22 +77,13 @@ in it: `title = "Сети и протоколы"` (no file - the folder name).
 1. Find out the **goal** (an exam, a contest, a lab, "to understand") and the
    **reader**: what they know well and what poorly (the less familiar gets
    more space). Gather the sources: lectures, problems, past exam papers -
-   often they are in the folder the skill is called from. Sources and the
-   original notes (`~/Documents/abstract/...`) are read only; everything of
-   your own goes to the vault, drafts and screenshots to a temporary folder.
+   often they are in the folder the skill is called from.
 2. Agree on the **plan** before the text: for a book - chapters and sections,
-   for a note - sections; for each - figures, examples, hard parts. Wait for
-   "yes".
-3. Write a chapter (section) at a time; after each - the check (below) and a
-   note in the file **header** - `//` comments at the start of the book's
-   `main.typ` or the note: goal and reader, sources, plan, what is done, what
-   is next. The author writes the header (`notes new` does not create it).
-   Work is often interrupted - the next session starts from the header. Done -
-   delete the header.
+   for a note - sections; for each - figures, examples, hard parts.
+3. Write a chapter (section) at a time and check it (below). After each one,
+   update the progress header of the file (the skill's "The file"), so that an
+   interrupted work resumes from it.
 4. Add visualizations right away, without waiting to be asked.
-
-The user sees the note as it is written: the app window picks up edits by
-itself (`notes new` prints the command that opens the note there).
 
 ## A book chapter (a note section - the same, without `plan`)
 
@@ -107,7 +99,7 @@ itself (`notes new` prints the command that opens the note there).
    #example                  step by step: #step[Figure] ... #step[Limits] ... #answer[...]
    #pitfall                  the main trap of the section, right after the example
 
-#pitfalls(...)   #summary(...)   #quiz(...)      // at the end of the chapter
+#pitfalls(...)   #summary(...)   #quiz(...)      // at the end; the summary is 3-6 points
 ```
 
 - A chapter starts on a new page in PDF and is shown separately in the app, so
@@ -136,7 +128,9 @@ itself (`notes new` prints the command that opens the note there).
 
 ## HTML is the main view
 
-One source gives the page and the PDF, but mostly the page is read.
+One source gives the page and the PDF, but mostly the page is read: everything
+has to work in the light and the dark theme and on a narrow screen (about
+400 px), not only in the PDF.
 
 - **Layout only with library blocks**: `side-by-side` (text and a figure side
   by side), `in-row` (figures in a row), `fig`, `data-table`. In HTML Typst
@@ -155,8 +149,8 @@ settings ("Пакеты Typst сверх белого списка").
 ## Figures - required, without reminders
 
 The norm: 2-3 figures per chapter and at least one in every section about
-geometry, a data structure, an algorithm or a diagram - next to the explaining
-text and referenced from it.
+geometry, a graph, a data structure, an algorithm or a diagram - next to the
+explaining text and referenced from it.
 
 - **A caption is a statement, not a title.** Bad: "Region D". Good: "The spoke
   enters D through the parabola and leaves through the line - these are the
@@ -167,7 +161,7 @@ text and referenced from it.
 - A dependence on a parameter - `interactive-plot` (sliders) or
   `interactive-surface` (3D with rotation).
 - Highlight with one theme color (`"second"`), not a rainbow; labels no
-  smaller than 8pt.
+  smaller than the library's defaults (the theme sets the sizes).
 - A large figure - `fig(..., floating: true)` (in PDF - top or bottom of the
   page), a small one for a paragraph - `side-by-side`.
 - What the library has, do not draw again: axes, plots, 3D, arrays, matrices,
@@ -205,16 +199,7 @@ notes check --vault "Name" "Folder/Book"              # errors, warnings ("0,5" 
 notes png --vault "Name" "Folder/Book" -o $TMP/pages  # and LOOK at the pages; --theme night for the dark theme
 ```
 
-- `$TMP` is a temporary folder, not the vault and not the sources folder.
-- The page in a browser (Claude in Chrome): start a temporary server on a
-  free port of your own, `notes serve --addr 127.0.0.1:8439` in the
-  background, open `http://127.0.0.1:8439/v/<Vault>/n/Folder/Book` (vault and
-  path percent-encoded), look at the light and dark theme (the switch at the
-  top right), a narrow window (~400 px), interactivity; then stop that server.
-  The app window itself is `notes app --vault "<Vault>" "Folder/Book"`; do not
-  open it for the user uninvited.
-- Your own note has no errors, warnings or broken links; other problems of the
-  vault (`notes check` without a path) are not fixed silently - tell the user.
+- Your own note has no errors, warnings or broken links.
 - Every number is recomputed independently (Python, sympy, brute force,
   simulation); a figure caption is checked against the figure's own
   coordinates.
