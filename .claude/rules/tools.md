@@ -8,15 +8,16 @@ paths:
 | File | What |
 |---|---|
 | `check.sh` | the full check |
+| `cargo.sh` | `cargo` by hand with the settings of the checks: the shared build dir, the CPU cap, the lock of heavy work and `freshen_sources` |
 | `install.sh` | `notes` and its parts (`notes-typst`, `notes-hub`, the `notes-app` window with a menu entry and icon) into `~/.local/bin` and the skill into `~/.claude/skills` in one version (the autostart service is not installed; one still active is restarted); run again after changes |
 | `cloud-setup.sh`, `cloud-finish.sh` | a throwaway Forgejo in a cloud session and sending its `main` to a GitHub branch ("Cloud environment") |
 | `deploy-hub.sh` | updates `notes-hub` on the VPS in one command: sends the sources of a commit over SSH, the VPS builds, a root helper (`server/baluk-notes-hub-install`, installed by hand) installs and restarts (`docs/server.md`, "Updating") |
 | `test-env.sh` | a server on `tests/vault` (data `tests/.data`, port 8432, another - `PORT=...`) |
 | `lib/worktree-target.sh` | in a linked worktree (agents) - the build dir of the main checkout, `<root>/target` |
 | `lib/target-limit.sh` | pruning and the size limit of that dir, sourced by `check.sh` (the crate list by python3, no `jq`) |
-| `lib/cpu-cap.sh` | the CPU cap `CHECK_JOBS` and the lock of heavy work and `freshen_sources`, sourced by `check.sh`, `install.sh`, `test-env.sh` |
-| `lib/build-env.sh` | the build settings of a small disk and a cloud session (`CARGO_PROFILE_DEV_DEBUG`) and the WebKitGTK check, sourced by `check.sh`, `install.sh`, `test-env.sh` |
-| `test-libs.sh` | tests of the libraries above without a cargo build - the first step of `check.sh` |
+| `lib/cpu-cap.sh` | the CPU cap `CHECK_JOBS` and the lock of heavy work and `freshen_sources`, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh` |
+| `lib/build-env.sh` | the build settings of a small disk and a cloud session (`CARGO_PROFILE_DEV_DEBUG`) and the WebKitGTK check, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh` |
+| `test-libs.sh` | tests of the libraries above and of `cargo.sh`, without a cargo build - the first step of `check.sh` |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 | `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; runs itself inside a headless gamescope |
 | `app-smoke.sh` | a smoke launch of the `notes-app` window inside a headless gamescope: it opens, loads the fixture vault, quits cleanly (~6 s); not in `check.sh` (needs gamescope and an installed or built `notes-app`) |
@@ -46,10 +47,10 @@ webkit2gtk-4.1`), otherwise it is excluded from the cargo steps (cloud).
 In a linked worktree `check.sh` and `test-env.sh` build into the `target/` of
 the main checkout (`lib/worktree-target.sh`, an absolute `CARGO_TARGET_DIR`;
 your own value is kept), so the dependencies built once serve every worktree;
-only our own crates are rebuilt in a new worktree. Prefix a `cargo` by hand
-with the same `CARGO_TARGET_DIR`, or it builds from scratch into the
-worktree's own `target/`. A worktree is inside the main checkout, so cargo
-reads `.cargo/config.toml` twice there and the `rustflags` differ from a build
+only our own crates are rebuilt in a new worktree. Run `cargo` by hand as
+`tools/cargo.sh <arguments>`: a plain `cargo` in a worktree builds from
+scratch into the worktree's own `target/`. A worktree is inside the main
+checkout, so cargo reads `.cargo/config.toml` twice there and the `rustflags` differ from a build
 in the main checkout: that build makes its own copy of the dependencies. A
 `cargo` by hand in the main checkout takes no lock of ours; cargo's own
 build-dir lock keeps it from overlapping a check (they wait for each other).
@@ -62,9 +63,9 @@ tracked sources to now (`freshen_sources` in `lib/cpu-cap.sh`), and cargo
 recompiles our crates against this tree. A repeated run of the same checkout
 does not, so our crates are not rebuilt. Dependencies and the foreign copies
 in `vendor/` stay built (after an edit under `vendor/`, `touch` the file or
-`cargo clean -p` that crate). A plain `cargo` by hand is exposed to this: run
-`freshen_sources` first (after `source tools/lib/cpu-cap.sh`) or use the
-scripts.
+`cargo clean -p` that crate). `tools/cargo.sh` takes the same lock. A plain
+`cargo` by hand is exposed to this and leaves the record stale, so the next run
+of the recorded checkout reuses its artifacts.
 Before the steps, under the lock of heavy work, `lib/target-limit.sh` keeps
 the dir bounded (cargo removes nothing itself): units of our own crates that
 cargo has not rebuilt for `TARGET_PRUNE_DAYS` (3) are removed
@@ -83,15 +84,16 @@ pruning skips a profile while cargo holds its build lock. The vendored
 system of the build dir is under `SMALL_DISK_GB` (100) in total, or in a cloud
 session (`CLAUDE_CODE_REMOTE=true` or `BALUK_CLOUD=1`); a value set by hand is
 kept. It also answers whether WebKitGTK is installed (`has_webkit`).
-`tools/test-libs.sh`, the first step of `check.sh`, tests these libraries
-without a cargo build, with shims for `jq`, `df`, `python3` and `pkg-config`.
+`tools/test-libs.sh`, the first step of `check.sh`, tests these libraries and
+`tools/cargo.sh` without a cargo build, with shims for `jq`, `df`, `python3`,
+`pkg-config` and `cargo`.
 Without `app/dist` (a fresh checkout) the client is built before the Rust
 steps - server tests serve it. e2e listens on fixed ports: the lock of heavy
 work (below) keeps runs from overlapping.
 
 ## CPU cap
 
-`check.sh`, `install.sh` and `test-env.sh` (its build) keep at most
+`check.sh`, `install.sh`, `test-env.sh` (its build) and `cargo.sh` keep at most
 `CHECK_JOBS` logical CPUs busy (default 9, never more than the machine has),
 also when several runs go at once (agents in worktrees). Priority stays as
 above (`nice` 2 and 1); the cap is on top of it.
@@ -110,12 +112,14 @@ above (`nice` 2 and 1); the cap is on top of it.
 - One lock `~/.cache/baluk-notes/heavy.lock` (`HEAVY_LOCK`): `check.sh` holds
   it for the duration of each step (the wait is not in the step time, a line
   "waiting for another run" is printed), `install.sh` and `test-env.sh` for
-  their builds. Steps of different runs take turns, so together they stay
-  within the cap, and one run does not rewrite artifacts under the tests of
+  their builds, `tools/cargo.sh` for its command. Steps of different runs take
+  turns, so together they stay within the cap, and one run does not rewrite
+  artifacts under the tests of
   another. The kernel releases the lock when its holder dies; child processes
   do not inherit it. Do not take it inside a step (no nesting): pruning and
   cleaning of the shared build dir are a locked step of their own at the start
-  of `check.sh`. `cargo` and `npm` started by hand are outside the cap.
+  of `check.sh`. A plain `cargo` and `npm` started by hand are outside the cap;
+  `tools/cargo.sh` is within it.
 - Measured on the 12-CPU laptop (CPU time of the whole run in a cgroup, windows
   of 0.5 s): a full run at the default peaks at 8.9 busy cores from an empty
   target dir (before: 11.2); `CHECK_JOBS=4` on `--app` - 5.8 (the e2e browser
@@ -260,8 +264,8 @@ Working in the session:
   see "Checks"). That a session counts as a cloud one rests on
   `CLAUDE_CODE_REMOTE=true`, which is an unconfirmed assumption; the explicit
   switch is `BALUK_CLOUD=1`, and `tools/cloud-setup.sh` prints in its summary
-  which of them it sees and, if neither, the line to export. A `cargo` by hand
-  needs the variable itself; out of space - `cargo clean`.
+  which of them it sees and, if neither, the line to export. `tools/cargo.sh` sets it as the scripts do; a plain
+  `cargo` needs the variable itself; out of space - `cargo clean`.
 - Time: a Rust build from scratch ~8 min, `cargo test` ~1 min, e2e ~1.5 min.
 - Not for the cloud (needs the user or their machine): the Tauri and Android
   apps, authorization, replacing font files, updating Typst.

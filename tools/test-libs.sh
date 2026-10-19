@@ -3,10 +3,12 @@
 # build dir: the target limit (pruning, the size limit, the warnings), the build
 # settings of a small disk and a cloud session, the WebKit check, and the lock's
 # record of the checkout (the sources are freshened only after another
-# checkout). No cargo build: cargo runs for `cargo metadata` and for `cargo
-# clean` of a scratch dir. Run by check.sh as a step. The scratch dirs are in
-# tests/.data/libs; the real build dir is never used. The tools that the
-# libraries call (jq, df, python3, pkg-config) are replaced by shims in tests/.data/libs/.
+# checkout), and tools/cargo.sh (its arguments, exit code, settings and record).
+# No cargo build: cargo runs for `cargo metadata` and for `cargo clean` of a
+# scratch dir; tools/cargo.sh runs in a scratch checkout against a cargo shim.
+# Run by check.sh as a step. The scratch dirs are in tests/.data/libs; the real
+# build dir is never used. The tools that the libraries call (jq, df, python3,
+# pkg-config, cargo) are replaced by shims in tests/.data/libs/.
 #
 #   tools/test-libs.sh
 set -uo pipefail
@@ -149,6 +151,51 @@ echo "the lock's record of the checkout:"
 expect "the sources are freshened after a start and after another checkout, not on a repeated run (2 times)" \
   test "$(wc -l <"$root/freshen.log")" -eq 2
 expect "the record is the checkout's path" test "$(cat "$root/heavy.lock.last")" = "$(git rev-parse --show-toplevel)"
+
+echo "tools/cargo.sh (in a scratch checkout of its own: the sources and the record of this one are not touched):"
+cg=$root/cargo-checkout
+mkdir -p "$cg/tools/lib" "$root/cargo-bin"
+cp tools/cargo.sh "$cg/tools/"
+cp tools/lib/worktree-target.sh tools/lib/cpu-cap.sh tools/lib/build-env.sh "$cg/tools/lib/"
+(cd "$cg" && git init -q && git add -A)
+# The cargo of the tests: writes its arguments, one per line, to $CARGO_SHIM_OUT,
+# CARGO_BUILD_JOBS to $CARGO_SHIM_OUT.jobs, and exits with $CARGO_SHIM_RC.
+cat >"$root/cargo-bin/cargo" <<'SHIM'
+#!/bin/sh
+for a in "$@"; do printf '%s\n' "$a"; done >"$CARGO_SHIM_OUT"
+printf '%s\n' "$CARGO_BUILD_JOBS" >"$CARGO_SHIM_OUT.jobs"
+exit "${CARGO_SHIM_RC:-0}"
+SHIM
+chmod +x "$root/cargo-bin/cargo"
+# run_cargo <arguments>: tools/cargo.sh in the scratch checkout, the shim first in
+# PATH, CHECK_JOBS=3, a lock of its own; SHIM_RC sets the shim's exit code.
+run_cargo() {
+  (cd "$cg" && CHECK_JOBS=3 PATH="$root/cargo-bin:$PATH" HEAVY_LOCK="$root/cargo.lock" \
+    CARGO_SHIM_OUT="$root/cargo.out" CARGO_SHIM_RC="${SHIM_RC:-0}" tools/cargo.sh "$@")
+}
+
+rm -f "$root/cargo.out" "$root/cargo.out.jobs" "$root/cargo.lock.last"
+run_cargo test -p notes-core "with a space" '$HOME' '*'
+printf '%s\n' test -p notes-core "with a space" '$HOME' '*' >"$root/cargo.expected"
+expect "the arguments reach cargo verbatim (one with a space, a literal \$HOME and a *)" \
+  cmp -s "$root/cargo.out" "$root/cargo.expected"
+expect "CARGO_BUILD_JOBS is set" grep -Eq '^[1-9][0-9]*$' "$root/cargo.out.jobs"
+expect "CARGO_BUILD_JOBS is the cap's setting for CHECK_JOBS=3" \
+  test "$(cat "$root/cargo.out.jobs")" = "$(CHECK_JOBS=3; source tools/lib/cpu-cap.sh; echo "$CARGO_BUILD_JOBS")"
+SHIM_RC=7 run_cargo build
+rc=$?
+expect "cargo's exit code is passed through" test "$rc" -eq 7
+echo /some/other/checkout >"$root/cargo.lock.last"
+run_cargo version
+expect "the lock's record names the checkout after the run" \
+  test "$(cat "$root/cargo.lock.last")" = "$(cd "$cg" && git rev-parse --show-toplevel)"
+d=$(mktemp -d)
+mkdir -p "$d/tools" && cp tools/cargo.sh "$d/tools/"
+(cd "$d" && tools/cargo.sh --version) >"$root/outside.log" 2>&1
+rc=$?
+rm -rf "$d"
+expect "outside a checkout of this repository it exits 2" test "$rc" -eq 2
+expect "and says so" grep -q "not in a checkout of baluk notes" "$root/outside.log"
 
 echo
 if (( fails == 0 )); then

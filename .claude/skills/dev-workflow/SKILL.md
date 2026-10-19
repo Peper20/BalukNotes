@@ -34,7 +34,7 @@ You work alone in your own git worktree. Work in English.
 tools/check.sh
 ```
 
-All steps must pass; fix what fails. In a worktree the script builds into the main checkout's `target/`, shared by all worktrees (`tools/lib/worktree-target.sh`, an absolute `CARGO_TARGET_DIR`). A `cargo` you run by hand needs the same `CARGO_TARGET_DIR` (`source tools/lib/worktree-target.sh` sets it) or it builds from scratch in the worktree, and it can reuse another checkout's artifacts of our crates: run `source tools/lib/cpu-cap.sh; freshen_sources` first, or use the scripts. A build there can wait on another worktree's lock: that is normal.
+All steps must pass; fix what fails. In a worktree the script builds into the main checkout's `target/`, shared by all worktrees (`tools/lib/worktree-target.sh`, an absolute `CARGO_TARGET_DIR`). Run `cargo` by hand only as `tools/cargo.sh <arguments>` (for example `tools/cargo.sh test -p notes-core`): it builds into the same dir with the same settings and freshens the sources when another checkout built there last. A plain `cargo` builds from scratch in the worktree or reuses another checkout's artifacts of our crates. The script and the checks can wait on another worktree's lock: that is normal.
 
 For changes to the library, CSS or client also look by eye as `.claude/rules/tools.md` says. Start the test server on your own port (`PORT=<8500-8599> tools/test-env.sh`), not 8432: other agents may be using it. Stop it by its port.
 

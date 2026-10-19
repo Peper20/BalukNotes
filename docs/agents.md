@@ -64,7 +64,7 @@ decides whether it waits (the `orchestrator` relays). Requirements to both docum
   itself, under the lock of heavy work (`.claude/rules/tools.md`, "Checks"). A
   build by hand in the main checkout uses other rustflags, so it builds its own
   copy of the dependencies.
-- The heavy steps of all runs (`tools/check.sh`, the builds in
+- The heavy steps of all runs (`tools/check.sh`, `tools/cargo.sh`, the builds in
   `tools/install.sh` and `tools/test-env.sh`) take turns on one lock,
   `~/.cache/baluk-notes/heavy.lock`, and each run is capped at `CHECK_JOBS`
   CPUs (default 9, `tools/lib/cpu-cap.sh`). Measurements are run the same
