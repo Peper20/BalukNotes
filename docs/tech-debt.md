@@ -388,7 +388,7 @@ it. The format and rules - `.claude/rules/docs.md`.
   time**: without reinstalling they lag behind the repository; an open window
   (its core) and a `notes serve` started by hand run the old version until a
   restart. How to close: an app with updates (PKGBUILD).
-- **Parts compare only the version number** (`notes::check_version`, the
+- **Parts compare only the version number** (`notes_parts::check_version`, the
   workspace version): two builds of one version from different commits are
   not told apart. While `tools/install.sh` installs the parts together - no
   problem; with releases (PKGBUILD) - bump the version.

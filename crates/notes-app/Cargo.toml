@@ -11,7 +11,7 @@ publish.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-notes.workspace = true
+notes-parts.workspace = true
 tauri = { version = "2", features = [] }
 # The window opens maximized or fullscreen if it was so when closed.
 tauri-plugin-window-state = "2"

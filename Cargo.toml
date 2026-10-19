@@ -13,7 +13,7 @@ license = "AGPL-3.0-only"
 publish = false
 
 [workspace.dependencies]
-notes = { path = "crates/notes" }
+notes-parts = { path = "crates/notes-parts" }
 notes-core = { path = "crates/notes-core" }
 notes-store = { path = "crates/notes-store" }
 # Without default features: a member asks for `client` (ureq, TLS) only if it needs it.

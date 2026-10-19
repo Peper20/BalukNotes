@@ -1,5 +1,5 @@
 //! One window app at a time: a Unix socket `$XDG_RUNTIME_DIR/baluk-notes/app.sock`
-//! (`notes::app_socket`). The first `notes app` binds it; a later one connects,
+//! (`notes_parts::app_socket`). The first `notes app` binds it; a later one connects,
 //! writes one JSON line `{"path": "/v/X/n/Y", "token": "<activation token>" |
 //! null}`, gets the line `ok` and exits - the running app opens the path
 //! (`windows::open`). A socket file nobody answers on (the app was killed) is

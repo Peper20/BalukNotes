@@ -1,5 +1,5 @@
 //! The core for the window: `notes-typst serve --socket` (default socket:
-//! `notes::default_socket`). Something answers on the socket (the service,
+//! `notes_parts::default_socket`). Something answers on the socket (the service,
 //! another window): connect to it; otherwise start our own core from the parts
 //! directory with the global flags of the command line (`launch::Launch::core_args`:
 //! `--data`, ..., and `--vault` for a vault given by a directory) and wait for its
@@ -27,13 +27,13 @@ pub struct Core {
 impl Core {
     /// `args`: the core's global flags (`--data`, `--vault`, ...) for our own core.
     pub fn start(args: &[OsString]) -> Result<Self, String> {
-        let socket = notes::default_socket().ok_or("no $XDG_RUNTIME_DIR")?;
+        let socket = notes_parts::default_socket().ok_or("no $XDG_RUNTIME_DIR")?;
         if UnixStream::connect(&socket).is_ok() {
             tracing::info!("core already running: {}", socket.display());
             return Ok(Self { socket, child: None });
         }
-        let dir = notes::parts_dir().map_err(|e| format!("parts directory: {e}"))?;
-        let bin = notes::TYPST.path(&dir);
+        let dir = notes_parts::parts_dir().map_err(|e| format!("parts directory: {e}"))?;
+        let bin = notes_parts::TYPST.path(&dir);
         if !bin.is_file() {
             return Err(format!("no notes-typst part ({})", bin.display()));
         }
@@ -42,7 +42,7 @@ impl Core {
             .arg("serve")
             .arg("--socket")
             .arg(&socket)
-            .env(notes::VERSION_ENV, notes::VERSION)
+            .env(notes_parts::VERSION_ENV, notes_parts::VERSION)
             .spawn()
             .map_err(|e| format!("starting {}: {e}", bin.display()))?;
         let started = Instant::now();

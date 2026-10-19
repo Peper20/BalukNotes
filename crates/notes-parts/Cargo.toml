@@ -1,0 +1,11 @@
+[package]
+name = "notes-parts"
+description = "The app parts of the notes command: the part table, socket paths, the version check; no dependencies"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

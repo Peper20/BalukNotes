@@ -14,16 +14,21 @@ How it works and why - `docs/architecture.md`; here - code rules of `crates/`.
 | `notes-core` | the core without async or HTTP: vault (notes and books), Typst compiling, HTML processing, cache, warm-up, links, graph, search, settings |
 | `notes-server` | HTTP API (axum) and serving the client |
 | `notes-assets` | the client `app/dist` for the server |
-| `notes` | the thin `notes` command: calls the parts from its own folder, no dependencies (architecture §1) |
-| `notes-typst` | the part that builds with Typst: every command except those of other parts |
+| `notes-parts` | the part table, socket paths, the version check; no dependencies (architecture §1) |
+| `notes` | the thin `notes` command: runs the light commands (`docs`, `vaults`, `sync`, `service`) itself and calls the parts from its own folder; the feature `sync` (on by default) is `notes sync`, the VPS builds without it |
+| `notes-typst` | the part that builds with Typst: `new`, `list`, `tags`, `check`, `pdf`, `png`, `rename`, `info`, `serve`; an unknown command ends up here too |
 | `notes-app` | the window (Tauri 2) without Typst: the `notes://` scheme -> the core over a Unix socket; needs WebKitGTK; a launch by an agent or a check - only in a headless gamescope (`tools/app-smoke.sh`, `.claude/rules/tools.md`) |
 | `notes-store` | the light part without Typst, HTTP or async: data directory rules, vault names and list, note paths (`NoteId`), `trait Storage` and the watcher, platform and sync preference, accounts, sessions, the sync engine |
 | `notes-hub` | the storage server without Typst (`notes hub serve`, `notes users`): sign-in (`auth`, also mounted by `notes-server`), the sync API, the device's HTTP client (feature `client`) |
 | `notes-device` | the device side of sync: account, linked vaults, rounds, the background worker (uses `notes-hub`'s client, so not in the core); no Typst |
 
 Logic lives in the core, the other crates are thin wrappers. A new app part is
-a binary `notes-<name>` and a line in `notes::PARTS` (its commands); shared
-`notes-typst` flags with a value - `notes::VALUE_FLAGS` (a test checks it).
+a binary `notes-<name>`, a line in `notes_parts::PARTS` (its commands) and a
+line of help in `notes`'s `cli.rs`; a new light command - `notes_parts::LIGHT`
+and `cli.rs`, its code next to the other light ones in `crates/notes`, not in a
+part (a test checks that the three lists agree). The global flags with a value
+are `notes_parts::VALUE_FLAGS` (tests of `notes` and `notes-typst` check
+them against their `clap`).
 
 The app icon has one source, `app/public/assets/icon.svg` (site favicon, menu -
 `tools/install.sh`); the Tauri window needs a PNG, after editing the SVG:

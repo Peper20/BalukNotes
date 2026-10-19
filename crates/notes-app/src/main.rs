@@ -37,7 +37,7 @@ fn main() -> ExitCode {
         .with_target(false)
         .with_writer(std::io::stderr)
         .init();
-    if let Err(e) = notes::check_version("notes-app") {
+    if let Err(e) = notes_parts::check_version("notes-app") {
         eprintln!("error: {e}");
         return ExitCode::FAILURE;
     }
@@ -62,7 +62,7 @@ fn main() -> ExitCode {
     {
         start = format!("/{}", path.trim_start_matches('/'));
     }
-    let Some(socket) = notes::app_socket() else {
+    let Some(socket) = notes_parts::app_socket() else {
         eprintln!("error: no $XDG_RUNTIME_DIR");
         return ExitCode::FAILURE;
     };

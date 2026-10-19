@@ -114,7 +114,7 @@ fn main() -> ExitCode {
         .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
         .with_writer(std::io::stderr)
         .init();
-    if let Err(e) = notes::check_version("notes-hub") {
+    if let Err(e) = notes_parts::check_version("notes-hub") {
         eprintln!("error: {e}");
         return ExitCode::FAILURE;
     }

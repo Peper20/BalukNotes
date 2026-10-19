@@ -12,7 +12,12 @@ use notes_store::sessions::{self, Sessions};
 
 fn command(data: &Path) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_notes-hub"));
-    command.arg("--data").arg(data).env_remove("NOTES_DATA").env_remove(notes::VERSION_ENV).env("RUST_LOG", "info");
+    command
+        .arg("--data")
+        .arg(data)
+        .env_remove("NOTES_DATA")
+        .env_remove(notes_parts::VERSION_ENV)
+        .env("RUST_LOG", "info");
     command
 }
 

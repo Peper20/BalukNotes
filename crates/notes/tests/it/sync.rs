@@ -1,6 +1,4 @@
-//! `notes-typst sync ...` on the binary, against a hub in this process.
-
-#![allow(clippy::unwrap_used, clippy::expect_used, reason = "test helpers fail the test by panicking")]
+//! `notes sync ...` on the binary, against a hub in this process.
 
 use std::io::Write as _;
 use std::path::Path;
@@ -11,10 +9,10 @@ use notes_device::testing::{PASSWORD, TestHub};
 
 static HUB: LazyLock<TestHub> = LazyLock::new(|| TestHub::start(&["ivan", "anna", "pavel", "kira", "boris"]));
 
-/// `notes-typst --data <data> <args>` with a clean environment; `stdin` is
+/// `notes --data <data> <args>` with a clean environment; `stdin` is
 /// what the command reads.
 fn run(data: &Path, args: &[&str], stdin: &str) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_notes-typst"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_notes"))
         .arg("--data")
         .arg(data)
         .args(args)
@@ -25,7 +23,7 @@ fn run(data: &Path, args: &[&str], stdin: &str) -> Output {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("run notes-typst");
+        .expect("run notes");
     child.stdin.take().unwrap().write_all(stdin.as_bytes()).unwrap();
     child.wait_with_output().unwrap()
 }

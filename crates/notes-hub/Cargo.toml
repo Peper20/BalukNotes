@@ -25,7 +25,7 @@ name = "notes-hub"
 path = "src/main.rs"
 
 [dependencies]
-notes.workspace = true
+notes-parts.workspace = true
 notes-store.workspace = true
 anyhow.workspace = true
 axum.workspace = true

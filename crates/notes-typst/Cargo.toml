@@ -12,7 +12,7 @@ name = "notes-typst"
 path = "src/main.rs"
 
 [dependencies]
-notes.workspace = true
+notes-parts.workspace = true
 notes-core.workspace = true
 notes-device = { path = "../notes-device" }
 notes-server.workspace = true
@@ -20,8 +20,6 @@ notes-hub = { workspace = true, default-features = false }
 notes-store.workspace = true
 anyhow.workspace = true
 clap.workspace = true
-dirs.workspace = true
-rpassword.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
@@ -32,7 +30,6 @@ tracing-subscriber.workspace = true
 tikv-jemallocator.workspace = true
 
 [dev-dependencies]
-notes-device = { path = "../notes-device", features = ["testing"] }
 tempfile.workspace = true
 
 [lints]

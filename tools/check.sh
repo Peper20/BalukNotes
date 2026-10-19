@@ -123,7 +123,8 @@ vendor_tests() {
 baluk_note() {
   local dir=tests/.data/baluk-note notes=(cargo run -q -p notes-typst -- --data tests/.data/baluk-note)
   rm -rf "$dir"
-  "${notes[@]}" vaults new Проверка >/dev/null || return 1
+  # `vaults` is a light command: the thin notes runs it, notes-typst does not know it.
+  cargo run -q -p notes -- --data "$dir" vaults new Проверка >/dev/null || return 1
   notes+=(--vault Проверка)
   "${notes[@]}" new --tag проверка "Математика/Заметка" || return 1
   "${notes[@]}" new --book --lang en --title 'C++ [1] #x $y$ // - z' "Книга" || return 1

@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 pub struct Part {
     /// Binary name (without `.exe`).
     pub bin: &'static str,
-    /// `notes` commands that go to this part; `notes-typst` takes all the rest.
+    /// `notes` commands that go to this part; an unknown command goes to `notes-typst`.
     pub commands: &'static [&'static str],
     /// What it is, for help and messages.
     pub about: &'static str,
@@ -28,9 +28,12 @@ pub fn parts_dir() -> std::io::Result<PathBuf> {
     Ok(exe.parent().map(Path::to_path_buf).unwrap_or_default())
 }
 
-/// Building notes: every command except those of other parts.
-pub const TYPST: Part =
-    Part { bin: "notes-typst", commands: &[], about: "builds notes: serve, new, list, check, pdf, ..." };
+/// Building notes. An unknown command goes here too: its `clap` reports it.
+pub const TYPST: Part = Part {
+    bin: "notes-typst",
+    commands: &["new", "list", "tags", "check", "pdf", "png", "rename", "info", "serve"],
+    about: "builds notes: serve, new, list, check, pdf, ...",
+};
 /// The app window.
 pub const APP: Part = Part { bin: "notes-app", commands: &["app"], about: "app window: notes app" };
 /// The storage server online and its accounts (`notes hub serve`, `notes users ...`).
@@ -41,8 +44,11 @@ pub const HUB: Part = Part {
 };
 pub const PARTS: &[Part] = &[TYPST, APP, HUB];
 
-/// Global `notes-typst` flags that take a value: in `notes --vault app list`
-/// the command is `list`. A `notes-typst` test checks them against `clap`.
+/// Commands the thin `notes` runs itself, without a part.
+pub const LIGHT: &[&str] = &["docs", "vaults", "sync", "service"];
+
+/// Global flags that take a value: in `notes --vault app list` the command is
+/// `list`. Tests of `notes` and `notes-typst` check them against their `clap`.
 pub const VALUE_FLAGS: &[&str] = &["--data", "--vault", "--trash", "--library", "--font-path"];
 
 /// Directory of the sockets: `$XDG_RUNTIME_DIR/baluk-notes`.
@@ -123,6 +129,16 @@ mod tests {
         assert_eq!(part_for(&["list", "app"]), TYPST);
         assert_eq!(part_for(&["list", "hub"]), TYPST);
         assert_eq!(part_for::<&str>(&[]), TYPST);
+    }
+
+    #[test]
+    fn commands_have_one_owner() {
+        let mut all: Vec<&str> =
+            PARTS.iter().flat_map(|p| p.commands.iter().copied()).chain(LIGHT.iter().copied()).collect();
+        let count = all.len();
+        all.sort_unstable();
+        all.dedup();
+        assert_eq!(all.len(), count, "a command is listed twice");
     }
 
     #[test]

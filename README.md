@@ -18,10 +18,10 @@ with sign-in (`docs/roadmap.md`); in a browser it works through `notes serve`.
    repository update): `tools/install.sh` (the first build takes a few
    minutes; at most 9 CPUs are busy, `CHECK_JOBS=N` changes it). Then
    `notes` works from any folder. `notes` is a thin command: it
-   hands work to the parts in its folder (`notes-typst` - building and all
-   commands below; `notes-app` - the window; `notes-hub` - accounts and the
-   storage server); which are installed - `notes
-   --version`.
+   runs `docs`, `vaults`, `sync` and `service` itself and hands the rest to
+   the parts in its folder (`notes-typst` - building and the other commands
+   below; `notes-app` - the window; `notes-hub` - accounts and the storage
+   server); which are installed - `notes --version`.
 3. **Vault**: `notes vaults new "Notes"` (or in the app).
 4. **App**: the window "baluk notes" from the menu, or `notes app` (`notes app
    --vault "Notes"` - on a vault, `notes app --vault "Notes" "Path"` - on a
@@ -73,7 +73,8 @@ notes --version                              # version and installed parts
 ## Development
 
 From the repository without installing - `cargo run -p notes-typst --
-<command>` (a debug build takes `baluk/` and `app/dist` from disk); a test
+<command>` (`docs`, `vaults`, `sync` and `service` - `cargo run -p notes --
+<command>`; a debug build takes `baluk/` and `app/dist` from disk); a test
 server on a vault with every feature - `tools/test-env.sh`
 (http://127.0.0.1:8432). Checks - `tools/check.sh` (`.claude/rules/tools.md`).
 Repository layout, documents and rules - `.claude/rules/project.md`.

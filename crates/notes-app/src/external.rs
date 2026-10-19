@@ -53,7 +53,7 @@ pub fn open_pdf(socket: Arc<PathBuf>, url: Url) {
             tracing::warn!("PDF \"{name}\" not built: {} {body}", response.status());
             return;
         }
-        let Some(dir) = notes::default_socket().and_then(|s| s.parent().map(|d| d.join("pdf"))) else { return };
+        let Some(dir) = notes_parts::default_socket().and_then(|s| s.parent().map(|d| d.join("pdf"))) else { return };
         let path = dir.join(format!("{}.pdf", safe_name(&name)));
         let written = async {
             tokio::fs::create_dir_all(&dir).await?;

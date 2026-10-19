@@ -35,7 +35,7 @@ pub enum Command {
 /// A launch of the window.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Launch {
-    /// Global flags for the window's own core: the shared `notes::VALUE_FLAGS`
+    /// Global flags for the window's own core: the shared `notes_parts::VALUE_FLAGS`
     /// and, for a vault given by a path, `--vault <absolute path>`.
     pub core_args: Vec<OsString>,
     /// The page to show: `/`, `/v/<vault>/` or `/v/<vault>/n/<note>`.
@@ -72,7 +72,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
                     Some((flag, value)) if flag.starts_with("--") => (flag, Some(value.to_owned())),
                     _ => (arg.as_str(), None),
                 };
-                if !notes::VALUE_FLAGS.contains(&flag) {
+                if !notes_parts::VALUE_FLAGS.contains(&flag) {
                     return Err(format!("unknown flag \"{arg}\""));
                 }
                 let Some(value) = inline.or_else(|| args.next().cloned()) else {

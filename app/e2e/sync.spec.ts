@@ -34,9 +34,9 @@ const write = (dir: string, vault: string, file: string, text: string) => {
   mkdirSync(join(dir, "vaults", vault), { recursive: true });
   writeFileSync(join(dir, "vaults", vault, file), text);
 };
-/** The `notes-typst` CLI on a device's data directory (the second device is one of these). */
+/** The `notes` CLI on a device's data directory (the second device is one of these). */
 const device = (dir: string, ...args: string[]) =>
-  execFileSync(join(BIN, "notes-typst"), ["--data", dir, ...args], { input: `${PASSWORD}\n`, stdio: ["pipe", "pipe", "inherit"] }).toString();
+  execFileSync(join(BIN, "notes"), ["--data", dir, ...args], { input: `${PASSWORD}\n`, stdio: ["pipe", "pipe", "inherit"] }).toString();
 
 let hub: ChildProcess | undefined;
 let app: ChildProcess | undefined;

@@ -8,9 +8,9 @@ reverse proxy. Commands that need root are marked `#`.
 
 Two files in one folder, `/usr/local/bin`: `notes` is the thin command,
 `notes-hub` the part (`notes --version` lists them). `--no-default-features`
-leaves the device's HTTP client out. The VPS builds them itself, from the
-sources sent by one command from the laptop: set it up once and update with
-"Updating" below.
+leaves the device's HTTP client out (and with it `notes sync`). The VPS builds
+them itself, from the sources sent by one command from the laptop: set it up
+once and update with "Updating" below.
 
 To do it by hand instead, build on a machine with Rust (the same or older
 glibc than on the VPS) and copy the two files:

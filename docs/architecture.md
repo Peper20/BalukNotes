@@ -57,16 +57,22 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   Typst, the device or WASM in the browser builds notes. The web version is the
   same client, served by the server.
 - **Parts are installed separately** (user's decision). `notes` is thin: help,
-  light commands and calling the parts in its folder (`notes app` ->
-  `notes-app`), with a version check; a missing part - a message which one.
-  Parts: `notes-typst` (building, `check`, `pdf`, `serve`, `sync`),
+  the light commands (`docs`, `vaults`, `sync`, `service`) and calling the
+  parts in its folder (`notes app` -> `notes-app`), with a version check; a
+  missing part - a message which one. The part table, socket paths and the
+  version check are the crate `notes-parts` without dependencies, shared by
+  `notes` and the parts. Parts: `notes-typst` (building: `new`, `list`,
+  `tags`, `check`, `pdf`, `png`, `rename`, `info`, `serve`),
   `notes-app` (the window, without Typst), `notes-hub` (the storage server and
   `notes users`, without Typst). Typst only in `notes-typst`. What the parts
   share without Typst is the light crate `notes-store`: the data directory
   rules, vault names and the vault list, note paths (`NoteId`), the vault
   storage (`trait Storage`) and its watcher, the platform and the sync
   preference, accounts, sessions, the sync engine. The settings schema stays
-  in the core: it is built from the library themes.
+  in the core: it is built from the library themes. The storage server build
+  (`tools/deploy-hub.sh`) takes `notes` without its default feature `sync`: no
+  device sync client and no TLS; there `notes sync` answers that it was built
+  without it.
 - **Every device has a copy of the vault** with sync (§9): notes are read
   without a network, Claude Code writes to the copy on the computer.
 - Typst is a Rust library in the core with a pinned version: the HTML export
