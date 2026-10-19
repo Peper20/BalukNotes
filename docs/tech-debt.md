@@ -133,12 +133,6 @@ it. The format and rules - `.claude/rules/docs.md`.
 
 ## Core and server
 
-- **A socket test fails on a long target path**
-  (`crates/notes-server/tests/it/api.rs`,
-  `serves_tcp_with_sign_in_and_unix_socket_without`): its Unix socket lies
-  under `CARGO_TARGET_TMPDIR`, and a path over 108 bytes (`SUN_LEN`) cannot be
-  bound - a checkout with a long path (a cloud session) fails the check. How
-  to close: put the socket in a short temporary directory.
 - **The rendering code tag is computed from the core sources** (`build.rs`):
   an edit of any `src/` file outside `AFTER_CACHE` (even a comment) means a
   full warm-up. The embedded fonts are in the tag by content, the system ones

@@ -703,8 +703,8 @@ async fn serves_tcp_with_sign_in_and_unix_socket_without() {
         stream.read_to_string(&mut out).await.unwrap();
         out.lines().next().unwrap().to_owned()
     }
-    // The socket path must be under 108 bytes: a temporary folder in target/tmp, not $TMPDIR.
-    let tmp = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
+    // The socket path must be under 108 bytes: /tmp, not the target dir or $TMPDIR (as tools/app-smoke.sh).
+    let tmp = tempfile::tempdir_in("/tmp").unwrap();
     let path = tmp.path().join("s.sock");
     let dir = tempfile::tempdir().unwrap();
     let state = signed_in_state(&dir);
