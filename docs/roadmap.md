@@ -179,8 +179,8 @@ before M7 starts.
 - [x] A guard against mass deletion in sync: a round that deletes a large
       part of the vault waits for `notes sync confirm` or the buttons in the
       settings; `restore` brings the files back (architecture §9)
-- [ ] An edit lock (one writer at a time) - groundwork only: a write names
-      the version it replaces
+- [x] An edit lock (one writer at a time) - groundwork only: a write names
+      the version it replaces (`notes_store::sync::Base`, the `x-base` header)
 - [x] HTTPS - the reverse proxy (user's decision: nginx is already on the
       VPS); how to deploy - `docs/server.md`
 - [x] One-command update of the hub on the VPS: `tools/deploy-hub.sh` (the VPS
