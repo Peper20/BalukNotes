@@ -1,6 +1,6 @@
-# Sourced by tools/check.sh, install.sh and test-env.sh, after worktree-target.sh:
-# what a small disk and a cloud session change in the builds, and what is
-# missing there (`.claude/rules/tools.md`, "Checks").
+# Sourced by tools/check.sh, install.sh, test-env.sh and cargo.sh, after
+# worktree-target.sh: what a small disk and a cloud session change in the
+# builds, and what is missing there (`.claude/rules/tools.md`, "Checks").
 #
 # A small disk is a file system under SMALL_DISK_GB (default 100) in total: its
 # size decides, not its free space, so the setting does not flip from run to run.

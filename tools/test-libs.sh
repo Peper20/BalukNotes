@@ -3,12 +3,14 @@
 # build dir: the target limit (pruning, the size limit, the warnings), the build
 # settings of a small disk and a cloud session, the WebKit check, and the lock's
 # record of the checkout (the sources are freshened only after another
-# checkout), and tools/cargo.sh (its arguments, exit code, settings and record).
+# checkout), tools/cargo.sh (its arguments, exit code, settings and record) and
+# tools/check-pr.sh (its arguments, comment text, exit codes, worktree).
 # No cargo build: cargo runs for `cargo metadata` and for `cargo clean` of a
-# scratch dir; tools/cargo.sh runs in a scratch checkout against a cargo shim.
+# scratch dir; tools/cargo.sh and tools/check-pr.sh run in scratch checkouts
+# against a cargo, a tea and a check.sh shim.
 # Run by check.sh as a step. The scratch dirs are in tests/.data/libs; the real
 # build dir is never used. The tools that the libraries call (jq, df, python3,
-# pkg-config, cargo) are replaced by shims in tests/.data/libs/.
+# pkg-config, cargo, tea) are replaced by shims in tests/.data/libs/.
 #
 #   tools/test-libs.sh
 set -uo pipefail
@@ -196,6 +198,206 @@ rc=$?
 rm -rf "$d"
 expect "outside a checkout of this repository it exits 2" test "$rc" -eq 2
 expect "and says so" grep -q "not in a checkout of baluk notes" "$root/outside.log"
+
+
+echo "tools/check-pr.sh, the pieces (the output of check.sh is a sample):"
+cat >"$root/sample-failed.out" <<'SAMPLE'
+▶ cargo-test: cargo test --workspace
+  ✗ cargo-test failed - tail of tests/.data/check/cargo-test.log:
+    step    this line is indented, it is not the table
+
+step          result                time, s
+tools-libs    ok                    1
+cargo-test    failed                42
+fmt           ok                    3
+build         skipped: --fast       -
+e2e           failed                9
+
+CHECK FAILED (55 s): logs in tests/.data/check/
+SAMPLE
+sed -e 's/failed  /ok      /' -e '/CHECK FAILED/d' "$root/sample-failed.out" >"$root/sample-passed.out"
+echo "check passed (55 s)" >>"$root/sample-passed.out"
+sha_a=$(printf 'a%.0s' {1..40})
+sha_b=$(printf 'b%.0s' {1..40})
+# fn <function> <args...>: a function of check-pr.sh, sourced in a subshell.
+fn() { (source tools/check-pr.sh; "$@"); }
+expect "the table of steps is cut from the first header to the blank line" \
+  test "$(fn step_table "$root/sample-failed.out" | sed -n '1p;$p')" = "$(printf '%s\n%s' 'step          result                time, s' 'e2e           failed                9')"
+expect "the failed steps are named in order, a skipped step is not failed" \
+  test "$(fn failed_steps "$root/sample-failed.out" | paste -sd,)" = "cargo-test,e2e"
+expect "a passed output has no failed steps" test -z "$(fn failed_steps "$root/sample-passed.out")"
+expect "the first line of a pass" test "$(fn first_line "$sha_a" '')" = "Full check passed at $sha_a."
+expect "the first line of a failure" \
+  test "$(fn first_line "$sha_a" 'cargo-test, e2e')" = "Full check failed at $sha_a: cargo-test, e2e."
+fn step_table "$root/sample-failed.out" >"$root/table.txt"
+fn comment_text "$sha_a" 'cargo-test, e2e' "$root/table.txt" >"$root/comment-failed.txt"
+expect "the comment of a failure: the line, a blank line, the table in a code block" \
+  test "$(cat "$root/comment-failed.txt")" = "$(printf 'Full check failed at %s: cargo-test, e2e.\n\n```\n%s\n```' "$sha_a" "$(cat "$root/table.txt")")"
+fn comment_text "$sha_a" '' "$root/table.txt" >"$root/comment-passed.txt"
+expect "the comment of a pass starts with the exact line" test "$(head -n 1 "$root/comment-passed.txt")" = "Full check passed at $sha_a."
+fn comment_text "$sha_a" '' "$root/table.txt" "$sha_b" >"$root/comment-moved.txt"
+expect "a moved head: the first line is the same, one more line names both commits" \
+  test "$(sed -n '1p;3p' "$root/comment-moved.txt")" = "$(printf 'Full check passed at %s.\nThe head of the pull request moved during the run to %s; this result is for %s.' "$sha_a" "$sha_b" "$sha_a")"
+expect "a head that did not move adds no line" test "$(grep -c moved "$root/comment-passed.txt")" -eq 0
+
+echo "tools/check-pr.sh (in a scratch checkout with its own origin, against tea and check.sh shims):"
+cp_main=$root/pr-main cp_origin=$root/pr-origin.git cp_bin=$root/pr-bin
+mkdir -p "$cp_main/tools/lib" "$cp_bin"
+cp tools/check-pr.sh "$cp_main/tools/"
+cp tools/lib/cpu-cap.sh "$cp_main/tools/lib/"
+# The check.sh of the pull request: FAKE_CHECK=pass|fail; it prints a table of
+# steps like the real one, writes the log of a failed step and changes a
+# tracked file as a failed api-types step does.
+cat >"$cp_main/tools/check.sh" <<'SHIM'
+#!/usr/bin/env bash
+rm -rf tests/.data/check && mkdir -p tests/.data/check
+echo "▶ fake step"
+if [[ ${FAKE_CHECK:-pass} == fail ]]; then
+  echo "boom" >tests/.data/check/cargo-test.log
+  echo "stale" >app-types.txt
+  printf 'step          result                time, s\ncargo-test    failed                4\nbuild         skipped: --fast       -\n\nCHECK FAILED (4 s): logs in tests/.data/check/\n'
+  exit 1
+fi
+printf 'step          result                time, s\ncargo-test    ok                    4\n\ncheck passed (4 s)\n'
+SHIM
+chmod +x "$cp_main/tools/check.sh"
+echo fresh >"$cp_main/app-types.txt"
+git init -q -b main "$cp_main"
+git -C "$cp_main" add -A
+git -C "$cp_main" -c user.name=t -c user.email=t@t commit -q -m first
+git init -q --bare "$cp_origin"
+git -C "$cp_main" remote add origin "$cp_origin"
+head1=$(git -C "$cp_main" rev-parse HEAD)
+git -C "$cp_origin" fetch -q "$cp_main" main
+git -C "$cp_origin" update-ref refs/pull/7/head "$head1"
+# tea: `api` prints $TEA_PR_JSON (from the second call on $TEA_PR_JSON2, if the
+# file is there), `comment` writes its body to $TEA_OUT; failures by TEA_API_FAIL, TEA_COMMENT_RC.
+cat >"$cp_bin/tea" <<'SHIM'
+#!/bin/sh
+case "$1" in
+  api)
+    [ -z "$TEA_API_FAIL" ] || { echo "tea: no server (test)" >&2; exit 1; }
+    n=$(cat "$TEA_OUT.calls" 2>/dev/null || echo 0)
+    echo $((n + 1)) >"$TEA_OUT.calls"
+    if [ "$n" -ge 1 ] && [ -f "$TEA_PR_JSON2" ]; then cat "$TEA_PR_JSON2"; else cat "$TEA_PR_JSON"; fi ;;
+  comment)
+    [ "${TEA_COMMENT_RC:-0}" = 0 ] || exit "$TEA_COMMENT_RC"
+    printf '%s\n' "$5" >"$TEA_OUT"; echo "$4" >"$TEA_OUT.number" ;;
+  *) echo "tea shim: $*" >&2; exit 9 ;;
+esac
+SHIM
+chmod +x "$cp_bin/tea"
+pr_json() { printf '{"state":"%s","merged":%s,"head":{"sha":"%s"}}\n' "$1" "$2" "$3"; }
+# run_pr <args>: tools/check-pr.sh in the scratch checkout; stdout and stderr in
+# $root/pr.out, the exit code in pr_rc.
+run_pr() {
+  rm -f "$root/pr-comment.txt" "$root/pr-comment.txt.calls" "$root/pr-comment.txt.number"
+  (cd "$cp_main" && PATH="$cp_bin:$PATH" HEAVY_LOCK="$root/pr.heavy" TEA_PR_JSON="$root/pr.json" \
+    TEA_OUT="$root/pr-comment.txt" tools/check-pr.sh "$@") >"$root/pr.out" 2>&1
+  pr_rc=$?
+  return "$pr_rc"
+}
+wt=$cp_main/.claude/worktrees/check-pr-7
+# ends_with_exit <code>: the last line of the output, the one a caller waits for.
+ends_with_exit() { [[ $(tail -n 1 "$root/pr.out") == "check-pr: exit $1" ]]; }
+
+run_pr --help
+expect "--help prints the whole header, to its last line, and exits 0" \
+  eval '[[ $pr_rc -eq 0 ]] && grep -qF "the end to wait for." "$root/pr.out" && ! grep -q "^set -uo" "$root/pr.out"'
+for bad in "" abc 0 -3 "7 8" 07; do
+  # shellcheck disable=SC2086
+  run_pr $bad
+  rc=$?
+  expect "argument '$bad' is refused with exit 2 and a usage line" \
+    eval '[[ $rc -eq 2 ]] && grep -q "^usage: tools/check-pr.sh" "$root/pr.out" && ends_with_exit 2'
+done
+pr_json closed true "$head1" >"$root/pr.json"
+run_pr 7
+expect "a merged pull request: exit 2, says so, no comment, no worktree" \
+  eval '[[ $pr_rc -eq 2 ]] && grep -q "pull request 7 is merged" "$root/pr.out" && [[ ! -e $root/pr-comment.txt && ! -e $wt ]] && ends_with_exit 2'
+pr_json closed false "$head1" >"$root/pr.json"
+run_pr 7
+expect "a closed pull request: exit 2, says so" eval '[[ $pr_rc -eq 2 ]] && grep -q "pull request 7 is closed" "$root/pr.out"'
+pr_json open false "$head1" >"$root/pr.json"
+TEA_API_FAIL=1 run_pr 7
+expect "no server: exit 2, says so" eval '[[ $pr_rc -eq 2 ]] && grep -q "the server" "$root/pr.out"'
+echo "not json" >"$root/pr.json"
+run_pr 7
+expect "an answer that is not a pull request: exit 2" eval '[[ $pr_rc -eq 2 ]] && grep -q "the server" "$root/pr.out"'
+pr_json open false "$head1" >"$root/pr.json"
+run_pr 99
+expect "a pull request that was not pushed (nothing to fetch): exit 2, says git" \
+  eval '[[ $pr_rc -eq 2 ]] && grep -q "git: cannot fetch pull/99/head" "$root/pr.out"'
+
+FAKE_CHECK=pass run_pr 7
+rc=$?
+expect "a passed check: exit 0" test "$rc" -eq 0
+expect "the output has the result line" grep -qx "Full check passed at $head1\." "$root/pr.out"
+expect "the last line of the output is the exit code" ends_with_exit 0
+expect "the comment starts with the exact line" test "$(head -n 1 "$root/pr-comment.txt")" = "Full check passed at $head1."
+expect "the comment holds the table in a code block" \
+  eval 'grep -q "^cargo-test    ok" "$root/pr-comment.txt" && [[ $(grep -c "^\`\`\`$" "$root/pr-comment.txt") -eq 2 ]]'
+expect "the comment went to pull request 7" test "$(cat "$root/pr-comment.txt.number")" = 7
+expect "the worktree is detached at the head" \
+  eval '[[ $(git -C "$wt" rev-parse HEAD) == "$head1" && -z $(git -C "$wt" branch --show-current) ]]'
+expect "the whole output is in tests/.data/check/run.log" grep -q "fake step" "$wt/tests/.data/check/run.log"
+
+# A new head; the worktree is reused, ignored output stays, a stale client build goes.
+mkdir -p "$wt/app/node_modules" "$wt/app/dist"
+touch "$wt/app/node_modules/kept" "$wt/app/dist/stale"
+echo second >>"$cp_main/app-types.txt"
+git -C "$cp_main" -c user.name=t -c user.email=t@t commit -q -am second
+head2=$(git -C "$cp_main" rev-parse HEAD)
+git -C "$cp_origin" fetch -q "$cp_main" main
+git -C "$cp_origin" update-ref refs/pull/7/head "$head2"
+pr_json open false "$head2" >"$root/pr.json"
+FAKE_CHECK=fail run_pr 7
+rc=$?
+expect "a failed check: exit 1" test "$rc" -eq 1
+expect "and the last line says exit 1" ends_with_exit 1
+expect "the worktree is reused at the new head" test "$(git -C "$wt" rev-parse HEAD)" = "$head2"
+expect "ignored build output stays (node_modules)" test -e "$wt/app/node_modules/kept"
+expect "the client build of the old head is removed" test ! -e "$wt/app/dist/stale"
+expect "the comment names the failed step" test "$(head -n 1 "$root/pr-comment.txt")" = "Full check failed at $head2: cargo-test."
+expect "the output has the first line and the absolute path of the log" \
+  eval 'grep -qx "Full check failed at $head2: cargo-test\." "$root/pr.out" && grep -qF "$wt/tests/.data/check/cargo-test.log" "$root/pr.out"'
+expect "the table with the skipped step is in the comment" grep -q "^build         skipped: --fast" "$root/pr-comment.txt"
+expect "a file the failed check changed is restored" test "$(git -C "$wt" status --porcelain --untracked-files=no)" = ""
+FAKE_CHECK=pass run_pr 7
+expect "so the next run is not refused" test $? -eq 0
+
+echo "stale" >"$wt/app-types.txt"
+run_pr 7
+expect "a worktree with tracked changes: exit 2, says so" eval '[[ $pr_rc -eq 2 ]] && grep -q "has tracked changes" "$root/pr.out"'
+git -C "$wt" checkout -q -- .
+
+pr_json open false "$sha_b" >"$root/pr2.json"
+TEA_PR_JSON2="$root/pr2.json" FAKE_CHECK=pass run_pr 7
+expect "a head that moved during the run: still the checked sha in the first line, one more line" \
+  eval '[[ $(head -n 1 "$root/pr-comment.txt") == "Full check passed at $head2." ]] && grep -qF "moved during the run to $sha_b; this result is for $head2." "$root/pr-comment.txt"'
+
+TEA_COMMENT_RC=1 FAKE_CHECK=pass run_pr 7
+rc=$?
+expect "a comment that fails: exit 2, the result is still printed" \
+  eval '[[ $rc -eq 2 ]] && grep -qx "Full check passed at $head2\." "$root/pr.out" && grep -q "the comment on pull request 7 was not posted" "$root/pr.out" && ends_with_exit 2'
+
+# A run of the same pull request is going: the lock of the pull request is taken.
+(
+  exec 9>"$root/check-pr-7.lock"
+  flock -n 9 || exit 1
+  FAKE_CHECK=pass run_pr 7
+  rc=$?
+  [[ $rc -eq 2 ]] && grep -q "another run of the check of pull request 7" "$root/pr.out" && [[ ! -e $root/pr-comment.txt ]]
+)
+expect "a second run for the same pull request: exit 2, says so, no comment" test $? -eq 0
+
+git -C "$cp_main" worktree remove --force "$wt"
+mkdir -p "$wt"
+run_pr 7
+expect "a folder that is not a worktree in the way: exit 2" eval '[[ $pr_rc -eq 2 ]] && grep -q "is not a worktree" "$root/pr.out"'
+rmdir "$wt"
+FAKE_CHECK=pass run_pr 7
+expect "a removed worktree is created again" eval '[[ $pr_rc -eq 0 && $(git -C "$wt" rev-parse HEAD) == "$head2" ]]'
 
 echo
 if (( fails == 0 )); then

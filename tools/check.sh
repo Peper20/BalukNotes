@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Full project check in one command - before a commit and a PR.
+# Full project check in one command. Before a pull request: --fast; the full
+# check runs on the head of every pull request (tools/check-pr.sh).
 #
 #   tools/check.sh           # everything: Rust, the fixture vault, API types, client, e2e
 #   tools/check.sh --fast    # without the client build and e2e (a minute or two)
@@ -19,7 +20,7 @@ for arg in "$@"; do
     --fast) fast=1 ;;
     --rust) app=0 ;;
     --app) rust=0 ;;
-    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $arg (known: --fast, --rust, --app)" >&2; exit 2 ;;
   esac
 done

@@ -31,10 +31,10 @@ You work alone in your own git worktree. Work in English.
 ## 3. Verify
 
 ```sh
-tools/check.sh
+tools/check.sh --fast
 ```
 
-All steps must pass; fix what fails. In a worktree the script builds into the main checkout's `target/`, shared by all worktrees (`tools/lib/worktree-target.sh`, an absolute `CARGO_TARGET_DIR`). Run `cargo` by hand only as `tools/cargo.sh <arguments>` (for example `tools/cargo.sh test -p notes-core`): it builds into the same dir with the same settings and freshens the sources when another checkout built there last. A plain `cargo` builds from scratch in the worktree or reuses another checkout's artifacts of our crates. The script and the checks can wait on another worktree's lock: that is normal.
+All steps must pass; fix what fails. The full check with the client build and e2e runs on the head of your pull request after you open it (`tools/check-pr.sh`, started by the orchestrator when your run ends); its failure comes back to you as a round, like review findings. In a worktree the script builds into the main checkout's `target/`, shared by all worktrees (`tools/lib/worktree-target.sh`, an absolute `CARGO_TARGET_DIR`). Run `cargo` by hand only as `tools/cargo.sh <arguments>` (for example `tools/cargo.sh test -p notes-core`): it builds into the same dir with the same settings and freshens the sources when another checkout built there last. A plain `cargo` builds from scratch in the worktree or reuses another checkout's artifacts of our crates. The script and the checks can wait on another worktree's lock: that is normal.
 
 For changes to the library, CSS or client also look by eye as `.claude/rules/tools.md` says. Start the test server on your own port (`PORT=<8500-8599> tools/test-env.sh`), not 8432: other agents may be using it. Stop it by its port.
 
@@ -66,3 +66,4 @@ If you stopped on a contradiction or an expensive open point, return the questio
 
 - Fix blocking findings on the same branch and push.
 - Answer each finding in a pull request comment: what you changed, or why you disagree.
+- A failed full check comes as its failed steps and the paths of their logs: fix, push and report back, as for findings. If the failure is not caused by your change (a flaky test, the machine), say so with the evidence instead of changing code.

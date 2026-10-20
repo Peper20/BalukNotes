@@ -9,11 +9,11 @@ in its definition (`.claude/agents/`); this document is the map.
 | Agent | Model | Does | Does not |
 |---|---|---|---|
 | `liaison` | Opus, medium | Talks to the user in Russian, owns the architecture and the specification (`docs/architecture.md`), decides on the tech debt, splits requests into tasks and picks the developer of each, writes the orchestrator's brief in English, keeps `docs/roadmap.md`, `docs/questions.md`, `docs/tech-debt.md`, this file and `.claude/rules/`, `.claude/agents/`, `.claude/skills/`, reports | Write code, run developers, merge |
-| `orchestrator` | Sonnet, medium | Runs the pipeline: starts the tasks of the brief, waits for them, runs the review, merges approved pull requests, cleans up, runs `tools/install.sh`, relays questions to the liaison | Design, split or change tasks, decide on the tech debt, edit files |
+| `orchestrator` | Sonnet, medium | Runs the pipeline: starts the tasks of the brief, waits for them, runs the review, merges approved pull requests, runs the full check of each pull request (`tools/check-pr.sh`), cleans up, runs `tools/install.sh`, relays questions to the liaison | Design, split or change tasks, decide on the tech debt, edit files |
 | `developer-1` | Haiku, xhigh | Routine, well-described, small tasks along an existing pattern | Merge, design the architecture |
 | `developer-2` | Sonnet, high | Complex tasks: several crates or the core with the client, sync, builds and caches, memory, concurrency, Typst internals | Merge, design the architecture |
 | `developer-3` | Opus, medium | The hardest: elusive bugs, investigations, tasks another developer could not finish, resumed blocked tasks | Merge, design the architecture |
-| `reviewer` | Sonnet, high | Builds the pull request, runs `tools/check.sh`, reads the change, approves or requests changes | Edit files |
+| `reviewer` | Sonnet, high | Reads the change against its passed full check, runs targeted tests, approves or requests changes | Edit files |
 
 The user talks only to the `liaison`. Agents talk to each other in English.
 
@@ -33,16 +33,22 @@ The user talks only to the `liaison`. Agents talk to each other in English.
    in parallel.
 4. **Development.** A developer starts cold in its own worktree with the
    design fixed in its brief, works on the branch `task/<slug>`, runs
-   `tools/check.sh` and opens a pull request (the `dev-workflow` skill).
-5. **Review.** The `reviewer` builds and checks the pull request in its own
-   worktree and gives the verdict. Blocking findings go back to the same
-   developer; at most two rounds per developer, then `developer-3`. A
-   task that cannot be finished is blocked (its pull request stays open) by
-   the `orchestrator`; dropped (deleted everywhere) only by the user.
-6. **Merge.** The `orchestrator` squashes an approved pull request into
+   `tools/check.sh --fast` and opens a pull request (the `dev-workflow` skill).
+5. **Full check.** The `orchestrator` runs `tools/check-pr.sh` on the head of
+   the pull request: the full `tools/check.sh` in a worktree of that commit,
+   the result as a pull request comment. A failure goes back to the developer
+   as a round; the review starts only on a passed head.
+6. **Review.** The `reviewer` reads the pull request in its own worktree,
+   relies on its passed full check, runs targeted tests and gives the verdict.
+   Blocking findings go back to the same developer, and the head is checked
+   again before the next review; at most two rounds per developer, then
+   `developer-3`. A task that cannot be finished is blocked (its pull request
+   stays open) by the `orchestrator`; dropped (deleted everywhere) only by the
+   user.
+7. **Merge.** The `orchestrator` squashes an approved pull request into
    `main`, deletes the branch, removes worktrees, and runs `tools/install.sh`
    when the request changed what it installs.
-7. **Report.** The `liaison` reports to the user in Russian: blocked tasks and
+8. **Report.** The `liaison` reports to the user in Russian: blocked tasks and
    tasks that took `developer-3` two rounds first, then the results, the
    tech debt, what to look at.
 
@@ -132,6 +138,7 @@ interface, not by the agent definition). `claude --agent <name>` overrides it.
 - Agents run in the background and cannot ask for a permission: `cargo`,
   `npm`, `git`, `tea` and `tools/*.sh` must be allowed in advance (or the
   session runs in auto mode).
-- No CI: the agents run `tools/check.sh` themselves.
+- No CI: the orchestrator runs the full check (`tools/check-pr.sh`) on this
+  machine, between the developer and the review.
 - Rare cases are not written into the rules: the `orchestrator` handles them
   on the spot and names them in the report.

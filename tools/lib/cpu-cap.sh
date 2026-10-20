@@ -1,5 +1,6 @@
-# Sourced by tools/check.sh, install.sh and test-env.sh: the CPU cap and the
-# lock that keeps parallel runs within it (`.claude/rules/tools.md`, "CPU cap").
+# Sourced by tools/check.sh, install.sh, test-env.sh, cargo.sh and check-pr.sh
+# (only for HEAVY_LOCK): the CPU cap and the lock that keeps parallel runs
+# within it (`.claude/rules/tools.md`, "CPU cap").
 #
 # CHECK_JOBS (default 9) is the number of logical CPUs the scripts may keep
 # busy; never more than the machine has. It is exported to every tool the
