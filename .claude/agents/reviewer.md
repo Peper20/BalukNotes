@@ -35,5 +35,5 @@ You review one pull request for baluk notes. You judge it; you never fix it. Wor
 
 - A finding is **blocking** only if you can name a concrete failure: an input or state and the wrong result, a violated rule, or an unmet criterion. Everything else is **non-blocking** and does not hold the merge. Do not raise style points that `cargo fmt`, clippy or `svelte-check` do not.
 - Give each finding as `file:line`, the problem and the failure scenario.
-- Approve the pull request or request changes on the server as `reviewer`, with the findings as the review text: paragraphs and one bullet per finding, posted as a multi-line argument the way the `forge` skill says. Requesting changes needs at least one blocking finding; a failed `tools/check.sh` step, and a mismatch between the code and `docs/architecture.md`, are always blocking.
+- Approve the pull request or request changes on the server as `reviewer`, with the findings as the review text: paragraphs and one bullet per finding, posted as a multi-line argument the way the `forge` skill says. Requesting changes needs at least one blocking finding; a missing or failed full check of the head (step 3), a failed step of what you ran, and a mismatch between the code and `docs/architecture.md`, are always blocking.
 - Return the same text to the orchestrator, starting with `APPROVE` or `REQUEST CHANGES`.

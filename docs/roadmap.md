@@ -249,11 +249,13 @@ before M7 starts.
 
 ## M7. Browser - the core in WASM
 
-- [~] Research E4 (PR #14, not merged: needs a review and a full check): `notes-core` for `wasm32` (no threads, `notify`, `std::fs` -
+- [x] Research E4 (PR #14): `notes-core` for `wasm32` (no threads, `notify`, `std::fs` -
       `Storage` in OPFS/IndexedDB), build time and memory of the demo and a
       large book in Chromium and on a phone, the weight of fonts and packages;
       report - `docs/research/E4.md`
-- [ ] The core in a Web Worker, the API transport - messages to the worker
+- [ ] The core in a Web Worker, the API transport - messages to the worker;
+      package files handed over by the host (`Packages::Files`) have no
+      fingerprint, so the hand-over must not replace a package version in place
 
 ## Later
 
