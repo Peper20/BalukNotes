@@ -400,6 +400,36 @@ mod tests {
         assert_eq!(plan.to, "Сеть/SSH 2");
     }
 
+    #[test]
+    fn note_in_decomposed_folder_stays_there() {
+        let (mem, vault) = setup();
+        // A decomposed folder on disk: the renamed note stays in it, in the form it is in.
+        let folder = "\u{438}\u{306}";
+        mem.write(&format!("{folder}/SSH.typ"), format!("{HEAD}#show: note.with(title: [SSH])\n"));
+        let plan = plan_ok(&vault, &format!("{folder}/SSH"), "UFW");
+        assert_eq!(plan.to, format!("{folder}/UFW"));
+        apply(&vault, RenameKind::Note, &id(&format!("{folder}/SSH")), "UFW").unwrap();
+        assert!(mem.read(&format!("{folder}/SSH.typ")).is_err());
+        assert!(text(&mem, &format!("{folder}/UFW.typ")).contains("title: [UFW]"));
+    }
+
+    #[test]
+    fn name_is_nfc() {
+        let (mem, vault) = setup();
+        // A decomposed name on disk (macOS): its own name in NFC is not taken by itself,
+        // and renaming it leaves the NFC name on disk.
+        mem.write("Сеть/\u{438}\u{306}.typ", format!("{HEAD}#show: note.with(title: [\u{438}\u{306}])\n"));
+        let plan = plan_ok(&vault, "Сеть/\u{438}\u{306}", "\u{439}");
+        assert_eq!(plan.to, "Сеть/\u{439}");
+        apply(&vault, RenameKind::Note, &id("Сеть/\u{438}\u{306}"), "\u{439}").unwrap();
+        assert!(mem.read("Сеть/\u{438}\u{306}.typ").is_err());
+        assert!(text(&mem, "Сеть/\u{439}.typ").contains("title: [\u{439}]"));
+        // A decomposed name of another note takes the NFC name: a number.
+        mem.write("Сеть/\u{415}\u{308}.typ", format!("{HEAD}#show: note.with(title: [Ё])\n"));
+        let plan = plan_ok(&vault, "Сеть/SSH", "\u{401}");
+        assert_eq!(plan.to, "Сеть/\u{401} 2");
+    }
+
     fn plan_ok(vault: &Vault, from: &str, title: &str) -> RenamePlan {
         plan(vault, RenameKind::Note, &id(from), title).unwrap()
     }

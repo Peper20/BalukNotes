@@ -363,9 +363,6 @@ it. The format and rules - `.claude/rules/docs.md`.
   search), while the page uses the title: a search by link text finds the file
   name. How to close: substitute titles when building the index (a second
   pass).
-- **A file name from a title is not Unicode-normalized**: "й" of two code
-  points (macOS) and of one are different names. How to close: NFC on
-  creation and comparison.
 - **`/_vault/title/...` without a watcher walks the vault** for every title
   (`notes check`: 10 links - 10 `stat` walks, tens of ms). How to close: a
   walk cache for the duration of a command.

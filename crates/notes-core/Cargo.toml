@@ -54,6 +54,8 @@ thiserror.workspace = true
 toml.workspace = true
 tracing.workspace = true
 ts-rs = { workspace = true, optional = true }
+# NFC of file names made from titles (new_note.rs).
+unicode-normalization.workspace = true
 
 # Lower priority of the warming thread (`world.rs`) without `unsafe`: the same
 # version typst-kit already pulls in.

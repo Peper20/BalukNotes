@@ -80,6 +80,9 @@ ureq = { version = "2.12", default-features = false, features = ["native-tls"] }
 # ureq does not turn native-tls on by itself: the client hands it a connector.
 native-tls = "0.2"
 thiserror = "2"
+# Unicode normalization of file names made from titles (notes-core::new_note): the
+# version typst already pulls.
+unicode-normalization = "0.1.25"
 # Settings file of `notes` (~/.config/baluk-notes/config.toml): the version typst
 # already pulls.
 toml = "0.8"

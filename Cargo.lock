@@ -3361,6 +3361,7 @@ dependencies = [
  "typst-layout",
  "typst-pdf",
  "typst-render",
+ "unicode-normalization",
  "write-fonts",
 ]
 

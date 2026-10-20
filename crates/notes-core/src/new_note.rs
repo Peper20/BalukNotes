@@ -18,6 +18,7 @@ use std::fmt::Write;
 use crate::vault::{BOOK_MAIN, NoteKind, Vault};
 use crate::{Error, Result};
 use notes_store::note_id::NoteId;
+use unicode_normalization::UnicodeNormalization;
 
 /// What to create.
 #[derive(Debug, Clone)]
@@ -123,23 +124,29 @@ pub(crate) fn free_id(
     base: &str,
     except: Option<&str>,
 ) -> Result<std::result::Result<NoteId, String>> {
+    // The folder as given: the id and the `stat` keep its form (a disk may hold it decomposed).
     let prefix = if folder.is_empty() { String::new() } else { format!("{}/", NoteId::new(folder)?) };
-    // Names in the folder: files (without .typ) and subfolders (empty ones too), lowercase.
+    // For matching only: a listed path is compared with the prefix in NFC.
+    let nfc_prefix: String = prefix.nfc().collect();
+    // Names in the folder: files (without .typ) and subfolders (empty ones too), as keys.
     let files = vault.storage().list().map_err(|e| vault.io_error(folder, e))?;
     let dirs = vault.storage().dirs().map_err(|e| vault.io_error(folder, e))?;
-    let except = except.map(str::to_lowercase);
+    let except = except.map(key);
     let taken: HashSet<String> = files
         .iter()
         .chain(&dirs)
-        .filter_map(|f| f.strip_prefix(&prefix))
-        .map(|rest| rest.split_once('/').map_or_else(|| rest.strip_suffix(".typ").unwrap_or(rest), |(dir, _)| dir))
-        .map(str::to_lowercase)
+        .filter_map(|path| {
+            // A disk may keep a name decomposed (macOS): it is the same name in NFC.
+            let path: String = path.nfc().collect();
+            let rest = path.strip_prefix(&nfc_prefix)?;
+            Some(key(rest.split_once('/').map_or_else(|| rest.strip_suffix(".typ").unwrap_or(rest), |(dir, _)| dir)))
+        })
         .filter(|name| Some(name) != except.as_ref())
         .collect();
     let exists = |name: &str| {
-        let stem = name.strip_suffix(".typ").unwrap_or(name).to_lowercase();
+        let stem = key(name.strip_suffix(".typ").unwrap_or(name));
         let own = except.as_deref() == Some(stem.as_str());
-        taken.contains(&name.to_lowercase()) || (!own && vault.storage().stat(&format!("{prefix}{name}")).is_ok())
+        taken.contains(&key(name)) || (!own && vault.storage().stat(&format!("{prefix}{name}")).is_ok())
     };
     for n in 1..=MAX_NUMBER {
         let name = if n == 1 { base.to_owned() } else { format!("{base} {n}") };
@@ -148,6 +155,12 @@ pub(crate) fn free_id(
         }
     }
     Ok(Err(format!("the folder already has {MAX_NUMBER} notes \"{base}\"")))
+}
+
+/// How names are compared for "taken": NFC (`й` of two code points and of one
+/// are one name) and lowercase. Canonically equal names give the same key.
+fn key(name: &str) -> String {
+    name.nfc().collect::<String>().to_lowercase()
 }
 
 /// How many numbers to try for a taken name.
@@ -174,6 +187,8 @@ const RESERVED: &[&str] = &[
 
 /// The file name (without `.typ`) or book folder name made from a title:
 ///
+/// - Unicode NFC (`й` of two code points becomes one, as the same name on
+///   macOS and Linux);
 /// - characters forbidden on Windows `/ \ : * ? " < > |` and control
 ///   characters become spaces, whitespace is collapsed;
 /// - no `_` or `.` at the start (internal names); no `.` or spaces at the end
@@ -183,6 +198,7 @@ const RESERVED: &[&str] = &[
 ///   would turn the folder into a book) get `_` after the stem;
 /// - if nothing is left, [`UNTITLED`].
 pub fn file_name(title: &str) -> String {
+    let title: String = title.nfc().collect();
     let spaced: String =
         title.chars().map(|c| if c.is_control() || FORBIDDEN.contains(&c) { ' ' } else { c }).collect();
     let mut name = spaced.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -364,6 +380,46 @@ mod tests {
             wide.len() <= 200 && wide.chars().all(|c| c == '🙂'),
             "within the file system limit in bytes, by whole characters"
         );
+    }
+
+    #[test]
+    fn file_name_is_nfc() {
+        // "й" of two code points (U+0438 U+0306) is the name of one (U+0439).
+        assert_eq!(file_name("\u{438}\u{306}"), "\u{439}");
+        assert_eq!(file_name("Ни\u{306}зкий  тон"), "Нйзкий тон");
+        // The length limit counts characters of the NFC name: 80 composed letters, not 40 pairs.
+        assert_eq!(file_name(&"\u{438}\u{306}".repeat(MAX_FILE_NAME)), "\u{439}".repeat(MAX_FILE_NAME));
+    }
+
+    #[test]
+    fn taken_compares_normal_forms() {
+        let mem = Arc::new(MemStorage::new());
+        // Names the disk keeps decomposed (macOS): a note in the root, a folder in "Сеть".
+        mem.write("\u{438}\u{306}.typ", "");
+        mem.write("Сеть/\u{438}\u{306}/x.typ", "");
+        let vault = Vault::new(mem.clone());
+        let titled = |t: &str| NewNote { title: Some(t.into()), ..new(NoteKind::Note) };
+        // The NFC name is taken by the decomposed one, whichever form the title is typed in.
+        assert_eq!(titled("\u{439}").id_in(&vault, "").unwrap().to_string(), "й 2");
+        assert_eq!(titled("\u{438}\u{306}").id_in(&vault, "").unwrap().to_string(), "й 2");
+        // Case and normal form together; a folder with a decomposed name, the folder given in NFC.
+        assert_eq!(titled("\u{419}").id_in(&vault, "").unwrap().to_string(), "Й 2");
+        assert_eq!(titled("й").id_in(&vault, "Сеть").unwrap().to_string(), "Сеть/й 2");
+    }
+
+    #[test]
+    fn folder_keeps_its_form() {
+        let mem = Arc::new(MemStorage::new());
+        // A decomposed folder on disk, and a decomposed note inside it.
+        let folder = "\u{438}\u{306}";
+        mem.write("\u{438}\u{306}/x.typ", "");
+        mem.write("\u{438}\u{306}/\u{438}\u{306}.typ", "");
+        let vault = Vault::new(mem.clone());
+        let titled = |t: &str| NewNote { title: Some(t.into()), ..new(NoteKind::Note) };
+        // The id is in the folder as given (the same folder, not a new one in NFC).
+        assert_eq!(titled("T").id_in(&vault, folder).unwrap().to_string(), format!("{folder}/T"));
+        // The names inside still match in NFC: the decomposed note is taken.
+        assert_eq!(titled("\u{439}").id_in(&vault, folder).unwrap().to_string(), format!("{folder}/\u{439} 2"));
     }
 
     #[test]
