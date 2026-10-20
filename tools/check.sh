@@ -109,9 +109,10 @@ api_types() {
   fi
 }
 
-# Copies of foreign crates with patches (.claude/rules/vendor.md) - their own tests.
+# Copies of foreign crates with patches (.claude/rules/vendor.md) - their own tests,
+# on one thread: the comemo cache is global (the rule says why).
 vendor_tests() {
-  CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$PWD/target}/vendor cargo test -q --manifest-path vendor/comemo/Cargo.toml --features testing || return 1
+  CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$PWD/target}/vendor cargo test -q --manifest-path vendor/comemo/Cargo.toml --features testing -- --test-threads=1 || return 1
   rm -f vendor/comemo/Cargo.lock
 }
 

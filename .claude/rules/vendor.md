@@ -33,8 +33,10 @@ as before. Test - `test_evict_release`.
 Checking the copy:
 
 ```sh
-CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/target}/vendor" cargo test --manifest-path vendor/comemo/Cargo.toml --features testing
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$PWD/target}/vendor" tools/cargo.sh test --manifest-path vendor/comemo/Cargo.toml --features testing -- --test-threads=1
 ```
+
+The tests run on one thread: the cache is global and the eviction tests empty it under the tests that assert a cache hit.
 
 Proposing the patch to `typst/comemo` is the user's decision (a PR in their
 name).
