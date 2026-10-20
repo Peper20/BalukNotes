@@ -28,7 +28,7 @@ Start each task on the developer the brief names. A task without one: the cheape
 | `developer-2` | A complex task: work across several crates or across the core and the client, the sync protocol, builds and caches, memory, concurrency, Typst internals. |
 | `developer-3` | The hardest cases: elusive bugs, deep investigations, tasks another developer could not finish, resumed blocked tasks. |
 
-Developers start cold. Give each the task as written in the brief, plus the branch name `task/<short-slug>`; add nothing of your own to the design. Wait for the developers: do not end your turn while a task you started is running, unless you only wait for the liaison's answer. A finished agent notifies you by itself: do not poll with `sleep` (it is refused) or read its output file to see whether it is done.
+Developers start cold. Give each the task as written in the brief, plus the branch name `task/<short-slug>`; add nothing of your own to the design. Wait for the developers: do not end your turn while a task you started is running, unless you only wait for the liaison's answer. Your run ends with your turn: an interim report ends it, and the reports of the agents you started then go to the liaison, who sends them back to you. A finished agent notifies you by itself while your turn goes on: do not poll with `sleep` (it is refused) or read its output file to see whether it is done. With nothing else to do, wait with `Monitor` (a deferred tool: load its schema with `ToolSearch`), an until-loop with a long timeout on what the agent leaves on the server, such as the pull request of its branch.
 
 ## 3. Review
 
