@@ -37,6 +37,11 @@ notify.workspace = true
 [target.'cfg(not(any(target_os = "android", target_os = "ios", target_family = "wasm")))'.dependencies]
 trash.workspace = true
 
+# Randomness in the browser (WASM): `crypto.getRandomValues` (rand and argon2
+# use getrandom 0.2, which refuses wasm32-unknown-unknown without it).
+[target.'cfg(target_family = "wasm")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
+
 [dev-dependencies]
 tempfile.workspace = true
 

@@ -27,7 +27,9 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, OnceLock};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
+
+use crate::time::Instant;
 
 use parking_lot::Mutex;
 use serde::Serialize;

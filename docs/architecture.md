@@ -494,6 +494,12 @@ Another package is a build error, it is not even downloaded
 of allowed ones (vault data `/_vault/packages/policy`): changing it rebuilds
 notes with packages - with the library that is almost all of them.
 
+Package files come from the Typst package directories, downloaded from Typst
+Universe if missing (`world::Packages::System`, native targets), or from a
+`Storage` of package files `<namespace>/<name>/<version>/<file>` that the host
+hands over (`Packages::Files`, `Compiler::with_package_files`): the browser
+(WASM) has no disk and no downloader, so it has only this.
+
 ### HTML security
 
 - The page HTML is sanitized before serialization (the first tree pass in

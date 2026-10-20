@@ -21,7 +21,8 @@
 //! - [`notes`]: the core facade for the server and the CLI;
 //! - [`check`]: checking a vault or a note - errors and broken links;
 //! - [`new_note`]: a template for a new note or book (`notes new`);
-//! - [`settings`]: the schema and storage of client settings.
+//! - [`settings`]: the schema and storage of client settings;
+//! - [`time`]: a clock that also works in the browser (WASM).
 //!
 //! The vault list, vault files behind an interface, the watcher, note paths and
 //! the platform live in the light crate `notes-store` (architecture §1).
@@ -54,6 +55,7 @@ pub mod render;
 pub mod search;
 pub mod settings;
 pub mod themes;
+pub mod time;
 pub mod vault;
 pub mod vault_data;
 pub mod vault_graph;

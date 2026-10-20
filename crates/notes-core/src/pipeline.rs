@@ -10,7 +10,9 @@
 use std::fmt;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use crate::time::Instant;
 
 use crate::diag::Diagnostic;
 use crate::figures::FigureOptions;

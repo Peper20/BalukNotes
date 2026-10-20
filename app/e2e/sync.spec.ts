@@ -59,7 +59,7 @@ test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
   test.setTimeout(300_000);
-  execFileSync("cargo", ["build", "-q", "-p", "notes-typst", "-p", "notes-hub"], { cwd: ROOT, stdio: "inherit" });
+  execFileSync("cargo", ["build", "-q", "-p", "notes", "-p", "notes-typst", "-p", "notes-hub"], { cwd: ROOT, stdio: "inherit" });
   rmSync(DATA, { recursive: true, force: true });
   mkdirSync(DIR_HUB, { recursive: true });
   write(DIR_A, VAULT, "a.typ", note("Первая", "Текст до."));

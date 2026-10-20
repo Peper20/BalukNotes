@@ -132,7 +132,7 @@ impl WebFace {
     /// cache key is by the original file.
     fn new(data: Bytes, math: bool, cache: Option<&PathBuf>) -> Self {
         let cache = cache.map(|dir| (dir.clone(), crate::version::StableHasher::new().bytes(&data).finish()));
-        let started = std::time::Instant::now();
+        let started = crate::time::Instant::now();
         let data = match (!math).then(|| crate::webfonts::cff_to_truetype(&data)).flatten() {
             Some(truetype) => {
                 tracing::debug!(ms = started.elapsed().as_millis(), bytes = truetype.len(), "font CFF -> TrueType");
@@ -160,7 +160,7 @@ impl WebFace {
                 if let Some(data) = cached.as_ref().and_then(|p| fs::read(p).ok()).filter(|d| d.starts_with(b"wOF2")) {
                     return Some(Arc::from(data));
                 }
-                let started = std::time::Instant::now();
+                let started = crate::time::Instant::now();
                 let file = crate::webfonts::chunk_woff2(&self.data, &self.chunks[i]).map(Arc::from);
                 if let (Some(path), Some(data)) = (&cached, &file)
                     && let Err(e) = crate::fsutil::write_atomic(path, data)
@@ -182,18 +182,25 @@ impl WebFace {
 impl Fonts {
     /// Fonts from `extra_dirs` (given explicitly, they beat all others), the
     /// embedded ones (styling and Typst) and the system ones, except families
-    /// already among the embedded.
+    /// already among the embedded. The browser (WASM) has only the embedded
+    /// ones: no font directories there.
     pub fn load(extra_dirs: &[PathBuf]) -> Self {
         let mut store = FontStore::new();
+        #[cfg(not(target_family = "wasm"))]
         for dir in extra_dirs {
             store.extend(fonts::scan(dir));
         }
+        #[cfg(target_family = "wasm")]
+        let _ = extra_dirs;
         let embedded: Vec<_> = bundled_fonts().chain(fonts::embedded()).collect();
         let shadowed: HashSet<String> = embedded.iter().map(|(_, info)| info.family.to_lowercase()).collect();
         store.extend(embedded);
         // Otherwise a system font of the same family could win the selection
         // (Typst prefers a variable file to a static one).
+        #[cfg(not(target_family = "wasm"))]
         store.extend(fonts::system().filter(|(_, info)| !shadowed.contains(&info.family.to_lowercase())));
+        #[cfg(target_family = "wasm")]
+        drop(shadowed);
         Self { store, web: Mutex::new(HashMap::new()), web_cache: None }
     }
 

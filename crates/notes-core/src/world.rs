@@ -13,7 +13,8 @@
 //! - Vault files are read through [`Storage`]; reading records the file's
 //!   fingerprint ([`Versions::token`]), and the note version comes from them.
 //! - Packages (`@preview/cetz`) come from the Typst cache and are downloaded
-//!   if missing.
+//!   if missing, or from a [`Storage`] of package files ([`Packages`]: the
+//!   browser has no disk and no downloader).
 //! - The theme is passed as the input `theme` (`sys.inputs.theme`): each theme
 //!   has its own Typst standard library, created once.
 //!
@@ -33,14 +34,17 @@ use parking_lot::{Condvar, Mutex, RwLock};
 use rust_embed::RustEmbed;
 use typst::diag::{FileError, FileResult};
 use typst::foundations::{Bytes, Datetime, Dict, Duration, IntoValue};
+use typst::syntax::package::PackageSpec;
 use typst::syntax::{FileId, RootedPath, Source, VirtualPath, VirtualRoot};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Feature, Features, Library, LibraryExt, World};
 use typst_html::HtmlDocument;
 use typst_kit::datetime::Time;
+#[cfg(not(target_family = "wasm"))]
 use typst_kit::downloader::SystemDownloader;
 use typst_kit::files::{FileLoader, FileStore};
+#[cfg(not(target_family = "wasm"))]
 use typst_kit::packages::SystemPackages;
 use typst_layout::PagedDocument;
 
@@ -104,6 +108,40 @@ impl LibrarySource {
     }
 }
 
+/// Where Typst packages come from.
+#[derive(Debug)]
+pub enum Packages {
+    /// The Typst package directories, downloading from Typst Universe if
+    /// missing (native targets).
+    #[cfg(not(target_family = "wasm"))]
+    System(SystemPackages),
+    /// Package files in a storage, `<namespace>/<name>/<version>/<file>`
+    /// (`preview/cetz/0.4.2/src/lib.typ`); nothing is downloaded. The browser
+    /// (WASM) has only this: the host hands the files over.
+    Files(Arc<dyn Storage>),
+}
+
+impl Packages {
+    /// The default of the platform: the system one natively, none in the
+    /// browser (an empty storage until the host gives one).
+    fn platform_default() -> Self {
+        #[cfg(not(target_family = "wasm"))]
+        {
+            let downloader = SystemDownloader::new(concat!("baluk-notes/", env!("CARGO_PKG_VERSION")));
+            Self::System(SystemPackages::new(downloader))
+        }
+        #[cfg(target_family = "wasm")]
+        {
+            Self::Files(Arc::new(notes_store::storage::MemStorage::default()))
+        }
+    }
+}
+
+/// The path of a package file in [`Packages::Files`].
+fn package_file(spec: &PackageSpec, vpath: &VirtualPath) -> String {
+    format!("{}/{}/{}/{}", spec.namespace, spec.name, spec.version, vpath.get_without_slash())
+}
+
 /// Where project, library and package files come from.
 #[derive(Debug)]
 struct Loader {
@@ -111,7 +149,7 @@ struct Loader {
     /// File fingerprints; vault data `/_vault/...` is there too.
     versions: Versions,
     lib: LibrarySource,
-    packages: Arc<SystemPackages>,
+    packages: Arc<Packages>,
     /// Which packages may be used ([`crate::packages`]).
     policy: Arc<PackagePolicy>,
     /// Fingerprints of the files read, at the time of reading (since the last reset).
@@ -128,6 +166,8 @@ enum Location {
     Embedded(String),
     /// A vault data file (`/_vault/...`), the path without `_vault/`.
     Data(String),
+    /// A file in [`Packages::Files`]: the storage and the path in it.
+    Package(Arc<dyn Storage>, String),
 }
 
 impl Loader {
@@ -150,7 +190,13 @@ impl Loader {
             VirtualRoot::Package(spec) => {
                 // Not on the list: a build error, and the package is not even downloaded.
                 self.policy.check(spec).map_err(|e| FileError::Other(Some(e.into())))?;
-                (self.packages.obtain(spec)?.path().to_path_buf(), vpath.clone())
+                match &*self.packages {
+                    #[cfg(not(target_family = "wasm"))]
+                    Packages::System(system) => (system.obtain(spec)?.path().to_path_buf(), vpath.clone()),
+                    Packages::Files(files) => {
+                        return Ok(Location::Package(files.clone(), package_file(spec, vpath)));
+                    }
+                }
             }
         };
         vpath.realize(&root).map(Location::Disk).map_err(Into::into)
@@ -187,6 +233,9 @@ impl Loader {
             }
             Location::Data(rest) => {
                 return self.versions.data().read(&rest).map(Bytes::new).map_err(|e| FileError::Other(Some(e.into())));
+            }
+            Location::Package(files, rel) => {
+                return files.read(&rel).map(Bytes::new).map_err(|e| FileError::from_io(e, Path::new(&rel)));
             }
         };
         let meta = fs::metadata(&path).map_err(|e| FileError::from_io(e, &path))?;
@@ -245,7 +294,7 @@ struct Stores {
     storage: Arc<dyn Storage>,
     versions: Versions,
     lib: LibrarySource,
-    packages: Arc<SystemPackages>,
+    packages: Arc<Packages>,
     policy: Arc<PackagePolicy>,
     max: AtomicUsize,
     /// Free caches and how many are taken now.
@@ -360,12 +409,11 @@ impl std::fmt::Debug for Compiler {
 impl Compiler {
     /// The vault and the data `/_vault/...` come from `versions` ([`Versions::with_data`]).
     pub fn new(versions: Versions, lib: LibrarySource, fonts: Arc<Fonts>) -> Self {
-        let downloader = SystemDownloader::new(concat!("baluk-notes/", env!("CARGO_PKG_VERSION")));
         let stores = Stores {
             storage: versions.storage().clone(),
             versions,
             lib,
-            packages: Arc::new(SystemPackages::new(downloader)),
+            packages: Arc::new(Packages::platform_default()),
             policy: Arc::default(),
             max: AtomicUsize::new(PARALLEL),
             state: Mutex::default(),
@@ -388,6 +436,23 @@ impl Compiler {
     pub fn with_packages(mut self, policy: Arc<PackagePolicy>) -> Self {
         self.stores.policy = policy;
         self
+    }
+
+    /// Packages from these files instead of the platform default
+    /// ([`Packages::Files`]). Before the first build.
+    #[must_use]
+    pub fn with_package_files(mut self, files: Arc<dyn Storage>) -> Self {
+        self.stores.packages = Arc::new(Packages::Files(files));
+        self
+    }
+
+    /// The package files given by [`Self::with_package_files`], if any.
+    pub fn package_files(&self) -> Option<Arc<dyn Storage>> {
+        match &*self.stores.packages {
+            Packages::Files(files) => Some(files.clone()),
+            #[cfg(not(target_family = "wasm"))]
+            Packages::System(_) => None,
+        }
     }
 
     /// How many builds Typst remembers figures for: more means faster rebuilds
@@ -436,19 +501,7 @@ impl Compiler {
             let world = CompileWorld { files: store, fonts: &self.fonts, library: &library, main, time: &time };
             compile_theme(&world, theme)
         };
-        let results: Vec<ThemeResult> = std::thread::scope(|scope| {
-            let handles: Vec<_> = match priority {
-                Priority::User => themes
-                    .iter()
-                    .map(|theme| spawn_compile(scope, format!("typst-{theme}"), move || vec![compile(theme)]))
-                    .collect(),
-                Priority::Background => vec![spawn_compile(scope, "typst-warm".into(), move || {
-                    lower_priority();
-                    themes.iter().map(compile).collect()
-                })],
-            };
-            handles.into_iter().flat_map(|h| joined(h.join())).collect()
-        });
+        let results = compile_themes(themes, priority, compile);
 
         let mut docs = Vec::with_capacity(themes.len());
         let mut errors = None;
@@ -564,10 +617,46 @@ impl Compiler {
     }
 }
 
+/// Runs `compile` for every theme: a thread per theme for the user, one
+/// thread with a lower priority for warming.
+#[cfg(not(target_family = "wasm"))]
+fn compile_themes<F>(themes: &[String], priority: Priority, compile: F) -> Vec<ThemeResult>
+where
+    F: Fn(&String) -> ThemeResult + Sync,
+{
+    let compile = &compile;
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = match priority {
+            Priority::User => themes
+                .iter()
+                .map(|theme| spawn_compile(scope, format!("typst-{theme}"), move || vec![compile(theme)]))
+                .collect(),
+            Priority::Background => vec![spawn_compile(scope, "typst-warm".into(), move || {
+                lower_priority();
+                themes.iter().map(compile).collect()
+            })],
+        };
+        handles.into_iter().flat_map(|h| joined(h.join())).collect()
+    })
+}
+
+/// The browser (WASM) has no threads: the themes build one by one in the
+/// calling thread, whoever waits. A Typst panic aborts the module there
+/// (wasm32 has no unwinding), so there is nothing to catch.
+#[cfg(target_family = "wasm")]
+fn compile_themes<F>(themes: &[String], _priority: Priority, compile: F) -> Vec<ThemeResult>
+where
+    F: Fn(&String) -> ThemeResult,
+{
+    themes.iter().map(compile).collect()
+}
+
 /// The stack of a compile thread: deeply nested markup is recursive.
+#[cfg(not(target_family = "wasm"))]
 const COMPILE_STACK: usize = 64 << 20;
 
 /// A compile thread (with a big stack).
+#[cfg(not(target_family = "wasm"))]
 #[expect(clippy::expect_used, reason = "the OS refuses a thread only when out of resources")]
 fn spawn_compile<'scope, T: Send + 'scope>(
     scope: &'scope std::thread::Scope<'scope, '_>,
@@ -584,6 +673,7 @@ fn spawn_compile<'scope, T: Send + 'scope>(
 /// Lowers the priority of the current thread (a warming build): `nice` 10. On
 /// Linux (and Android) priority belongs to a thread, not a process. Typst's own
 /// layout threads (a shared pool) stay as they were.
+#[cfg(not(target_family = "wasm"))]
 fn lower_priority() {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     if let Err(e) = rustix::process::setpriority_process(Some(rustix::thread::gettid()), 10) {
@@ -599,6 +689,7 @@ struct ThemeResult {
 
 /// Results of a compile thread; a panic in Typst (a bug in it or in a
 /// package) becomes a build error of the note instead of taking the server down.
+#[cfg(not(target_family = "wasm"))]
 fn joined(results: std::thread::Result<Vec<ThemeResult>>) -> Vec<ThemeResult> {
     results.unwrap_or_else(|panic| {
         vec![ThemeResult { theme: String::new(), doc: Err(vec![panic_error(&*panic)]), warnings: Vec::new() }]

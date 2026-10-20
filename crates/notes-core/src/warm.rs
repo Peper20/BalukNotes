@@ -33,7 +33,9 @@
 //! cache is cleaned ([`crate::cache::DiskCache::prune`]).
 
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use crate::time::Instant;
 
 use parking_lot::{Condvar, Mutex};
 

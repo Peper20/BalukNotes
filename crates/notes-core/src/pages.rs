@@ -16,7 +16,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use crate::time::Instant;
 
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -66,7 +68,9 @@ pub struct Pages {
 
 /// E5: a release adds about 3 ms to the next rebuild; 5 s is a compromise that
 /// noticeably lowers idle RSS and still fires in normal work.
+#[cfg(not(target_family = "wasm"))]
 const IDLE_RELEASE_DELAY: Duration = Duration::from_secs(5);
+#[cfg(not(target_family = "wasm"))]
 const RELEASE_POLL_DELAY: Duration = Duration::from_millis(200);
 
 #[derive(Debug, Default)]
@@ -87,7 +91,9 @@ impl Pages {
             waiting: AtomicUsize::new(0),
             releaser: Arc::new(Mutex::default()),
         };
-        // One debouncer per Pages: releasing memory when idle.
+        // One debouncer per Pages: releasing memory when idle. The browser
+        // (WASM) has no threads: its host calls `release_memory` itself.
+        #[cfg(not(target_family = "wasm"))]
         pages.spawn_releaser();
         pages
     }
@@ -240,6 +246,7 @@ impl Pages {
     }
 
     /// One worker thread per `Pages`: watches for idle time and calls the release.
+    #[cfg(not(target_family = "wasm"))]
     fn spawn_releaser(&self) {
         let pipeline = Arc::downgrade(&self.pipeline);
         let releaser = Arc::downgrade(&self.releaser);

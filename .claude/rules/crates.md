@@ -21,6 +21,7 @@ How it works and why - `docs/architecture.md`; here - code rules of `crates/`.
 | `notes-store` | the light part without Typst, HTTP or async: data directory rules, vault names and list, note paths (`NoteId`), `trait Storage` and the watcher, platform and sync preference, accounts, sessions, the sync engine |
 | `notes-hub` | the storage server without Typst (`notes hub serve`, `notes users`): sign-in (`auth`, also mounted by `notes-server`), the sync API, the device's HTTP client (feature `client`) |
 | `notes-device` | the device side of sync: account, linked vaults, rounds, the background worker (uses `notes-hub`'s client, so not in the core); no Typst |
+| `notes-wasm` | research prototype: the core in WASM, one thread, a vault from JS (`docs/research/E4.md`; the module and the measurements - `harness/`). `notes-core` and `notes-store` stay buildable for `wasm32-unknown-unknown`: what has no browser counterpart (threads, `notify`, `trash`, system fonts, the package downloader) is under `cfg(target_family = "wasm")`, packages come from `world::Packages::Files`, `Instant` from `notes_core::time` |
 
 Logic lives in the core, the other crates are thin wrappers. A new app part is
 a binary `notes-<name>`, a line in `notes_parts::PARTS` (its commands) and a

@@ -28,9 +28,9 @@ typst-html = "=0.15.1"
 typst-layout = "=0.15.1"
 typst-pdf = "=0.15.1"
 typst-render = "=0.15.1"
-typst-kit = { version = "=0.15.1", features = [
-    "embedded-fonts", "scan-fonts", "system-files", "system-downloader", "datetime",
-] }
+# Only what builds everywhere, the browser (WASM) too: system fonts, files and
+# the package downloader are added by notes-core for native targets.
+typst-kit = { version = "=0.15.1", features = ["embedded-fonts", "datetime"] }
 # Versions as in typst itself (see Cargo.lock): otherwise two copies of the comemo cache.
 comemo = "0.5.1"
 ecow = "0.2.6"

@@ -70,6 +70,10 @@ pub struct SharedAssets {
     pub fonts: Option<Arc<Fonts>>,
     /// Themes of the library.
     pub themes: Option<Arc<ThemeSet>>,
+    /// Typst package files, `<namespace>/<name>/<version>/<file>`, instead of
+    /// the system package directories and downloading (the browser:
+    /// [`crate::world::Packages::Files`]).
+    pub packages: Option<Arc<dyn Storage>>,
 }
 
 /// An open vault: pages, index, graph, warming and the watcher.
@@ -108,7 +112,12 @@ impl Notes {
 
     /// The vault is any [`Storage`] (`config.vault` is not used).
     pub fn with_storage(storage: Arc<dyn Storage>, config: &NotesConfig) -> Result<Self> {
-        Self::with_vault(Vault::new(storage), config, &SharedAssets::default())
+        Self::with_storage_shared(storage, config, &SharedAssets::default())
+    }
+
+    /// The same, with shared fonts, themes and package files (the browser).
+    pub fn with_storage_shared(storage: Arc<dyn Storage>, config: &NotesConfig, shared: &SharedAssets) -> Result<Self> {
+        Self::with_vault(Vault::new(storage), config, shared)
     }
 
     fn with_vault(vault: Vault, config: &NotesConfig, shared: &SharedAssets) -> Result<Self> {
@@ -141,7 +150,10 @@ impl Notes {
             LibrarySource::Embedded => None,
         };
         let stamp = crate::cache::stamp(&[library.fingerprint(), fonts.fingerprint()]);
-        let compiler = Compiler::new(versions.clone(), library, fonts).with_packages(packages.clone());
+        let mut compiler = Compiler::new(versions.clone(), library, fonts).with_packages(packages.clone());
+        if let Some(files) = &shared.packages {
+            compiler = compiler.with_package_files(files.clone());
+        }
         let themes = match shared.themes.clone() {
             Some(themes) => themes,
             None => Arc::new(ThemeSet::load(&compiler)?),
@@ -181,7 +193,11 @@ impl Notes {
 
     /// Fonts and themes of this core, for other cores with the same library.
     pub fn shared_assets(&self) -> SharedAssets {
-        SharedAssets { fonts: Some(self.typst.compiler().fonts().clone()), themes: Some(self.typst.themes_arc()) }
+        SharedAssets {
+            fonts: Some(self.typst.compiler().fonts().clone()),
+            themes: Some(self.typst.themes_arc()),
+            packages: self.typst.compiler().package_files(),
+        }
     }
 
     /// Fonts for Typst and the browser.
@@ -387,6 +403,12 @@ impl Notes {
     /// Calls `f` with every batch of vault changes (from the watcher thread).
     pub fn on_change(&self, f: impl Fn(&Change) + Send + Sync + 'static) {
         self.changes.subscribe(f);
+    }
+
+    /// Forgets what Typst memoized now. Natively an idle thread does it
+    /// itself; the browser (WASM) has none, its host calls this.
+    pub fn release_memory(&self) {
+        self.pages.release_memory();
     }
 
     /// How many pages and bytes the memory cache holds.

@@ -1,0 +1,22 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>E4: the core in a Web Worker</title>
+<pre id="out">running...</pre>
+<script type="module">
+  // ?notes=a,b - notes to build, in this order, in one worker.
+  // &main=1 - on the page itself: CDP CPU throttling does not reach workers.
+  import { measure } from "./measure.js";
+
+  const query = new URLSearchParams(location.search);
+  const notes = query.get("notes").split(",").filter(Boolean);
+  const inWorker = () =>
+    new Promise((resolve) => {
+      const worker = new Worker("./worker.js", { type: "module" });
+      worker.onmessage = ({ data }) => resolve(data);
+      worker.onerror = (e) => resolve({ error: e.message || "worker failed" });
+      worker.postMessage({ notes });
+    });
+  const onPage = () => measure(notes).catch((e) => ({ error: String(e?.stack ?? e) }));
+  window.result = query.get("main") ? onPage() : inWorker();
+  window.result.then((r) => (document.getElementById("out").textContent = JSON.stringify(r.builds ?? r, null, 2)));
+</script>

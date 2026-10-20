@@ -628,8 +628,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -1807,8 +1809,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "wasi",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -3362,6 +3366,7 @@ dependencies = [
  "typst-pdf",
  "typst-render",
  "unicode-normalization",
+ "web-time",
  "write-fonts",
 ]
 
@@ -3438,6 +3443,7 @@ dependencies = [
  "argon2",
  "base64 0.22.1",
  "dirs 6.0.0",
+ "getrandom 0.2.17",
  "notify",
  "parking_lot",
  "rand",
@@ -3471,6 +3477,17 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "notes-wasm"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "notes-core",
+ "notes-store",
+ "serde_json",
+ "wasm-bindgen",
 ]
 
 [[package]]

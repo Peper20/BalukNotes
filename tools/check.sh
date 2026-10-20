@@ -145,6 +145,16 @@ baluk_note() {
 
 in_app() { (cd app && "$@"); }
 
+# The core builds for the browser (docs/research/E4.md): notes-wasm and with it
+# notes-core and notes-store for wasm32-unknown-unknown, lints included.
+wasm_check() {
+  if ! rustup target list --installed 2>/dev/null | grep -qx wasm32-unknown-unknown; then
+    echo "no Rust target wasm32-unknown-unknown - install it: rustup target add wasm32-unknown-unknown"
+    return 1
+  fi
+  cargo clippy -p notes-wasm --target wasm32-unknown-unknown -- -D warnings
+}
+
 # The notes-app window (Tauri) - only with WebKitGTK; without it (cloud) - skipped.
 no_webkit=()
 if ! has_webkit; then
@@ -164,7 +174,8 @@ if [[ $rust == 1 ]]; then
   fi
   step cargo-test cargo test --workspace "${no_webkit[@]}"
   # With the measure feature - also the heavy memory measurements (they do not run as tests).
-  step clippy cargo clippy --workspace "${no_webkit[@]}" --all-targets --features notes-core/measure -- -D warnings
+  step clippy cargo clippy --workspace "${no_webkit[@]}" --all-targets --features notes-core/measure,notes-wasm/measure -- -D warnings
+  step wasm wasm_check
   step fmt cargo fmt --check
   step vendor vendor_tests
   step notes-check vault_check

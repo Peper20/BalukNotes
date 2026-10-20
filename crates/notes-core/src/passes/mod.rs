@@ -27,8 +27,8 @@ mod sanitize;
 mod tags;
 mod themes;
 
+use crate::time::Instant;
 use std::collections::HashSet;
-use std::time::Instant;
 
 use typst_html::{HtmlElement, HtmlFrame};
 
