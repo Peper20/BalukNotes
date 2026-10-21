@@ -56,6 +56,7 @@ test('the tools are registered and pipeline_start starts a developer', async ($,
   const status = await $.tool.call({ tool: 'mcp__pipeline__pipeline_status' } as never)
   expect(String(status.text ?? status.result)).toContain('feat:')
   expect(statuses.length).toBeGreaterThan(0)
+  expect(statuses[statuses.length - 1]).toBe('1 developing')
 
   const refused = await $.tool.call({ tool: TOOL, slug: 'feat', developer: 'developer-1', brief: 'x' } as never)
   expect(refused.deny).toContain('exists')

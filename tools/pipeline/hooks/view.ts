@@ -28,12 +28,12 @@ export function describeAll(s: State): string {
   return s.tasks.map(describeTask).join('\n')
 }
 
-/** The status line: tasks by stage, merged ones left out. */
+/** The status line: the counts of tasks by stage, merged ones left out. The engine puts the plugin's name before it. */
 export function summary(s: State): string | undefined {
   const counts = new Map<Stage, number>()
   for (const t of s.tasks) if (t.stage !== 'merged') counts.set(t.stage, (counts.get(t.stage) ?? 0) + 1)
   const parts = STAGES.filter(st => counts.has(st)).map(st => `${counts.get(st)} ${st}`)
-  return parts.length === 0 ? undefined : `pipeline: ${parts.join(', ')}`
+  return parts.length === 0 ? undefined : parts.join(' · ')
 }
 
 /** The rows the pane draws (kept in `$.state`). */

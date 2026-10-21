@@ -362,8 +362,8 @@ counts rounds, merges, cleans up and reports to the liaison.
   when the diff touches `crates/`, `app/`, `baluk/` or `skills/`. The mod never
   pushes to `main`, never forces a push, never runs `tools/deploy-hub.sh`.
 - **View**: the pane `/pipeline` (a row per task: stage, pull request, status,
-  developer, rounds, last event) and a status line entry (`pipeline: 1 developing,
-  2 checking`).
+  developer, rounds, last event) and the status line under the prompt, the counts
+  by stage (`1 developing · 2 checking`; the engine puts the plugin's name before it).
 - **Code**: `hooks/machine.ts` decides (state and event in, state and actions
   out; no clock, no server), `hooks/driver.ts` carries the actions out and feeds
   results back as events, `hooks/forge.ts` holds every `tea` and `git` call,
