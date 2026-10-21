@@ -11,32 +11,26 @@
 //! Errors are those of the sync module: a refused session (401) is
 //! [`Error::Unauthorized`], a network failure (no connection, a timeout, a
 //! broken answer) is [`Error::Network`], a version conflict (409) is an
-//! [`Outcome`] with a [`Conflict`], not an error. Timeouts: 10 s to connect,
-//! 60 s to read, which is longer than the longest long-poll wait.
+//! [`Outcome`](notes_store::sync::Outcome) with a
+//! [`Conflict`](notes_store::sync::Conflict), not an error. The URLs and the
+//! status mapping of the sync calls are [`notes_store::sync::wire`], shared
+//! with the browser's client; this module is the `ureq` transport. Timeouts:
+//! 10 s to connect, 60 s to read, which is longer than the longest long-poll
+//! wait.
 
 use std::io::Read;
 use std::sync::Arc;
 use std::time::Duration;
 
-use notes_store::sync::path::check;
-use notes_store::sync::{Base, Changes, Conflict, Entry, Error, MAX_FILE_SIZE, Outcome, Remote, Result};
-use percent_encoding::{AsciiSet, NON_ALPHANUMERIC, utf8_percent_encode};
+use notes_store::sync::wire::{self, Answer, MAX_JSON, Transport, WireRemote};
+use notes_store::sync::{Base, Changes, Error, Outcome, Remote, Result};
 use serde::de::DeserializeOwned;
-use ureq::{Agent, AgentBuilder, Request, Response};
+use ureq::{Agent, AgentBuilder, Response};
 
-use crate::api::{ErrorResponse, HEADER_BASE, LoginRequest, LoginResponse, MAX_WAIT_SECS, VaultInfo};
+use crate::api::{LoginRequest, LoginResponse, MAX_WAIT_SECS, VaultInfo};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const READ_TIMEOUT: Duration = Duration::from_secs(60);
-/// The largest answer that is not a file (a list of changes).
-const MAX_JSON: u64 = 64 * 1024 * 1024;
-
-/// What stays unencoded in a URL path segment: letters, digits and `-._~`.
-const SEGMENT: &AsciiSet = &NON_ALPHANUMERIC.remove(b'-').remove(b'.').remove(b'_').remove(b'~');
-
-fn segment(text: &str) -> String {
-    utf8_percent_encode(text, SEGMENT).to_string()
-}
 
 /// The HTTP agent with TLS. `ureq` built with `native-tls` still has no TLS
 /// until it is given a connector: without one every `https://` request fails.
@@ -51,7 +45,8 @@ fn agent() -> Agent {
     }
 }
 
-/// A hub address and, after sign-in, a token.
+/// A hub address and, after sign-in, a token: the [`Transport`] of the
+/// native client.
 #[derive(Debug, Clone)]
 struct Api {
     base: String,
@@ -64,7 +59,7 @@ impl Api {
         Self { base: base_url.trim_end_matches('/').to_owned(), token: token.map(str::to_owned), agent: agent() }
     }
 
-    fn request(&self, method: &str, path: &str) -> Request {
+    fn request(&self, method: &str, path: &str) -> ureq::Request {
         let request = self.agent.request(method, &format!("{}{path}", self.base));
         match &self.token {
             Some(token) => request.set("Authorization", &format!("Bearer {token}")),
@@ -72,37 +67,55 @@ impl Api {
         }
     }
 
-    /// Sends the request; the answer of any status is `Ok`.
-    fn send(request: Request, body: Option<&[u8]>) -> Result<Response> {
+    /// Sends the request; the answer of any status is `Ok`, its body read up
+    /// to `limit` bytes (an error answer whose body cannot be read has none).
+    fn send(request: ureq::Request, body: Option<&[u8]>, limit: u64) -> Result<Answer> {
         let result = match body {
             Some(body) => request.send_bytes(body),
             None => request.call(),
         };
-        match result {
-            Ok(response) | Err(ureq::Error::Status(_, response)) => Ok(response),
-            Err(ureq::Error::Transport(e)) => Err(Error::Network(e.to_string())),
-        }
+        let response = match result {
+            Ok(response) | Err(ureq::Error::Status(_, response)) => response,
+            Err(ureq::Error::Transport(e)) => return Err(Error::Network(e.to_string())),
+        };
+        let status = response.status();
+        let retry_after = response.header("Retry-After").map(str::to_owned);
+        let body = match read_bytes(response, limit) {
+            Ok(body) => body,
+            Err(_) if status != 200 => Vec::new(),
+            Err(e) => return Err(e),
+        };
+        Ok(Answer { status, retry_after, body })
     }
 
-    fn vault_path(vault: &str) -> String {
-        format!("/api/sync/vaults/{}", segment(vault))
+    /// A call of the account side: the answer if its status is one of `ok`,
+    /// otherwise the error.
+    fn call(&self, method: &str, path: &str, json: Option<&[u8]>, ok: &[u16]) -> Result<Answer> {
+        let request = self.request(method, path);
+        let answer = match json {
+            Some(body) => Self::send(request.set("Content-Type", "application/json"), Some(body), MAX_JSON)?,
+            None if method == "GET" => Self::send(request, None, MAX_JSON)?,
+            None => Self::send(request, Some(&[]), MAX_JSON)?,
+        };
+        if ok.contains(&answer.status) { Ok(answer) } else { Err(wire::failure(&answer)) }
+    }
+
+    fn call_json<T: DeserializeOwned>(&self, method: &str, path: &str, json: Option<&[u8]>, ok: &[u16]) -> Result<T> {
+        wire::json(&self.call(method, path, json, ok)?)
     }
 }
 
-/// The error for an answer that is not the expected one.
-fn failure(response: Response) -> Error {
-    let status = response.status();
-    if status == 401 {
-        return Error::Unauthorized;
+impl Transport for Api {
+    fn send(&self, request: &wire::Request<'_>) -> Result<Answer> {
+        let mut http = self.request(request.method, &request.url);
+        if let Some(base) = &request.base {
+            http = http.set(wire::HEADER_BASE, base);
+        }
+        if let Some(content_type) = request.content_type {
+            http = http.set("Content-Type", content_type);
+        }
+        Self::send(http, request.body, request.limit)
     }
-    let retry = response.header("Retry-After").map(str::to_owned);
-    let message = read_json::<ErrorResponse>(response).map_or_else(|_| String::new(), |e| e.error);
-    let message = match (message.is_empty(), retry) {
-        (false, _) => message,
-        (true, Some(secs)) => format!("retry after {secs} s"),
-        (true, None) => "no details".into(),
-    };
-    Error::Other(format!("the hub answered {status}: {message}"))
 }
 
 fn read_bytes(response: Response, limit: u64) -> Result<Vec<u8>> {
@@ -114,11 +127,6 @@ fn read_bytes(response: Response, limit: u64) -> Result<Vec<u8>> {
     Ok(data)
 }
 
-fn read_json<T: DeserializeOwned>(response: Response) -> Result<T> {
-    let data = read_bytes(response, MAX_JSON)?;
-    serde_json::from_slice(&data).map_err(|e| Error::Network(format!("not an answer of the hub: {e}")))
-}
-
 /// Signs in; the token for [`HttpRemote::new`] and the other functions.
 ///
 /// # Errors
@@ -127,12 +135,7 @@ pub fn login(base_url: &str, login: &str, password: &str) -> Result<String> {
     let api = Api::new(base_url, None);
     let body = serde_json::to_vec(&LoginRequest { login: login.to_owned(), password: password.to_owned() })
         .map_err(|e| Error::Other(e.to_string()))?;
-    let request = api.request("POST", "/api/login").set("Content-Type", "application/json");
-    let response = Api::send(request, Some(&body))?;
-    if response.status() != 200 {
-        return Err(failure(response));
-    }
-    Ok(read_json::<LoginResponse>(response)?.token)
+    Ok(api.call_json::<LoginResponse>("POST", "/api/login", Some(&body), &[200])?.token)
 }
 
 /// Ends the session of the token.
@@ -140,9 +143,7 @@ pub fn login(base_url: &str, login: &str, password: &str) -> Result<String> {
 /// # Errors
 /// The hub cannot be reached.
 pub fn logout(base_url: &str, token: &str) -> Result<()> {
-    let api = Api::new(base_url, Some(token));
-    let response = Api::send(api.request("POST", "/api/logout"), Some(&[]))?;
-    if response.status() == 204 { Ok(()) } else { Err(failure(response)) }
+    Api::new(base_url, Some(token)).call("POST", "/api/logout", None, &[204]).map(drop)
 }
 
 /// The vaults of the account.
@@ -150,12 +151,7 @@ pub fn logout(base_url: &str, token: &str) -> Result<()> {
 /// # Errors
 /// [`Error::Unauthorized`], or the hub cannot be reached.
 pub fn vaults(base_url: &str, token: &str) -> Result<Vec<VaultInfo>> {
-    let api = Api::new(base_url, Some(token));
-    let response = Api::send(api.request("GET", "/api/sync/vaults"), None)?;
-    if response.status() != 200 {
-        return Err(failure(response));
-    }
-    read_json(response)
+    Api::new(base_url, Some(token)).call_json("GET", "/api/sync/vaults", None, &[200])
 }
 
 /// Creates an empty vault; one that exists is not an error.
@@ -163,32 +159,18 @@ pub fn vaults(base_url: &str, token: &str) -> Result<Vec<VaultInfo>> {
 /// # Errors
 /// An invalid name, [`Error::Unauthorized`], or the hub cannot be reached.
 pub fn create_vault(base_url: &str, token: &str, name: &str) -> Result<VaultInfo> {
-    let api = Api::new(base_url, Some(token));
-    let response = Api::send(api.request("PUT", &Api::vault_path(name)), Some(&[]))?;
-    if !matches!(response.status(), 200 | 201) {
-        return Err(failure(response));
-    }
-    read_json(response)
+    Api::new(base_url, Some(token)).call_json("PUT", &wire::vault_url(name), None, &[200, 201])
 }
 
 /// One vault of the hub as a [`Remote`].
 #[derive(Debug, Clone)]
-pub struct HttpRemote {
-    api: Api,
-    vault: String,
-}
+pub struct HttpRemote(WireRemote<Api>);
 
 impl HttpRemote {
     /// `base_url` is the address of the hub (`https://hub.example`).
     #[must_use]
     pub fn new(base_url: &str, token: &str, vault: &str) -> Self {
-        Self { api: Api::new(base_url, Some(token)), vault: vault.to_owned() }
-    }
-
-    fn files_path(&self, path: &str) -> Result<String> {
-        check(path)?;
-        let encoded: Vec<String> = path.split('/').map(segment).collect();
-        Ok(format!("{}/files/{}", Api::vault_path(&self.vault), encoded.join("/")))
+        Self(WireRemote::new(Api::new(base_url, Some(token)), vault))
     }
 
     /// As [`Remote::changes`], but with no entries after `after` it waits up
@@ -198,70 +180,31 @@ impl HttpRemote {
     /// [`Error::Unauthorized`], [`Error::NotFound`] for an unknown vault, or
     /// the hub cannot be reached.
     pub fn wait_changes(&self, after: u64, wait: Duration) -> Result<Changes> {
-        let secs = wait.as_secs().min(MAX_WAIT_SECS);
-        let path = format!("{}/changes?after={after}&wait={secs}", Api::vault_path(&self.vault));
-        let response = Api::send(self.api.request("GET", &path), None)?;
-        match response.status() {
-            200 => read_json(response),
-            404 => Err(Error::NotFound(format!("vault \"{}\"", self.vault))),
-            _ => Err(failure(response)),
-        }
-    }
-
-    fn write(&self, method: &str, path: &str, base: &Base, data: Option<&[u8]>) -> Result<Outcome> {
-        let url = self.files_path(path)?;
-        let mut request = self.api.request(method, &url).set(HEADER_BASE, &base.to_string());
-        if data.is_some() {
-            request = request.set("Content-Type", "application/octet-stream");
-        }
-        let response = Api::send(request, Some(data.unwrap_or_default()))?;
-        match response.status() {
-            200 => Ok(Ok(read_json::<Entry>(response)?)),
-            409 => Ok(Err(read_json::<Conflict>(response)?)),
-            413 => Err(Error::TooLarge {
-                path: path.to_owned(),
-                size: data.map_or(0, |d| d.len() as u64),
-                limit: MAX_FILE_SIZE,
-            }),
-            404 => Err(Error::NotFound(format!("vault \"{}\"", self.vault))),
-            _ => Err(failure(response)),
-        }
+        self.0.wait_changes(after, wait.as_secs().min(MAX_WAIT_SECS))
     }
 }
 
 impl Remote for HttpRemote {
     fn changes(&self, after: u64) -> Result<Changes> {
-        self.wait_changes(after, Duration::ZERO)
+        self.0.changes(after)
     }
 
     fn get(&self, path: &str) -> Result<Vec<u8>> {
-        let response = Api::send(self.api.request("GET", &self.files_path(path)?), None)?;
-        match response.status() {
-            200 => read_bytes(response, MAX_FILE_SIZE),
-            404 => Err(Error::NotFound(path.to_owned())),
-            _ => Err(failure(response)),
-        }
+        self.0.get(path)
     }
 
     fn put(&self, path: &str, base: &Base, data: &[u8]) -> Result<Outcome> {
-        self.write("PUT", path, base, Some(data))
+        self.0.put(path, base, data)
     }
 
     fn delete(&self, path: &str, base: &Base) -> Result<Outcome> {
-        self.write("DELETE", path, base, None)
+        self.0.delete(path, base)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn segments_are_encoded() {
-        assert_eq!(segment("Сеть"), "%D0%A1%D0%B5%D1%82%D1%8C");
-        assert_eq!(segment("a b#?%/"), "a%20b%23%3F%25%2F");
-        assert_eq!(segment("a-b_c.d~"), "a-b_c.d~");
-    }
 
     /// The client speaks TLS: an `https://` request reaches the handshake (which a
     /// plain TCP listener fails), it is not refused for a missing TLS backend.
@@ -276,14 +219,8 @@ mod tests {
     }
 
     #[test]
-    fn file_urls() {
+    fn base_url() {
         let remote = HttpRemote::new("http://h:1/", "t", "My vault");
-        assert_eq!(remote.api.base, "http://h:1");
-        assert_eq!(
-            remote.files_path("a b/Сеть.typ").unwrap(),
-            "/api/sync/vaults/My%20vault/files/a%20b/%D0%A1%D0%B5%D1%82%D1%8C.typ"
-        );
-        assert!(matches!(remote.files_path("a/../b"), Err(Error::InvalidPath { .. })));
-        assert!(matches!(remote.files_path("/abs"), Err(Error::InvalidPath { .. })));
+        assert_eq!(remote.0.transport().base, "http://h:1");
     }
 }

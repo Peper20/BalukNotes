@@ -25,6 +25,8 @@ serde_json.workspace = true
 [dev-dependencies]
 # Natively the requests are driven by a current-thread runtime.
 tokio = { workspace = true, features = ["rt", "macros"] }
+# The hub of the sync tests: a `HubVault` in a temporary folder.
+tempfile.workspace = true
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 # Exactly the version of wasm-bindgen-cli that generates the JS glue
@@ -35,6 +37,8 @@ wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 # `datetime.today()` in Typst: the clock of chrono from JS `Date`.
 chrono = { version = "0.4", default-features = false, features = ["wasmbind"] }
+# Sync with the hub: a synchronous XMLHttpRequest from the worker (`xhr.rs`).
+web-sys = { version = "0.3", features = ["XmlHttpRequest", "XmlHttpRequestResponseType"] }
 
 [lints]
 workspace = true

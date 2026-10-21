@@ -7,10 +7,11 @@
 //! [`WAIT`]; the next request carries the `seq` of the answer. Without `after`
 //! it comes at once: the number and whether the server watches the files. Not
 //! SSE: the Tauri window gets an answer of its URL scheme only as a whole
-//! (docs/research/E7.md). Not watching (the watcher broke, an in-memory vault):
+//! (docs/research/E7.md). Not watching (the watcher broke, a storage that cannot watch):
 //! nothing to wait for, the answer comes at once. A server stop answers the
-//! waiting requests. In the browser build (`wasm32`) a vault never watches, so
-//! the answer always comes at once.
+//! waiting requests. In the browser build (`wasm32`) the answer always comes
+//! at once: the worker's host holds a request with nothing new until the vault
+//! changes (`app/src/worker/host.ts`).
 
 #[cfg(not(target_family = "wasm"))]
 use std::time::Duration;

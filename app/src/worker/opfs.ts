@@ -3,7 +3,9 @@
 // OPFS after each request and reads it all back at the start.
 //
 //   notes/vaults/<vault>/files/<path>                   vault files (.baluk/settings.json among them)
-//   notes/vaults/<vault>/ready                          written last by the first import
+//   notes/vaults/<vault>/ready                          written last by the first import or the first sync round
+//   notes/vaults/<vault>/sync.json                      the sync state of a vault of the hub
+//   notes/vaults/<vault>/removed/<path>                 the last content sync replaced or removed
 //   notes/settings.json                                 shared settings values
 //   notes/packages/<namespace>/<name>/<version>/<file>  Typst package files
 //
@@ -44,6 +46,10 @@ export interface Source {
   /** `undefined`: the file is gone. */
   readFile(path: string): Uint8Array | undefined;
   settingsJson(): string;
+  /** The sync state JSON if it changed since the last call (a vault of the hub). */
+  takeSyncState?(): string | undefined;
+  /** What sync replaced or removed since the last call: the path and the old content. */
+  takeRemoved?(): Files;
 }
 
 /** What the core is started with. */
@@ -52,6 +58,8 @@ export interface Stored {
   packages: Files;
   /** The shared settings JSON; `null`: none yet. */
   settings: string | null;
+  /** The vault's sync state JSON; `null`: none yet. */
+  sync: string | null;
 }
 
 const encoder = new TextEncoder();
@@ -123,6 +131,8 @@ async function readTree(dir: Dir, prefix = ""): Promise<Files> {
 
 const vaultBase = (vault: string): string[] => ["notes", "vaults", vault];
 const filesBase = (vault: string): string[] => [...vaultBase(vault), "files"];
+const removedBase = (vault: string): string[] => [...vaultBase(vault), "removed"];
+const SYNC_STATE = "sync.json";
 const PACKAGES = ["notes", "packages"];
 const SETTINGS = { base: ["notes"], file: "settings.json" };
 
@@ -138,11 +148,29 @@ export async function readStored(root: Dir, vault: string | null): Promise<Store
   const packages = await descend(root, PACKAGES, false);
   const notes = await descend(root, SETTINGS.base, false);
   const settings = notes && (await readFile(notes, SETTINGS.file));
+  const kept = vault === null ? null : await descend(root, vaultBase(vault), false);
+  const sync = kept && (await readFile(kept, SYNC_STATE));
   return {
     vault: files ? await readTree(files) : [],
     packages: packages ? await readTree(packages) : [],
     settings: settings ? decoder.decode(settings) : null,
+    sync: sync ? decoder.decode(sync) : null,
   };
+}
+
+/** Removes what OPFS has of the vault: a vault that was never complete starts over. */
+export async function clearVault(root: Dir, vault: string): Promise<void> {
+  await removePath(root, [], vaultBase(vault).join("/"));
+}
+
+/** Marks the vault complete: from now on OPFS is its source. */
+export async function markReady(root: Dir, vault: string): Promise<void> {
+  await writeFile(root, vaultBase(vault), "ready", new Uint8Array());
+}
+
+/** Adds package files (a whitelisted version never changes in place). */
+export async function writePackages(root: Dir, files: Files): Promise<void> {
+  for (const [path, data] of files) await writeFile(root, PACKAGES, path, data);
 }
 
 /**
@@ -151,20 +179,28 @@ export async function readStored(root: Dir, vault: string | null): Promise<Store
  * empty vault folder.
  */
 export async function importFiles(root: Dir, vault: string, files: { vault: Files; packages: Files }): Promise<void> {
-  await removePath(root, [], vaultBase(vault).join("/"));
+  await clearVault(root, vault);
   for (const [path, data] of files.vault) await writeFile(root, filesBase(vault), path, data);
-  for (const [path, data] of files.packages) await writeFile(root, PACKAGES, path, data);
-  await writeFile(root, vaultBase(vault), "ready", new Uint8Array());
+  await writePackages(root, files.packages);
+  await markReady(root, vault);
 }
 
 /**
- * Writes the changes of the core to OPFS, one flush after each request. With no
- * vault (`null`: the placeholder of the picker screen) the vault files are
- * not written, only the shared settings.
+ * Writes the changes of the core to OPFS, one flush after each request and
+ * each sync round. With no vault (`null`: the placeholder of the picker
+ * screen) the vault files are not written, only the shared settings.
+ *
+ * The sync state is written only when every vault file is: a state that
+ * names a version the files in OPFS do not have would make the next start
+ * see a local deletion or edit that never happened.
  */
 export class Persistence {
   /** Vault paths still to write (or remove): a failed one stays for the next flush. */
   private readonly files = new Set<string>();
+  /** Removed content still to keep aside, by path. */
+  private readonly removed = new Map<string, Uint8Array>();
+  /** The sync state JSON still to write. */
+  private syncState: string | null = null;
   private settings = false;
 
   constructor(
@@ -178,12 +214,29 @@ export class Persistence {
     this.source.takeChanges();
   }
 
-  /** Writes what changed since the last flush. A failure is logged, not thrown. */
-  async flush(): Promise<void> {
+  /** Every vault file the core changed is in OPFS. */
+  get clean(): boolean {
+    return this.files.size === 0;
+  }
+
+  /**
+   * Writes what changed since the last flush; whether the core reported
+   * changed vault files. A failure is logged, not thrown.
+   */
+  async flush(): Promise<boolean> {
     const changes = this.source.takeChanges();
     if (changes.settings) this.settings = true;
     const vault = this.vault;
     if (vault !== null) {
+      for (const [path, data] of this.source.takeRemoved?.() ?? []) this.removed.set(path, data);
+      for (const [path, data] of [...this.removed]) {
+        try {
+          await writeFile(this.root, removedBase(vault), path, data);
+          this.removed.delete(path);
+        } catch (e) {
+          console.error(`OPFS: cannot keep the removed ${path}: ${describe(e)}`);
+        }
+      }
       for (const path of changes.files) this.files.add(path);
       for (const path of [...this.files]) {
         try {
@@ -196,6 +249,15 @@ export class Persistence {
           console.error(`OPFS: cannot save ${path}: ${describe(e)}`);
         }
       }
+      this.syncState = this.source.takeSyncState?.() ?? this.syncState;
+      if (this.syncState !== null && this.clean) {
+        try {
+          await writeFile(this.root, vaultBase(vault), SYNC_STATE, encoder.encode(this.syncState));
+          this.syncState = null;
+        } catch (e) {
+          console.error(`OPFS: cannot save the sync state: ${describe(e)}`);
+        }
+      }
     }
     if (this.settings) {
       try {
@@ -205,5 +267,6 @@ export class Persistence {
         console.error(`OPFS: cannot save the settings: ${describe(e)}`);
       }
     }
+    return changes.files.length > 0;
   }
 }

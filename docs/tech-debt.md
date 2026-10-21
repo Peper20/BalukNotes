@@ -357,6 +357,16 @@ it. The format and rules - `.claude/rules/docs.md`.
   does not see the other's changes until a reload - take a Web Lock per vault
   (`navigator.locks`) so one worker owns the vault, and tell the other tabs
   about changes over a `BroadcastChannel` (they reload the changed files).
+- **Held sync rounds in the browser** (`app/src/worker/`, `notes-wasm`
+  `sync`) - the browser has no `/api/device/sync` (the confirm and restore
+  buttons of the settings) - a mass deletion holds every round of that vault
+  forever, seen only in the console - answer `/api/device/sync...` in the
+  worker for its vault (status, confirm, restore) so the settings section
+  works.
+- **Removed files in the browser never pruned**
+  (`notes/vaults/<vault>/removed/` in OPFS) - sync keeps the last version of
+  each removed or replaced file there - OPFS grows with every replaced file -
+  prune entries older than 30 days as `DirTree::prune_removed` does.
 
 ## Vault and tools
 

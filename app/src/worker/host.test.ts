@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { CoreHost, type Core } from "./host";
+import { CoreHost, EVENTS_WAIT_MS, ROUND_AFTER_CHANGE_MS, ROUND_EVERY_MS, type Core } from "./host";
 import type { ResponseMessage } from "./protocol";
 
 const dec = new TextDecoder();
@@ -70,4 +70,148 @@ it("flushes after each answer, before the next request, and survives a failing f
   await tick();
   await tick();
   expect(log).toEqual(["answer 1", "flush", "answer 2", "flush"]);
+});
+
+/** A core of a vault of the hub: events by `seq`, a request to `/change` changes vault files, rounds are logged. */
+function hubCore() {
+  const state = { seq: 0, log: [] as string[], roundChanges: false, running: 0, maxRunning: 0, gate: null as Promise<void> | null };
+  let changed = false;
+  const hub: Core = {
+    request: async (_method, uri) => {
+      state.log.push(uri);
+      if (uri === "/change") {
+        changed = true;
+        state.seq++;
+      }
+      const after = Number(new URL(uri, "http://x").searchParams.get("after") ?? -1);
+      const body = uri.includes("/events") ? { watching: true, seq: state.seq, changes: state.seq > after ? [{ seq: state.seq, paths: [] }] : [] } : {};
+      return { status: 200, contentType: "application/json", body: new TextEncoder().encode(JSON.stringify(body)) };
+    },
+    flush: async () => {
+      const out = changed;
+      changed = false;
+      return out;
+    },
+    sync: async () => {
+      state.log.push("round");
+      state.maxRunning = Math.max(state.maxRunning, ++state.running);
+      await state.gate;
+      state.running--;
+      if (!state.roundChanges) return false;
+      state.roundChanges = false;
+      state.seq++;
+      return true;
+    },
+  };
+  return { hub, state };
+}
+
+function startHub() {
+  const { hub, state } = hubCore();
+  const answers: ResponseMessage[] = [];
+  const host = new CoreHost(async () => hub, (answer) => answers.push(answer));
+  host.start({ module: "m", vault: "v", hub: "" });
+  const answered = () => answers.map((a) => a.id);
+  const events = (a: ResponseMessage) => JSON.parse(dec.decode(a.body)) as { changes: unknown[] };
+  const rounds = () => state.log.filter((l) => l === "round").length;
+  return { host, state, answers, answered, events, rounds };
+}
+
+const advance = (ms: number) => vi.advanceTimersByTimeAsync(ms);
+
+it("runs a round at start before any request, every 30 s, 2 s after a change, never two at once", async () => {
+  vi.useFakeTimers();
+  try {
+    const { host, state, answered, rounds } = startHub();
+    host.request({ id: 1, method: "GET", uri: "/a" });
+    await advance(0);
+    expect(state.log).toEqual(["round", "/a"]);
+    expect(answered()).toEqual([1]);
+
+    await advance(ROUND_EVERY_MS - 1);
+    expect(rounds()).toBe(1);
+    await advance(1);
+    expect(rounds()).toBe(2);
+
+    // A request that changed vault files: a round 2 s later, not 30.
+    host.request({ id: 2, method: "PUT", uri: "/change" });
+    await advance(ROUND_AFTER_CHANGE_MS - 1);
+    expect(rounds()).toBe(2);
+    await advance(1);
+    expect(rounds()).toBe(3);
+
+    // A slow round: the requests and the timers wait, no second round starts.
+    let open = () => {};
+    state.gate = new Promise((r) => (open = r));
+    await advance(ROUND_EVERY_MS);
+    host.request({ id: 3, method: "PUT", uri: "/change" });
+    await advance(5 * ROUND_EVERY_MS);
+    expect(state.running).toBe(1);
+    expect(answered()).toEqual([1, 2]);
+    state.gate = null;
+    open();
+    await advance(0);
+    expect(answered()).toEqual([1, 2, 3]);
+    await advance(ROUND_AFTER_CHANGE_MS);
+    expect(state.maxRunning).toBe(1);
+    expect(rounds()).toBe(5);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("holds an events request with nothing new until a round or a request changes files, or 25 s; others go on", async () => {
+  vi.useFakeTimers();
+  try {
+    const { host, state, answers, answered, events } = startHub();
+    await advance(10_000);
+    host.request({ id: 1, method: "GET", uri: "/api/vaults/v/events?after=0" });
+    host.request({ id: 2, method: "GET", uri: "/api/vaults/v/notes" });
+    await advance(0);
+    expect(answered()).toEqual([2]);
+
+    // The next round (20 s later) pulls a change: the held request is answered with it.
+    state.roundChanges = true;
+    await advance(ROUND_EVERY_MS - 10_000);
+    expect(answered()).toEqual([2, 1]);
+    expect(events(answers[1]!).changes).toHaveLength(1);
+
+    // Nothing changes: answered empty after 25 s.
+    host.request({ id: 3, method: "GET", uri: "/api/vaults/v/events?after=1" });
+    await advance(EVENTS_WAIT_MS - 1);
+    expect(answered()).toEqual([2, 1]);
+    await advance(1);
+    expect(answered()).toEqual([2, 1, 3]);
+    expect(events(answers[2]!).changes).toEqual([]);
+
+    // A request that changes files answers the held one at once.
+    host.request({ id: 4, method: "GET", uri: "/api/vaults/v/events?after=1" });
+    host.request({ id: 5, method: "PUT", uri: "/change" });
+    await advance(0);
+    expect(answered()).toEqual([2, 1, 3, 5, 4]);
+    expect(events(answers[4]!).changes).toHaveLength(1);
+
+    // Changes already there: answered at once; no `after`: never held.
+    host.request({ id: 6, method: "GET", uri: "/api/vaults/v/events?after=0" });
+    host.request({ id: 7, method: "GET", uri: "/api/vaults/v/events" });
+    await advance(0);
+    expect(answered()).toEqual([2, 1, 3, 5, 4, 6, 7]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("a core without sync runs no rounds", async () => {
+  vi.useFakeTimers();
+  try {
+    const answers: ResponseMessage[] = [];
+    const host = new CoreHost(async () => core(async () => true), (a) => answers.push(a));
+    host.start({ module: "m", vault: "v" });
+    host.request({ id: 1, method: "PUT", uri: "/x" });
+    await advance(10 * ROUND_EVERY_MS);
+    expect(answers.map((a) => a.id)).toEqual([1]);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });

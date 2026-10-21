@@ -479,6 +479,11 @@ impl MemStorage {
         self.changed(path);
     }
 
+    /// Every file, internal ones (`_`, `.`) too, sorted.
+    pub fn paths(&self) -> Vec<String> {
+        self.files.lock().files.keys().cloned().collect()
+    }
+
     pub fn remove(&self, path: &str) {
         self.files.lock().files.remove(path);
         self.journal_add([path]);

@@ -58,7 +58,7 @@ dirs = "6"
 # the client.
 notify = "8"
 parking_lot = "0.12"
-# Percent-encoding of path segments in the hub client: the version url/ureq already pull.
+# Percent-encoding of the sync URL segments (notes-store sync::wire) and decoding of paths: the version url/ureq already pull.
 percent-encoding = "2"
 # A password prompt without echo (`notes users`).
 rpassword = "7"

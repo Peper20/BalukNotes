@@ -15,7 +15,7 @@
 # The folder (the list of files is the same for the same sources; it is not
 # committed):
 #   index.html, assets/...        the client (app/dist)
-#   assets/config.js              the core in WASM on: { core: { module, packages } }
+#   assets/config.js              the core in WASM on, syncing with the hub: { core: { module, packages, hub } }
 #   wasm/notes_wasm.js, wasm/notes_wasm_bg.wasm    the core module (crates/notes-wasm/harness/build.sh)
 #   wasm/packages.json            { packages: [[path, base64]] }, the whitelisted Typst packages
 #   api/fonts.css, api/themes.css, fonts/<family>/<style>/<part>.woff2
@@ -159,7 +159,7 @@ server_pid=""
 cat >"$stage/assets/config.js" <<'JS'
 // The browser version served by the hub: the core runs in a Web Worker
 // (tools/web-bundle.sh).
-globalThis.__NOTES_API__ = { core: { module: "/wasm/notes_wasm.js", packages: "/wasm/packages.json" } };
+globalThis.__NOTES_API__ = { core: { module: "/wasm/notes_wasm.js", packages: "/wasm/packages.json", hub: "" } };
 JS
 
 # In place of the old folder (the stage is on another file system maybe: copy).

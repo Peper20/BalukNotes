@@ -1,9 +1,11 @@
 // Starts the core of a worker: the module, then the vault, the packages and the
 // settings from OPFS or the seed. Plain TypeScript with the browser's parts
 // passed in (`Env`; `core.ts` wires the real ones), so it is tested with fakes.
+// A vault of the hub (`CoreSource.hub`) gets a sync round (`Core.sync`, run
+// by the host's queue); its files come from the hub, not from a seed.
 
 import { StartRefused, type Core } from "./host";
-import { importFiles, isStored, Persistence, readStored, type Dir, type Files, type Source, type Stored } from "./opfs";
+import { clearVault, importFiles, isStored, markReady, Persistence, readStored, writePackages, type Dir, type Files, type Source, type Stored } from "./opfs";
 import type { CoreSource } from "./protocol";
 
 /** The name of the core's vault while the page names none (the picker screen). It is never read from or written to OPFS. */
@@ -18,8 +20,18 @@ export interface Glue {
       addPackageFile(path: string, data: Uint8Array): void;
       setSettings(json: string): void;
       open(): void;
+      /** One sync round with the hub at `hub`, blocking: `Round` JSON. */
+      sync(hub: string): string;
+      setSyncState(json: string): void;
+      takeSyncState(): string | undefined;
+      takeRemoved(): Files;
     };
 }
+
+/** What a sync round says (`notes_wasm::round_json`). */
+export type Round =
+  | { ok: true; changed: boolean; uploaded: number; downloaded: number; removedLocal: number; removedRemote: number; conflicts: string[]; skipped: string[] }
+  | { ok: false; error: string; held: boolean; unauthorized: boolean };
 
 /** `files.json` and `packages.json` as they are served: base64 contents. */
 export interface Seed {
@@ -65,11 +77,43 @@ async function readKept(root: Dir | null, key: string | null): Promise<{ stored:
 }
 
 /**
+ * Hands the kept package files to the core, then, with `address` set, the
+ * whitelisted ones of the bundle that OPFS lacks (a later bundle may ship new
+ * versions; a version never changes in place, so only the paths are
+ * compared), and keeps those in OPFS. With nothing kept the bundle's list is
+ * required; otherwise a failure to get it is only logged.
+ */
+async function addPackages(core: { addPackageFile(path: string, data: Uint8Array): void }, kept: Files, address: string | undefined, env: Env, root: Dir | null): Promise<void> {
+  for (const [path, data] of kept) core.addPackageFile(path, data);
+  if (!address) return;
+  let bundled: Files;
+  try {
+    bundled = (await seedFrom(env, address)).packages;
+  } catch (e) {
+    if (kept.length === 0) throw e;
+    console.error(`packages: the bundle's list is not available, going with the kept ones: ${describe(e)}`);
+    return;
+  }
+  const have = new Set(kept.map(([path]) => path));
+  const missing = bundled.filter(([path]) => !have.has(path));
+  for (const [path, data] of missing) core.addPackageFile(path, data);
+  if (root && missing.length > 0) {
+    try {
+      await writePackages(root, missing);
+    } catch (e) {
+      console.error(`OPFS: cannot save the packages: ${describe(e)}`);
+    }
+  }
+}
+
+/**
  * Starts the core for `source`. The vault is `source.vault`; unset, the core
  * runs an empty placeholder vault that OPFS never sees (the shared settings and
  * the packages are still kept). A vault name the core refuses is `StartRefused`.
+ * With `hub` the named vault syncs with the hub: OPFS is its source once the
+ * first round completed (`ready`), before that it starts empty.
  */
-export async function load({ module, vault, files, packages }: CoreSource, env: Env): Promise<Core> {
+export async function load({ module, vault, files, packages, hub }: CoreSource, env: Env): Promise<Core> {
   const glue = await env.importGlue(module);
   await glue.default();
   let core: InstanceType<Glue["WasmCore"]>;
@@ -79,6 +123,7 @@ export async function load({ module, vault, files, packages }: CoreSource, env: 
     throw new StartRefused(describe(e));
   }
   const key = vault ?? null;
+  const syncing = hub !== undefined && key !== null;
   const root = await env.opfsRoot();
   let persistence: Persistence | null = root && new Persistence(root, key, core);
 
@@ -90,11 +135,30 @@ export async function load({ module, vault, files, packages }: CoreSource, env: 
       console.error(`OPFS: the kept settings are not used: ${describe(e)}`);
     }
   }
-  if (kept?.ready || key === null) {
+  let ready = kept?.ready ?? false;
+  if (ready || key === null) {
     for (const [path, data] of kept?.stored.vault ?? []) core.addFile(path, data);
-    // The packages of an earlier run, or - when it kept none - the bundle's (not written back).
-    const keptPackages = kept && (kept.stored.packages.length > 0 || !packages) ? kept.stored.packages : packages ? (await seedFrom(env, packages)).packages : [];
-    for (const [path, data] of keptPackages) core.addPackageFile(path, data);
+    if (syncing && kept?.stored.sync != null) {
+      try {
+        core.setSyncState(kept.stored.sync);
+      } catch (e) {
+        // An empty state compares the whole vault with the hub: nothing is deleted.
+        console.error(`OPFS: the kept sync state is not used: ${describe(e)}`);
+      }
+    }
+    await addPackages(core, kept?.stored.packages ?? [], packages, env, root);
+  } else if (syncing) {
+    // A vault of the hub that OPFS does not have complete: whatever an
+    // interrupted first round left goes, the first round fills it again.
+    if (root) {
+      try {
+        await clearVault(root, key);
+      } catch (e) {
+        console.error(`OPFS: cannot clear the incomplete vault, nothing is kept this run: ${describe(e)}`);
+        persistence = null;
+      }
+    }
+    await addPackages(core, kept?.stored.packages ?? [], packages, env, root);
   } else if (files || packages) {
     const seed = files ? await seedFrom(env, files) : { vault: [], packages: [] };
     if (seed.packages.length === 0 && packages) seed.packages = (await seedFrom(env, packages)).packages;
@@ -113,8 +177,26 @@ export async function load({ module, vault, files, packages }: CoreSource, env: 
   core.open();
   // What was just loaded is in OPFS already (or not meant to be there).
   persistence?.discard();
+  // Without OPFS the changes are still taken: they wake the waiting events.
+  const flush = async (): Promise<boolean> => (persistence ? persistence.flush() : core.takeChanges().files.length > 0);
+  const sync = async (): Promise<boolean> => {
+    const round = JSON.parse(core.sync(hub as string)) as Round;
+    if (!round.ok && round.held) console.warn(`sync of "${key}" is held, nothing is applied until it is confirmed: ${round.error}`);
+    else if (!round.ok) console.error(`sync of "${key}": ${round.error}`);
+    const changed = await flush();
+    if (round.ok && !ready && root && persistence?.clean) {
+      try {
+        await markReady(root, key as string);
+        ready = true;
+      } catch (e) {
+        console.error(`OPFS: cannot mark the vault complete: ${describe(e)}`);
+      }
+    }
+    return changed;
+  };
   return {
     request: (method, uri, body) => core.request(method, uri, body),
-    flush: async () => persistence?.flush(),
+    flush,
+    ...(syncing && { sync }),
   };
 }

@@ -66,8 +66,44 @@ impl std::fmt::Debug for Changes {
 
 impl Changes {
     /// Starts the watcher. `false`: the storage cannot watch (or it failed,
-    /// the reason is in the log); everything works by scanning.
+    /// the reason is in the log); everything works by scanning. The browser
+    /// (WASM) has no threads: there every event is a batch of its own, handed
+    /// out at once from the call that changed the file.
     pub fn start(self: &Arc<Self>, storage: &dyn Storage) -> bool {
+        if cfg!(target_family = "wasm") { self.start_inline(storage) } else { self.start_settled(storage) }
+    }
+
+    /// The watcher without a thread: the listeners are called from the sink.
+    fn start_inline(self: &Arc<Self>, storage: &dyn Storage) -> bool {
+        let this = Arc::downgrade(self);
+        let sink: ChangeSink = Arc::new(move |paths: Option<Vec<String>>| {
+            let Some(this) = this.upgrade() else { return };
+            let seq = this.seq.fetch_add(1, Ordering::SeqCst) + 1;
+            if paths.is_none() {
+                this.watching.store(false, Ordering::SeqCst);
+            }
+            let mut paths = paths.unwrap_or_default();
+            paths.sort();
+            paths.dedup();
+            this.publish(&Change { seq, paths });
+        });
+        match storage.watch(sink.clone()) {
+            Ok(Some(guard)) => {
+                self.guards.lock().push(guard);
+                *self.sink.lock() = Some(sink);
+                self.watching.store(true, Ordering::SeqCst);
+                true
+            }
+            Ok(None) => false,
+            Err(e) => {
+                tracing::warn!("vault watcher did not start: {e}; scanning files from now on");
+                false
+            }
+        }
+    }
+
+    /// The watcher with a thread that collects events into batches.
+    fn start_settled(self: &Arc<Self>, storage: &dyn Storage) -> bool {
         let (tx, rx) = mpsc::channel::<Option<Vec<String>>>();
         let this = Arc::downgrade(self);
         let sink: ChangeSink = Arc::new(move |paths: Option<Vec<String>>| {
@@ -218,5 +254,30 @@ mod tests {
         changes.stop();
         assert!(!changes.watching());
         assert!(!changes.also(&library, "_baluk"), "not after a stop");
+    }
+
+    /// Without a thread (the browser) every event is handed out at once.
+    #[test]
+    fn inline_hands_out_each_event() {
+        let storage = MemStorage::new();
+        let changes = Arc::new(Changes::default());
+        assert!(changes.start_inline(&storage));
+        assert!(changes.watching());
+        let got = Arc::new(Mutex::new(Vec::new()));
+        let sink = got.clone();
+        changes.subscribe(move |c| sink.lock().push(c.clone()));
+        storage.write("b.typ", "1");
+        storage.rename("b.typ", "a.typ").unwrap();
+        assert_eq!(
+            *got.lock(),
+            [
+                Change { seq: 1, paths: vec!["b.typ".into()] },
+                Change { seq: 2, paths: vec!["b.typ".into()] },
+                Change { seq: 3, paths: vec!["a.typ".into()] },
+            ]
+        );
+        storage.lose_changes();
+        assert!(!changes.watching());
+        assert_eq!(got.lock().last(), Some(&Change { seq: 4, paths: Vec::new() }));
     }
 }

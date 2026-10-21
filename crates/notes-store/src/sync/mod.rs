@@ -22,8 +22,9 @@
 //! - [`State`]: what was synced last time, per file (the base of the next
 //!   round);
 //! - [`Remote`]: what the engine needs from the server. [`HubVault`]
-//!   implements it for a local mode and tests; the HTTP client implements it
-//!   over the network, the server routes call [`HubVault`] methods;
+//!   implements it for a local mode and tests; [`wire::WireRemote`]
+//!   implements it over the hub's HTTP API for any transport (the wire rules:
+//!   URLs, headers, statuses), the server routes call [`HubVault`] methods;
 //! - [`sync`] / [`Report`]: one round; its algorithm is described in
 //!   [`engine`]. A round that would delete a large part of the vault stops
 //!   first ([`Deletions`], [`Held`]).
@@ -59,6 +60,7 @@ pub mod path;
 mod protocol;
 mod state;
 mod tree;
+pub mod wire;
 
 #[cfg(test)]
 mod tests;

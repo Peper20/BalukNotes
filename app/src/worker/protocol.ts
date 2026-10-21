@@ -21,6 +21,13 @@ export interface CoreSource {
    * It seeds a vault that OPFS does not have yet; afterwards OPFS is the source.
    */
   files?: string;
+  /**
+   * Address of the hub the named vault syncs with (`""`: the page's server,
+   * the hub that serves the browser version); unset: no sync. With it the
+   * vault comes from the hub, not from `files`, and OPFS keeps it once the
+   * first round is done (`load.ts`).
+   */
+  hub?: string;
 }
 
 /** The first message of a worker: start the core. */

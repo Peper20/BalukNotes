@@ -58,13 +58,22 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
     a time; stylesheets and fonts still come over HTTP from the page's server.
     The worker keeps the vault in memory and writes it through to OPFS
     (`notes/vaults/<vault>/files/`, `notes/settings.json`, `notes/packages/`;
-    `notes/vaults/<vault>/ready`, written last, marks a complete import)
+    `notes/vaults/<vault>/ready`, written last, marks a complete import or
+    first sync round)
     after each request; at start it reads it back (`files.json` only seeds an
     empty vault). With the core in the worker, sign-in and the vault list go
     to the page's server, the hub: `/api/login|logout|session` and
     `/api/sync/...` over HTTP, `GET`/`POST /api/vaults` mapped by the
     transport to the hub's vault list and creation (rename and delete are not
     available); the worker runs the vault of the tab.
+    When `__NOTES_API__.core.hub` is set (`""`: the page's server; the hub's
+    bundle sets it), the worker syncs the tab's vault with the hub
+    (`notes-store` sync engine,
+    the server wins as on a phone) over synchronous `XMLHttpRequest`: a round
+    at start, every 30 s when idle and 2 s after a local change; the state
+    and the removed files are kept in OPFS (`sync.json`, `removed/`). Long
+    polling of vault events is done by the worker's host, so it does not hold
+    the queue.
 - **The server online** - vault files, their versions, change events,
   sessions; without Typst.
 - **Self-hosted and web version** (user's decision): `notes serve` with Typst
@@ -442,8 +451,9 @@ How to put it on a VPS - `docs/server.md`.
   another address it starts only with `--auth`. With sign-in on, the page,
   client files, themes and fonts are public (the sign-in screen needs them),
   everything else answers 401 and the client shows the sign-in screen.
-- **Sync** (`notes_store::sync` - the engine, no network; `notes-hub` - the
-  API and the client `HttpRemote`; `notes-device` - the device side): file
+- **Sync** (`notes_store::sync` - the engine and the wire rules, no network;
+  `notes-hub` - the API and the client `HttpRemote`; `notes-device` - the
+  device side): file
   versions, no CRDT. A device keeps a full copy of a vault and the state of
   the last sync (hash of every file). A round: scan the folder (only files
   whose size or time changed are hashed), ask the server for changes after

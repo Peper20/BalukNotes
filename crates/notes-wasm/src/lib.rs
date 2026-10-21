@@ -8,11 +8,21 @@
 //! [`Core::read_file`], [`Core::settings_json`]) and hands it back at the next
 //! start (`add_file`, [`Core::set_settings`]); the worker writes it to OPFS
 //! (architecture §1).
+//! The vault syncs with the hub through the same core ([`Core::sync`]: the
+//! `notes-store` engine over [`tree::VaultTree`], the server wins as on a
+//! phone); the host keeps the state and the removed files
+//! ([`Core::take_sync_state`], [`Core::take_removed`]). The vault reports its
+//! changes as vault events, so an open note refreshes when a round pulls it.
 //! [`Core`] is plain Rust (its tests run natively); the JS binding is
-//! [`wasm::WasmCore`], compiled only for `wasm32`.
+//! [`wasm::WasmCore`] with the `XMLHttpRequest` remote ([`xhr`]), compiled
+//! only for `wasm32`.
+
+mod tree;
+#[cfg(target_family = "wasm")]
+mod xhr;
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use axum::Router;
 use axum::body::Body;
@@ -24,8 +34,11 @@ use notes_server::{AppState, VaultSet, router};
 use notes_store::names::VaultName;
 use notes_store::platform::Platform;
 use notes_store::storage::{MemStorage, Storage};
-use serde_json::{Map, Value};
+use notes_store::sync::{self, Error as SyncError, Options, Prefer, Remote, Report, State};
+use serde_json::{Map, Value, json};
 use tower::ServiceExt;
+
+use crate::tree::VaultTree;
 
 /// The answer to an API request.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,11 +75,33 @@ struct Open {
     router: Router,
 }
 
+/// The sync state and the JSON of it the host has (to tell a change).
+#[derive(Debug)]
+struct SyncState {
+    state: State,
+    kept: String,
+}
+
+/// The state as JSON; a state of strings and numbers always serializes.
+fn state_json(state: &State) -> String {
+    serde_json::to_string(state).unwrap_or_default()
+}
+
+impl Default for SyncState {
+    /// The empty state of a vault never synced: nothing for the host to keep.
+    fn default() -> Self {
+        let state = State::default();
+        Self { kept: state_json(&state), state }
+    }
+}
+
 /// The core over a vault in memory.
 #[derive(Debug)]
 pub struct Core {
     name: VaultName,
     vault: Arc<MemStorage>,
+    tree: VaultTree,
+    sync: Mutex<SyncState>,
     packages: Arc<MemStorage>,
     /// The shared settings the host handed over before [`Core::open`].
     stored: Map<String, Value>,
@@ -104,7 +139,15 @@ impl Core {
         let name = VaultName::new(vault).map_err(|e| e.to_string())?;
         let vault = Arc::new(MemStorage::new());
         vault.keep_journal();
-        Ok(Self { name, vault, packages: Arc::new(MemStorage::new()), stored: Map::new(), open: None })
+        Ok(Self {
+            name,
+            tree: VaultTree::new(vault.clone()),
+            vault,
+            sync: Mutex::default(),
+            packages: Arc::new(MemStorage::new()),
+            stored: Map::new(),
+            open: None,
+        })
     }
 
     /// The shared settings the host kept (`{ "key": value }`, what
@@ -164,6 +207,10 @@ impl Core {
             return Ok(());
         }
         let notes = open_notes(&self.vault, &self.packages)?;
+        // The vault reports its changes (architecture §8): `GET .../events`
+        // answers `watching: true`, and the host holds the request until
+        // something changes (a request, a sync round).
+        notes.watch();
         let settings = shared_settings(&notes, std::mem::take(&mut self.stored));
         let router = router(app_state(self.name.clone(), notes.clone(), settings.clone()));
         self.open = Some(Open { notes, settings, router });
@@ -200,12 +247,81 @@ impl Core {
         }
     }
 
+    fn sync_state(&self) -> std::sync::MutexGuard<'_, SyncState> {
+        self.sync.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// The sync state the host kept (what [`Self::take_sync_state`] gave).
+    /// One that cannot be read is an error and the state stays empty: the
+    /// next round compares the whole vault, which deletes nothing.
+    pub fn set_sync_state(&self, json: &str) -> Result<(), String> {
+        let state: State = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        *self.sync_state() = SyncState { state, kept: json.to_owned() };
+        Ok(())
+    }
+
+    /// The sync state as JSON if it changed since the host last got it.
+    pub fn take_sync_state(&self) -> Option<String> {
+        let mut sync = self.sync_state();
+        let json = state_json(&sync.state);
+        if json == sync.kept {
+            return None;
+        }
+        sync.kept.clone_from(&json);
+        Some(json)
+    }
+
+    /// What sync replaced or removed in the vault since the last call: the
+    /// path and the previous content, for the host to keep aside.
+    pub fn take_removed(&self) -> Vec<(String, Vec<u8>)> {
+        self.tree.take_removed()
+    }
+
+    /// One sync round of the vault with `remote` (architecture §9): the
+    /// server wins a conflict ("the others receive"), a mass deletion is held
+    /// ([`SyncError::DeletionsHeld`]) having changed nothing. Pulled files are
+    /// vault changes like any other: the vault events and the journal show
+    /// them.
+    ///
+    /// # Errors
+    /// The round failed (the hub cannot be reached, the session is refused)
+    /// or was held; what it did before stays recorded in the state.
+    pub fn sync(&self, remote: &dyn Remote) -> sync::Result<Report> {
+        let mut sync = self.sync_state();
+        sync::sync_with(&self.tree, &mut sync.state, remote, &Options::new(Prefer::Remote))
+    }
+
     /// Forgets what Typst memoized (there is no idle thread to do it here).
     pub fn release_memory(&self) {
         if let Some(open) = &self.open {
             open.notes.release_memory();
         }
     }
+}
+
+/// A round's result for the host: `{ ok: true, changed, uploaded,
+/// downloaded, removedLocal, removedRemote, conflicts, skipped }` or `{ ok:
+/// false, error, held, unauthorized }`.
+pub fn round_json(round: &sync::Result<Report>) -> String {
+    let value = match round {
+        Ok(report) => json!({
+            "ok": true,
+            "changed": !report.is_idle(),
+            "uploaded": report.uploaded,
+            "downloaded": report.downloaded,
+            "removedLocal": report.removed_local,
+            "removedRemote": report.removed_remote,
+            "conflicts": report.conflicts,
+            "skipped": report.skipped,
+        }),
+        Err(e) => json!({
+            "ok": false,
+            "error": e.to_string(),
+            "held": matches!(e, SyncError::DeletionsHeld(_)),
+            "unauthorized": matches!(e, SyncError::Unauthorized),
+        }),
+    };
+    value.to_string()
 }
 
 #[cfg(test)]
@@ -310,7 +426,7 @@ mod tests {
         let events = core.request("GET", &format!("{base}/events?after=0"), b"").await;
         assert_eq!(events.status, 200);
         let events = json_of(&events);
-        assert_eq!(events["watching"], false);
+        assert_eq!(events["watching"], true, "the vault reports its changes");
         assert_eq!(events["changes"], json!([]));
 
         let put = core.request("PUT", "/api/settings", br#"{"device.builds": 3}"#).await;
@@ -453,6 +569,121 @@ mod tests {
             assert_eq!(got.body, want.as_ref(), "{path}");
         }
     }
+
+    /// The paths of the vault events after `after`, waited for (natively the
+    /// watcher hands them out after a pause).
+    async fn events_after(core: &Core, after: u64) -> Vec<String> {
+        for _ in 0..50 {
+            let events = json_of(&core.request("GET", &format!("/api/vaults/{VAULT}/events?after={after}"), b"").await);
+            let paths: Vec<String> = events["changes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .flat_map(|c| c["paths"].as_array().unwrap().iter().map(|p| p.as_str().unwrap().to_owned()))
+                .collect();
+            if !paths.is_empty() {
+                return paths;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        Vec::new()
+    }
+
+    async fn latest_event(core: &Core) -> u64 {
+        json_of(&core.request("GET", &format!("/api/vaults/{VAULT}/events"), b"").await)["seq"].as_u64().unwrap()
+    }
+
+    fn hub_write(hub: &sync::HubVault, path: &str, data: &[u8]) {
+        let base = match hub.read(path) {
+            Ok((entry, _)) => sync::Base::Hash(entry.hash.unwrap()),
+            Err(_) => sync::Base::Absent,
+        };
+        hub.write(path, &base, data).unwrap().unwrap();
+    }
+
+    fn hub_delete(hub: &sync::HubVault, path: &str) {
+        let (entry, _) = hub.read(path).unwrap();
+        hub.delete(path, &sync::Base::Hash(entry.hash.unwrap())).unwrap().unwrap();
+    }
+
+    fn round(json: &str) -> Value {
+        serde_json::from_str(json).unwrap()
+    }
+
+    /// Rounds over the core's vault: the first one uploads and downloads,
+    /// a conflict goes to the server and the local version is kept aside, a
+    /// deletion goes both ways, a pulled change is a vault event, the state
+    /// round-trips through JSON, a mass deletion is held.
+    #[tokio::test]
+    async fn syncs_the_vault() {
+        let dir = tempfile::tempdir().unwrap();
+        let hub = sync::HubVault::open(dir.path().join("hub")).unwrap();
+        hub_write(&hub, "Хаб.typ", "= Хаб".as_bytes());
+        let core = core();
+        core.take_changes();
+        assert_eq!(core.take_sync_state(), None, "nothing synced yet");
+
+        let report = core.sync(&hub).unwrap();
+        assert_eq!((report.uploaded, report.downloaded), (5, 1), "{report:?}");
+        assert_eq!(hub.read("Книга/01-глава.typ").unwrap().1, "= Глава\n\nТекст главы.".as_bytes());
+        assert_eq!(core.read_file("Хаб.typ").unwrap(), "= Хаб".as_bytes());
+        assert_eq!(core.take_changes().files, ["Хаб.typ"], "the host persists a pulled file");
+        assert!(core.take_removed().is_empty());
+        assert!(core.take_sync_state().is_some(), "the state changed");
+        assert_eq!(core.take_sync_state(), None, "taken once");
+        assert_eq!(round(&round_json(&Ok(report)))["changed"], true);
+
+        // Both changed: the server wins, the local version is kept aside;
+        // a deletion on the hub removes the file, also kept aside.
+        let seen = latest_event(&core).await;
+        hub_write(&hub, "Привет.typ", "= Привет с хаба".as_bytes());
+        hub_delete(&hub, "Хаб.typ");
+        let storage: &dyn Storage = core.vault.as_ref();
+        storage.rewrite("Привет.typ", "= Привет отсюда".as_bytes()).unwrap();
+        let report = core.sync(&hub).unwrap();
+        assert_eq!((report.downloaded, report.removed_local, report.conflicts.len()), (1, 1, 1), "{report:?}");
+        assert_eq!(core.read_file("Привет.typ").unwrap(), "= Привет с хаба".as_bytes());
+        assert_eq!(core.read_file("Хаб.typ"), None);
+        assert_eq!(
+            core.take_removed(),
+            [
+                ("Привет.typ".to_owned(), "= Привет отсюда".as_bytes().to_vec()),
+                ("Хаб.typ".to_owned(), "= Хаб".as_bytes().to_vec())
+            ]
+        );
+        let events = events_after(&core, seen).await;
+        assert!(events.contains(&"Привет.typ".to_owned()) && events.contains(&"Хаб.typ".to_owned()), "{events:?}");
+
+        // A note deleted in the browser is deleted on the hub.
+        storage.trash("Пакет.typ").unwrap();
+        let report = core.sync(&hub).unwrap();
+        assert_eq!(report.removed_remote, 1, "{report:?}");
+        assert!(hub.read("Пакет.typ").is_err());
+        assert!(core.sync(&hub).unwrap().is_idle());
+
+        // A new core over the same files with the kept state: nothing to do.
+        let state = core.take_sync_state().unwrap();
+        let next = Core::new(VAULT).unwrap();
+        for path in core.vault.paths() {
+            next.add_file(&path, &core.read_file(&path).unwrap());
+        }
+        assert!(next.set_sync_state("[]").is_err());
+        next.set_sync_state(&state).unwrap();
+        assert_eq!(next.take_sync_state(), None, "a loaded state is not a change");
+        let report = next.sync(&hub).unwrap();
+        assert!(report.is_idle(), "{report:?}");
+
+        // The hub lost every file: held, nothing removed here.
+        for path in ["Книга/01-глава.typ", "Книга/main.typ", "Нет пакета.typ", "Привет.typ"]
+        {
+            hub_delete(&hub, path);
+        }
+        let held = round(&round_json(&next.sync(&hub)));
+        assert_eq!((&held["ok"], &held["held"], &held["unauthorized"]), (&json!(false), &json!(true), &json!(false)));
+        assert!(next.read_file("Привет.typ").is_some());
+        assert!(next.take_removed().is_empty());
+        assert_eq!(round(&round_json(&Err(SyncError::Unauthorized)))["unauthorized"], true);
+    }
 }
 
 /// The JS binding.
@@ -549,6 +780,35 @@ pub mod wasm {
         #[wasm_bindgen(js_name = readFile)]
         pub fn read_file(&self, path: &str) -> Option<Vec<u8>> {
             self.0.read_file(path)
+        }
+
+        /// One sync round with the hub at `hub` (`""`: the page's server),
+        /// blocking the worker: the result as JSON (`round_json`).
+        pub fn sync(&self, hub: &str) -> String {
+            let remote = crate::xhr::Xhr::remote(hub, self.0.name.as_str());
+            super::round_json(&self.0.sync(&remote))
+        }
+
+        /// The sync state the host kept (`sync.json`).
+        #[wasm_bindgen(js_name = setSyncState)]
+        pub fn set_sync_state(&self, json: &str) -> Result<(), JsError> {
+            self.0.set_sync_state(json).map_err(|e| JsError::new(&e))
+        }
+
+        /// The sync state JSON if it changed since the last call.
+        #[wasm_bindgen(js_name = takeSyncState)]
+        pub fn take_sync_state(&self) -> Option<String> {
+            self.0.take_sync_state()
+        }
+
+        /// What sync replaced or removed: `[path, Uint8Array][]`.
+        #[wasm_bindgen(js_name = takeRemoved)]
+        pub fn take_removed(&self) -> Array {
+            self.0
+                .take_removed()
+                .into_iter()
+                .map(|(path, data)| Array::of2(&JsValue::from_str(&path), &Uint8Array::from(data.as_slice())))
+                .collect()
         }
 
         #[wasm_bindgen(js_name = releaseMemory)]

@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 pub const COOKIE: &str = "notes_session";
 
 /// The header of a write: the version it replaces (`notes_store::sync::Base`
-/// in its text form).
-pub const HEADER_BASE: &str = "x-base";
+/// in its text form); one of the wire rules the device clients share.
+pub use notes_store::sync::wire::HEADER_BASE;
 /// The header of a file read: the SHA-256 hex of the content.
 pub const HEADER_HASH: &str = "x-hash";
 /// The header of a file read: the `seq` of this version.
