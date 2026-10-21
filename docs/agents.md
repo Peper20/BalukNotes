@@ -13,7 +13,7 @@ in its definition (`.claude/agents/`); this document is the map.
 | `developer-1` | Haiku, xhigh | Routine, well-described, small tasks along an existing pattern | Merge, design the architecture |
 | `developer-2` | Sonnet, high | Complex tasks: several crates or the core with the client, sync, builds and caches, memory, concurrency, Typst internals | Merge, design the architecture |
 | `developer-3` | Opus, medium | The hardest: elusive bugs, investigations, tasks another developer could not finish, resumed blocked tasks | Merge, design the architecture |
-| `reviewer` | Sonnet, high | Reads the change against its passed CI check, runs targeted tests, approves or requests changes | Edit files |
+| `reviewer` | Sonnet, high | Reads the change against its passed CI check (no re-run of its tests), approves or requests changes | Edit files |
 
 The user talks only to the `liaison`. Agents talk to each other in English.
 
