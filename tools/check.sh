@@ -156,6 +156,25 @@ wasm_check() {
   cargo clippy -p notes-wasm --target wasm32-unknown-unknown -- -D warnings
 }
 
+# The pipeline mod (tools/pipeline, a Claude Code plugin; .claude/rules/tools.md,
+# "Pipeline mod"): the manifest and the module, its tests, and the types with tsc.
+# The types of the engine are laid beside the mod when Claude Code loads it
+# (tools/pipeline/.claude-plugin/types, kept out of the repository), tsc is the
+# client's: without either the type check is left out with a line in the log.
+pipeline_mod() {
+  claude plugin validate tools/pipeline || return 1
+  claude plugin test tools/pipeline || return 1
+  local tsc=app/node_modules/.bin/tsc
+  [[ -x $tsc ]] || tsc=$(command -v tsc || true)
+  if [[ -z $tsc ]]; then
+    echo "no tsc (npm ci in app/): the types of the mod were not checked"
+  elif [[ ! -f tools/pipeline/.claude-plugin/types/tsconfig.json ]]; then
+    echo "the types of the engine are not laid (Claude Code lays them when it loads the mod): the types of the mod were not checked"
+  else
+    "$tsc" -p tools/pipeline || return 1
+  fi
+}
+
 # The notes-app window (Tauri) - only with WebKitGTK; without it (cloud) - skipped.
 no_webkit=()
 if ! has_webkit; then
@@ -165,6 +184,12 @@ fi
 
 # The shell libraries of tools/lib (target limit, build settings, lock): no cargo build.
 step tools-libs tools/test-libs.sh
+if claude plugin test --help >/dev/null 2>&1; then
+  step pipeline-mod pipeline_mod
+else
+  echo "no claude with plugin tests - the pipeline mod is not checked"
+  skip pipeline-mod "no claude plugin"
+fi
 
 if [[ $rust == 1 ]]; then
   # Server tests serve the client from app/dist (a debug build reads it from

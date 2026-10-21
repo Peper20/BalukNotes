@@ -23,6 +23,7 @@ paths:
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 | `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; runs itself inside a headless gamescope |
 | `app-smoke.sh` | a smoke launch of the `notes-app` window inside a headless gamescope: it opens, loads the fixture vault, quits cleanly (~6 s); not in `check.sh` (needs gamescope and an installed or built `notes-app`) |
+| `pipeline/` | the pipeline mod: a Claude Code plugin that runs developers, the full check, review, merge and cleanup by code ("Pipeline mod") |
 
 ## Checks
 
@@ -324,3 +325,46 @@ Working in the session:
 - Time: a Rust build from scratch ~8 min, `cargo test` ~1 min, e2e ~1.5 min.
 - Not for the cloud (needs the user or their machine): the Tauri and Android
   apps, authorization, replacing font files, updating Typst.
+
+## Pipeline mod
+
+`tools/pipeline/` is a Claude Code plugin (a "mod") that the liaison's session
+loads. It does what the orchestrator agent did, by code: no model decides a
+routine step. It starts developers and reviewers as subagents (they show in the
+session window), reacts to the commit status and the review on the server,
+counts rounds, merges, cleans up and reports to the liaison.
+
+- **Load**, with no edit of `.claude/settings*.json`: from the main checkout
+  `claude --agent liaison --plugin-dir tools/pipeline` (an absolute path from
+  elsewhere), or `CLAUDE_CODE_PLUGIN_DIRS=<absolute path>` where no flag can
+  be given. The mod keeps working over a restart: its tasks are in `$.store`
+  (key `tasks`, so in the user's Claude Code state, not in the repository).
+- **Tools of the liaison** (`mcp__pipeline__<name>`): `pipeline_start { slug,
+  developer, brief, after? }` (the developer gets the brief, the branch
+  `task/<slug>` and the contract: targeted tests only, push, open the pull
+  request, end with `PIPELINE: pr=<n>`, `PIPELINE: pr=<n> liaison` or `PIPELINE:
+  question`), `pipeline_status`, `pipeline_send { slug, text }` (an answer to a
+  developer; resumes the task), `pipeline_stop { slug?, reason }`.
+- **Stages** of a task: waiting (for `after`), developing, liaison (waits for
+  `pipeline_send`), checking (the status of the head, polled every 60 s),
+  reviewing, merging, merged, blocked. Rounds, hand-over to `developer-3` and
+  the block follow `.claude/agents/orchestrator.md` (section 3); the merge only
+  with an approval of `reviewer` and a `success` status at the same head commit,
+  squash as `owner`, then cleanup as its section 5 says and `tools/install.sh`
+  when the diff touches `crates/`, `app/`, `baluk/` or `skills/`. The mod never
+  pushes to `main`, never forces a push, never runs `tools/deploy-hub.sh`.
+- **View**: the pane `/pipeline` (a row per task: stage, pull request, status,
+  developer, rounds, last event) and a status line entry (`pipeline: 1 developing,
+  2 checking`).
+- **Code**: `hooks/machine.ts` decides (state and event in, state and actions
+  out; no clock, no server), `hooks/driver.ts` carries the actions out and feeds
+  results back as events, `hooks/forge.ts` holds every `tea` and `git` call,
+  `hooks/register.tsx` only wires events, timers and `$` to them. Tests
+  (`tests/*.test.ts`) use a fake server and fake ports (`tests/helpers.ts`); none
+  talks to the server.
+- **Checks**: `claude plugin validate tools/pipeline`, `claude plugin test
+  tools/pipeline` and `tsc -p tools/pipeline` are the step `pipeline-mod` of
+  `check.sh`. The engine lays its types in `tools/pipeline/.claude-plugin/types/`
+  (not in the repository) when it loads the mod; before that the `tsc` part is
+  left out with a line in the log. Without a `claude` that has plugin tests (a
+  cloud session) the step is skipped.
