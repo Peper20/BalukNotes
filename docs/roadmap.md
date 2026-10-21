@@ -256,9 +256,9 @@ before M7 starts.
 - [x] The core in a Web Worker, the API transport - messages to the worker:
       `notes-wasm` serves the `notes-server` `Router` (PR #21), the client's
       worker transport (PR #22), the vault and settings kept in OPFS (PR #23)
-- [ ] Sync from the hub in the worker (a blocking `Remote` over synchronous
-      `XMLHttpRequest`); a vault filled by sync must get the `ready` marker of
-      OPFS, which today only the `files.json` import writes
+- [x] Sync from the hub in the worker (PR #28): the `notes-store` sync engine
+      over synchronous `XMLHttpRequest`, the state and the removed files in
+      OPFS
 - [x] The hub serves the browser version (`notes hub serve --web`, PR #24):
       the client, the module, the packages, the theme CSS and the fonts as
       static files built on the computer (`tools/web-bundle.sh`); sign-in and
