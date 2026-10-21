@@ -29,7 +29,9 @@ async fn shell_has_csp() {
         "the client is built (200) or not (503)"
     );
     let csp = res.headers().get("content-security-policy").unwrap().to_str().unwrap();
-    assert!(csp.contains("script-src 'self'"));
+    assert!(csp.contains("script-src 'self' 'wasm-unsafe-eval';"));
+    assert!(!csp.contains("'unsafe-eval'"), "no eval of JS");
+    assert!(!csp.contains("worker-src"), "workers fall back to script-src");
     assert!(csp.contains("object-src 'none'"));
     assert!(csp.contains("base-uri 'none'"));
 }

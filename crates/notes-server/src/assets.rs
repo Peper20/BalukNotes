@@ -70,11 +70,14 @@ fn is_hashed(path: &str) -> bool {
 fn csp() -> &'static str {
     // No unsafe-inline/-eval: scripts come only from files; styles from files
     // and inline (MathML <style>); style attributes are allowed by default.
+    // 'wasm-unsafe-eval': compiling the WebAssembly core of the browser
+    // client, not `eval` of JS. The worker of the core is a file of 'self'
+    // (`worker-src` falls back to `script-src`).
     // Images: self and data: (SVG inserts from Typst). Fonts: self.
     // No dev-server worker (serve does not use Vite).
     concat!(
         "default-src 'self';",
-        "script-src 'self';",
+        "script-src 'self' 'wasm-unsafe-eval';",
         "object-src 'none';",
         "base-uri 'none';",
         "img-src 'self' data: blob:;",

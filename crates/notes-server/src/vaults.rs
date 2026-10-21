@@ -22,6 +22,7 @@
 //! sync worker first and unlinks it afterwards (`device_sync`).
 
 use std::collections::{BTreeMap, VecDeque};
+#[cfg(not(target_family = "wasm"))]
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
@@ -55,7 +56,9 @@ pub(crate) fn routes() -> Router<AppState> {
 pub const IDLE_CLOSE: Duration = Duration::from_secs(600);
 
 /// How often the server checks whether to close inactive vaults.
+#[cfg(not(target_family = "wasm"))]
 const IDLE_POLL_MAX: Duration = Duration::from_secs(30);
+#[cfg(not(target_family = "wasm"))]
 const IDLE_POLL_MIN: Duration = Duration::from_millis(100);
 
 /// The browser build has no device sync: no vault is linked.
@@ -142,6 +145,7 @@ pub struct OpenVault {
     /// The last API request to this vault.
     last_request: Mutex<Instant>,
     /// How many `GET .../events` requests wait for changes.
+    #[cfg(not(target_family = "wasm"))]
     waiting: AtomicUsize,
 }
 
@@ -230,7 +234,15 @@ impl OpenVault {
         let events = Arc::new(VaultEvents::new());
         let log = events.clone();
         notes.on_change(move |c| log.push(ChangeEvent { seq: c.seq, paths: c.paths.clone() }));
-        Self { name, notes, events, settings, last_request: Mutex::new(Instant::now()), waiting: AtomicUsize::new(0) }
+        Self {
+            name,
+            notes,
+            events,
+            settings,
+            last_request: Mutex::new(Instant::now()),
+            #[cfg(not(target_family = "wasm"))]
+            waiting: AtomicUsize::new(0),
+        }
     }
 
     /// Figure processing by the settings of this vault.
@@ -242,10 +254,12 @@ impl OpenVault {
         *lock(&self.last_request) = Instant::now();
     }
 
+    #[cfg(not(target_family = "wasm"))]
     fn idle_for(&self, now: Instant) -> Duration {
         now.saturating_duration_since(*lock(&self.last_request))
     }
 
+    #[cfg(not(target_family = "wasm"))]
     fn has_waiting(&self) -> bool {
         self.waiting.load(Ordering::SeqCst) > 0
     }
@@ -284,6 +298,7 @@ pub struct VaultSet {
     active: Mutex<Option<VaultName>>,
     /// The server is running ([`VaultSet::start_background`]): open vaults have
     /// warming and the watcher on.
+    #[cfg(not(target_family = "wasm"))]
     background: AtomicBool,
 }
 
@@ -315,6 +330,7 @@ impl VaultSet {
             settings,
             open: Mutex::default(),
             active: Mutex::default(),
+            #[cfg(not(target_family = "wasm"))]
             background: AtomicBool::new(false),
         }
     }
@@ -435,6 +451,7 @@ impl VaultSet {
         let vault = Arc::new(OpenVault::new(name.clone(), notes, self.settings.schema()));
         open.insert(name.clone(), vault.clone());
         drop(open);
+        #[cfg(not(target_family = "wasm"))]
         if self.background.load(Ordering::SeqCst) {
             Self::background(&vault);
         }
@@ -468,12 +485,14 @@ impl VaultSet {
         }
     }
 
+    #[cfg(not(target_family = "wasm"))]
     fn idle_poll(&self) -> Duration {
         self.idle_close.min(IDLE_POLL_MAX).max(IDLE_POLL_MIN)
     }
 
     /// Closes inactive vaults with no requests and no waiting events for longer
     /// than `idle_close`. A server on one vault (`--vault`) closes nothing.
+    #[cfg(not(target_family = "wasm"))]
     fn close_idle_once(&self) {
         if !self.can_create() || self.idle_close.is_zero() {
             return;
@@ -496,6 +515,9 @@ impl VaultSet {
         }
     }
 
+    /// Closes inactive vaults until `closing` (a thread of its own: the
+    /// browser build has none).
+    #[cfg(not(target_family = "wasm"))]
     pub fn close_idle_forever(self: Arc<Self>, closing: &watch::Sender<bool>) {
         let closing = closing.subscribe();
         while !*closing.borrow() {
@@ -509,6 +531,7 @@ impl VaultSet {
 
     /// The server is running: open vaults (and those opened later) get warming
     /// and the file watcher.
+    #[cfg(not(target_family = "wasm"))]
     pub fn start_background(&self) {
         if self.background.swap(true, Ordering::SeqCst) {
             return;
@@ -518,6 +541,7 @@ impl VaultSet {
         }
     }
 
+    #[cfg(not(target_family = "wasm"))]
     fn background(vault: &OpenVault) {
         // Notes ahead: all of them, by priority, skipping built ones, into the
         // disk cache (figures are processed on opening, by the settings).

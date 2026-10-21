@@ -6,6 +6,7 @@ import { encodeId } from "../ids";
 import { vault } from "../vault";
 import { apiUrl } from "./config";
 import { requireSignIn } from "./signin";
+import { transport } from "./transport";
 import type { ErrorResponse } from "./types/ErrorResponse";
 import type { EventsResponse } from "./types/EventsResponse";
 import type { FolderListItem } from "./types/FolderListItem";
@@ -32,7 +33,7 @@ import type { VersionResponse } from "./types/VersionResponse";
 import type { VaultsResponse } from "./types/VaultsResponse";
 import type { WarmRequest } from "./types/WarmRequest";
 
-export { apiConfig, apiUrl, configure, rebaseStylesheets, type ApiConfig } from "./config";
+export { apiConfig, apiUrl, configure, rebaseStylesheets, type ApiConfig, type CoreSource } from "./config";
 export { isSignIn, onSignInRequired, signInMessage, signInRequired } from "./signin";
 export type { SessionResponse } from "./types/SessionResponse";
 export type { BookView } from "./types/BookView";
@@ -109,14 +110,14 @@ export function onReach(fn: (ok: boolean) => void): void {
 }
 
 /**
- * One request. The cookie of the session goes with it (also to another
- * configured address). A 401 means "sign-in needed" for the whole client
+ * One request, to the server or to the core in a worker (`transport.ts`).
+ * The cookie of the session goes with it (also to another configured address). A 401 means "sign-in needed" for the whole client
  * (`signin.ts`), except for the sign-in request itself (`signIn: false`).
  */
 async function request<T>(path: string, init: RequestInit = {}, { signIn = true } = {}): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(apiUrl(path), { credentials: "include", ...init });
+    res = await transport(path, init);
   } catch (e) {
     if ((e as Error).name === "AbortError") throw e;
     reached(false);

@@ -25,6 +25,9 @@ npm test        # Vitest; also check, e2e
   `changes.ts` (long polling `GET .../events?after=`, no polling every N
   seconds); the server connection is `state/connection.svelte.ts` (whether it
   answered - `api.onReach`).
+- Where a request goes - `api/transport.ts`: HTTP to the server, or, with
+  `__NOTES_API__.core`, a message to the core in a worker (`src/worker/`;
+  `host.ts` is its queue). Stylesheets, fonts and `pdfUrl` stay HTTP.
 - **API types come from Rust** (`ts-rs`, feature `ts`): `npm run types`
   exports them to `src/lib/api/types/` (in git). Changed a response structure -
   export and commit; do not edit by hand.

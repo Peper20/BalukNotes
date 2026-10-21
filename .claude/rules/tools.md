@@ -41,7 +41,9 @@ tools/check.sh          # full (~3 min warm); CI runs it on every pull request p
 1, `ionice` 5): the computer does not lag. Steps: cargo test, clippy
 (`-D warnings`), fmt; clippy of `notes-wasm` for `wasm32-unknown-unknown`
 (the step `wasm`: fails with the install command when the target is missing,
-`rustup target add wasm32-unknown-unknown`); `notes check` on `tests/vault` (the total is compared
+`rustup target add wasm32-unknown-unknown`; the step `wasm-module`, in the
+full run before e2e, builds the release module and `files.json` into
+`tests/.data/wasm` for `app/e2e/wasm.spec.ts`); `notes check` on `tests/vault` (the total is compared
 with the "Total" line in `.claude/rules/tests-vault.md`); `notes new`
 templates and the skill (`.claude/rules/skills.md`); exported API types match
 the committed ones (uncommitted ones also count as "failed"); the client -

@@ -14,6 +14,8 @@ export default defineConfig({
   // The note look: assets/baluk.css from the src/baluk-css/ blocks.
   plugins: [svelte(), balukCss()],
   build: { outDir: "dist", emptyOutDir: true, assetsDir: "assets", target: "es2023" },
+  // The worker of the core (`src/worker/core.ts`) imports the WASM glue at run time.
+  worker: { format: "es" },
   server: {
     port: 5173,
     strictPort: true,

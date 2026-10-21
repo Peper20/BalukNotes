@@ -52,7 +52,10 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
     WASM (`notes-wasm`, a Web Worker), the API transport is messages to the
     worker: the module serves the same `Router` (`notes-server` for `wasm32`
     has no server loop, client files, sign-in, compression or device sync;
-    blocking work runs inline, one thread).
+    blocking work runs inline, one thread). The client's transport
+    (`app/src/lib/api/transport.ts`) sends the `/api/...` requests to the
+    worker (`app/src/worker/core.ts`) when `__NOTES_API__.core` is set, one at
+    a time; stylesheets and fonts still come over HTTP from the page's server.
 - **The server online** - vault files, their versions, change events,
   sessions; without Typst.
 - **Self-hosted and web version** (user's decision): `notes serve` with Typst
@@ -527,7 +530,8 @@ hands over (`Packages::Files`, `Compiler::with_package_files`): the browser
   attributes and dangerous URLs were removed in this note. Note files do not
   change.
 - The client (`notes serve`) is served with a CSP: `default-src 'self'`,
-  `script-src 'self'` (without `unsafe-inline` and `unsafe-eval`),
+  `script-src 'self' 'wasm-unsafe-eval'` (compiling the WebAssembly core; without
+  `unsafe-inline` and `unsafe-eval`; `worker-src` falls back to it),
   `object-src 'none'`, `base-uri 'none'`, `img-src 'self' data: blob:`,
   `style-src 'self' 'unsafe-inline'`, `font-src 'self'`, `connect-src 'self'`,
   `frame-ancestors 'self'`. In dev mode (Vite) the CSP is not applied, since

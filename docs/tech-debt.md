@@ -339,6 +339,12 @@ it. The format and rules - `.claude/rules/docs.md`.
   by one, a failure in the middle leaves part of the edits. Only literal
   `#see("path")` are rewritten: computed paths and `#import`/`#include` of
   other files by an absolute path are not.
+- **PDF in the browser core** (`app/src/lib/api/index.ts` `pdfUrl`,
+  `notes-wasm`): the WASM core has no PDF export, and `pdfUrl` is an HTTP
+  address of the page's server. With the worker transport the PDF button leads
+  to a server that may not have the vault (or Typst). How to close: export PDF
+  in the worker (`typst-pdf` builds for wasm32, untested) and hand it to the
+  client as a blob URL.
 
 ## Vault and tools
 

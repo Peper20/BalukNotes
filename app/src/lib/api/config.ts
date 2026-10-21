@@ -5,17 +5,30 @@
 // window init script, `http://127.0.0.1:<port>`; a VPS: its own domain) or
 // `configure(...)`. Sign-in is a cookie the browser sends itself (requests
 // carry credentials, `api/index.ts`); no token is kept or put into addresses.
+//
+// With `core` set the `/api/...` requests go to the core in a Web Worker
+// instead of the server (`transport.ts`); `base` still serves everything else
+// (stylesheets, fonts, the PDF).
+
+import type { CoreSource } from "../../worker/protocol";
+
+export type { CoreSource };
 
 export interface ApiConfig {
   /** Server address without a trailing `/`; "" - the same as the page's. */
   base: string;
+  /** The core in a worker: the module, the vault name, the vault files. Unset: the server answers. */
+  core?: CoreSource;
 }
 
 declare global {
   var __NOTES_API__: Partial<ApiConfig> | undefined;
 }
 
-const normalize = (c: Partial<ApiConfig> = {}): ApiConfig => ({ base: (c.base ?? "").replace(/\/+$/, "") });
+const normalize = (c: Partial<ApiConfig> = {}): ApiConfig => ({
+  base: (c.base ?? "").replace(/\/+$/, ""),
+  ...(c.core && { core: c.core }),
+});
 
 // Read as an own property: an element with the same id would be the global by name (named access on window).
 let config = normalize(Object.getOwnPropertyDescriptor(globalThis, "__NOTES_API__")?.value as Partial<ApiConfig> | undefined);

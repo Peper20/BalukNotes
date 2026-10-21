@@ -156,6 +156,14 @@ wasm_check() {
   cargo clippy -p notes-wasm --target wasm32-unknown-unknown -- -D warnings
 }
 
+# The release module of the core and the vault files for the browser e2e
+# (app/e2e/wasm.spec.ts reads tests/.data/wasm): the wasm-bindgen glue and
+# files.json, as the E4 harness makes them.
+wasm_module() {
+  crates/notes-wasm/harness/build.sh || return 1
+  node crates/notes-wasm/harness/run.mjs --prepare
+}
+
 # The pipeline mod (tools/pipeline, a Claude Code plugin; .claude/rules/tools.md,
 # "Pipeline mod"): the manifest and the module, its tests, and the types with tsc.
 # The types of the engine are laid beside the mod when Claude Code loads it
@@ -207,6 +215,12 @@ if [[ $rust == 1 ]]; then
   step notes-check vault_check
   step baluk-note baluk_note
   step api-types api_types
+fi
+
+# After the Rust steps (the Typst packages for files.json are downloaded by
+# them) and before the e2e that uses the module.
+if [[ $app == 1 && $fast == 0 ]]; then
+  step wasm-module wasm_module
 fi
 
 if [[ $app == 1 ]]; then
