@@ -4,6 +4,10 @@
 //! Typst package files over as bytes, the core keeps them in memory
 //! ([`MemStorage`]) and answers the HTTP API requests the host passes in
 //! ([`Core::request`]) with the same `notes-server` `Router` as `notes serve`.
+//! The core knows no disk: the host persists what changed ([`Core::take_changes`],
+//! [`Core::read_file`], [`Core::settings_json`]) and hands it back at the next
+//! start (`add_file`, [`Core::set_settings`]); the worker writes it to OPFS
+//! (architecture §1).
 //! [`Core`] is plain Rust (its tests run natively); the JS binding is
 //! [`wasm::WasmCore`], compiled only for `wasm32`.
 
@@ -19,7 +23,8 @@ use notes_core::{LibrarySource, Notes, NotesConfig, SharedAssets};
 use notes_server::{AppState, VaultSet, router};
 use notes_store::names::VaultName;
 use notes_store::platform::Platform;
-use notes_store::storage::MemStorage;
+use notes_store::storage::{MemStorage, Storage};
+use serde_json::{Map, Value};
 use tower::ServiceExt;
 
 /// The answer to an API request.
@@ -39,10 +44,21 @@ impl Response {
     }
 }
 
-/// An opened vault: the core and the router over it.
+/// What changed since the last [`Core::take_changes`]: the host persists it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Changes {
+    /// The vault paths created, rewritten, renamed (both paths) or trashed,
+    /// sorted. [`Core::read_file`] says which of them are gone.
+    pub files: Vec<String>,
+    /// The shared settings changed ([`Core::settings_json`]).
+    pub settings: bool,
+}
+
+/// An opened vault: the core, the shared settings and the router over it.
 #[derive(Debug)]
 struct Open {
     notes: Arc<Notes>,
+    settings: Arc<SettingsStore>,
     router: Router,
 }
 
@@ -52,6 +68,8 @@ pub struct Core {
     name: VaultName,
     vault: Arc<MemStorage>,
     packages: Arc<MemStorage>,
+    /// The shared settings the host handed over before [`Core::open`].
+    stored: Map<String, Value>,
     open: Option<Open>,
 }
 
@@ -68,10 +86,14 @@ fn open_notes(vault: &Arc<MemStorage>, packages: &Arc<MemStorage>) -> Result<Arc
     Notes::with_storage_shared(vault.clone(), &config, &shared).map(Arc::new).map_err(|e| e.to_string())
 }
 
-/// The state the router serves: one vault, settings in memory.
-fn app_state(name: VaultName, notes: Arc<Notes>) -> AppState {
+/// The shared settings in memory: the defaults with `stored` on top.
+fn shared_settings(notes: &Notes, stored: Map<String, Value>) -> Arc<SettingsStore> {
     let schema = Schema::new(notes.themes().themes(), Platform::current());
-    let settings = Arc::new(SettingsStore::in_memory(schema));
+    Arc::new(SettingsStore::in_memory_with(schema, stored))
+}
+
+/// The state the router serves: one vault, settings in memory.
+fn app_state(name: VaultName, notes: Arc<Notes>, settings: Arc<SettingsStore>) -> AppState {
     AppState::new(VaultSet::single(name, notes, settings))
 }
 
@@ -80,7 +102,47 @@ impl Core {
     /// paths (`/api/vaults/<vault>/...`).
     pub fn new(vault: &str) -> Result<Self, String> {
         let name = VaultName::new(vault).map_err(|e| e.to_string())?;
-        Ok(Self { name, vault: Arc::new(MemStorage::new()), packages: Arc::new(MemStorage::new()), open: None })
+        let vault = Arc::new(MemStorage::new());
+        vault.keep_journal();
+        Ok(Self { name, vault, packages: Arc::new(MemStorage::new()), stored: Map::new(), open: None })
+    }
+
+    /// The shared settings the host kept (`{ "key": value }`, what
+    /// [`Self::settings_json`] gave). Only before [`Self::open`] (an error
+    /// after it): the host hands the kept settings over at start. Invalid
+    /// values are dropped, the defaults hold.
+    pub fn set_settings(&mut self, json: &str) -> Result<(), String> {
+        if self.open.is_some() {
+            return Err("the settings are set before the vault is opened".into());
+        }
+        self.stored = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// The shared settings as JSON, to be kept by the host and handed back by
+    /// [`Self::set_settings`].
+    pub fn settings_json(&self) -> String {
+        let values = match &self.open {
+            Some(open) => open.settings.values(),
+            None => self.stored.clone(),
+        };
+        // A JSON map of values always serializes.
+        serde_json::to_string(&values).unwrap_or_else(|_| "{}".into())
+    }
+
+    /// The vault files and settings that changed since the last call (the
+    /// first call includes the files added before it). Trashing removes a
+    /// file for good: the browser has no trash.
+    pub fn take_changes(&self) -> Changes {
+        Changes {
+            files: self.vault.take_journal(),
+            settings: self.open.as_ref().is_some_and(|open| open.settings.take_changed()),
+        }
+    }
+
+    /// The vault file `path`; `None`: it is gone.
+    pub fn read_file(&self, path: &str) -> Option<Vec<u8>> {
+        self.vault.read(path).ok()
     }
 
     /// Adds or replaces a vault file (`Сеть/SSH.typ`).
@@ -95,14 +157,16 @@ impl Core {
 
     /// Opens the vault: loads the embedded fonts, builds the themes and the
     /// router. Once; files added later are seen by the next build. The
-    /// settings live in memory for the life of the core.
+    /// settings live in memory for the life of the core; the host persists
+    /// them ([`Self::take_changes`]).
     pub fn open(&mut self) -> Result<(), String> {
         if self.open.is_some() {
             return Ok(());
         }
         let notes = open_notes(&self.vault, &self.packages)?;
-        let router = router(app_state(self.name.clone(), notes.clone()));
-        self.open = Some(Open { notes, router });
+        let settings = shared_settings(&notes, std::mem::take(&mut self.stored));
+        let router = router(app_state(self.name.clone(), notes.clone(), settings.clone()));
+        self.open = Some(Open { notes, settings, router });
         Ok(())
     }
 
@@ -178,11 +242,15 @@ mod tests {
         }
     }
 
-    fn core() -> Core {
-        let mut core = Core::new(VAULT).unwrap();
-        fill(&core.vault, &core.packages);
+    fn open(mut core: Core) -> Core {
         core.open().unwrap();
         core
+    }
+
+    fn core() -> Core {
+        let core = Core::new(VAULT).unwrap();
+        fill(&core.vault, &core.packages);
+        open(core)
     }
 
     fn json_of(response: &Response) -> Value {
@@ -260,6 +328,97 @@ mod tests {
         core.release_memory();
     }
 
+    /// `take_changes` lists the paths created, rewritten, renamed and trashed
+    /// once; `read_file` says what is gone.
+    #[test]
+    fn takes_changes() {
+        let core = core();
+        let first = core.take_changes();
+        assert_eq!(first.files.len(), 5, "the files added before: {first:?}");
+        assert!(!first.settings);
+        assert_eq!(core.take_changes(), Changes::default(), "taken once");
+
+        let storage: &dyn Storage = core.vault.as_ref();
+        storage.create("Новая.typ", "= Новая".as_bytes()).unwrap();
+        storage.rewrite("Привет.typ", "= Привет 2".as_bytes()).unwrap();
+        storage.rename("Книга", "Том").unwrap();
+        storage.trash("Пакет.typ").unwrap();
+        let changes = core.take_changes();
+        assert_eq!(
+            changes.files,
+            [
+                "Книга/01-глава.typ",
+                "Книга/main.typ",
+                "Новая.typ",
+                "Пакет.typ",
+                "Привет.typ",
+                "Том/01-глава.typ",
+                "Том/main.typ"
+            ]
+        );
+        assert_eq!(core.read_file("Новая.typ").unwrap(), "= Новая".as_bytes());
+        assert_eq!(core.read_file("Том/main.typ").unwrap(), "= Книга\n\n#include \"01-глава.typ\"".as_bytes());
+        assert_eq!(core.read_file("Привет.typ").unwrap(), "= Привет 2".as_bytes());
+        assert_eq!(core.read_file("Пакет.typ"), None, "trashed");
+        assert_eq!(core.read_file("Книга/main.typ"), None, "moved");
+        assert_eq!(core.take_changes(), Changes::default());
+    }
+
+    /// The shared settings round-trip through the host: a change raises the
+    /// flag once, `settings_json` goes into `set_settings` of a new core.
+    #[tokio::test]
+    async fn keeps_shared_settings() {
+        let core = core();
+        assert!(!core.take_changes().settings);
+        let put = core.request("PUT", "/api/settings", br#"{"device.builds": 3}"#).await;
+        assert_eq!(put.status, 200);
+        assert!(core.take_changes().settings);
+        assert!(!core.take_changes().settings, "raised once");
+        let json = core.settings_json();
+        assert_eq!(serde_json::from_str::<Value>(&json).unwrap()["device.builds"], 3);
+
+        let mut next = Core::new(VAULT).unwrap();
+        next.set_settings(&json).unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&next.settings_json()).unwrap()["device.builds"], 3, "before open");
+        next.open().unwrap();
+        let settings = json_of(&next.request("GET", "/api/settings", b"").await);
+        assert_eq!(settings["values"]["device.builds"], 3);
+        assert!(!next.take_changes().settings, "loading is not a change");
+        assert!(next.set_settings("{}").is_err(), "after open");
+
+        let mut bad = Core::new(VAULT).unwrap();
+        assert!(bad.set_settings("[1]").is_err());
+        bad.set_settings(r#"{"device.builds": "many", "nothing": 1}"#).unwrap();
+        bad.open().unwrap();
+        let settings = json_of(&bad.request("GET", "/api/settings", b"").await);
+        let defaults = json_of(&Core::new(VAULT).map(open).unwrap().request("GET", "/api/settings", b"").await);
+        assert_eq!(settings["values"], defaults["values"], "an invalid value and an unknown key are dropped");
+    }
+
+    /// A vault setting set through the API is the vault file
+    /// `.baluk/settings.json`: it is a change to persist, and a new core over
+    /// the same files reads it back.
+    #[tokio::test]
+    async fn keeps_vault_settings_in_the_vault() {
+        let core = core();
+        core.take_changes();
+        let base = format!("/api/vaults/{VAULT}");
+        let put = core.request("PUT", &format!("{base}/settings"), br#"{"appearance.measure": 50}"#).await;
+        assert_eq!(put.status, 200, "{}", String::from_utf8_lossy(&put.body));
+        let changes = core.take_changes();
+        assert_eq!(changes.files, [".baluk/settings.json"]);
+        assert!(!changes.settings, "a vault setting is not a shared one");
+        let file = core.read_file(".baluk/settings.json").unwrap();
+        assert_eq!(serde_json::from_slice::<Value>(&file).unwrap()["appearance.measure"], 50);
+
+        let mut next = Core::new(VAULT).unwrap();
+        next.add_file(".baluk/settings.json", &file);
+        next.open().unwrap();
+        let settings = json_of(&next.request("GET", &format!("{base}/settings"), b"").await);
+        assert_eq!(settings["values"]["appearance.measure"], 50, "{settings}");
+        assert_eq!(settings["own"]["appearance.measure"], 50, "{settings}");
+    }
+
     /// A request before `open` and a malformed one are answers, not failures.
     #[tokio::test]
     async fn answers_bad_requests() {
@@ -281,7 +440,8 @@ mod tests {
         let packages = Arc::new(MemStorage::new());
         fill(&vault, &packages);
         let notes = open_notes(&vault, &packages).unwrap();
-        let native = router(app_state(VaultName::new(VAULT).unwrap(), notes));
+        let settings = shared_settings(&notes, Map::new());
+        let native = router(app_state(VaultName::new(VAULT).unwrap(), notes, settings));
 
         for path in ["Привет", "Пакет", "Нет пакета", "Книга"] {
             let uri = format!("/api/vaults/{VAULT}/notes/{}", uri(path));
@@ -298,7 +458,7 @@ mod tests {
 /// The JS binding.
 #[cfg(target_family = "wasm")]
 pub mod wasm {
-    use js_sys::{Object, Reflect, Uint8Array};
+    use js_sys::{Array, Object, Reflect, Uint8Array};
     use wasm_bindgen::prelude::*;
 
     #[wasm_bindgen]
@@ -355,6 +515,40 @@ pub mod wasm {
             set("contentType", JsValue::from_str(&response.content_type))?;
             set("body", Uint8Array::from(response.body.as_slice()).into())?;
             Ok(object.into())
+        }
+
+        /// The shared settings the host kept (JSON), before `open`.
+        #[wasm_bindgen(js_name = setSettings)]
+        pub fn set_settings(&mut self, json: &str) -> Result<(), JsError> {
+            self.0.set_settings(json).map_err(|e| JsError::new(&e))
+        }
+
+        /// The shared settings as JSON.
+        #[wasm_bindgen(js_name = settingsJson)]
+        pub fn settings_json(&self) -> String {
+            self.0.settings_json()
+        }
+
+        /// What changed since the last call: `{ files: string[], settings: boolean }`.
+        #[wasm_bindgen(js_name = takeChanges)]
+        pub fn take_changes(&self) -> Result<JsValue, JsError> {
+            let changes = self.0.take_changes();
+            let files: Array = changes.files.iter().map(|f| JsValue::from_str(f)).collect();
+            let object = Object::new();
+            let set = |key: &str, value: JsValue| {
+                Reflect::set(&object, &JsValue::from_str(key), &value)
+                    .map(drop)
+                    .map_err(|_| JsError::new("cannot build the changes"))
+            };
+            set("files", files.into())?;
+            set("settings", JsValue::from_bool(changes.settings))?;
+            Ok(object.into())
+        }
+
+        /// A vault file; `undefined`: it is gone.
+        #[wasm_bindgen(js_name = readFile)]
+        pub fn read_file(&self, path: &str) -> Option<Vec<u8>> {
+            self.0.read_file(path)
         }
 
         #[wasm_bindgen(js_name = releaseMemory)]

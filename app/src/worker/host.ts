@@ -7,6 +7,8 @@ import type { CoreSource, RequestMessage, ResponseMessage } from "./protocol";
 /** What the worker needs of `WasmCore` (the wasm-bindgen glue of `notes-wasm`). */
 export interface Core {
   request(method: string, uri: string, body?: Uint8Array): Promise<{ status: number; contentType: string; body: Uint8Array }>;
+  /** Persists what the request changed; runs after the answer, before the next request. Does not throw. */
+  flush?(): Promise<void>;
 }
 
 /** Starts the core of `source`: loads the module and the vault files. */
@@ -44,7 +46,43 @@ export class CoreHost {
   }
 
   request(message: RequestMessage): void {
-    this.queue = this.queue.then(async () => this.reply(await this.answer(message)));
+    this.queue = this.queue.then(() => this.serve(message));
+  }
+
+  /** One request from the queue; whatever goes wrong, the next request is served. */
+  private async serve(message: RequestMessage): Promise<void> {
+    let answer: ResponseMessage;
+    try {
+      answer = await this.answer(message);
+    } catch (e) {
+      console.error(`request ${message.id}: ${describe(e)}`);
+      answer = errorAnswer(message.id, 500, describe(e));
+    }
+    this.send(answer, message.id);
+    await this.flush();
+  }
+
+  /** Posts the answer; if that fails (a failed transfer), tries to answer with an error instead. */
+  private send(answer: ResponseMessage, id: number): void {
+    try {
+      this.reply(answer);
+    } catch (e) {
+      console.error(`request ${id}: the answer was not delivered: ${describe(e)}`);
+      try {
+        this.reply(errorAnswer(id, 500, `the answer was not delivered: ${describe(e)}`));
+      } catch (e2) {
+        console.error(`request ${id}: ${describe(e2)}`);
+      }
+    }
+  }
+
+  private async flush(): Promise<void> {
+    try {
+      const core = this.broken ? null : await this.ready;
+      await core?.flush?.();
+    } catch (e) {
+      console.error(`saving the core files: ${describe(e)}`);
+    }
   }
 
   private async answer({ id, method, uri, body }: RequestMessage): Promise<ResponseMessage> {

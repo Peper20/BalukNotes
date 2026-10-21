@@ -345,6 +345,18 @@ it. The format and rules - `.claude/rules/docs.md`.
   to a server that may not have the vault (or Typst). How to close: export PDF
   in the worker (`typst-pdf` builds for wasm32, untested) and hand it to the
   client as a blob URL.
+- **No page cache in the browser core** (`crates/notes-wasm`,
+  `NotesConfig.cache: None`) - the disk cache uses `std::fs`, which WASM lacks
+  - every worker start builds each note from scratch (seconds per note,
+  `docs/research/E4.md`), also after a reload that reads the vault back from
+  OPFS. How to close: give the cache a `Storage`-like backend and persist it
+  through the same OPFS flush.
+- **Two tabs on one vault in the browser core** (`app/src/worker/core.ts`,
+  `opfs.ts`) - each tab runs its own worker with its own copy of the vault and
+  writes it through to the same OPFS files - the last write wins and a tab
+  does not see the other's changes until a reload - take a Web Lock per vault
+  (`navigator.locks`) so one worker owns the vault, and tell the other tabs
+  about changes over a `BroadcastChannel` (they reload the changed files).
 
 ## Vault and tools
 

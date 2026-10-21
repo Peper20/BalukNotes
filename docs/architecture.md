@@ -56,6 +56,11 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
     (`app/src/lib/api/transport.ts`) sends the `/api/...` requests to the
     worker (`app/src/worker/core.ts`) when `__NOTES_API__.core` is set, one at
     a time; stylesheets and fonts still come over HTTP from the page's server.
+    The worker keeps the vault in memory and writes it through to OPFS
+    (`notes/vaults/<vault>/files/`, `notes/settings.json`, `notes/packages/`;
+    `notes/vaults/<vault>/ready`, written last, marks a complete import)
+    after each request; at start it reads it back (`files.json` only seeds an
+    empty vault).
 - **The server online** - vault files, their versions, change events,
   sessions; without Typst.
 - **Self-hosted and web version** (user's decision): `notes serve` with Typst

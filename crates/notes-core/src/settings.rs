@@ -22,10 +22,14 @@
 //! device settings, to all (the user's decisions).
 
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use notes_store::platform::{Platform, SyncPrefer};
+use notes_store::storage::Storage;
 use parking_lot::RwLock;
 use serde::Serialize;
 use serde_json::{Map, Value, json};
@@ -498,6 +502,9 @@ pub struct SettingsStore {
     path: Option<PathBuf>,
     schema: Schema,
     values: RwLock<Map<String, Value>>,
+    /// Values changed by [`Self::update`] since [`Self::take_changed`] (the
+    /// browser host persists them).
+    changed: AtomicBool,
 }
 
 /// Values from the file `path`, checked by the schema: invalid ones and those
@@ -507,22 +514,41 @@ fn load(
     schema: &Schema,
     keep: impl Fn(&str) -> std::result::Result<(), &'static str>,
 ) -> Result<Map<String, Value>> {
-    let text = match fs::read_to_string(path) {
-        Ok(text) => text,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Map::new()),
-        Err(e) => return Err(Error::io(path, e)),
-    };
-    let stored: Map<String, Value> = serde_json::from_str(&text)?;
+    match fs::read_to_string(path) {
+        Ok(text) => parse(&text, &path.display().to_string(), schema, keep),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Map::new()),
+        Err(e) => Err(Error::io(path, e)),
+    }
+}
+
+/// Values from the JSON `text` (`origin` names it in the log), checked as [`load`] does.
+fn parse(
+    text: &str,
+    origin: &str,
+    schema: &Schema,
+    keep: impl Fn(&str) -> std::result::Result<(), &'static str>,
+) -> Result<Map<String, Value>> {
+    let stored: Map<String, Value> = serde_json::from_str(text)?;
+    Ok(checked(stored, origin, schema, keep))
+}
+
+/// The entries of `stored` the schema accepts (and `keep` allows); the others are logged and dropped.
+fn checked(
+    stored: Map<String, Value>,
+    origin: &str,
+    schema: &Schema,
+    keep: impl Fn(&str) -> std::result::Result<(), &'static str>,
+) -> Map<String, Value> {
     let mut values = Map::new();
     for (key, value) in migrate(stored) {
         match keep(&key).map_err(|reason| setting_err(&key, reason)).and_then(|()| schema.validate(&key, &value)) {
             Ok(v) => {
                 values.insert(key, v);
             }
-            Err(e) => tracing::warn!("{}: {e}; skipping", path.display()),
+            Err(e) => tracing::warn!("{origin}: {e}; skipping"),
         }
     }
-    Ok(values)
+    values
 }
 
 impl SettingsStore {
@@ -530,14 +556,27 @@ impl SettingsStore {
         let path = path.into();
         let mut values = schema.defaults();
         values.extend(load(&path, &schema, |_| Ok(()))?);
-        Ok(Self { path: Some(path), schema, values: RwLock::new(values) })
+        Ok(Self { path: Some(path), schema, values: RwLock::new(values), changed: AtomicBool::new(false) })
     }
 
     /// Settings with no file (the browser build): the schema defaults, changes
     /// are kept for the life of the store and written nowhere.
     pub fn in_memory(schema: Schema) -> Self {
-        let values = RwLock::new(schema.defaults());
-        Self { path: None, schema, values }
+        Self::in_memory_with(schema, Map::new())
+    }
+
+    /// Like [`Self::in_memory`], with `stored` values on top of the defaults
+    /// (the host kept them from the last time; invalid ones are dropped as
+    /// from a file). Changes are reported by [`Self::take_changed`].
+    pub fn in_memory_with(schema: Schema, stored: Map<String, Value>) -> Self {
+        let mut values = schema.defaults();
+        values.extend(checked(stored, "stored settings", &schema, |_| Ok(())));
+        Self { path: None, schema, values: RwLock::new(values), changed: AtomicBool::new(false) }
+    }
+
+    /// Whether [`Self::update`] changed the values since the last call.
+    pub fn take_changed(&self) -> bool {
+        self.changed.swap(false, Ordering::SeqCst)
     }
 
     pub fn schema(&self) -> &Schema {
@@ -599,6 +638,7 @@ impl SettingsStore {
             write_atomic(path, &serde_json::to_vec_pretty(&next)?)?;
         }
         *values = next;
+        self.changed.store(true, Ordering::SeqCst);
         Ok(values.clone())
     }
 }
@@ -613,13 +653,74 @@ pub fn figure_options(values: &Map<String, Value>) -> FigureOptions {
 }
 
 /// The settings of one vault: only those set in it (on top of the shared ones).
-/// Without a file (`path` = `None`, an in-memory vault) they live in memory only.
+/// Without a file ([`Place::Memory`]) they live in memory only.
 #[derive(Debug)]
 pub struct VaultSettings {
-    path: Option<PathBuf>,
+    place: Place,
     own: RwLock<Map<String, Value>>,
     /// The file could not be read: the settings live in memory, the file is left alone.
     problem: Option<SettingsProblem>,
+}
+
+/// Where the vault settings are kept.
+#[derive(Debug)]
+enum Place {
+    Memory,
+    /// A file on disk.
+    Disk(PathBuf),
+    /// A file of the vault storage (a vault in memory: the browser host
+    /// persists the vault files, so the settings go with them).
+    Storage {
+        storage: Arc<dyn Storage>,
+        path: String,
+    },
+}
+
+impl Place {
+    /// The file text; none if there is no file.
+    fn read(&self) -> Result<Option<String>> {
+        match self {
+            Self::Memory => Ok(None),
+            Self::Disk(path) => match fs::read_to_string(path) {
+                Ok(text) => Ok(Some(text)),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+                Err(e) => Err(Error::io(path, e)),
+            },
+            Self::Storage { storage, path } => match storage.read(path) {
+                Ok(bytes) => String::from_utf8(bytes)
+                    .map(Some)
+                    .map_err(|e| Error::io(Path::new(path), io::Error::new(io::ErrorKind::InvalidData, e))),
+                Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+                Err(e) => Err(Error::io(Path::new(path), e)),
+            },
+        }
+    }
+
+    fn write(&self, data: &[u8]) -> Result<()> {
+        match self {
+            Self::Memory => Ok(()),
+            Self::Disk(path) => {
+                if let Some(dir) = path.parent() {
+                    fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
+                }
+                write_atomic(path, data)
+            }
+            Self::Storage { storage, path } => match storage.rewrite(path, data) {
+                Err(e) if e.kind() == io::ErrorKind::NotFound => storage.create(path, data),
+                other => other,
+            }
+            .map_err(|e| Error::io(Path::new(path), e)),
+        }
+    }
+
+    /// The file for messages.
+    fn shown(&self) -> String {
+        match self {
+            Self::Memory => String::new(),
+            Self::Disk(path) => path.display().to_string(),
+            Self::Storage { path, .. } => path.clone(),
+        }
+    }
 }
 
 /// Why the vault settings file was not loaded (shown in the interface).
@@ -645,34 +746,49 @@ fn not_device(key: &str) -> std::result::Result<(), &'static str> {
 
 impl VaultSettings {
     pub fn open(path: Option<PathBuf>, schema: &Schema) -> Result<Self> {
-        let Some(path) = path else { return Ok(Self::in_memory()) };
-        let own = load(&path, schema, not_device)?;
-        Ok(Self { path: Some(path), own: RwLock::new(own), problem: None })
+        Self::open_at(path.map_or(Place::Memory, Place::Disk), schema)
+    }
+
+    /// Settings in the file `path` of a vault `storage`.
+    pub fn open_in(storage: Arc<dyn Storage>, path: &str, schema: &Schema) -> Result<Self> {
+        Self::open_at(Place::Storage { storage, path: path.to_owned() }, schema)
+    }
+
+    fn open_at(place: Place, schema: &Schema) -> Result<Self> {
+        let own = match place.read()? {
+            Some(text) => parse(&text, &place.shown(), schema, not_device)?,
+            None => Map::new(),
+        };
+        Ok(Self { place, own: RwLock::new(own), problem: None })
     }
 
     /// Like [`Self::open`], but a broken file is not an error: the vault goes
     /// without its settings, changes are kept in memory only (the file is not
     /// overwritten) and [`Self::problem`] says why.
     pub fn open_or_broken(path: Option<PathBuf>, schema: &Schema) -> Self {
-        let shown = path.clone();
-        Self::open(path, schema).unwrap_or_else(|e| {
+        Self::broken_ok(path.map_or(Place::Memory, Place::Disk), schema)
+    }
+
+    /// [`Self::open_or_broken`] over the file `path` of a vault `storage`.
+    pub fn open_in_or_broken(storage: Arc<dyn Storage>, path: &str, schema: &Schema) -> Self {
+        Self::broken_ok(Place::Storage { storage, path: path.to_owned() }, schema)
+    }
+
+    fn broken_ok(place: Place, schema: &Schema) -> Self {
+        let shown = place.shown();
+        Self::open_at(place, schema).unwrap_or_else(|e| {
             let (line, column) = match &e {
                 Error::Json(j) => (u32::try_from(j.line()).ok(), u32::try_from(j.column()).ok()),
                 _ => (None, None),
             };
-            let problem = SettingsProblem {
-                path: shown.map(|p| p.display().to_string()).unwrap_or_default(),
-                message: e.to_string(),
-                line,
-                column,
-            };
+            let problem = SettingsProblem { path: shown, message: e.to_string(), line, column };
             Self { problem: Some(problem), ..Self::in_memory() }
         })
     }
 
     /// No settings of its own, changes are kept in memory only.
     pub fn in_memory() -> Self {
-        Self { path: None, own: RwLock::default(), problem: None }
+        Self { place: Place::Memory, own: RwLock::default(), problem: None }
     }
 
     /// Why the settings file was not loaded, if so.
@@ -713,12 +829,7 @@ impl VaultSettings {
                 None => next.remove(&key),
             };
         }
-        if let Some(path) = &self.path {
-            if let Some(dir) = path.parent() {
-                fs::create_dir_all(dir).map_err(|e| Error::io(dir, e))?;
-            }
-            write_atomic(path, &serde_json::to_vec_pretty(&next)?)?;
-        }
+        self.place.write(&serde_json::to_vec_pretty(&next)?)?;
         *own = next;
         Ok(own.clone())
     }
@@ -951,5 +1062,41 @@ mod tests {
         fs::write(&path, r#"{"device.builds": 4, "header.title": false}"#).unwrap();
         let own = VaultSettings::open(Some(path), &schema()).unwrap().own();
         assert_eq!(own.keys().collect::<Vec<_>>(), ["header.title"]);
+    }
+
+    #[test]
+    fn in_memory_values_and_changes() {
+        let stored = json!({"appearance.font_size": 22, "header.title": "nope", "нет.такой": 1});
+        let store = SettingsStore::in_memory_with(schema(), stored.as_object().unwrap().clone());
+        assert_eq!(store.values()["appearance.font_size"], json!(22));
+        assert_eq!(store.values()["header.title"], json!(true), "an invalid value gives the default");
+        assert!(!store.values().contains_key("нет.такой"));
+        assert!(!store.take_changed(), "loading is not a change");
+        assert!(store.update(json!({"appearance.font_size": 999}).as_object().unwrap()).is_err());
+        assert!(!store.take_changed(), "a rejected update is not a change");
+        store.update(json!({"appearance.font_size": 20}).as_object().unwrap()).unwrap();
+        assert!(store.take_changed());
+        assert!(!store.take_changed(), "once");
+    }
+
+    #[test]
+    fn vault_settings_in_storage() {
+        use notes_store::storage::MemStorage;
+        let mem = Arc::new(MemStorage::new());
+        let file = ".baluk/settings.json";
+        let vault = VaultSettings::open_in(mem.clone(), file, &schema()).unwrap();
+        assert!(vault.own().is_empty(), "no file yet");
+        let set = |v: Value| v.as_object().unwrap().clone();
+        vault.update(&schema(), &set(json!({"appearance.font_size": 22}))).unwrap();
+        vault.update(&schema(), &set(json!({"header.title": false}))).unwrap();
+        let written: Value = serde_json::from_slice(&mem.read(file).unwrap()).unwrap();
+        assert_eq!(written, json!({"appearance.font_size": 22, "header.title": false}));
+        assert_eq!(VaultSettings::open_in(mem.clone(), file, &schema()).unwrap().own().len(), 2);
+
+        mem.write(file, "{ not json");
+        let broken = VaultSettings::open_in_or_broken(mem.clone(), file, &schema());
+        assert_eq!(broken.problem().unwrap().path, file);
+        broken.update(&schema(), &set(json!({"header.tags": false}))).unwrap();
+        assert!(mem.read(file).unwrap().starts_with(b"{ not"), "a broken file is not overwritten");
     }
 }

@@ -225,9 +225,16 @@ impl Drop for EventsWait {
 
 impl OpenVault {
     fn new(name: VaultName, notes: Arc<Notes>, schema: &Schema) -> Self {
-        let path = notes.dir().map(|d| d.join(notes_store::vaults::SETTINGS_FILE));
         // A broken file is not overwritten: the vault settings stay in memory only.
-        let settings = VaultSettings::open_or_broken(path, schema);
+        let settings = match notes.dir() {
+            Some(dir) => VaultSettings::open_or_broken(Some(dir.join(notes_store::vaults::SETTINGS_FILE)), schema),
+            // A vault without a directory (the browser): the file is in the vault storage and goes with its files.
+            None => VaultSettings::open_in_or_broken(
+                notes.vault().storage().clone(),
+                notes_store::vaults::SETTINGS_FILE,
+                schema,
+            ),
+        };
         if let Some(p) = settings.problem() {
             tracing::warn!("settings of vault \"{name}\": {}; going without them for now", p.message);
         }

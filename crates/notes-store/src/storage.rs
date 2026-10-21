@@ -17,7 +17,7 @@
 //! compiler reads them (`notes_core::world`).
 
 use std::any::Any;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::fs;
 use std::io;
@@ -425,6 +425,9 @@ impl Drop for Unwatch {
 pub struct MemStorage {
     files: Mutex<MemFiles>,
     sink: Mutex<Option<ChangeSink>>,
+    /// The files changed since the last [`MemStorage::take_journal`]; `None`
+    /// until [`MemStorage::keep_journal`] (a host that persists the files).
+    journal: Mutex<Option<BTreeSet<String>>>,
 }
 
 impl fmt::Debug for MemStorage {
@@ -444,6 +447,27 @@ impl MemStorage {
         Self::default()
     }
 
+    /// Starts the journal: from now on the files written, removed, moved and
+    /// trashed are remembered until [`Self::take_journal`]. Unlike the
+    /// [`Storage::watch`] sink (one, owned by the core) the journal belongs to
+    /// the host.
+    pub fn keep_journal(&self) {
+        self.journal.lock().get_or_insert_with(BTreeSet::new);
+    }
+
+    /// The paths of the files changed since the last call, sorted. A moved or
+    /// trashed directory gives the paths of its files, both old and new; a
+    /// path may be gone (`read` says `NotFound`).
+    pub fn take_journal(&self) -> Vec<String> {
+        self.journal.lock().as_mut().map(std::mem::take).unwrap_or_default().into_iter().collect()
+    }
+
+    fn journal_add<'a>(&self, paths: impl IntoIterator<Item = &'a str>) {
+        if let Some(journal) = self.journal.lock().as_mut() {
+            journal.extend(paths.into_iter().map(str::to_owned));
+        }
+    }
+
     /// Writes a file (directories appear by themselves).
     pub fn write(&self, path: &str, data: impl Into<Vec<u8>>) {
         let mut f = self.files.lock();
@@ -451,11 +475,13 @@ impl MemStorage {
         let clock = f.clock;
         f.files.insert(path.to_owned(), (data.into(), clock));
         drop(f);
+        self.journal_add([path]);
         self.changed(path);
     }
 
     pub fn remove(&self, path: &str) {
         self.files.lock().files.remove(path);
+        self.journal_add([path]);
         self.changed(path);
     }
 
@@ -524,6 +550,7 @@ impl Storage for MemStorage {
             f.files.remove(p);
         }
         drop(f);
+        self.journal_add(gone.iter().map(String::as_str));
         self.changed(path);
         Ok(())
     }
@@ -548,10 +575,14 @@ impl Storage for MemStorage {
             return Err(io::Error::new(io::ErrorKind::AlreadyExists, format!("already exists: {to}")));
         }
         let moved: Vec<_> = f.files.extract_if(.., |p, _| is_moved(p)).collect();
+        let mut touched = Vec::with_capacity(moved.len() * 2);
         for (old, data) in moved {
-            f.files.insert(format!("{to}{}", &old[from.len()..]), data);
+            let new = format!("{to}{}", &old[from.len()..]);
+            f.files.insert(new.clone(), data);
+            touched.extend([old, new]);
         }
         drop(f);
+        self.journal_add(touched.iter().map(String::as_str));
         self.changed(from);
         self.changed(to);
         Ok(())
@@ -707,5 +738,27 @@ mod tests {
         assert_ne!(first.modified, mem.stat("a.typ").unwrap().modified);
         mem.remove("a.typ");
         assert!(mem.stat("a.typ").is_err());
+    }
+
+    #[test]
+    fn memory_journal() {
+        let mem = MemStorage::new();
+        mem.write("before.typ", "0");
+        assert!(mem.take_journal().is_empty(), "off until asked for");
+        mem.keep_journal();
+        mem.write("before.typ", "1");
+        mem.create("a.typ", b"a").unwrap();
+        mem.write("Книга/1.typ", "1");
+        mem.write("Книга/2.typ", "2");
+        assert_eq!(mem.take_journal(), ["a.typ", "before.typ", "Книга/1.typ", "Книга/2.typ"]);
+        assert!(mem.take_journal().is_empty(), "taken once");
+
+        mem.rewrite("a.typ", b"aa").unwrap();
+        mem.rename("Книга", "Том").unwrap();
+        mem.trash("before.typ").unwrap();
+        mem.remove("a.typ");
+        assert_eq!(mem.take_journal(), ["a.typ", "before.typ", "Книга/1.typ", "Книга/2.typ", "Том/1.typ", "Том/2.typ"]);
+        assert!(mem.rename("нет", "x").is_err());
+        assert!(mem.take_journal().is_empty(), "a failed write is not a change");
     }
 }

@@ -7,8 +7,11 @@ export interface CoreSource {
   module: string;
   /** The vault name in the API paths (`/api/vaults/<vault>/...`). */
   vault: string;
-  /** Address of `files.json`: `{ vault: [[path, base64]], packages: [[path, base64]] }`. */
-  files: string;
+  /**
+   * Address of `files.json`: `{ vault: [[path, base64]], packages: [[path, base64]] }`.
+   * It seeds a vault that OPFS does not have yet; afterwards OPFS is the source.
+   */
+  files?: string;
 }
 
 /** The first message of a worker: start the core. */
