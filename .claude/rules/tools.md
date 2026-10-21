@@ -352,9 +352,10 @@ counts rounds, merges, cleans up and reports to the liaison.
   with an approval of `reviewer` and a `success` status at the same head commit
   (a head approved while its status was still pending is merged when the status
   passes, with no second review; a new head clears the approval), squash as
-  `owner`, a merge that cannot be tried (the server unreadable) goes to the
-  liaison, never retried by the mod, then cleanup (the worktrees and branches of its agents, the local
-  `task/<slug>` when it equals the merged head, `check-pr-<n>`) and `tools/install.sh`
+  `owner`; a merge that fails for any reason but a conflict or a moved head
+  goes to the liaison, never retried by the mod. Then cleanup (the worktrees
+  and branches of its agents, the local `task/<slug>` when it equals the
+  merged head, `check-pr-<n>`) and `tools/install.sh`
   when the diff touches `crates/`, `app/`, `baluk/` or `skills/`. The mod never
   pushes to `main`, never forces a push, never runs `tools/deploy-hub.sh`.
 - **View**: the pane `/pipeline` (a row per task: stage, pull request, status,
