@@ -32,9 +32,9 @@ catalog - `.claude/rules/tests-vault.md`), test data - `tests/.data/` (not in
 git, can be deleted).
 
 ```sh
-tools/check.sh --fast   # before a pull request: no client build and e2e
+tools/check.sh --fast   # no client build and e2e
                         # also --rust, --app
-tools/check.sh          # full (~3 min warm): tools/check-pr.sh on every PR head
+tools/check.sh          # full (~3 min warm); CI runs it on every pull request push
 ```
 
 `check.sh` and `install.sh` run with lower than normal priority (`nice` 2 and
@@ -253,8 +253,9 @@ gamescope --backend headless -W <width> -H <height> -- <command>
 ## Cloud environment
 
 A Claude Code cloud session clones the GitHub mirror, runs as root, has a
-small disk and no Forgejo. The pipeline works there as it does locally:
-`tools/cloud-setup.sh` starts a throwaway Forgejo inside the session with the
+small disk and no Forgejo. The server side works there as it does locally
+(the pipeline mod does not: there is no CI runner, `docs/agents.md`, "Known
+limits"): `tools/cloud-setup.sh` starts a throwaway Forgejo inside the session with the
 same accounts, `tea` logins and protection of `main` (`docs/agents.md`,
 "Server"), so the rules, skills and agent definitions stay as they are;
 `tools/cloud-finish.sh` sends the result to GitHub.
@@ -329,9 +330,8 @@ Working in the session:
 ## Pipeline mod
 
 `tools/pipeline/` is a Claude Code plugin (a "mod") that the liaison's session
-loads. It does what the orchestrator agent did, by code: no model decides a
-routine step. It starts developers and reviewers as subagents (they show in the
-session window), reacts to the commit status and the review on the server,
+loads (`docs/agents.md`). No model decides a routine step. It starts
+developers and reviewers as subagents (they show in the session window), reacts to the commit status and the review on the server,
 counts rounds, merges, cleans up and reports to the liaison.
 
 - **Load**, with no edit of `.claude/settings*.json`: from the main checkout
@@ -348,9 +348,10 @@ counts rounds, merges, cleans up and reports to the liaison.
 - **Stages** of a task: waiting (for `after`), developing, liaison (waits for
   `pipeline_send`), checking (the status of the head, polled every 60 s),
   reviewing, merging, merged, blocked. Rounds, hand-over to `developer-3` and
-  the block follow `.claude/agents/orchestrator.md` (section 3); the merge only
+  the block follow `docs/agents.md`, "The path of a task"; the merge only
   with an approval of `reviewer` and a `success` status at the same head commit,
-  squash as `owner`, then cleanup as its section 5 says and `tools/install.sh`
+  squash as `owner`, then cleanup (the worktrees and branches of its agents, the local
+  `task/<slug>` when it equals the merged head, `check-pr-<n>`) and `tools/install.sh`
   when the diff touches `crates/`, `app/`, `baluk/` or `skills/`. The mod never
   pushes to `main`, never forces a push, never runs `tools/deploy-hub.sh`.
 - **View**: the pane `/pipeline` (a row per task: stage, pull request, status,

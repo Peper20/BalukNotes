@@ -6,14 +6,14 @@ in its definition (`.claude/agents/`); this document is the map.
 
 ## Roles
 
-| Agent | Model | Does | Does not |
+| Who | Model | Does | Does not |
 |---|---|---|---|
-| `liaison` | Opus, medium | Talks to the user in Russian, owns the architecture and the specification (`docs/architecture.md`), decides on the tech debt, splits requests into tasks and picks the developer of each, writes the orchestrator's brief in English, keeps `docs/roadmap.md`, `docs/questions.md`, `docs/tech-debt.md`, this file and `.claude/rules/`, `.claude/agents/`, `.claude/skills/`, reports | Write code, run developers, merge |
-| `orchestrator` | Sonnet, medium | Runs the pipeline: starts the tasks of the brief, waits for them, runs the review, merges approved pull requests, runs the full check of each pull request (`tools/check-pr.sh`), cleans up, runs `tools/install.sh`, relays questions to the liaison | Design, split or change tasks, decide on the tech debt, edit files |
+| `liaison` | Opus, medium | Talks to the user in Russian, owns the architecture and the specification (`docs/architecture.md`), decides on the tech debt, splits requests into tasks, picks the developer of each and starts them through the pipeline mod, answers developers' questions, keeps `docs/roadmap.md`, `docs/questions.md`, `docs/tech-debt.md`, this file and `.claude/rules/`, `.claude/agents/`, `.claude/skills/`, reports | Write code, merge |
+| pipeline mod | code, no model | Starts developers and reviewers, follows the CI status and the review on the server, returns failures and findings to the developer, counts rounds, hands over to `developer-3`, blocks, merges, cleans up, runs `tools/install.sh`, reports to the liaison (`tools/pipeline/`, `.claude/rules/tools.md`, "Pipeline mod") | Decide anything a rule below does not fix |
 | `developer-1` | Haiku, xhigh | Routine, well-described, small tasks along an existing pattern | Merge, design the architecture |
 | `developer-2` | Sonnet, high | Complex tasks: several crates or the core with the client, sync, builds and caches, memory, concurrency, Typst internals | Merge, design the architecture |
 | `developer-3` | Opus, medium | The hardest: elusive bugs, investigations, tasks another developer could not finish, resumed blocked tasks | Merge, design the architecture |
-| `reviewer` | Sonnet, high | Reads the change against its passed full check, runs targeted tests, approves or requests changes | Edit files |
+| `reviewer` | Sonnet, high | Reads the change against its passed CI check, runs targeted tests, approves or requests changes | Edit files |
 
 The user talks only to the `liaison`. Agents talk to each other in English.
 
@@ -26,43 +26,52 @@ The user talks only to the `liaison`. Agents talk to each other in English.
    debt is done now, works out the change to `docs/architecture.md`, splits
    the request into tasks (one per coherent change) and picks the developer
    of each.
-3. **Brief.** Goal, context, design, tasks (each with its developer, files,
-   tech debt entries, architecture change and acceptance criteria), out of
-   scope. The brief is self-contained: the `orchestrator` and the developers
-   have not seen the conversation. The `orchestrator` runs independent tasks
-   in parallel.
-4. **Development.** A developer starts cold in its own worktree with the
-   design fixed in its brief, works on the branch `task/<slug>`, runs
-   `tools/check.sh --fast` and opens a pull request (the `dev-workflow` skill).
-5. **Full check.** The `orchestrator` runs `tools/check-pr.sh` on the head of
-   the pull request: the full `tools/check.sh` in a worktree of that commit,
-   the result as a pull request comment. A failure goes back to the developer
-   as a round; the review starts only on a passed head.
-6. **Review.** The `reviewer` reads the pull request in its own worktree,
-   relies on its passed full check, runs targeted tests and gives the verdict.
-   Blocking findings go back to the same developer, and the head is checked
-   again before the next review; at most two rounds per developer, then
-   `developer-3`. A task that cannot be finished is blocked (its pull request
-   stays open) by the `orchestrator`; dropped (deleted everywhere) only by the
-   user.
-7. **Merge.** The `orchestrator` squashes an approved pull request into
-   `main`, deletes the branch, removes worktrees, and runs `tools/install.sh`
-   when the request changed what it installs.
-8. **Report.** The `liaison` reports to the user in Russian: blocked tasks and
-   tasks that took `developer-3` two rounds first, then the results, the
-   tech debt, what to look at.
+3. **Start.** For each task the `liaison` calls `pipeline_start` with a
+   self-contained brief (the developer has not seen the conversation); tasks
+   that depend on others wait with `after`. Independent tasks run in parallel.
+4. **Development.** The developer starts cold in its own worktree with the
+   design fixed in its brief, works on the branch `task/<slug>`, runs the
+   targeted tests, opens a pull request and ends with a `PIPELINE:` line (the
+   `dev-workflow` skill). A question or a report that needs the `liaison`
+   first (architecture additions, deferred items) goes to it; it answers with
+   `pipeline_send`.
+5. **CI.** The runner checks every push to a pull request
+   (`.forgejo/workflows/check.yml` -> `tools/check-pr.sh`): the full
+   `tools/check.sh` at the head commit, as the commit status `ci / full-check
+   (pull_request)` and a comment with the step table. A failure goes back to
+   the developer as a round.
+6. **Review.** On a `success` status the mod starts a `reviewer`; it reads the
+   pull request in its own worktree, runs targeted tests and gives the verdict
+   on the server. Blocking findings go back to the same developer as a round.
+7. **Merge.** An approval and a `success` status at the same head: the mod
+   squashes the pull request into `main`, deletes the branch, removes the
+   worktrees, runs `tools/install.sh` when the diff touches what it installs,
+   and reports to the `liaison`, which marks the roadmap and reports to the
+   user in Russian.
+
+Rounds and the end of a task:
+
+- A round is one return of the pull request to a developer with a failed
+  check or blocking findings. Each developer gets two; then a new
+  `developer-3` takes the task over on the same branch and pull request.
+  After `developer-3`'s two rounds the task is blocked.
+- A blocked task is still wanted but cannot be finished now: its pull request
+  stays open and its branch stays on the server; the `liaison` brings it to
+  the user, and `pipeline_send` resumes it on a new `developer-3`.
+- A dropped task is discarded for good (its pull request closed, its branch
+  deleted), only on the user's word.
 
 The `liaison` owns the architecture (`docs/architecture.md`); developers apply
 its changes to the document in the same pull request as the code. Tech debt
 (`docs/tech-debt.md`) entries change in the pull requests of the code: a
 developer may defer a large unforeseen problem with an entry, the `liaison`
-decides whether it waits (the `orchestrator` relays). Requirements to both documents - `.claude/rules/docs.md`.
+decides whether it waits. Requirements to both documents - `.claude/rules/docs.md`.
 
 ## Isolation
 
 - Each developer and reviewer works in its own git worktree in
   `.claude/worktrees/` (not in git), on its own branch. The `liaison` and the
-  `orchestrator` work in the main checkout.
+  pipeline mod work in the main checkout.
 - Worktrees build into the `target/` of the main checkout
   (`tools/lib/worktree-target.sh`): a build from scratch is ~8 min and tens of
   GB, and the dependencies built once serve every worktree. `tools/check.sh`
@@ -95,13 +104,14 @@ the accounts with the `nexus` project:
 
 | Account | `tea` login | Used by | For |
 |---|---|---|---|
-| `ibaluk` | `owner` | the user, every `git push` | owner, administrator |
-| `agent-dev` | `dev` | `orchestrator`, developers | opens and merges pull requests |
+| `ibaluk` | `owner` | the user, every `git push`, the mod's merge | owner, administrator |
+| `agent-dev` | `dev` | developers, `tools/check-pr.sh` | opens pull requests, comments the check |
 | `agent-reviewer` | `reviewer` | `reviewer` | approves or requests changes |
 
 Separate accounts make the review formal: the server does not let an account
 approve its own pull request. Protection of `main`: a merge needs an approval
-of `agent-reviewer`, a new commit makes it stale; `agent-dev` merges; only
+of `agent-reviewer` and the status `ci / full-check (pull_request)`, a new
+commit makes the approval stale; `agent-dev` and `ibaluk` may merge; only
 `ibaluk` pushes to `main` directly. All pushes go as `ibaluk`, so the ban on
 developers pushing to `main` rests on the agents' rules.
 
@@ -125,20 +135,26 @@ anything not sent by `cloud-finish.sh`, open pull requests included, is lost.
 ## Launch
 
 ```sh
-claude
+claude --plugin-dir tools/pipeline
 ```
 
 From the project root. `"agent": "liaison"` in `.claude/settings.json` makes the
 main session the `liaison`, locally and in a cloud session (the cloud session
 reads the file from the clone; the model of a cloud session is chosen in its
-interface, not by the agent definition). `claude --agent <name>` overrides it.
+interface, not by the agent definition). `--plugin-dir` loads the pipeline mod
+(`.claude/rules/tools.md`, "Pipeline mod"); the runner of CI is a user service
+(`tools/ci-runner.sh status`).
 
 ## Known limits
 
 - Agents run in the background and cannot ask for a permission: `cargo`,
   `npm`, `git`, `tea` and `tools/*.sh` must be allowed in advance (or the
   session runs in auto mode).
-- No CI: the orchestrator runs the full check (`tools/check-pr.sh`) on this
-  machine, between the developer and the review.
-- Rare cases are not written into the rules: the `orchestrator` handles them
-  on the spot and names them in the report.
+- The mod lives in the liaison's session: with the session closed CI still
+  checks pushes, but no reviewer starts and nothing merges until the session
+  is back (the mod reloads its tasks).
+- The runner is a user service: it stops when the user logs out, unless
+  lingering is enabled (`loginctl enable-linger`, the user's decision).
+- The mod's API is early access and may change with a Claude Code update.
+- A cloud session has no runner, so the mod would wait for a status that
+  never comes: the pipeline does not run in a cloud session now.

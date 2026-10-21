@@ -46,9 +46,8 @@ directory - read the file.
 
 ## Iteration
 
-- Before a pull request - `tools/check.sh --fast`; the full `tools/check.sh`
-  runs on the head of every pull request (`tools/check-pr.sh`,
-  `docs/agents.md`).
+- While working - the tests the change needs; the full `tools/check.sh` runs
+  in CI on every push to a pull request (`docs/agents.md`).
 - Changed the public library API, the `note`/`book` templates
   (`notes-core::new_note`), `notes` commands or path rules (`NoteId`) - in the
   same change fix `docs/writing.md` and the `/baluk-note` skill (`SKILL.md`,
@@ -59,8 +58,8 @@ directory - read the file.
 
 ## Pipeline
 
-`liaison` (the main session, `claude --agent liaison`) -> `orchestrator` ->
-`developer-1`, `developer-2`, `developer-3` -> `reviewer`;
+`liaison` (the main session) -> the pipeline mod (`tools/pipeline/`, code) ->
+`developer-1`, `developer-2`, `developer-3` -> CI -> `reviewer`;
 definitions - `.claude/agents/`, how it works - `docs/agents.md`. The
 repository is on a local Forgejo server (`origin`, the `forge` skill), GitHub
 is its mirror. Code and the documents that change with it reach `main` only

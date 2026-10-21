@@ -9,7 +9,7 @@ The project is hosted on a local Forgejo server (`http://localhost:3000`, reposi
 
 Two accounts, chosen with `--login`. The login is a `tea` name; the server user is shown in reviews and API output:
 
-- `dev` (server user `agent-dev`) opens and merges pull requests: orchestrator and developers.
+- `dev` (server user `agent-dev`) opens pull requests: the developers.
 - `reviewer` (server user `agent-reviewer`) reviews: the reviewer only.
 
 The accounts are shared with another project on the same server. Pushes go as the repository owner.
