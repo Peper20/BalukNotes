@@ -153,8 +153,9 @@ interface, not by the agent definition). `--plugin-dir` loads the pipeline mod
 - The mod lives in the liaison's session: with the session closed CI still
   checks pushes, but no reviewer starts and nothing merges until the session
   is back (the mod reloads its tasks).
-- The runner is a user service: it stops when the user logs out, unless
-  lingering is enabled (`loginctl enable-linger`, the user's decision).
+- The runner is a user service without lingering (the user's decision): it
+  stops when the user logs out, and the jobs queued meanwhile run at the next
+  login.
 - The mod's API is early access and may change with a Claude Code update.
 - A cloud session has no runner, so the mod would wait for a status that
   never comes: the pipeline does not run in a cloud session now.
