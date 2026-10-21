@@ -253,9 +253,18 @@ before M7 starts.
       `Storage` in OPFS/IndexedDB), build time and memory of the demo and a
       large book in Chromium and on a phone, the weight of fonts and packages;
       report - `docs/research/E4.md`
-- [ ] The core in a Web Worker, the API transport - messages to the worker;
-      package files handed over by the host (`Packages::Files`) have no
-      fingerprint, so the hand-over must not replace a package version in place
+- [x] The core in a Web Worker, the API transport - messages to the worker:
+      `notes-wasm` serves the `notes-server` `Router` (PR #21), the client's
+      worker transport (PR #22), the vault and settings kept in OPFS (PR #23)
+- [ ] Sync from the hub in the worker (a blocking `Remote` over synchronous
+      `XMLHttpRequest`); a vault filled by sync must get the `ready` marker of
+      OPFS, which today only the `files.json` import writes
+- [ ] The hub serves the browser version: the client, the module, the theme
+      CSS and the fonts as static files built on the computer; fonts and
+      packages fetched apart from the module; package files handed over by the
+      host (`Packages::Files`) have no fingerprint, so the hand-over must not
+      replace a package version in place
+- [ ] Restart the worker after a panic or above a memory threshold
 
 ## Later
 
