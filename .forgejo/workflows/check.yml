@@ -1,0 +1,27 @@
+# The full check of a pull request on every push to it (`.claude/rules/tools.md`,
+# "CI"). The runner is on this machine (`tools/ci-runner.sh`, label baluk-host,
+# host execution), so the check runs the script of the main checkout: it builds
+# into the shared target/ and takes the shared locks. The result of the job is
+# the exit code of the check: 0 success, anything else failure; the commit
+# status of the head is the combined status of the commit.
+name: ci
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+jobs:
+  full-check:
+    runs-on: baluk-host
+    # A cold run takes tens of minutes; a runner takes one job at a time, so the
+    # time in the queue is not counted.
+    timeout-minutes: 180
+    steps:
+      - name: check-pr.sh
+        shell: bash
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          : "${BALUK_MAIN:?BALUK_MAIN is not set: run tools/ci-runner.sh install}"
+          exec "$BALUK_MAIN/tools/check-pr.sh" "$PR"

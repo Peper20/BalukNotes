@@ -4,10 +4,13 @@
 # settings of a small disk and a cloud session, the WebKit check, and the lock's
 # record of the checkout (the sources are freshened only after another
 # checkout), tools/cargo.sh (its arguments, exit code, settings and record) and
-# tools/check-pr.sh (its arguments, comment text, exit codes, worktree).
+# tools/check-pr.sh (its arguments, comment text, exit codes, worktree) and
+# tools/ci-runner.sh (its arguments, the generated config and unit, install and
+# uninstall in scratch places).
 # No cargo build: cargo runs for `cargo metadata` and for `cargo clean` of a
 # scratch dir; tools/cargo.sh and tools/check-pr.sh run in scratch checkouts
-# against a cargo, a tea and a check.sh shim.
+# against a cargo, a tea and a check.sh shim; tools/ci-runner.sh against a tea
+# and a systemctl shim.
 # Run by check.sh as a step. The scratch dirs are in tests/.data/libs; the real
 # build dir is never used. The tools that the libraries call (jq, df, python3,
 # pkg-config, cargo, tea) are replaced by shims in tests/.data/libs/.
@@ -398,6 +401,161 @@ expect "a folder that is not a worktree in the way: exit 2" eval '[[ $pr_rc -eq 
 rmdir "$wt"
 FAKE_CHECK=pass run_pr 7
 expect "a removed worktree is created again" eval '[[ $pr_rc -eq 0 && $(git -C "$wt" rev-parse HEAD) == "$head2" ]]'
+
+echo "tools/ci-runner.sh (no server: the argument handling, the generated texts, install and uninstall against tea and systemctl shims):"
+tools/ci-runner.sh >"$root/ci.out" 2>&1
+rc=$?
+expect "without arguments it exits 2 with the usage" eval '[[ $rc -eq 2 ]] && grep -q "^usage: tools/ci-runner.sh install|uninstall|status" "$root/ci.out"'
+tools/ci-runner.sh restart >"$root/ci.out" 2>&1
+expect "an unknown command exits 2" test $? -eq 2
+tools/ci-runner.sh status extra >"$root/ci.out" 2>&1
+expect "an extra argument exits 2" test $? -eq 2
+tools/ci-runner.sh --help >"$root/ci.out" 2>&1
+rc=$?
+expect "--help exits 0 and prints the header, to its last line" \
+  eval '[[ $rc -eq 0 ]] && grep -q "^  *tools/ci-runner.sh install" "$root/ci.out" && tail -n 1 "$root/ci.out" | grep -q "^Needs: "'
+
+ci_conf=$root/ci/config ci_data=$root/ci/data ci_units=$root/ci/units ci_bin=$root/ci/bin ci_sh=$root/ci/shims ci_main=$root/ci/main
+mkdir -p "$ci_sh" "$ci_main/tools" "$ci_bin" "$root/ci/state"
+printf '#!/bin/sh\n' >"$ci_main/tools/check-pr.sh"
+chmod +x "$ci_main/tools/check-pr.sh"
+# The runner binary of the tests: only its version (the pinned one, so nothing is downloaded).
+pinned=$(sed -n 's/^RUNNER_VERSION=//p' tools/ci-runner.sh)
+printf '#!/bin/sh\necho "forgejo-runner version v%s"\n' "$pinned" >"$ci_bin/forgejo-runner"
+chmod +x "$ci_bin/forgejo-runner"
+# tea: `api --login owner [-X METHOD] [-d BODY] ENDPOINT` on a list of runners in
+# $CI_STATE/runners.json; every call is logged in $CI_STATE/tea.log.
+cat >"$ci_sh/tea" <<'SHIM'
+#!/bin/sh
+[ "$1" = api ] || { echo "tea shim: $*" >&2; exit 9; }
+shift 3
+method=GET
+while [ $# -gt 1 ]; do
+  case "$1" in -X) method=$2 ;; -d) body=$2 ;; esac
+  shift 2
+done
+echo "$method $1 $body" >>"$CI_STATE/tea.log"
+[ -z "$CI_NO_SERVER" ] || { echo "tea: no server (test)" >&2; exit 1; }
+n=$(cat "$CI_STATE/count" 2>/dev/null || echo 0)
+case "$method $1" in
+  "GET /repos/{owner}/{repo}/actions/runners")
+    cat "$CI_STATE/runners.json" 2>/dev/null || echo '[{"id":1,"uuid":"u-other","name":"someone-else","status":"idle","version":"v1","labels":["x"]}]' ;;
+  "POST /repos/{owner}/{repo}/actions/runners")
+    n=$((n + 1)); echo "$n" >"$CI_STATE/count"
+    printf '[{"id":%s,"uuid":"u-%s","name":"baluk-host","status":"idle","version":"v13","labels":["baluk-host"]}]\n' "$n" "$n" >"$CI_STATE/runners.json"
+    printf '{"id":%s,"uuid":"u-%s","token":"tok-%s"}\n' "$n" "$n" "$n" ;;
+  "DELETE /repos/{owner}/{repo}/actions/runners/"*)
+    echo '[]' >"$CI_STATE/runners.json" ;;
+  *) echo "tea shim: $method $1" >&2; exit 9 ;;
+esac
+SHIM
+# systemctl --user: a service that is active or not; every call is logged.
+cat >"$ci_sh/systemctl" <<'SHIM'
+#!/bin/sh
+shift
+echo "$*" >>"$CI_STATE/systemctl.log"
+case "$1" in
+  show-environment | daemon-reload | enable | cat) exit 0 ;;
+  is-active) [ -e "$CI_STATE/active" ] && { [ "$2" = --quiet ] || echo active; exit 0; }; [ "$2" = --quiet ] || echo inactive; exit 3 ;;
+  is-enabled) echo enabled ;;
+  start | restart) : >"$CI_STATE/active" ;;
+  disable) rm -f "$CI_STATE/active" ;;
+esac
+SHIM
+chmod +x "$ci_sh/tea" "$ci_sh/systemctl"
+# run_ci <command>: tools/ci-runner.sh against the shims and the scratch places.
+run_ci() {
+  CI_STATE=$root/ci/state PATH="$ci_sh:$PATH" CI_RUNNER_CONFIG_DIR=$ci_conf CI_RUNNER_DATA_DIR=$ci_data \
+    CI_RUNNER_UNIT_DIR=$ci_units CI_RUNNER_BIN_DIR=$ci_bin CI_RUNNER_ONLINE_WAIT=2 BALUK_MAIN=${CI_TEST_MAIN:-$ci_main} \
+    tools/ci-runner.sh "$@" >"$root/ci.out" 2>&1
+}
+ci_fn() { (source tools/ci-runner.sh; CONFIG=$ci_conf/config.yml "$@"); }
+
+ci_fn config_text /main http://forge uuid-1 secret-1 >"$root/ci-config.txt"
+expect "the config: one label, host execution, capacity 1" \
+  eval 'grep -qx "  labels: \[\"baluk-host:host\"\]" "$root/ci-config.txt" && grep -qx "  capacity: 1" "$root/ci-config.txt"'
+expect "the config: the main checkout for the jobs, a job longer than 90 minutes" \
+  eval 'grep -qx "    BALUK_MAIN: \"/main\"" "$root/ci-config.txt" && grep -qx "  timeout: 4h" "$root/ci-config.txt"'
+expect "the config: the connection of the runner" \
+  eval 'grep -qx "      url: \"http://forge\"" "$root/ci-config.txt" && grep -qx "      uuid: \"uuid-1\"" "$root/ci-config.txt" && grep -qx "      token: \"secret-1\"" "$root/ci-config.txt"'
+mkdir -p "$ci_conf"
+cp "$root/ci-config.txt" "$ci_conf/config.yml"
+expect "the uuid and the token are read back from the config" \
+  eval '[[ $(ci_fn conn_field uuid) == uuid-1 && $(ci_fn conn_field token) == secret-1 ]]'
+rm -rf "$ci_conf"
+expect "a missing config gives no uuid and no message" eval '[[ -z $(ci_fn conn_field uuid 2>&1) ]]'
+ci_fn unit_text /bin/runner /conf.yml /p:/q >"$root/ci-unit.txt"
+expect "the unit: start line, PATH, nice, restart, the default target" \
+  eval 'grep -qx "ExecStart=/bin/runner daemon --config /conf.yml" "$root/ci-unit.txt" && grep -qx "Environment=PATH=/p:/q" "$root/ci-unit.txt" && grep -qx "Nice=2" "$root/ci-unit.txt" && grep -qx "Restart=on-failure" "$root/ci-unit.txt" && grep -qx "WantedBy=default.target" "$root/ci-unit.txt"'
+printf '[{"id":3,"uuid":"u-3","name":"baluk-host","status":"idle","version":"v13","labels":["baluk-host"]},{"id":4,"uuid":"u-4","name":"other","status":"offline","version":null,"labels":[]}]' |
+  ci_fn parse_runners >"$root/ci-runners.txt"
+expect "only the runner of our name is read, with its id, uuid, status, version and labels" \
+  test "$(cat "$root/ci-runners.txt")" = "3 u-3 idle v13 baluk-host"
+ci_fn put_file "$root/ci-put.txt" 600 <<<"one"
+expect "put_file: a new file is a change, with its mode" eval '[[ $(cat "$root/ci-put.txt") == one && $(stat -c %a "$root/ci-put.txt") == 600 ]]'
+ci_fn put_file "$root/ci-put.txt" 600 <<<"one"
+expect "put_file: the same text and mode is no change" test $? -eq 1
+ci_fn put_file "$root/ci-put.txt" 644 <<<"one"
+expect "put_file: another mode is a change" test $? -eq 0
+ci_fn put_file "$root/ci-put.txt" 644 <<<"two"
+rc=$?
+expect "put_file: another text is a change" eval '[[ $rc -eq 0 &&$(cat "$root/ci-put.txt") == two ]]'
+
+run_ci status
+expect "status before install: exit 1" test $? -eq 1
+run_ci install
+rc=$?
+expect "install: exit 0, registers the runner, writes the config and the unit, starts the service" \
+  eval '[[ $rc -eq 0 ]] && grep -q "^POST /repos/{owner}/{repo}/actions/runners {\"name\":\"baluk-host\"" "$root/ci/state/tea.log" && [[ -f $ci_conf/config.yml && -f $ci_units/forgejo-runner.service ]] && grep -qx "start forgejo-runner.service" "$root/ci/state/systemctl.log" && grep -q "is online" "$root/ci.out"'
+expect "install: the config has the token of the registration, is private, names the main checkout" \
+  eval '[[ $(stat -c %a "$ci_conf/config.yml") == 600 ]] && grep -qx "      token: \"tok-1\"" "$ci_conf/config.yml" && grep -qx "    BALUK_MAIN: \"$ci_main\"" "$ci_conf/config.yml"'
+expect "install: the token is not printed" eval '! grep -q tok-1 "$root/ci.out"'
+expect "install: the runner of someone else is not touched" eval '! grep -q "^DELETE" "$root/ci/state/tea.log"'
+: >"$root/ci/state/tea.log"
+: >"$root/ci/state/systemctl.log"
+cp "$ci_conf/config.yml" "$root/ci-config-1.yml"
+run_ci install
+rc=$?
+expect "install again: exit 0, no registration, no restart, nothing rewritten" \
+  eval '[[ $rc -eq 0 ]] && ! grep -q "^POST\|^DELETE" "$root/ci/state/tea.log" && ! grep -q "start\|restart\|daemon-reload" "$root/ci/state/systemctl.log" && cmp -s "$ci_conf/config.yml" "$root/ci-config-1.yml" && ! grep -q "wrote" "$root/ci.out"'
+run_ci status
+rc=$?
+expect "status after install: exit 0, names the unit and the runner" \
+  eval '[[ $rc -eq 0 ]] && grep -q "^unit: .*active" "$root/ci.out" && grep -q "^runner:  baluk-host id 1 idle" "$root/ci.out"'
+# A changed text (another main checkout) rewrites the config and restarts the service.
+: >"$root/ci/state/systemctl.log"
+mkdir -p "$ci_main/other/tools" && printf '#!/bin/sh\n' >"$ci_main/other/tools/check-pr.sh" && chmod +x "$ci_main/other/tools/check-pr.sh"
+CI_TEST_MAIN=$ci_main/other run_ci install
+rc=$?
+expect "install with another main checkout: the config is rewritten, the service restarted, the same runner kept" \
+  eval '[[ $rc -eq 0 ]] && grep -qx "restart forgejo-runner.service" "$root/ci/state/systemctl.log" && grep -qx "    BALUK_MAIN: \"$ci_main/other\"" "$ci_conf/config.yml" && ! grep -q "^POST" "$root/ci/state/tea.log"'
+# The runner is gone from Forgejo: a new registration replaces the config's one.
+echo '[]' >"$root/ci/state/runners.json"
+run_ci install
+rc=$?
+expect "install when Forgejo lost the runner: registered again, the new token in the config" \
+  eval '[[ $rc -eq 0 ]] && grep -qx "      token: \"tok-2\"" "$ci_conf/config.yml"'
+# A runner of our name that the config does not know (a lost config) is replaced.
+rm -rf "$ci_conf"
+run_ci install
+rc=$?
+expect "install without the config but with a runner of the name: it is removed, a new one registered" \
+  eval '[[ $rc -eq 0 ]] && grep -q "^DELETE /repos/{owner}/{repo}/actions/runners/2" "$root/ci/state/tea.log" && grep -qx "      token: \"tok-3\"" "$ci_conf/config.yml"'
+CI_NO_SERVER=1 run_ci install
+rc=$?
+expect "install without the server: exit 1, the server is named" eval '[[ $rc -eq 1 ]] && grep -q "cannot list the runners" "$root/ci.out"'
+rm -f "$ci_main/tools/check-pr.sh"
+run_ci install
+rc=$?
+expect "install outside the main checkout: exit 1, says so" eval '[[ $rc -eq 1 ]] && grep -q "check-pr.sh is missing" "$root/ci.out"'
+printf '#!/bin/sh\n' >"$ci_main/tools/check-pr.sh"
+chmod +x "$ci_main/tools/check-pr.sh"
+run_ci uninstall
+rc=$?
+expect "uninstall: exit 0, the service stopped, the unit, the runner in Forgejo, the config, the data and the binary gone" \
+  eval '[[ $rc -eq 0 ]] && grep -q "^disable --now" "$root/ci/state/systemctl.log" && [[ ! -e $ci_units/forgejo-runner.service && ! -e $ci_conf && ! -e $ci_data && ! -e $ci_bin/forgejo-runner ]] && [[ $(cat "$root/ci/state/runners.json") == "[]" ]]'
+run_ci uninstall
+expect "uninstall again: exit 0" test $? -eq 0
 
 echo
 if (( fails == 0 )); then

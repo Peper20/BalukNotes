@@ -9,7 +9,8 @@ paths:
 |---|---|
 | `check.sh` | the full check |
 | `cargo.sh` | `cargo` by hand with the settings of the checks: the shared build dir, the CPU cap, the lock of heavy work and `freshen_sources` |
-| `check-pr.sh` | the full check of a pull request: `check.sh` in the worktree `.claude/worktrees/check-pr-<number>` at its head commit, the result as a pull request comment `Full check passed at <sha>.` or `Full check failed at <sha>: <steps>.` (run by the orchestrator, `docs/agents.md`) |
+| `check-pr.sh` | the full check of a pull request: `check.sh` in the worktree `.claude/worktrees/check-pr-<number>` at its head commit, the result as a pull request comment `Full check passed at <sha>.` or `Full check failed at <sha>: <steps>.` (run by CI on every pull request push, `.forgejo/workflows/check.yml`, "CI") |
+| `ci-runner.sh` | `install`, `uninstall`, `status` of the Forgejo Runner that runs `check-pr.sh` on every pull request push ("CI") |
 | `install.sh` | `notes` and its parts (`notes-typst`, `notes-hub`, the `notes-app` window with a menu entry and icon) into `~/.local/bin` and the skill into `~/.claude/skills` in one version (the autostart service is not installed; one still active is restarted); run again after changes |
 | `cloud-setup.sh`, `cloud-finish.sh` | a throwaway Forgejo in a cloud session and sending its `main` to a GitHub branch ("Cloud environment") |
 | `deploy-hub.sh` | updates `notes-hub` on the VPS in one command: sends the sources of a commit over SSH, the VPS builds, a root helper (`server/baluk-notes-hub-install`, installed by hand) installs and restarts (`docs/server.md`, "Updating") |
@@ -18,7 +19,7 @@ paths:
 | `lib/target-limit.sh` | pruning and the size limit of that dir, sourced by `check.sh` (the crate list by python3, no `jq`) |
 | `lib/cpu-cap.sh` | the CPU cap `CHECK_JOBS` and the lock of heavy work and `freshen_sources`, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh`, `check-pr.sh` |
 | `lib/build-env.sh` | the build settings of a small disk and a cloud session (`CARGO_PROFILE_DEV_DEBUG`) and the WebKitGTK check, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh` |
-| `test-libs.sh` | tests of the libraries above, of `cargo.sh` and of `check-pr.sh`, without a cargo build - the first step of `check.sh` |
+| `test-libs.sh` | tests of the libraries above, of `cargo.sh`, `check-pr.sh` and `ci-runner.sh`, without a cargo build - the first step of `check.sh` |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 | `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; runs itself inside a headless gamescope |
 | `app-smoke.sh` | a smoke launch of the `notes-app` window inside a headless gamescope: it opens, loads the fixture vault, quits cleanly (~6 s); not in `check.sh` (needs gamescope and an installed or built `notes-app`) |
@@ -90,9 +91,10 @@ system of the build dir is under `SMALL_DISK_GB` (100) in total, or in a cloud
 session (`CLAUDE_CODE_REMOTE=true` or `BALUK_CLOUD=1`); a value set by hand is
 kept. It also answers whether WebKitGTK is installed (`has_webkit`).
 `tools/test-libs.sh`, the first step of `check.sh`, tests these libraries and
-`tools/cargo.sh` and `tools/check-pr.sh` without a cargo build, with shims for
-`jq`, `df`, `python3`, `pkg-config`, `cargo` and `tea`.
-`tools/check-pr.sh <number>` (the orchestrator, from any checkout) fetches
+`tools/cargo.sh`, `tools/check-pr.sh` and `tools/ci-runner.sh` without a cargo
+build, with shims for `jq`, `df`, `python3`, `pkg-config`, `cargo`, `tea` and
+`systemctl`.
+`tools/check-pr.sh <number>` (CI; by hand from any checkout) fetches
 `pull/<number>/head`, checks it out detached in the worktree of the main
 checkout `.claude/worktrees/check-pr-<number>` (a later run reuses it: ignored
 output such as `app/node_modules` stays, `app/dist` of an older head is
@@ -107,6 +109,42 @@ step by step).
 Without `app/dist` (a fresh checkout) the client is built before the Rust
 steps - server tests serve it. e2e listens on fixed ports: the lock of heavy
 work (below) keeps runs from overlapping.
+
+## CI
+
+Every push to a pull request into `main` (opened, synchronize, reopened) runs
+the full check as a commit status: `.forgejo/workflows/check.yml`, one job
+`full-check` on the runner label `baluk-host`, which runs
+`$BALUK_MAIN/tools/check-pr.sh <number>` of the main checkout (so the check
+builds into the shared `target/` and takes the shared locks). The job result is
+the exit code of the script: 0 success, anything else failure. A readable
+status of a head is the combined status of its commit, `tea api --login dev
+'/repos/{owner}/{repo}/commits/<sha>/status'`: `state` is `pending`,
+`success`, `failure` or `error`. The comment of `check-pr.sh` on the pull
+request stays as it is.
+
+The runner is a Forgejo Runner (pinned in `tools/ci-runner.sh`) on this
+machine: a repository runner `baluk-host`, label `baluk-host:host` (the job
+runs on the host, no Docker), capacity 1, so the jobs queue and the check of a
+newer head of a pull request starts when the older one ends. It runs as the
+user service `forgejo-runner.service` (while the user is logged in), `Nice=2`.
+`tools/ci-runner.sh install` sets it up (idempotent; no root), `uninstall`
+removes it, `status` shows the unit and the runner as Forgejo sees it.
+
+- Config and the token of the runner: `~/.config/forgejo-runner/config.yml`
+  (0600; `BALUK_MAIN`, the main checkout, is in its `runner.envs`); the unit:
+  `~/.config/systemd/user/forgejo-runner.service`; the working dirs of jobs:
+  `~/.local/share/forgejo-runner/`; the binary: `~/.local/bin/forgejo-runner`.
+  Both files are written by `install`: edit the script, not them.
+- Logs: the runner's - `journalctl --user -u forgejo-runner`; a job's - in
+  Forgejo, on the run of the pull request (`/ibaluk/baluk-notes/actions`; the
+  list through the API: `tea api --login dev
+  '/repos/{owner}/{repo}/actions/runs'`). `check-pr.sh` prints the failed
+  steps and the paths of their logs there.
+- The job runs code of the pull request with the rights of the user (host
+  execution, no sandbox), as the agents do by hand. A change of
+  `.forgejo/workflows/check.yml` in a pull request takes effect in that pull
+  request's own run.
 
 ## CPU cap
 
