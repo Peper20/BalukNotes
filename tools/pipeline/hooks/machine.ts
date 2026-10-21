@@ -465,6 +465,7 @@ function onPolled(s: State, ev: Event_<'polled'>, out: Result): void {
     return
   }
   if (t.head !== undefined && t.head !== ev.head) note(t, ev.now, `new head ${short(ev.head)}`)
+  if (t.approvedHead !== ev.head) t.approvedHead = undefined
   t.head = ev.head
   t.ci = ev.ci
   t.unmergeable = ev.mergeable ? 0 : t.unmergeable + 1
@@ -475,6 +476,13 @@ function onPolled(s: State, ev: Event_<'polled'>, out: Result): void {
   }
   switch (ev.ci) {
     case 'success':
+      if (t.approvedHead === ev.head && t.pr !== undefined) {
+        // The reviewer approved this very head while its status was not `success` yet: no second review.
+        t.stage = 'merging'
+        note(t, ev.now, `check passed at ${short(ev.head)}, approved earlier: merging`)
+        out.actions.push({ type: 'merge', slug: t.slug, pr: t.pr, head: ev.head })
+        return
+      }
       t.stage = 'reviewing'
       note(t, ev.now, `check passed at ${short(ev.head)}: review`)
       spawnReviewer(t, out)
@@ -497,6 +505,7 @@ function onReviewed(s: State, ev: Event_<'reviewed'>, out: Result): void {
   if (ev.head !== t.head) {
     // A new head was pushed while the review ran: the review is stale, the check starts over.
     t.head = ev.head
+    t.approvedHead = undefined
     t.stage = 'checking'
     t.ci = 'pending'
     note(t, ev.now, `new head ${short(ev.head)} during the review: checking again`)
@@ -512,6 +521,7 @@ function onReviewed(s: State, ev: Event_<'reviewed'>, out: Result): void {
       } else {
         t.stage = 'checking'
         t.ci = ev.status
+        if (ev.reviewHead === ev.head) t.approvedHead = ev.head
         note(t, ev.now, `approved, but the status is ${ev.status} at ${short(ev.head)}: waiting`)
         out.actions.push({ type: 'poll', slug: t.slug, pr: ev.pr })
       }

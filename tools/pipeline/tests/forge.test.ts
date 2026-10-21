@@ -51,10 +51,48 @@ describe('reading the server', () => {
     expect(st.detail).not.toContain('at old')
     expect(st.detail).toContain('ci: clippy failed http://x/1')
     expect(st.detail).toContain('/repo/.claude/worktrees/check-pr-7/tests/.data/check/')
-    for (const [state, want] of [['success', 'success'], ['pending', 'pending'], ['', 'pending'], ['error', 'error']] as const) {
+    for (const [state, want] of [['success', 'success'], ['pending', 'pending'], ['', 'pending'], ['unknown', 'pending'], ['error', 'error'], ['warning', 'error']] as const) {
       const t = script([['/status', ok(JSON.stringify({ state, statuses: [] }))], ['/comments', ok('[]')]])
       expect((await forgeOf(t.run).status(HEAD, 7)).state).toBe(want)
     }
+  })
+
+  test('a combined status warning is an error for the developer, with the statuses that did not pass', async () => {
+    const statuses = [
+      { context: 'ci', status: 'warning', description: 'slow', target_url: 'http://x/2' },
+      { context: 'lint', status: 'success', description: 'ok', target_url: '' },
+      { context: 'wait', status: 'pending', description: '', target_url: '' },
+    ]
+    const s = script([['/status', ok(JSON.stringify({ state: 'warning', statuses }))], ['/comments', ok('[]')]])
+    const st = await forgeOf(s.run).status(HEAD, 7)
+    expect(st.state).toBe('error')
+    expect(st.detail).toContain('ci: slow http://x/2')
+    expect(st.detail).not.toContain('lint')
+    expect(st.detail).not.toContain('wait')
+  })
+
+  test('comments are read page by page: a failure comment on page 2 is found', async () => {
+    const filler = Array.from({ length: 50 }, (_, i) => ({ body: `chatter ${i}` }))
+    const body = `Full check failed at ${HEAD}: tests.`
+    const s = script([
+      ['/status', ok(JSON.stringify({ state: 'failure', statuses: [] }))],
+      ['/comments?limit=50&page=2', ok(JSON.stringify([{ body: 'later chatter' }, { body }]))],
+      ['/comments?limit=50&page=1', ok(JSON.stringify(filler))],
+    ])
+    const st = await forgeOf(s.run).status(HEAD, 7)
+    expect(st.detail).toContain(body)
+    expect(s.log.filter(l => l.includes('/comments'))).toHaveLength(2)
+  })
+
+  test('the reviews are read page by page: the last review on page 2 decides', async () => {
+    const mine = (id: number, state: string) => ({ id, user: { login: 'agent-reviewer' }, state, commit_id: HEAD, body: `review ${id}` })
+    const page1 = Array.from({ length: 50 }, (_, i) => mine(i + 1, 'REQUEST_CHANGES'))
+    const s = script([
+      ['--login reviewer /user', ok('{"login":"agent-reviewer"}')],
+      ['/reviews?limit=50&page=2', ok(JSON.stringify([mine(51, 'APPROVED')]))],
+      ['/reviews?limit=50&page=1', ok(JSON.stringify(page1))],
+    ])
+    expect(await forgeOf(s.run).review(7, HEAD)).toEqual({ verdict: 'APPROVED', commit: HEAD, text: 'review 51' })
   })
 
   test('the review: the reviewer account, this commit, not stale, the latest one', async () => {

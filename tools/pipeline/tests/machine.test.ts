@@ -280,6 +280,60 @@ describe('reviewing and merging', () => {
     expect(r.actions('tell')[0]?.agentId).toBe('x-rev')
   })
 
+  test('an approval at a head whose status is pending: the status passing later merges it, no second reviewer', async () => {
+    const r = new Run()
+    reviewing(r)
+    r.review('x', HEAD, 'APPROVED', '', 'pending')
+    expect(r.task('x').stage).toBe('checking')
+    expect(r.task('x').approvedHead).toBe(HEAD)
+    const res = r.poll('x', HEAD, 'success')
+    expect(r.task('x').stage).toBe('merging')
+    expect(res.actions.find(a => a.type === 'merge')).toEqual({ type: 'merge', slug: 'x', pr: 7, head: HEAD })
+    expect(res.actions.some(a => a.type === 'spawn')).toBe(false)
+  })
+
+  test('a new head after an approval clears it: the new head is reviewed', async () => {
+    const r = new Run()
+    reviewing(r)
+    r.review('x', HEAD, 'APPROVED', '', 'pending')
+    const res = r.poll('x', HEAD2, 'success')
+    expect(r.task('x').approvedHead).toBeUndefined()
+    expect(r.task('x').stage).toBe('reviewing')
+    expect(res.actions.some(a => a.type === 'merge')).toBe(false)
+    expect(res.actions.find(a => a.type === 'spawn')).toMatchObject({ role: 'reviewer' })
+  })
+
+  test('an approved head that fails the check goes back to the developer', async () => {
+    const r = new Run()
+    reviewing(r)
+    r.review('x', HEAD, 'APPROVED', '', 'pending')
+    r.poll('x', HEAD, 'failure', 'clippy')
+    expect(r.task('x').stage).toBe('developing')
+    expect(r.task('x').rounds['developer-1']).toBe(1)
+    expect(r.actions('merge')).toHaveLength(0)
+  })
+
+  test('a head pushed during the review drops the approval record', async () => {
+    const r = new Run()
+    reviewing(r)
+    r.task('x').approvedHead = HEAD
+    r.feed({ type: 'reviewed', slug: 'x', pr: 7, head: HEAD2, verdict: 'APPROVED', reviewHead: HEAD, text: '', status: 'success', statusHead: HEAD2 })
+    expect(r.task('x').approvedHead).toBeUndefined()
+    expect(r.task('x').stage).toBe('checking')
+  })
+
+  test('the rebase message allows the forced push only to the task branch', async () => {
+    const r = new Run()
+    r.begin('x')
+    r.ready('x', 7, HEAD)
+    r.feed({ type: 'polled', slug: 'x', pr: 7, prState: 'open', head: HEAD, ci: 'pending', mergeable: false, detail: '' })
+    r.feed({ type: 'polled', slug: 'x', pr: 7, prState: 'open', head: HEAD, ci: 'pending', mergeable: false, detail: '' })
+    const text = r.actions('tell')[0]?.text ?? ''
+    expect(text).toContain('--force-with-lease')
+    expect(text).toContain("only to this task's own branch task/x, never to main or to another branch")
+    expect(text).toContain('merge origin/main into the branch')
+  })
+
   test('a merge that fails with a conflict sends the developer to rebase', async () => {
     const r = new Run()
     reviewing(r)

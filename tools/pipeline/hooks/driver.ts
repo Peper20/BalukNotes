@@ -192,7 +192,13 @@ export function createPipeline(ports: Ports): Pipeline {
   }
 
   async function merge(slug: string, pr: number, head: string, emit: (e: Input) => void): Promise<void> {
-    const outcome = await ports.forge.merge(pr, head, `task/${slug}`)
+    let outcome: Awaited<ReturnType<Forge['merge']>>
+    try {
+      outcome = await ports.forge.merge(pr, head, `task/${slug}`)
+    } catch (err) {
+      // The server could not be read: the liaison decides, there is no automatic retry.
+      outcome = { ok: false, kind: 'other', message: err instanceof Error ? err.message : String(err) }
+    }
     if (!outcome.ok) {
       emit({ type: 'merge-result', slug, ok: false, kind: outcome.kind, message: outcome.message })
       return

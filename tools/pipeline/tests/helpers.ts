@@ -12,6 +12,8 @@ export class FakeServer {
   /** Calls of the Forge interface, in order, as readable lines. */
   calls: string[] = []
   mergeFails: MergeOutcome | undefined
+  /** `merge` throws this text, as forge.ts does when `tea` fails. */
+  mergeThrows: string | undefined
   pull: PullOutcome = { pull: 'ok', note: '', changed: [] }
   installOk = true
   /** Left over by the cleanup, per call kind. */
@@ -49,6 +51,7 @@ export class FakeServer {
       },
       merge: async (n, head, branch) => {
         calls.push(`merge ${n} ${head} ${branch}`)
+        if (this.mergeThrows !== undefined) throw new Error(this.mergeThrows)
         if (this.mergeFails) return this.mergeFails
         const p = this.prs.get(n)
         if (!p || p.head !== head) return { ok: false, kind: 'moved', message: 'moved' }

@@ -61,6 +61,8 @@ export type Task = {
   apiNotified?: boolean
   /** Consecutive polls that saw the pull request not mergeable. */
   unmergeable: number
+  /** The head the reviewer approved while its status was not `success` yet; cleared when the head changes. */
+  approvedHead?: string
   /** The head for which the developer was already sent to rebase. */
   conflictHead?: string
   /** The open findings: they go to a developer that takes the task over. */

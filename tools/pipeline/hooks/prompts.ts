@@ -78,7 +78,7 @@ export function changesMessage(t: Task, n: number, review: string): string {
 }
 
 export function rebaseMessage(t: Task): string {
-  return `Pull request #${t.pr} conflicts with main since another pull request was merged. Rebase ${branchOf(t.slug)} onto origin/main (git fetch origin, then git rebase origin/main), resolve the conflicts, run the targeted tests, push (git push --force-with-lease to this branch only; if you cannot force-push, merge origin/main into the branch instead), and end your final message with the PIPELINE line again.`
+  return `Pull request #${t.pr} conflicts with main since another pull request was merged. Rebase ${branchOf(t.slug)} onto origin/main (git fetch origin, then git rebase origin/main), resolve the conflicts, run the targeted tests, push. A rebase rewrites the branch, so push it with git push --force-with-lease: this is allowed only to this task's own branch ${branchOf(t.slug)}, never to main or to another branch. If that push is refused, merge origin/main into the branch instead and push normally. End your final message with the PIPELINE line again.`
 }
 
 export const nudgeMessage = (): string =>

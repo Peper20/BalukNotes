@@ -82,10 +82,17 @@ function toCi(state: string): Ci {
     case 'failure':
     case 'error':
       return state
+    // The head did not pass cleanly: a developer's round, not a poll without end.
+    case 'warning':
+      return 'error'
     default:
       return 'pending'
   }
 }
+
+/** The page size of the lists read from the server, and a bound against a server that never ends a list. */
+const PAGE_SIZE = 50
+const MAX_PAGES = 200
 
 export function makeForge(run: Run, opts: ForgeOptions): Forge {
   const { root, sleep } = opts
@@ -95,6 +102,17 @@ export function makeForge(run: Run, opts: ForgeOptions): Forge {
   const api = (login: string, endpoint: string, ...more: string[]): Promise<RunResult> =>
     sh(['tea', 'api', '--login', login, ...more, endpoint])
   let reviewerLogin: string | undefined
+
+  /** Every item of a list endpoint: pages of `PAGE_SIZE` from 1, until a page is shorter. */
+  async function allPages(endpoint: string, what: string): Promise<Record<string, unknown>[]> {
+    const items: Record<string, unknown>[] = []
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const list = asArray(json(await api('dev', `${endpoint}?limit=${PAGE_SIZE}&page=${page}`), what))
+      items.push(...list.map(asRecord))
+      if (list.length < PAGE_SIZE) break
+    }
+    return items
+  }
 
   async function pr(n: number): Promise<PrInfo> {
     const d = asRecord(json(await api('dev', `/repos/{owner}/{repo}/pulls/${n}`), `pull request ${n}`))
@@ -112,9 +130,7 @@ export function makeForge(run: Run, opts: ForgeOptions): Forge {
       .map(s => `- ${asString(s.context)}: ${asString(s.description)} ${asString(s.target_url)}`.trimEnd())
     let comment = ''
     try {
-      const comments = asArray(
-        json(await api('dev', `/repos/{owner}/{repo}/issues/${n}/comments`), `comments of ${n}`),
-      ).map(asRecord)
+      const comments = await allPages(`/repos/{owner}/{repo}/issues/${n}/comments`, `comments of ${n}`)
       const mine = comments.filter(c => asString(c.body).startsWith(`Full check failed at ${sha}`))
       comment = asString(mine[mine.length - 1]?.body)
     } catch {
@@ -135,7 +151,7 @@ export function makeForge(run: Run, opts: ForgeOptions): Forge {
 
   async function review(n: number, head: string): Promise<ReviewInfo> {
     const who = await login()
-    const list = asArray(json(await api('dev', `/repos/{owner}/{repo}/pulls/${n}/reviews`), `reviews of ${n}`)).map(asRecord)
+    const list = await allPages(`/repos/{owner}/{repo}/pulls/${n}/reviews`, `reviews of ${n}`)
     const mine = list
       .filter(r => asString(asRecord(r.user).login) === who)
       .filter(r => asString(r.commit_id) === head && r.dismissed !== true && r.stale !== true)

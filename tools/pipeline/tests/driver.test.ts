@@ -62,6 +62,34 @@ describe('a task from start to merge', () => {
     expect(f.store.value?.tasks[0]?.slug).toBe('feat')
   })
 
+  test('a merge whose server call throws ends in the liaison stage with a notification', async () => {
+    const f = fakes()
+    const p = await started(f)
+    const { rev } = await toReview(f, p, 'feat', 7, HEAD)
+    f.server.review(7, HEAD, 'APPROVED')
+    f.server.mergeThrows = 'pull request 7: connection refused'
+    await finish(p, rev)
+    expect(p.state().tasks[0]?.stage).toBe('liaison')
+    expect(f.notes).toHaveLength(1)
+    expect(f.notes[0]).toContain('the merge failed: pull request 7: connection refused')
+  })
+
+  test('an approval before the status passed: the passing status merges it with no second reviewer', async () => {
+    const f = fakes()
+    const p = await started(f)
+    const { rev } = await toReview(f, p, 'feat', 7, HEAD)
+    f.server.setStatus(HEAD, 'pending')
+    f.server.review(7, HEAD, 'APPROVED')
+    await finish(p, rev)
+    expect(p.state().tasks[0]?.stage).toBe('checking')
+    f.server.setStatus(HEAD, 'success')
+    await p.tick()
+    await p.settle()
+    expect(p.state().tasks[0]?.stage).toBe('merged')
+    expect(f.spawned.map(s => s.tier)).toEqual(['developer-1', 'reviewer'])
+    expect(f.server.calls.filter(c => c.startsWith('merge'))).toEqual([`merge 7 ${HEAD} task/feat`])
+  })
+
   test('install runs when the merged diff touches crates/, app/, baluk/ or skills/', async () => {
     for (const path of ['crates/notes-core/src/lib.rs', 'app/src/a.ts', 'baluk/x.typ', 'skills/baluk-note/SKILL.md']) {
       const f = fakes()
