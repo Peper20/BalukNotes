@@ -35,6 +35,11 @@ export interface CoreSource {
    * first round is done (`load.ts`).
    */
   hub?: string;
+  /**
+   * Milliseconds from a sync round to the next one (default 30 000). The
+   * production bundle does not set it; the e2e do, so they do not wait 30 s.
+   */
+  syncEvery?: number;
 }
 
 /** The first message of a worker: start the core. */

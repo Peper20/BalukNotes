@@ -58,6 +58,9 @@ export RAYON_NUM_THREADS=$(below 2)
 export TOKIO_WORKER_THREADS=$CHECK_JOBS
 # Vitest: the workers that run test files (the main process is one more).
 export VITEST_MAX_WORKERS=$(below 1)
+# Playwright: the workers of the e2e, each with its own app server and browser
+# (app/playwright.config.ts; unset there means one worker).
+export PLAYWRIGHT_WORKERS=$(( CHECK_JOBS / 3 < 1 ? 1 : CHECK_JOBS / 3 ))
 
 # One lock for all heavy work of all runs on the machine (the check of every
 # worktree, the installation, the test server build): steps of different runs

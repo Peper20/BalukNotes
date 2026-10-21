@@ -1,5 +1,5 @@
 // baluk frames: the slider, buttons, playing, theme.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { open, resetTheme } from "./helpers";
 
 test("frames: the default frame is visible, the slider and ‹ › switch, the place does not jump", async ({ page }) => {

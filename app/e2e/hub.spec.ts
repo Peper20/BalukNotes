@@ -1,11 +1,12 @@
 // The browser version served by the hub (docs/architecture.md, 1 and 9):
-// `notes-hub --web tests/.data/web` on port 8463 over tests/.data/e2e-hub, an
+// `notes-hub --web tests/.data/web` on HUB_PORT (e2e/ports.ts) over tests/.data/e2e-hub, an
 // account `e2e` and a hub vault `Учёба` (both made by playwright.config.ts
 // before the server starts). The page asks the hub to sign in and for the
 // vault list, and runs the core in the worker for the vault of the tab: the
 // hub gets no vault, note or settings request, only the sync API, with which
 // the worker syncs the vault (a round at start, every 30 s, 2 s after a local
-// change). The first start of the module in the browser takes tens of seconds.
+// change; the sync scenario sets the interval to 1 s, see `shortRounds`). The
+// first start of the module in the browser takes tens of seconds.
 import { expect, test } from "@playwright/test";
 import { HUB_LOGIN, HUB_PASSWORD, HUB_URL, HUB_VAULT } from "./hub-env";
 
@@ -21,6 +22,18 @@ const hubApi = (page: import("@playwright/test").Page): string[] => {
   });
   return served;
 };
+
+/**
+ * The rounds of the worker every second instead of 30: the page gets the
+ * bundle's `assets/config.js` with `core.syncEvery` added (`CoreSource.syncEvery`;
+ * the bundle itself does not set it).
+ */
+async function shortRounds(page: import("@playwright/test").Page) {
+  await page.route("**/assets/config.js", async (route) => {
+    const config = await route.fetch();
+    await route.fulfill({ response: config, body: `${await config.text()}\nglobalThis.__NOTES_API__.core.syncEvery = 1000;\n` });
+  });
+}
 
 test("the hub's browser version: sign-in, the vault list from the hub, a new vault, the core in the worker", async ({ page }) => {
   test.setTimeout(400_000);
@@ -76,6 +89,7 @@ test("the worker syncs the vault with the hub: download, a change on the hub, OP
   test.setTimeout(400_000);
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  await shortRounds(page);
   // The sync requests of the worker (the context sees those of workers too).
   const vaultApi = `/api/sync/vaults/${HUB_VAULT}`;
   const fileGets: string[] = [];
@@ -111,7 +125,7 @@ test("the worker syncs the vault with the hub: download, a change on the hub, OP
     headers: { "x-base": current.headers()["x-hash"]!, "content-type": "application/octet-stream" },
   });
   expect(put.status()).toBe(200);
-  await expect(note).toContainText("Новый текст с хаба", { timeout: 40_000 });
+  await expect(note).toContainText("Новый текст с хаба", { timeout: 15_000 });
 
   // A reload opens the note from OPFS: the start round asks for changes, no file is downloaded.
   fileGets.length = 0;

@@ -1,6 +1,6 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { VAULT, apiPath, noteUrl, open, ready, title, vaultUrl } from "./helpers";
 
 test("home: the graph and the list, a click on a node opens the note", async ({ page }) => {

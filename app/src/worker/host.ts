@@ -5,7 +5,8 @@
 // tested with a fake core.
 //
 // Sync rounds (architecture §1): one at start, before any request; then 30 s
-// after the last one, and 2 s after a request that changed vault files. A
+// after the last one (`CoreSource.syncEvery` sets another time, the e2e use it),
+// and 2 s after a request that changed vault files. A
 // round is an item of the queue, so it never overlaps a request or another
 // round, and at most one waits in the queue.
 //
@@ -42,7 +43,7 @@ export interface Core {
  */
 export const MEMORY_LIMIT = 1024 ** 3;
 
-/** A round this long after the last one. */
+/** A round this long after the last one, unless `CoreSource.syncEvery` says otherwise. */
 export const ROUND_EVERY_MS = 30_000;
 /** A round this long after a request that changed vault files. */
 export const ROUND_AFTER_CHANGE_MS = 2_000;
@@ -100,6 +101,8 @@ export class CoreHost {
   private due = 0;
   /** A round waits in the queue. */
   private roundQueued = false;
+  /** The time from a round to the next one. */
+  private roundEvery = ROUND_EVERY_MS;
   /** The events requests that wait for a change, with their timers. */
   private readonly held = new Map<RequestMessage, ReturnType<typeof setTimeout>>();
 
@@ -111,6 +114,7 @@ export class CoreHost {
   ) {}
 
   start(source: CoreSource): void {
+    this.roundEvery = source.syncEvery ?? ROUND_EVERY_MS;
     this.ready = this.load(source);
     // Registered before any request awaits `ready`, so `broken` is set by then.
     this.ready.then(
@@ -258,7 +262,7 @@ export class CoreHost {
       if (e instanceof WebAssembly.RuntimeError) this.abort(e);
       console.error(`sync: ${describe(e)}`);
     }
-    this.schedule(ROUND_EVERY_MS);
+    this.schedule(this.roundEvery);
     await this.check();
   }
 

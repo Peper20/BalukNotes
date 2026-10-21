@@ -1,6 +1,6 @@
 // Vault sync in the settings: this spec starts its OWN storage server (port
-// 8461, `notes-hub`, one account) and its OWN app server (port 8462, a data
-// directory with one vault), and a second device is the `notes` CLI on another
+// SYNC_HUB_PORT, `notes-hub`, one account) and its OWN app server (port
+// SYNC_APP_PORT, a data directory with one vault; e2e/ports.ts), and a second device is the `notes` CLI on another
 // data directory. Through the settings window: a wrong password and an
 // unreachable server say so, the sign-in, the switch of a vault (the files
 // reach the hub), a change made on the other device shows in the open note
@@ -10,20 +10,17 @@
 // answered by the page route.
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { SILENT_PORT, SYNC_APP_PORT, SYNC_HUB_PORT } from "./ports";
+import { BIN, ROOT, exitOf, startApp, stop, waitFor } from "./server";
 
-const HUB_PORT = 8461;
-const APP_PORT = 8462;
-const HUB = `http://127.0.0.1:${HUB_PORT}`;
-const APP = `http://127.0.0.1:${APP_PORT}`;
-const ROOT = fileURLToPath(new URL("../../", import.meta.url));
+const HUB = `http://127.0.0.1:${SYNC_HUB_PORT}`;
+const APP = `http://127.0.0.1:${SYNC_APP_PORT}`;
 const DATA = join(ROOT, "tests/.data/sync-e2e");
 const DIR_HUB = join(DATA, "hub");
 const DIR_A = join(DATA, "a");
 const DIR_B = join(DATA, "b");
-const BIN = join(process.env.CARGO_TARGET_DIR ?? join(ROOT, "target"), "debug");
 const LOGIN = "test";
 const PASSWORD = "correct-horse-9";
 const VAULT = "notes";
@@ -41,41 +38,22 @@ const device = (dir: string, ...args: string[]) =>
 let hub: ChildProcess | undefined;
 let app: ChildProcess | undefined;
 
-/** Waits until the address answers (any status when `any`). */
-async function waitFor(url: string, ms: number, any = false) {
-  const until = Date.now() + ms;
-  for (;;) {
-    try {
-      if ((await fetch(url)).ok || any) return;
-    } catch {
-      // not listening yet
-    }
-    if (Date.now() > until) throw new Error(`no answer from ${url}`);
-    await new Promise((r) => setTimeout(r, 200));
-  }
-}
-
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
   test.setTimeout(300_000);
-  execFileSync("cargo", ["build", "-q", "-p", "notes", "-p", "notes-typst", "-p", "notes-hub"], { cwd: ROOT, stdio: "inherit" });
   rmSync(DATA, { recursive: true, force: true });
   mkdirSync(DIR_HUB, { recursive: true });
   write(DIR_A, VAULT, "a.typ", note("Первая", "Текст до."));
   execFileSync(join(BIN, "notes-hub"), ["--data", DIR_HUB, "users", "add", LOGIN, "--password-stdin"], { input: `${PASSWORD}\n`, stdio: ["pipe", "ignore", "inherit"] });
-  hub = spawn(join(BIN, "notes-hub"), ["--data", DIR_HUB, "hub", "serve", "--addr", `127.0.0.1:${HUB_PORT}`], { stdio: ["ignore", "ignore", "inherit"] });
-  app = spawn(join(BIN, "notes-typst"), ["--data", DIR_A, "--trash", join(DATA, "trash"), "serve", "--addr", `127.0.0.1:${APP_PORT}`], {
-    stdio: ["ignore", "ignore", "inherit"],
-  });
-  await waitFor(`${APP}/api/vaults`, 120_000);
-  await waitFor(`${HUB}/api/session`, 30_000, true);
+  hub = spawn(join(BIN, "notes-hub"), ["--data", DIR_HUB, "hub", "serve", "--addr", `127.0.0.1:${SYNC_HUB_PORT}`], { stdio: ["ignore", "ignore", "inherit"] });
+  app = startApp(DIR_A, SYNC_APP_PORT);
+  await waitFor(`${APP}/api/vaults`, 120_000, false, exitOf(app));
+  await waitFor(`${HUB}/api/session`, 30_000, true, exitOf(hub));
 });
 
 test.afterAll(async () => {
-  hub?.kill("SIGTERM");
-  app?.kill("SIGTERM");
-  await new Promise((r) => setTimeout(r, 300));
+  await Promise.all([stop(hub), stop(app)]);
 });
 
 /** The settings window opened on the sync section. */
@@ -114,7 +92,7 @@ test("sync: sign-in errors, sign-in, a vault goes to the server and a change fro
   expect((await (await page.request.get(`${APP}/api/device/sync`)).json()).signed_in).toBe(false);
 
   // A server that does not answer.
-  await server.fill("http://127.0.0.1:8469");
+  await server.fill(`http://127.0.0.1:${SILENT_PORT}`);
   await section.getByLabel("Пароль").press("Enter");
   await expect(section.getByRole("alert")).toContainText("Сервер хранилища недоступен");
 

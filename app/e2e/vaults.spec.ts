@@ -3,7 +3,8 @@
 // directory), with a confirmation; the tabs of a deleted note close.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { TRASH, VAULT, noteUrl, open, ready, vaultUrl } from "./helpers";
 
 const head = (title: string) => `#import "/_baluk/lib.typ": *\n#show: note.with(title: [${title}])\n\n`;

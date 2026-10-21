@@ -1,14 +1,16 @@
 // The core in a Web Worker (docs/architecture.md, 1): with `__NOTES_API__.core`
 // the client sends its `/api/...` requests to the notes-wasm module in a
 // worker, so a note opens and builds in the browser itself. The module, its
-// fonts and the vault files (tests/.data/wasm, made by the `wasm-module` step of check.sh)
-// are answered under /wasm/ by the test; the server on 8433 serves the client
-// and the stylesheets only. The first build in WASM takes tens of seconds.
+// fonts and the vault files (tests/.data/wasm, made by the `wasm-module` step of
+// check.sh) are answered under /wasm/ by the test; the app server of the worker
+// serves the client and the stylesheets only. The first build in WASM takes
+// tens of seconds.
 // The worker keeps the vault and the settings in OPFS (`worker/opfs.ts`).
 import { existsSync, readFileSync } from "node:fs";
 import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { noteUrl, VAULT_NAME } from "./helpers";
 
 const WASM_DIR = fileURLToPath(new URL("../../tests/.data/wasm/", import.meta.url));

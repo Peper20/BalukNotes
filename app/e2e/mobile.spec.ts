@@ -1,5 +1,6 @@
 // A narrow screen (a phone): nothing wider than the window, the popup panels work.
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { noteUrl, open, ready, vaultUrl } from "./helpers";
 
 test.use({ viewport: { width: 400, height: 800 }, hasTouch: true });

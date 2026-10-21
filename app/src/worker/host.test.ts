@@ -108,11 +108,11 @@ function hubCore() {
   return { hub, state };
 }
 
-function startHub() {
+function startHub(syncEvery?: number) {
   const { hub, state } = hubCore();
   const answers: ResponseMessage[] = [];
   const host = new CoreHost(async () => hub, (answer) => answers.push(answer), () => {});
-  host.start({ module: "m", vault: "v", hub: "" });
+  host.start({ module: "m", vault: "v", hub: "", ...(syncEvery !== undefined && { syncEvery }) });
   const answered = () => answers.map((a) => a.id);
   const events = (a: ResponseMessage) => JSON.parse(dec.decode(a.body)) as { changes: unknown[] };
   const rounds = () => state.log.filter((l) => l === "round").length;
@@ -157,6 +157,33 @@ it("runs a round at start before any request, every 30 s, 2 s after a change, ne
     await advance(ROUND_AFTER_CHANGE_MS);
     expect(state.maxRunning).toBe(1);
     expect(rounds()).toBe(5);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("runs the rounds every `syncEvery` ms when the source sets it; the round after a change stays 2 s", async () => {
+  vi.useFakeTimers();
+  try {
+    const { host, rounds } = startHub(1_000);
+    host.request({ id: 1, method: "GET", uri: "/a" });
+    await advance(0);
+    expect(rounds()).toBe(1);
+    await advance(999);
+    expect(rounds()).toBe(1);
+    await advance(1);
+    expect(rounds()).toBe(2);
+    await advance(3_000);
+    expect(rounds()).toBe(5);
+
+    // A change: the round 2 s later, then every second again.
+    host.request({ id: 2, method: "PUT", uri: "/change" });
+    await advance(ROUND_AFTER_CHANGE_MS - 1);
+    expect(rounds()).toBe(6);
+    await advance(1);
+    expect(rounds()).toBe(7);
+    await advance(1_000);
+    expect(rounds()).toBe(8);
   } finally {
     vi.useRealTimers();
   }

@@ -1,53 +1,36 @@
 // Sign-in on the TCP address (`notes serve --auth`): this spec starts its OWN
-// server (port 8441, data tests/.data/auth-e2e: a copy of the test vault and
+// server (port AUTH_PORT, e2e/ports.ts; data tests/.data/auth-e2e: a copy of the test vault and
 // one account made with the `notes-hub` binary), the shared e2e server runs
 // without sign-in. The address shows the sign-in screen, a wrong password
 // says so, the right one opens the vault, a reload stays signed in, sign-out
 // returns to the screen and the API answers 401 again.
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, type ChildProcess } from "node:child_process";
 import { cpSync, mkdirSync, rmSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { VAULT_NAME } from "./helpers";
+import { AUTH_PORT } from "./ports";
+import { BIN, ROOT, TEMPLATE_DATA, exitOf, startApp, stop, waitFor } from "./server";
 
-const PORT = 8441;
-const BASE = `http://127.0.0.1:${PORT}`;
-const ROOT = fileURLToPath(new URL("../../", import.meta.url));
+const BASE = `http://127.0.0.1:${AUTH_PORT}`;
 const DATA = join(ROOT, "tests/.data/auth-e2e");
-const BIN = join(process.env.CARGO_TARGET_DIR ?? join(ROOT, "target"), "debug");
 const LOGIN = "test";
 const PASSWORD = "correct-horse-9";
 
 let server: ChildProcess | undefined;
 
-async function waitFor(url: string, ms: number) {
-  const until = Date.now() + ms;
-  for (;;) {
-    try {
-      if ((await fetch(url)).ok) return;
-    } catch {
-      // not listening yet
-    }
-    if (Date.now() > until) throw new Error(`no answer from ${url}`);
-    await new Promise((r) => setTimeout(r, 200));
-  }
-}
-
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
   test.setTimeout(300_000);
-  execFileSync("cargo", ["build", "-q", "-p", "notes-typst", "-p", "notes-hub"], { cwd: ROOT, stdio: "inherit" });
   rmSync(DATA, { recursive: true, force: true });
-  mkdirSync(join(DATA, "vaults"), { recursive: true });
-  cpSync(join(ROOT, "tests/vault"), join(DATA, "vaults", VAULT_NAME), { recursive: true });
+  // A copy of the warmed template of the app servers (global-setup.ts): the vault and the disk cache.
+  mkdirSync(DATA, { recursive: true });
+  cpSync(TEMPLATE_DATA, DATA, { recursive: true, preserveTimestamps: true });
   execFileSync(join(BIN, "notes-hub"), ["--data", DATA, "users", "add", LOGIN, "--password-stdin"], { input: `${PASSWORD}\n`, stdio: ["pipe", "ignore", "inherit"] });
-  server = spawn(join(BIN, "notes-typst"), ["--data", DATA, "--trash", join(DATA, "trash"), "serve", "--addr", `127.0.0.1:${PORT}`, "--auth"], {
-    stdio: ["ignore", "ignore", "inherit"],
-  });
+  server = startApp(DATA, AUTH_PORT, true);
   // The sign-in screen's own files are open.
-  await waitFor(`${BASE}/api/themes`, 120_000);
+  await waitFor(`${BASE}/api/themes`, 120_000, false, exitOf(server));
   // Build the notes in advance (the Bearer header is how a program signs in).
   const res = await fetch(`${BASE}/api/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login: LOGIN, password: PASSWORD }) });
   const { token } = (await res.json()) as { token: string };
@@ -59,8 +42,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  server?.kill("SIGTERM");
-  await new Promise((r) => setTimeout(r, 300));
+  await stop(server);
 });
 
 test("sign-in: the screen, a wrong password, the right one, a reload, sign-out", async ({ page, context }) => {

@@ -1,5 +1,6 @@
 // The graph page: zoom, pan, moving a node, filters, search, the neighbours of a note.
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { noteUrl, open, ready, title, vaultUrl } from "./helpers";
 
 const scale = (page: Page) =>

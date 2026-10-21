@@ -1,5 +1,6 @@
 // The hub the browser-version spec talks to: shared by playwright.config.ts (it starts the server) and hub.spec.ts.
-export const HUB_PORT = 8463;
+import { HUB_PORT } from "./ports";
+
 export const HUB_URL = `http://127.0.0.1:${HUB_PORT}`;
 /** The data directory of the hub, from the repository root. */
 export const HUB_DATA = "tests/.data/e2e-hub";

@@ -1,11 +1,15 @@
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { expect, type Page } from "@playwright/test";
+import { workerData } from "./server";
 
-/** The vault of the e2e server: a copy of tests/vault (see playwright.config.ts). */
+/** The vault of the e2e servers: a copy of tests/vault (see e2e/fixtures.ts). */
 export const VAULT_NAME = "vault";
-export const VAULT = fileURLToPath(new URL(`../../tests/.data/e2e/vaults/${VAULT_NAME}/`, import.meta.url));
-/** The trash of the e2e server: deleted notes go here, not to the system trash. */
-export const TRASH = fileURLToPath(new URL("../../tests/.data/e2e/trash/", import.meta.url));
+/** Playwright sets it in the worker process before it loads a spec (0 elsewhere: the config and the listing). */
+const WORKER = Number(process.env.TEST_PARALLEL_INDEX ?? 0);
+/** The vault directory of this worker's app server (the files a scenario edits). */
+export const VAULT = join(workerData(WORKER), "vaults", VAULT_NAME, "/");
+/** The trash of this worker's app server: deleted notes go here, not to the system trash. */
+export const TRASH = join(workerData(WORKER), "trash", "/");
 
 /** A client address in the e2e vault: `/v/vault<path>`. */
 export const vaultUrl = (path = "/") => `/v/${VAULT_NAME}${path}`;
