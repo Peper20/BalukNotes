@@ -14,6 +14,9 @@ export interface Core {
 /** Starts the core of `source`: loads the module and the vault files. */
 export type Loader = (source: CoreSource) => Promise<Core>;
 
+/** The core refuses to start for what the request names (a vault name it does not accept): every request is answered 400 with the message. */
+export class StartRefused extends Error {}
+
 const encoder = new TextEncoder();
 
 const describe = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -29,8 +32,9 @@ export class CoreHost {
   private ready: Promise<Core> | null = null;
   /** Requests are answered one by one: a build blocks the worker, and `WasmCore.request` must not overlap. */
   private queue: Promise<void> = Promise.resolve();
-  /** Why every request gets 503: the start failed or the module aborted. */
+  /** Why every request gets 503 (400 when the start was refused): the start failed or the module aborted. */
   private broken: string | null = null;
+  private brokenStatus = 503;
 
   constructor(
     private readonly load: Loader,
@@ -41,7 +45,12 @@ export class CoreHost {
     this.ready = this.load(source);
     // Registered before any request awaits `ready`, so `broken` is set by then.
     this.ready.catch((e: unknown) => {
-      this.broken = `the core did not start: ${describe(e)}`;
+      if (e instanceof StartRefused) {
+        this.broken = e.message;
+        this.brokenStatus = 400;
+      } else {
+        this.broken = `the core did not start: ${describe(e)}`;
+      }
     });
   }
 
@@ -90,9 +99,9 @@ export class CoreHost {
     try {
       core = await (this.ready ?? Promise.reject(new Error("the core is not started")));
     } catch (e) {
-      return errorAnswer(id, 503, this.broken ?? describe(e));
+      return errorAnswer(id, this.brokenStatus, this.broken ?? describe(e));
     }
-    if (this.broken) return errorAnswer(id, 503, this.broken);
+    if (this.broken) return errorAnswer(id, this.brokenStatus, this.broken);
     try {
       const r = await core.request(method, uri, body);
       return { id, status: r.status, contentType: r.contentType, body: r.body };

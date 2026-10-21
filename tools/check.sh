@@ -57,14 +57,25 @@ failed=0
 
 # step <name> <command...>: run it under the lock of heavy work (steps of all
 # runs on the machine take turns: together they stay within CHECK_JOBS), record
-# the result and time (the wait for the lock is not counted).
-step() {
-  local name="$1"; shift
-  local log="$logs/$name.log" start
+# the result and time (the wait for the lock is not counted). step_unlocked: the
+# same for a command that takes the lock itself where it needs it (it calls
+# tools/cargo.sh, and the lock is not reentrant).
+run_step() {
+  local locked="$1" name="$2"; shift 2
+  local log="$logs/$name.log" start rc
   echo "▶ $name: $*"
-  heavy_acquire
-  start=$SECONDS
-  if "$@" >"$log" 2>&1 {HEAVY_FD}>&-; then
+  if [[ $locked == 1 ]]; then
+    heavy_acquire
+    start=$SECONDS
+    "$@" >"$log" 2>&1 {HEAVY_FD}>&-
+    rc=$?
+    heavy_release
+  else
+    start=$SECONDS
+    "$@" >"$log" 2>&1
+    rc=$?
+  fi
+  if [[ $rc == 0 ]]; then
     results+=("ok")
   else
     results+=("failed")
@@ -72,10 +83,11 @@ step() {
     echo "  ✗ $name failed - tail of $log:"
     tail -n 25 "$log" | sed 's/^/    /'
   fi
-  heavy_release
   names+=("$name")
   times+=("$((SECONDS - start))")
 }
+step() { run_step 1 "$@"; }
+step_unlocked() { run_step 0 "$@"; }
 
 # skip <name> <reason>
 skip() {
@@ -239,9 +251,16 @@ if [[ $app == 1 ]]; then
   else
     step build in_app npm run -s build
     if [[ ${results[-1]} == "ok" ]]; then
-      # e2e listens on fixed ports (8433, 8461, 8462): runs in parallel
-      # worktrees must not overlap - the lock of the step takes care of it.
-      step e2e in_app npm run -s e2e
+      # The browser version for the hub e2e (app/e2e/hub.spec.ts): the client just
+      # built and the module of wasm-module, in tests/.data/web.
+      step_unlocked web-bundle tools/web-bundle.sh tests/.data/web --reuse-dist --reuse-wasm tests/.data/wasm
+      if [[ ${results[-1]} == "ok" ]]; then
+        # e2e listens on fixed ports (8433, 8461, 8462, 8463): runs in parallel
+        # worktrees must not overlap - the lock of the step takes care of it.
+        step e2e in_app npm run -s e2e
+      else
+        skip e2e "the browser version did not build"
+      fi
     else
       skip e2e "the client did not build"
     fi

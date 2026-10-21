@@ -2,13 +2,16 @@
 // the core running in a Web Worker (`worker/core.ts`). Both answer with a
 // standard `Response`, so `index.ts` handles errors the same way.
 //
-// With `ApiConfig.core` set, every `/api/...` request goes to the worker;
-// stylesheets, fonts and the PDF address stay HTTP (`config.ts`). The worker
-// starts on the first request and answers one request at a time (a build
-// blocks it anyway); the queue and the failures are in `worker/host.ts`.
+// With `ApiConfig.core` set, the `/api/...` requests go to the worker, except
+// those of the page's server, the hub (`route`); stylesheets, fonts and the PDF
+// address stay HTTP (`config.ts`). The worker starts on the first request and
+// answers one request at a time (a build blocks it anyway); the queue and the
+// failures are in `worker/host.ts`.
 
 import type { RequestMessage, ResponseMessage, StartMessage } from "../../worker/protocol";
+import { vault } from "../vault";
 import { apiConfig, apiUrl, type CoreSource } from "./config";
+import type { VaultsResponse } from "./types/VaultsResponse";
 
 export type Transport = (path: string, init: RequestInit) => Promise<Response>;
 
@@ -58,6 +61,16 @@ export class CoreClient {
     });
   }
 
+  /** Stops the worker; the pending calls fail. */
+  close(): void {
+    const worker = this.worker;
+    this.worker = null;
+    worker?.terminate();
+    const error = new Error("the core worker was closed");
+    for (const p of this.pending.values()) p.reject(error);
+    this.pending.clear();
+  }
+
   private start(): WorkerLike {
     if (this.worker) return this.worker;
     const worker = this.spawn();
@@ -85,16 +98,28 @@ export class CoreClient {
 const spawnWorker = (): WorkerLike => new Worker(new URL("../../worker/core.ts", import.meta.url), { type: "module" });
 
 let spawn: () => WorkerLike = spawnWorker;
-let current: { source: CoreSource; client: CoreClient } | null = null;
+let current: { core: CoreSource; vault: string | null; client: CoreClient } | null = null;
 
-/** Replaces the worker factory (tests); `null` - the real worker. Forgets the running core. */
+/** Replaces the worker factory (tests); `null` - the real worker. Stops the running core. */
 export function setWorkerFactory(factory: (() => WorkerLike) | null): void {
   spawn = factory ?? spawnWorker;
+  current?.client.close();
   current = null;
 }
 
-function client(source: CoreSource): CoreClient {
-  if (current?.source !== source) current = { source, client: new CoreClient(source, spawn) };
+/**
+ * The core of the tab: it runs the vault the page shows (`lib/vault.ts`) unless
+ * `core.vault` names one. With neither (the picker screen) the worker starts on
+ * the placeholder vault (`worker/load.ts`). A tab never changes its vault (the
+ * client reloads to open another), so the worker is started once; a changed
+ * vault replaces it (tests).
+ */
+function client(core: CoreSource): CoreClient {
+  const name = core.vault === undefined ? vault() : null;
+  if (current?.core !== core || current.vault !== name) {
+    current?.client.close();
+    current = { core, vault: name, client: new CoreClient(name === null ? core : { ...core, vault: name }, spawn) };
+  }
   return current.client;
 }
 
@@ -114,9 +139,66 @@ async function viaWorker(core: CoreSource, path: string, init: RequestInit): Pro
   });
 }
 
-/** One request: `/api/...` to the core in the worker when `core` is configured, otherwise to the server. */
+/** What the page's server, the hub, answers when the core runs in the browser: sign-in and sync. */
+const HUB = /^\/api\/(login|logout|session|sync)(\/|$)/;
+
+const jsonResponse = (status: number, body: unknown): Response =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+
+/** Vault names in the order of the core's own list: by the bytes of UTF-8, that is by code points. */
+function byCodePoints(a: string, b: string): number {
+  const x = Array.from(a, (c) => c.codePointAt(0)!);
+  const y = Array.from(b, (c) => c.codePointAt(0)!);
+  for (let i = 0; i < Math.min(x.length, y.length); i++) if (x[i] !== y[i]) return x[i]! - y[i]!;
+  return x.length - y.length;
+}
+
+const hubFetch = (path: string, init: RequestInit): Promise<Response> => fetch(apiUrl(path), { credentials: "include", ...init });
+
+/** `GET /api/vaults` from the hub's `GET /api/sync/vaults`: the account's vaults, a new one can be made. A hub error passes through. */
+async function hubVaults(signal?: AbortSignal | null): Promise<Response> {
+  const res = await hubFetch("/api/sync/vaults", { ...(signal && { signal }) });
+  if (!res.ok) return res;
+  const list = (await res.json()) as { name: string }[];
+  const answer: VaultsResponse = { vaults: list.map((v) => v.name).sort(byCodePoints), can_create: true };
+  return jsonResponse(200, answer);
+}
+
+/** `POST /api/vaults { name }` as `PUT /api/sync/vaults/{name}`, then the list. A hub error passes through. */
+async function hubCreate(body: BodyInit | null | undefined, signal?: AbortSignal | null): Promise<Response> {
+  let name: unknown;
+  try {
+    name = typeof body === "string" ? (JSON.parse(body) as { name?: unknown }).name : undefined;
+  } catch {
+    name = undefined;
+  }
+  if (typeof name !== "string") return jsonResponse(400, { error: "no vault name" });
+  const created = await hubFetch(`/api/sync/vaults/${encodeURIComponent(name)}`, { method: "PUT", ...(signal && { signal }) });
+  return created.ok ? hubVaults(signal) : created;
+}
+
+/** The answer of a request the page's server takes instead of the worker; `null`: the worker answers it. */
+function route(path: string, init: RequestInit): Promise<Response> | null {
+  const pathname = path.split("?")[0]!;
+  const method = (init.method ?? "GET").toUpperCase();
+  if (HUB.test(pathname)) return hubFetch(path, init);
+  if (pathname === "/api/vaults") {
+    if (method === "GET") return hubVaults(init.signal);
+    if (method === "POST") return hubCreate(init.body, init.signal);
+  } else if (/^\/api\/vaults\/[^/]+$/.test(pathname) && (method === "PATCH" || method === "DELETE")) {
+    // The hub has no such API.
+    return Promise.resolve(jsonResponse(405, { error: "В браузере хранилище нельзя переименовать или удалить" }));
+  }
+  return null;
+}
+
+/**
+ * One request: with `core` configured `/api/...` goes to the core in the worker,
+ * except sign-in, sync and the vault list, which the server of the page answers;
+ * otherwise everything goes to the server.
+ */
 export function transport(path: string, init: RequestInit = {}): Promise<Response> {
   const { core } = apiConfig();
-  if (core && path.startsWith("/api/")) return viaWorker(core, path, init);
+  if (core && path.startsWith("/api/")) return route(path, init) ?? viaWorker(core, path, init);
   return fetch(apiUrl(path), { credentials: "include", ...init });
 }

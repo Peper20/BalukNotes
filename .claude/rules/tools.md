@@ -14,7 +14,7 @@ paths:
 | `install.sh` | `notes` and its parts (`notes-typst`, `notes-hub`, the `notes-app` window with a menu entry and icon) into `~/.local/bin` and the skill into `~/.claude/skills` in one version (the autostart service is not installed; one still active is restarted); run again after changes |
 | `cloud-setup.sh`, `cloud-finish.sh` | a throwaway Forgejo in a cloud session and sending its `main` to a GitHub branch ("Cloud environment") |
 | `deploy-hub.sh` | updates `notes-hub` on the VPS in one command (`--web`: also the browser version): sends the sources of a commit over SSH, the VPS builds, a root helper (`server/baluk-notes-hub-install`, installed by hand) installs and restarts (`docs/server.md`, "Updating") |
-| `web-bundle.sh` | builds the browser version for the hub into a folder (`web-bundle.sh <dir> [--reuse-dist]`): the client, the core module, the packages, the stylesheets and font parts from a temporary `notes-typst serve`; `notes hub serve --web <dir>` serves it (architecture §9, `docs/server.md`); `deploy-hub.sh --web` sends it |
+| `web-bundle.sh` | builds the browser version for the hub into a folder (`web-bundle.sh <dir> [--reuse-dist] [--reuse-wasm <dir>]`: the client or the module that a build already made): the client, the core module, the packages, the stylesheets and font parts from a temporary `notes-typst serve`; `notes hub serve --web <dir>` serves it (architecture §9, `docs/server.md`); `deploy-hub.sh --web` sends it |
 | `test-env.sh` | a server on `tests/vault` (data `tests/.data`, port 8432, another - `PORT=...`) |
 | `lib/worktree-target.sh` | in a linked worktree (agents) - the build dir of the main checkout, `<root>/target` |
 | `lib/target-limit.sh` | pruning and the size limit of that dir, sourced by `check.sh` (the crate list by python3, no `jq`) |
@@ -45,7 +45,11 @@ tools/check.sh          # full (~3 min warm); CI runs it on every pull request p
 (the step `wasm`: fails with the install command when the target is missing,
 `rustup target add wasm32-unknown-unknown`; the step `wasm-module`, in the
 full run before e2e, builds the release module and `files.json` into
-`tests/.data/wasm` for `app/e2e/wasm.spec.ts`); `notes check` on `tests/vault` (the total is compared
+`tests/.data/wasm` for `app/e2e/wasm.spec.ts`; the step `web-bundle`, after the
+client build and before e2e, runs `tools/web-bundle.sh tests/.data/web
+--reuse-dist --reuse-wasm tests/.data/wasm` for `app/e2e/hub.spec.ts`: it
+takes the lock of heavy work itself where it needs it, not as a locked step);
+`notes check` on `tests/vault` (the total is compared
 with the "Total" line in `.claude/rules/tests-vault.md`); `notes new`
 templates and the skill (`.claude/rules/skills.md`); exported API types match
 the committed ones (uncommitted ones also count as "failed"); the pipeline mod (validate, tests, `tsc`, "Pipeline mod"); the client -

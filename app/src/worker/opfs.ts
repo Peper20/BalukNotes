@@ -132,9 +132,9 @@ export async function isStored(root: Dir, vault: string): Promise<boolean> {
   return dir !== null && (await readFile(dir, "ready")) !== null;
 }
 
-/** Reads the vault, the packages and the shared settings kept by an earlier run. */
-export async function readStored(root: Dir, vault: string): Promise<Stored> {
-  const files = await descend(root, filesBase(vault), false);
+/** Reads the vault, the packages and the shared settings kept by an earlier run. No vault (`null`): no vault files. */
+export async function readStored(root: Dir, vault: string | null): Promise<Stored> {
+  const files = vault === null ? null : await descend(root, filesBase(vault), false);
   const packages = await descend(root, PACKAGES, false);
   const notes = await descend(root, SETTINGS.base, false);
   const settings = notes && (await readFile(notes, SETTINGS.file));
@@ -157,7 +157,11 @@ export async function importFiles(root: Dir, vault: string, files: { vault: File
   await writeFile(root, vaultBase(vault), "ready", new Uint8Array());
 }
 
-/** Writes the changes of the core to OPFS, one flush after each request. */
+/**
+ * Writes the changes of the core to OPFS, one flush after each request. With no
+ * vault (`null`: the placeholder of the picker screen) the vault files are
+ * not written, only the shared settings.
+ */
 export class Persistence {
   /** Vault paths still to write (or remove): a failed one stays for the next flush. */
   private readonly files = new Set<string>();
@@ -165,7 +169,7 @@ export class Persistence {
 
   constructor(
     private readonly root: Dir,
-    private readonly vault: string,
+    private readonly vault: string | null,
     private readonly source: Source,
   ) {}
 
@@ -177,17 +181,20 @@ export class Persistence {
   /** Writes what changed since the last flush. A failure is logged, not thrown. */
   async flush(): Promise<void> {
     const changes = this.source.takeChanges();
-    for (const path of changes.files) this.files.add(path);
     if (changes.settings) this.settings = true;
-    for (const path of [...this.files]) {
-      try {
-        // The file is read now: a retry writes its latest content.
-        const data = this.source.readFile(path);
-        if (data) await writeFile(this.root, filesBase(this.vault), path, data);
-        else await removePath(this.root, filesBase(this.vault), path);
-        this.files.delete(path);
-      } catch (e) {
-        console.error(`OPFS: cannot save ${path}: ${describe(e)}`);
+    const vault = this.vault;
+    if (vault !== null) {
+      for (const path of changes.files) this.files.add(path);
+      for (const path of [...this.files]) {
+        try {
+          // The file is read now: a retry writes its latest content.
+          const data = this.source.readFile(path);
+          if (data) await writeFile(this.root, filesBase(vault), path, data);
+          else await removePath(this.root, filesBase(vault), path);
+          this.files.delete(path);
+        } catch (e) {
+          console.error(`OPFS: cannot save ${path}: ${describe(e)}`);
+        }
       }
     }
     if (this.settings) {

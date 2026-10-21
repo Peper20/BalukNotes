@@ -60,7 +60,11 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
     (`notes/vaults/<vault>/files/`, `notes/settings.json`, `notes/packages/`;
     `notes/vaults/<vault>/ready`, written last, marks a complete import)
     after each request; at start it reads it back (`files.json` only seeds an
-    empty vault).
+    empty vault). With the core in the worker, sign-in and the vault list go
+    to the page's server, the hub: `/api/login|logout|session` and
+    `/api/sync/...` over HTTP, `GET`/`POST /api/vaults` mapped by the
+    transport to the hub's vault list and creation (rename and delete are not
+    available); the worker runs the vault of the tab.
 - **The server online** - vault files, their versions, change events,
   sessions; without Typst.
 - **Self-hosted and web version** (user's decision): `notes serve` with Typst

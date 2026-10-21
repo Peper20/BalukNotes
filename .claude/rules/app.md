@@ -79,4 +79,8 @@ npm test        # Vitest; also check, e2e
   which the `wasm-module` step of `tools/check.sh` makes
   (`crates/notes-wasm/harness/build.sh` and `node
   crates/notes-wasm/harness/run.mjs --prepare`); `npm run e2e` alone without
-  them fails with 404s.
+  them fails with 404s. `e2e/hub.spec.ts` talks to a second server of
+  `playwright.config.ts`, `notes-hub --web tests/.data/web` on 8463 (ports of
+  the e2e: 8433, 8441, 8461, 8462, 8463), over the bundle that the
+  `web-bundle` step of `tools/check.sh` makes (`tools/web-bundle.sh`); without
+  `tests/.data/web` `npm run e2e` fails at the start of that server.

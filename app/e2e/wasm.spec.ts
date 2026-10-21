@@ -58,6 +58,9 @@ async function withCore(page: Page): Promise<string[]> {
   return served;
 }
 
+/** What the server of the page still answers when the core runs in the worker. */
+const SERVER_PATHS = new Set(["/api/fonts.css", "/api/themes.css", "/api/session"]);
+
 const settled = (page: Page) => expect(page.locator("html")).toHaveAttribute("data-state", "ready", { timeout: 180_000 });
 
 test("a note builds in the browser: formula, CeTZ figure, the list and search; the server gets no vault request", async ({ page }) => {
@@ -88,8 +91,8 @@ test("a note builds in the browser: formula, CeTZ figure, the list and search; t
   await settled(page);
   await expect(page.locator("#note .k-title h1")).toHaveText("SSH");
 
-  // Only the stylesheets come from the server; not a single vault, note or settings request.
-  expect(served.filter((path) => path !== "/api/fonts.css" && path !== "/api/themes.css")).toEqual([]);
+  // Only the stylesheets and the session (sign-in is the server's) come from the server; not a single vault, note or settings request.
+  expect(served.filter((path) => !SERVER_PATHS.has(path))).toEqual([]);
   expect(errors).toEqual([]);
 });
 
@@ -133,6 +136,6 @@ test("the vault and the settings stay in OPFS: a reload reads them back, files.j
   await expect(page.locator('.setting[data-key="header.tags"] .setting-badge')).toHaveText("только в этом хранилище");
 
   expect(seeds, "the reload read OPFS, not files.json").toBe(1);
-  expect(served.filter((path) => path !== "/api/fonts.css" && path !== "/api/themes.css")).toEqual([]);
+  expect(served.filter((path) => !SERVER_PATHS.has(path))).toEqual([]);
   expect(errors).toEqual([]);
 });

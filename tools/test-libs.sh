@@ -574,6 +574,12 @@ run_wb "$wb/foreign"
 rc=$?
 expect "web-bundle refuses a folder that is not empty and not a bundle, and leaves it" \
   eval '[[ $rc -eq 1 ]] && grep -q "not empty and not a bundle" "$root/wb.out" && [[ $(cat "$wb/foreign/file") == keep ]]'
+run_wb "$wb/x" --reuse-wasm
+expect "web-bundle with --reuse-wasm and no folder: exit 2" test $? -eq 2
+run_wb "$wb/x" --reuse-wasm "$wb/foreign"
+rc=$?
+expect "web-bundle --reuse-wasm names the missing file before it builds" \
+  eval '[[ $rc -eq 1 ]] && grep -q "pkg/notes_wasm.js" "$root/wb.out"'
 PATH=$wb/path run_wb "$wb/bundle"
 rc=$?
 expect "web-bundle accepts an earlier bundle, and names a missing tool before it builds" \

@@ -4,11 +4,13 @@
 # docs/server.md). The VPS has no Typst, so everything that needs it is made
 # here.
 #
-#   tools/web-bundle.sh <out-dir> [--reuse-dist]
+#   tools/web-bundle.sh <out-dir> [--reuse-dist] [--reuse-wasm <dir>]
 #
 # <out-dir> is created or replaced (it must be absent, empty or an earlier
 # bundle). --reuse-dist keeps an existing app/dist instead of building the
-# client again.
+# client again. --reuse-wasm takes the core module and the packages from <dir>
+# (what the `wasm-module` step of check.sh made in tests/.data/wasm: pkg/ and
+# files.json) instead of building them again.
 #
 # The folder (the list of files is the same for the same sources; it is not
 # committed):
@@ -27,15 +29,17 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: tools/web-bundle.sh <out-dir> [--reuse-dist]" >&2
+  echo "usage: tools/web-bundle.sh <out-dir> [--reuse-dist] [--reuse-wasm <dir>]" >&2
   exit 2
 }
 
 out=""
 reuse_dist=0
+reuse_wasm=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --reuse-dist) reuse_dist=1; shift ;;
+    --reuse-wasm) [[ $# -ge 2 ]] || usage; reuse_wasm=$2; shift 2 ;;
     -*) usage ;;
     *) [[ -z $out ]] || usage; out=$1; shift ;;
   esac
@@ -56,6 +60,13 @@ if [[ -e $out ]]; then
   if [[ -n $(ls -A "$out") && ! ( -f $out/index.html && -f $out/assets/config.js ) ]]; then
     fail "$out is not empty and not a bundle: give a new folder"
   fi
+fi
+
+if [[ -n $reuse_wasm ]]; then
+  for f in pkg/notes_wasm.js pkg/notes_wasm_bg.wasm files.json; do
+    [[ -f $reuse_wasm/$f ]] || fail "--reuse-wasm: $reuse_wasm has no $f"
+  done
+  reuse_wasm=$(cd "$reuse_wasm" && pwd)
 fi
 
 for tool in node npm cargo curl; do
@@ -88,22 +99,30 @@ echo "== core module"
 source tools/lib/worktree-target.sh
 # shellcheck source=lib/cpu-cap.sh
 source tools/lib/cpu-cap.sh
-OUT=$work/wasm heavy crates/notes-wasm/harness/build.sh >/dev/null
+if [[ -n $reuse_wasm ]]; then
+  echo "reusing $reuse_wasm"
+  wasm=$reuse_wasm
+else
+  wasm=$work/wasm
+  OUT=$wasm heavy crates/notes-wasm/harness/build.sh >/dev/null
+fi
 mkdir -p "$stage/wasm"
 for f in notes_wasm.js notes_wasm_bg.wasm; do
-  [[ -f $work/wasm/pkg/$f ]] || fail "the module build left no $f"
-  cp "$work/wasm/pkg/$f" "$stage/wasm/$f"
+  [[ -f $wasm/pkg/$f ]] || fail "the module build left no $f"
+  cp "$wasm/pkg/$f" "$stage/wasm/$f"
 done
 
 echo "== packages"
 # The packages are the whitelist of run.mjs, in the form of the worker's seed.
-OUT=$work/wasm BOOK_REPEAT=0 node crates/notes-wasm/harness/run.mjs --prepare
+if [[ -z $reuse_wasm ]]; then
+  OUT=$wasm BOOK_REPEAT=0 node crates/notes-wasm/harness/run.mjs --prepare
+fi
 node -e '
   const fs = require("fs");
   const seed = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
   seed.packages.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   fs.writeFileSync(process.argv[2], JSON.stringify({ packages: seed.packages }));
-' "$work/wasm/files.json" "$stage/wasm/packages.json"
+' "$wasm/files.json" "$stage/wasm/packages.json"
 
 echo "== stylesheets and fonts"
 tools/cargo.sh build -q -p notes-typst

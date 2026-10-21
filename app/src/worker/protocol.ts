@@ -1,14 +1,15 @@
 // Messages between the client (`lib/api/transport.ts`) and the worker that runs
 // the core (`worker/core.ts`).
 
-/** The vault name of a core configured without one, until the page names the vault. */
-export const DEFAULT_VAULT = "notes";
-
 /** Where the core module, the packages and the vault files come from (`ApiConfig.core`). */
 export interface CoreSource {
   /** Address of the `notes_wasm.js` glue (the module `notes_wasm_bg.wasm` is next to it). */
   module: string;
-  /** The vault name in the API paths (`/api/vaults/<vault>/...`); unset: `DEFAULT_VAULT`. */
+  /**
+   * The vault name in the API paths (`/api/vaults/<vault>/...`) and in OPFS.
+   * The transport sets the vault of the tab; unset (no vault chosen yet), the
+   * core runs an empty placeholder vault that OPFS never sees (`load.ts`).
+   */
   vault?: string;
   /**
    * Address of `packages.json`: `{ packages: [[path, base64]] }`, the whitelisted
