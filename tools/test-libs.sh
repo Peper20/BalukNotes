@@ -6,7 +6,8 @@
 # checkout), tools/cargo.sh (its arguments, exit code, settings and record) and
 # tools/check-pr.sh (its arguments, comment text, exit codes, worktree) and
 # tools/ci-runner.sh (its arguments, the generated config and unit, install and
-# uninstall in scratch places).
+# uninstall in scratch places) and the copy of the pipeline mod's types into a
+# linked worktree (tools/lib/pipeline-types.sh).
 # No cargo build: cargo runs for `cargo metadata` and for `cargo clean` of a
 # scratch dir; tools/cargo.sh and tools/check-pr.sh run in scratch checkouts
 # against a cargo, a tea and a check.sh shim; tools/ci-runner.sh against a tea
@@ -577,6 +578,79 @@ PATH=$wb/path run_wb "$wb/bundle"
 rc=$?
 expect "web-bundle accepts an earlier bundle, and names a missing tool before it builds" \
   eval '[[ $rc -eq 1 ]] && grep -q "node not found" "$root/wb.out" && [[ -f $wb/bundle/index.html ]]'
+
+# --- tools/lib/pipeline-types.sh: the types of the pipeline mod in a linked worktree ---
+echo "tools/lib/pipeline-types.sh (scratch checkouts: a main checkout with the types, a worktree of it, a checkout without them):"
+pt=$root/pipeline-types pt_types=tools/pipeline/.claude-plugin/types pt_lib=$PWD/tools/lib/pipeline-types.sh
+rm -rf "$pt"
+# pt_repo <dir> <yes|no>: a checkout with one commit; with yes, the types are laid as Claude Code
+# lays them: untracked, and ignored by the .gitignore of their folder.
+pt_repo() {
+  mkdir -p "$1"
+  if [[ $2 == yes ]]; then
+    mkdir -p "$1/$pt_types/claude-code"
+    printf '{"compilerOptions":{}}\n' >"$1/$pt_types/tsconfig.json"
+    printf '*\n' >"$1/$pt_types/.gitignore"
+    printf 'export {};\n' >"$1/$pt_types/claude-code/index.d.ts"
+  fi
+  printf 'x\n' >"$1/README"
+  git init -q -b main "$1"
+  git -C "$1" add -A
+  git -C "$1" -c user.name=t -c user.email=t@t commit -q -m first
+}
+pt_repo "$pt/main" yes
+pt_repo "$pt/none" no
+git -C "$pt/main" worktree add -q --detach "$pt/wt"
+git -C "$pt/none" worktree add -q --detach "$pt/wt-none"
+# pt_lay <checkout>: lay_pipeline_types in it; its output in $pt/lay.out.
+pt_lay() { (cd "$1" && source "$pt_lib" && lay_pipeline_types) >"$pt/lay.out" 2>&1; }
+pt_lay "$pt/wt"
+rc=$?
+expect "a worktree without the types gets a copy of the main checkout's and says so" \
+  eval '[[ $rc -eq 0 && $(cat "$pt/lay.out") == *"copied from"* ]]'
+expect "the copy is a copy, not a link, with the .gitignore of its folder" \
+  eval '[[ -f $pt/wt/$pt_types/.gitignore && ! -L $pt/wt/$pt_types && ! -L $pt/wt/$pt_types/tsconfig.json ]] && cmp -s "$pt/main/$pt_types/tsconfig.json" "$pt/wt/$pt_types/tsconfig.json"'
+expect "the copy is marked, and ignored by git: the worktree has no untracked file" \
+  eval '[[ -f $pt/wt/$pt_types/.copied-from-main && -z $(git -C "$pt/wt" status --porcelain --untracked-files=all) ]] && git -C "$pt/wt" check-ignore -q "$pt_types/tsconfig.json" && git -C "$pt/wt" check-ignore -q "$pt_types/.copied-from-main"'
+# a run replaces a copy that changed: an edited tsconfig.json and a stray file of ours go
+echo changed >>"$pt/wt/$pt_types/tsconfig.json"
+echo stray >"$pt/wt/$pt_types/stray.txt"
+pt_lay "$pt/wt"
+rc=$?
+expect "a second run replaces a changed copy with the main checkout's, and says so" \
+  eval '[[ $rc -eq 0 && ! -e $pt/wt/$pt_types/stray.txt && -f $pt/wt/$pt_types/.copied-from-main && $(cat "$pt/lay.out") == *"copied from"* ]] && cmp -s "$pt/main/$pt_types/tsconfig.json" "$pt/wt/$pt_types/tsconfig.json"'
+# types laid by Claude Code in a linked worktree (no mark) are left alone
+git -C "$pt/main" worktree add -q --detach "$pt/wt-laid"
+mkdir -p "$pt/wt-laid/$pt_types"
+echo laid >"$pt/wt-laid/$pt_types/tsconfig.json"
+pt_lay "$pt/wt-laid"
+rc=$?
+expect "types laid by Claude Code in a linked worktree (no mark) are left alone" \
+  eval '[[ $rc -eq 0 && $(cat "$pt/wt-laid/$pt_types/tsconfig.json") == laid && ! -e $pt/wt-laid/$pt_types/.copied-from-main && ! -s $pt/lay.out ]]'
+pt_lay "$pt/main"
+rc=$?
+expect "the main checkout, which has the types, copies nothing onto itself" \
+  eval '[[ $rc -eq 0 && ! -s $pt/lay.out && ! -e $pt/main/$pt_types/.copied-from-main ]]'
+pt_lay "$pt/wt-none"
+rc=$?
+expect "neither checkout has the types: nothing is laid, no error" \
+  eval '[[ $rc -eq 0 && ! -e $pt/wt-none/$pt_types && ! -s $pt/lay.out ]]'
+mkdir -p "$pt/wt-none/$pt_types"
+echo old >"$pt/wt-none/$pt_types/tsconfig.json"
+: >"$pt/wt-none/$pt_types/.copied-from-main"
+pt_lay "$pt/wt-none"
+rc=$?
+expect "a copy of ours goes when the main checkout has no types any more" \
+  eval '[[ $rc -eq 0 && ! -e $pt/wt-none/$pt_types ]]'
+# pipeline_tsc: the client's tsc of this checkout, else the main checkout's.
+mkdir -p "$pt/main/app/node_modules/.bin" "$pt/wt-none/app/node_modules/.bin"
+printf '#!/bin/sh\n' >"$pt/main/app/node_modules/.bin/tsc"
+printf '#!/bin/sh\n' >"$pt/wt-none/app/node_modules/.bin/tsc"
+chmod +x "$pt/main/app/node_modules/.bin/tsc" "$pt/wt-none/app/node_modules/.bin/tsc"
+pt_tsc() { (cd "$1" && source "$pt_lib" && pipeline_tsc); }
+expect "a worktree without node_modules takes the main checkout's tsc" \
+  eval '[[ $(pt_tsc "$pt/wt") == */pipeline-types/main/app/node_modules/.bin/tsc ]]'
+expect "a checkout with its own tsc takes it first" test "$(pt_tsc "$pt/wt-none")" = "app/node_modules/.bin/tsc"
 
 echo
 if (( fails == 0 )); then

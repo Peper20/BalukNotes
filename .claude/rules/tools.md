@@ -20,7 +20,8 @@ paths:
 | `lib/target-limit.sh` | pruning and the size limit of that dir, sourced by `check.sh` (the crate list by python3, no `jq`) |
 | `lib/cpu-cap.sh` | the CPU cap `CHECK_JOBS` and the lock of heavy work and `freshen_sources`, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh`, `check-pr.sh` |
 | `lib/build-env.sh` | the build settings of a small disk and a cloud session (`CARGO_PROFILE_DEV_DEBUG`) and the WebKitGTK check, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh` |
-| `test-libs.sh` | tests of the libraries above, of `cargo.sh`, `check-pr.sh` and `ci-runner.sh` and the refusals of `web-bundle.sh`, without a cargo build - the first step of `check.sh` |
+| `lib/pipeline-types.sh` | the types of the pipeline mod in a linked worktree: a copy of the main checkout's on every run (marked, ignored by git), `tsc` from this checkout or else the main one; sourced by `check.sh` (step `pipeline-mod`, "Pipeline mod") |
+| `test-libs.sh` | tests of the libraries above, of `cargo.sh`, `check-pr.sh` and `ci-runner.sh`, the refusals of `web-bundle.sh` and the copy of the mod's types, without a cargo build - the first step of `check.sh` |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 | `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; runs itself inside a headless gamescope |
 | `app-smoke.sh` | a smoke launch of the `notes-app` window inside a headless gamescope: it opens, loads the fixture vault, quits cleanly (~6 s); not in `check.sh` (needs gamescope and an installed or built `notes-app`) |
@@ -47,7 +48,7 @@ full run before e2e, builds the release module and `files.json` into
 `tests/.data/wasm` for `app/e2e/wasm.spec.ts`); `notes check` on `tests/vault` (the total is compared
 with the "Total" line in `.claude/rules/tests-vault.md`); `notes new`
 templates and the skill (`.claude/rules/skills.md`); exported API types match
-the committed ones (uncommitted ones also count as "failed"); the client -
+the committed ones (uncommitted ones also count as "failed"); the pipeline mod (validate, tests, `tsc`, "Pipeline mod"); the client -
 check, Vitest, build, e2e. At the end - a table of steps with times, a
 non-zero exit code on any failure, logs in `tests/.data/check/`. e2e needs a
 system Chromium (`/usr/bin/chromium`, another one - `CHROMIUM=...`). The
@@ -372,7 +373,12 @@ counts rounds, merges, cleans up and reports to the liaison.
   talks to the server.
 - **Checks**: `claude plugin validate tools/pipeline`, `claude plugin test
   tools/pipeline` and `tsc -p tools/pipeline` are the step `pipeline-mod` of
-  `check.sh`. The engine lays its types in `tools/pipeline/.claude-plugin/types/`
-  (not in the repository) when it loads the mod; before that the `tsc` part is
-  left out with a line in the log. Without a `claude` that has plugin tests (a
-  cloud session) the step is skipped.
+  `check.sh`. The types of the engine (`tools/pipeline/.claude-plugin/types/`,
+  not in the repository) are laid by Claude Code when it loads the mod from the
+  main checkout. A linked worktree (agents, `check-pr-<n>`) has none: the step
+  copies them from the main checkout into its own ignored folder on every run
+  (`lib/pipeline-types.sh`; the copy is marked `.copied-from-main`, a folder
+  without the mark is laid by Claude Code and is left alone). `tsc` is `app/node_modules/.bin/tsc` of this checkout, else the
+  main checkout's. The `tsc` part is left out with a line in the log only when
+  neither checkout has the types or a `tsc`. Without a `claude` that has plugin
+  tests (a cloud session) the step is skipped.

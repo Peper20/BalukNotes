@@ -40,6 +40,8 @@ source tools/lib/worktree-target.sh
 source tools/lib/cpu-cap.sh
 # The build settings of a small disk and a cloud session (CARGO_PROFILE_DEV_DEBUG).
 source tools/lib/build-env.sh
+# The types of the pipeline mod in a linked worktree (the step pipeline-mod).
+source tools/lib/pipeline-types.sh
 
 # The shared build dir grows without limit: pruning and the size limit
 # (tools/lib/target-limit.sh) run first, under the lock of heavy work.
@@ -166,18 +168,20 @@ wasm_module() {
 
 # The pipeline mod (tools/pipeline, a Claude Code plugin; .claude/rules/tools.md,
 # "Pipeline mod"): the manifest and the module, its tests, and the types with tsc.
-# The types of the engine are laid beside the mod when Claude Code loads it
-# (tools/pipeline/.claude-plugin/types, kept out of the repository), tsc is the
-# client's: without either the type check is left out with a line in the log.
+# The types of the engine (tools/pipeline/.claude-plugin/types, kept out of the
+# repository) are copied from the main checkout into a linked worktree
+# (tools/lib/pipeline-types.sh); tsc is the client's. Without the types (neither
+# checkout has them) or without tsc the type check is left out with a line in the log.
 pipeline_mod() {
+  lay_pipeline_types || return 1
   claude plugin validate tools/pipeline || return 1
   claude plugin test tools/pipeline || return 1
-  local tsc=app/node_modules/.bin/tsc
-  [[ -x $tsc ]] || tsc=$(command -v tsc || true)
+  local tsc
+  tsc=$(pipeline_tsc)
   if [[ -z $tsc ]]; then
-    echo "no tsc (npm ci in app/): the types of the mod were not checked"
-  elif [[ ! -f tools/pipeline/.claude-plugin/types/tsconfig.json ]]; then
-    echo "the types of the engine are not laid (Claude Code lays them when it loads the mod): the types of the mod were not checked"
+    echo "no tsc (npm ci in app/, here or in the main checkout): the types of the mod were not checked"
+  elif [[ ! -f $PIPELINE_TYPES/tsconfig.json ]]; then
+    echo "the types of the engine are not laid here or in the main checkout (Claude Code lays them when it loads the mod): the types of the mod were not checked"
   else
     "$tsc" -p tools/pipeline || return 1
   fi
