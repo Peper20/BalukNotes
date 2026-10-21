@@ -259,11 +259,12 @@ before M7 starts.
 - [ ] Sync from the hub in the worker (a blocking `Remote` over synchronous
       `XMLHttpRequest`); a vault filled by sync must get the `ready` marker of
       OPFS, which today only the `files.json` import writes
-- [ ] The hub serves the browser version: the client, the module, the theme
-      CSS and the fonts as static files built on the computer; fonts and
-      packages fetched apart from the module; package files handed over by the
-      host (`Packages::Files`) have no fingerprint, so the hand-over must not
-      replace a package version in place
+- [x] The hub serves the browser version (`notes hub serve --web`, PR #24):
+      the client, the module, the packages, the theme CSS and the fonts as
+      static files built on the computer (`tools/web-bundle.sh`); sign-in and
+      the vault list go to the hub, the worker runs the tab's vault (PR #26)
+- [ ] Fonts fetched apart from the module (half of its 12 MB brotli,
+      `docs/research/E4.md`)
 - [ ] Restart the worker after a panic or above a memory threshold
 
 ## Later
