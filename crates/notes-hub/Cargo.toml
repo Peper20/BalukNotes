@@ -12,7 +12,7 @@ default = ["client"]
 # The HTTP client of a device (`client`, over ureq with native-tls). The server
 # binary does not need it: `--no-default-features` builds the VPS binary without
 # a TLS library.
-client = ["dep:ureq", "dep:native-tls", "dep:percent-encoding"]
+client = ["dep:ureq", "dep:native-tls"]
 # Exports the wire types of sign-in to app/src/lib/api/types (cd app && npm run types).
 ts = ["dep:ts-rs"]
 
@@ -30,12 +30,13 @@ notes-store.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 clap.workspace = true
-percent-encoding = { workspace = true, optional = true }
+percent-encoding.workspace = true
 rpassword.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["sync", "time", "macros"] }
+tokio = { workspace = true, features = ["sync", "time", "macros", "fs"] }
+tokio-util.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 ts-rs = { workspace = true, optional = true }

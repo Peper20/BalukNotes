@@ -1,6 +1,6 @@
 #!/bin/bash
-# Installs the freshly built `notes` and `notes-hub` and restarts the storage
-# server. Runs as root through sudo for the deploy user (docs/server.md,
+# Installs the freshly built `notes` and `notes-hub`, the folder of the browser
+# version when the deploy user sent one, and restarts the storage server. Runs as root through sudo for the deploy user (docs/server.md,
 # "Updating"); takes no arguments: what it copies is fixed here.
 #
 # Install: copy to /usr/local/sbin/baluk-notes-hub-install (root:root, 0755)
@@ -10,6 +10,7 @@ set -euo pipefail
 DEPLOY_USER=deploy
 SERVICE=baluk-notes-hub
 DEST=/usr/local/bin
+WEB_DEST=/usr/local/share/baluk-notes/web
 
 if [ "$#" -ne 0 ]; then
     echo "baluk-notes-hub-install: takes no arguments" >&2
@@ -36,5 +37,41 @@ for name in notes notes-hub; do
     install -m 755 "$release/$name" "$DEST/.$name.new"
     mv -f "$DEST/.$name.new" "$DEST/$name"
 done
+
+# The browser version (`notes hub serve --web`, built on the laptop by
+# tools/web-bundle.sh and sent to ~/baluk-notes/web): copied only when the
+# folder is there, from a plain path, and only regular files and folders: a
+# link or a device in it, before or after the copy, fails the install (tar
+# stores a link as a link instead of following it), so nothing outside the
+# folder is read as root.
+web="$home/baluk-notes/web"
+if [ -e "$web" ] || [ -L "$web" ]; then
+    [ "$(realpath -e "$web")" = "$web" ] || { echo "not a plain path: $web" >&2; exit 1; }
+    if [ ! -d "$web" ] || [ -L "$web/index.html" ] || [ ! -f "$web/index.html" ]; then
+        echo "not a bundle (no index.html): $web" >&2
+        exit 1
+    fi
+    if [ -n "$(find "$web" ! -type f ! -type d -print -quit)" ]; then
+        echo "the bundle has files that are not regular (links, devices): $web" >&2
+        exit 1
+    fi
+    mkdir -p "$(dirname "$WEB_DEST")"
+    new="$WEB_DEST.new"
+    rm -rf "$new"
+    mkdir "$new"
+    tar -C "$web" -cf - . | tar -C "$new" -xf - --no-same-owner --no-same-permissions
+    if [ -n "$(find "$new" ! -type f ! -type d -print -quit)" ]; then
+        rm -rf "$new"
+        echo "the bundle has files that are not regular (links, devices): $web" >&2
+        exit 1
+    fi
+    chown -R root:root "$new"
+    find "$new" -type d -exec chmod 755 {} +
+    find "$new" -type f -exec chmod 644 {} +
+    rm -rf "$WEB_DEST.old"
+    [ ! -e "$WEB_DEST" ] || mv "$WEB_DEST" "$WEB_DEST.old"
+    mv "$new" "$WEB_DEST"
+    rm -rf "$WEB_DEST.old"
+fi
 
 systemctl restart "$SERVICE"

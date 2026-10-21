@@ -1,6 +1,8 @@
 //! The rules of the browser server (`notes serve`) that `notes service
 //! install` checks before it writes the unit: the defaults and the sign-in
-//! requirements of the TCP address.
+//! requirements of the TCP address. Also what every server of the client page
+//! shares (`notes serve`, `notes hub serve --web`): the CSP and the caching of
+//! built files.
 
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::path::Path;
@@ -14,6 +16,36 @@ pub const DEFAULT_ADDR: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::
 
 /// Default lifetime of a sign-in session without requests, in days.
 pub const DEFAULT_SESSION_DAYS: u64 = 30;
+
+/// The CSP of the client page and its files: strict, no inline or eval scripts.
+///
+/// No unsafe-inline/-eval: scripts come only from files; styles from files and
+/// inline (MathML `<style>`); style attributes are allowed by default.
+/// `'wasm-unsafe-eval'`: compiling the WebAssembly core of the browser client,
+/// not `eval` of JS. The worker of the core is a file of `'self'`
+/// (`worker-src` falls back to `script-src`). Images: self and `data:` (SVG
+/// inserts from Typst). Fonts: self. No dev-server worker (the servers do not
+/// use Vite).
+pub const CLIENT_CSP: &str = concat!(
+    "default-src 'self';",
+    "script-src 'self' 'wasm-unsafe-eval';",
+    "object-src 'none';",
+    "base-uri 'none';",
+    "img-src 'self' data: blob:;",
+    "style-src 'self' 'unsafe-inline';",
+    "font-src 'self';",
+    "connect-src 'self';",
+    "frame-ancestors 'self'"
+);
+
+/// `name-XXXXXXXX.ext`: Vite puts 8 characters of the content hash in the name,
+/// so such a build file never changes and may be cached for good.
+#[must_use]
+pub fn is_hashed(path: &str) -> bool {
+    let stem = path.rsplit_once('.').map_or(path, |(s, _)| s);
+    stem.rsplit_once('-')
+        .is_some_and(|(_, h)| h.len() == 8 && h.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'))
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -76,6 +108,22 @@ mod tests {
         // Only the socket: no TCP address to protect.
         assert!(check_sign_in(None, false).is_ok());
         assert!(check_sign_in(None, true).unwrap_err().to_string().contains("--addr"));
+    }
+
+    #[test]
+    fn hashed_names() {
+        assert!(is_hashed("index-CX38oHQo.js"));
+        assert!(is_hashed("assets/core-a_b-9xYzAbC1.css"));
+        assert!(!is_hashed("theme.js"));
+        assert!(!is_hashed("icon-small.svg"));
+        assert!(!is_hashed("config.js"));
+    }
+
+    #[test]
+    fn csp_runs_the_wasm_core_without_js_eval() {
+        assert!(CLIENT_CSP.contains("script-src 'self' 'wasm-unsafe-eval';"));
+        assert!(!CLIENT_CSP.contains("'unsafe-eval'"));
+        assert!(!CLIENT_CSP.contains("worker-src"));
     }
 
     #[test]

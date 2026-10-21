@@ -13,13 +13,14 @@ paths:
 | `ci-runner.sh` | `install`, `uninstall`, `status` of the Forgejo Runner that runs `check-pr.sh` on every pull request push ("CI") |
 | `install.sh` | `notes` and its parts (`notes-typst`, `notes-hub`, the `notes-app` window with a menu entry and icon) into `~/.local/bin` and the skill into `~/.claude/skills` in one version (the autostart service is not installed; one still active is restarted); run again after changes |
 | `cloud-setup.sh`, `cloud-finish.sh` | a throwaway Forgejo in a cloud session and sending its `main` to a GitHub branch ("Cloud environment") |
-| `deploy-hub.sh` | updates `notes-hub` on the VPS in one command: sends the sources of a commit over SSH, the VPS builds, a root helper (`server/baluk-notes-hub-install`, installed by hand) installs and restarts (`docs/server.md`, "Updating") |
+| `deploy-hub.sh` | updates `notes-hub` on the VPS in one command (`--web`: also the browser version): sends the sources of a commit over SSH, the VPS builds, a root helper (`server/baluk-notes-hub-install`, installed by hand) installs and restarts (`docs/server.md`, "Updating") |
+| `web-bundle.sh` | builds the browser version for the hub into a folder (`web-bundle.sh <dir> [--reuse-dist]`): the client, the core module, the packages, the stylesheets and font parts from a temporary `notes-typst serve`; `notes hub serve --web <dir>` serves it (architecture §9, `docs/server.md`); `deploy-hub.sh --web` sends it |
 | `test-env.sh` | a server on `tests/vault` (data `tests/.data`, port 8432, another - `PORT=...`) |
 | `lib/worktree-target.sh` | in a linked worktree (agents) - the build dir of the main checkout, `<root>/target` |
 | `lib/target-limit.sh` | pruning and the size limit of that dir, sourced by `check.sh` (the crate list by python3, no `jq`) |
 | `lib/cpu-cap.sh` | the CPU cap `CHECK_JOBS` and the lock of heavy work and `freshen_sources`, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh`, `check-pr.sh` |
 | `lib/build-env.sh` | the build settings of a small disk and a cloud session (`CARGO_PROFILE_DEV_DEBUG`) and the WebKitGTK check, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh` |
-| `test-libs.sh` | tests of the libraries above, of `cargo.sh`, `check-pr.sh` and `ci-runner.sh`, without a cargo build - the first step of `check.sh` |
+| `test-libs.sh` | tests of the libraries above, of `cargo.sh`, `check-pr.sh` and `ci-runner.sh` and the refusals of `web-bundle.sh`, without a cargo build - the first step of `check.sh` |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 | `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; runs itself inside a headless gamescope |
 | `app-smoke.sh` | a smoke launch of the `notes-app` window inside a headless gamescope: it opens, loads the fixture vault, quits cleanly (~6 s); not in `check.sh` (needs gamescope and an installed or built `notes-app`) |

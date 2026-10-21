@@ -3,7 +3,8 @@
 // By default, the same server that served the page. Otherwise, the object
 // `globalThis.__NOTES_API__ = { base }` before the client starts (Tauri: the
 // window init script, `http://127.0.0.1:<port>`; a VPS: its own domain) or
-// `configure(...)`. Sign-in is a cookie the browser sends itself (requests
+// `configure(...)`; the hub's browser version sets `core` in `assets/config.js`
+// (`tools/web-bundle.sh`; the file in the repository sets nothing). Sign-in is a cookie the browser sends itself (requests
 // carry credentials, `api/index.ts`); no token is kept or put into addresses.
 //
 // With `core` set the `/api/...` requests go to the core in a Web Worker
@@ -17,7 +18,7 @@ export type { CoreSource };
 export interface ApiConfig {
   /** Server address without a trailing `/`; "" - the same as the page's. */
   base: string;
-  /** The core in a worker: the module, the vault name, the vault files. Unset: the server answers. */
+  /** The core in a worker: the module, the packages, the vault name and files (all but the module optional). Unset: the server answers. */
   core?: CoreSource;
 }
 

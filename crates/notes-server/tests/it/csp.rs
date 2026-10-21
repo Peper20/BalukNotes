@@ -35,3 +35,19 @@ async fn shell_has_csp() {
     assert!(csp.contains("object-src 'none'"));
     assert!(csp.contains("base-uri 'none'"));
 }
+
+/// `assets/config.js` is the setting the client reads first (the hub's browser
+/// version replaces it): served like any asset, never cached for good.
+#[tokio::test]
+async fn config_js_is_an_asset() {
+    let (app, _dir) = app();
+    let res = app.oneshot(Request::get("/assets/config.js").body(Body::empty()).unwrap()).await.unwrap();
+    if res.status() == axum::http::StatusCode::NOT_FOUND {
+        // The client is not built (`npm run build` makes it; the full check builds it first).
+        assert!(notes_assets::index_html().is_none(), "the client is built but config.js is missing");
+        return;
+    }
+    assert_eq!(res.status(), axum::http::StatusCode::OK);
+    assert_eq!(res.headers()["cache-control"], "no-cache");
+    assert!(res.headers()["content-type"].to_str().unwrap().contains("javascript"));
+}

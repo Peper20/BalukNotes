@@ -16,7 +16,8 @@
 //! Modules: [`auth`] (sign-in and the session check, reusable by any axum
 //! server), [`sync`] (the vault API), [`client`] (the device side over HTTP:
 //! `HttpRemote`, feature `client`), [`api`] (the wire types), `error`. [`Hub`]
-//! puts the server together and [`serve`] runs it.
+//! puts the server together and [`serve`] runs it. [`Hub::with_web`] adds the
+//! browser version: a built folder answered next to the API.
 
 pub mod api;
 pub mod auth;
@@ -24,6 +25,7 @@ pub mod auth;
 pub mod client;
 mod error;
 pub mod sync;
+mod web;
 
 use std::future::Future;
 use std::path::Path;
@@ -31,6 +33,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
+use axum::http::{Method, Uri};
 use notes_store::config::hub_dir;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
@@ -47,6 +50,7 @@ pub struct Hub {
     auth: Arc<Auth>,
     vaults: Arc<sync::Vaults>,
     closing: Arc<watch::Sender<bool>>,
+    web: Option<Arc<web::Web>>,
 }
 
 impl Hub {
@@ -61,7 +65,19 @@ impl Hub {
             auth: Auth::open(data, session_lifetime)?,
             vaults: sync::Vaults::new(hub_dir(data), closing.clone()),
             closing,
+            web: None,
         })
+    }
+
+    /// Serves the folder of the browser version next to the API (architecture
+    /// §9): a GET that no API route takes answers a file of it, or the client
+    /// page. Anyone can load the page; the API stays behind sign-in.
+    ///
+    /// # Errors
+    /// `dir` is not a folder or has no `index.html`.
+    pub fn with_web(mut self, dir: &Path) -> Result<Self> {
+        self.web = Some(web::Web::open(dir)?);
+        Ok(self)
     }
 
     #[must_use]
@@ -74,9 +90,14 @@ impl Hub {
         self.closing.send_replace(true);
     }
 
-    /// The API: sign-in and the sync routes, all but sign-in behind a session.
+    /// The API: sign-in and the sync routes, all but sign-in behind a session;
+    /// with [`Hub::with_web`] also the files of the browser version.
     pub fn router(&self) -> Router {
-        self.auth.protect(self.vaults.routes(), |_, _| false)
+        let Some(web) = self.web.clone() else {
+            return self.auth.protect(self.vaults.routes(), |_, _| false);
+        };
+        let routes = self.vaults.routes().fallback(move |method: Method, uri: Uri| web.clone().respond(method, uri));
+        self.auth.protect(routes, web::is_public)
     }
 }
 

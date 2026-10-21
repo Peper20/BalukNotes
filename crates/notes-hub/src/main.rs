@@ -3,7 +3,7 @@
 //! over the whole argument list.
 //!
 //! ```text
-//! notes hub serve [--addr 127.0.0.1:8422] [--session-days 30]
+//! notes hub serve [--addr 127.0.0.1:8422] [--session-days 30] [--web <dir>]
 //! notes users list | add <login> | passwd <login> | remove <login>
 //! ```
 //!
@@ -80,6 +80,11 @@ enum HubAction {
         /// A session ends after this many days without requests.
         #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u64).range(1..=3650))]
         session_days: u64,
+        /// A folder of the browser version built by tools/web-bundle.sh: the
+        /// server also answers the client, the core module and the fonts from
+        /// it (docs/server.md). Without it only the API is served.
+        #[arg(long, value_name = "DIR")]
+        web: Option<PathBuf>,
     },
 }
 
@@ -130,13 +135,19 @@ fn main() -> ExitCode {
 fn run(cli: Cli) -> Result<()> {
     let data = config::data_dir(cli.data.as_deref())?;
     match cli.command {
-        Command::Hub { action: HubAction::Serve { addr, session_days } } => serve(&data, addr, session_days),
+        Command::Hub { action: HubAction::Serve { addr, session_days, web } } => {
+            serve(&data, addr, session_days, web.as_deref())
+        }
         Command::Users { action } => users(&data, action),
     }
 }
 
-fn serve(data: &Path, addr: SocketAddr, session_days: u64) -> Result<()> {
-    let hub = Hub::open(data, Duration::from_secs(session_days * 24 * 3600))?;
+fn serve(data: &Path, addr: SocketAddr, session_days: u64, web: Option<&Path>) -> Result<()> {
+    let mut hub = Hub::open(data, Duration::from_secs(session_days * 24 * 3600))?;
+    if let Some(dir) = web {
+        hub = hub.with_web(dir)?;
+        tracing::info!("serving the browser version from {}", dir.display());
+    }
     if hub.auth().accounts().is_empty()? {
         bail!("no users: create one: notes users add <login>");
     }

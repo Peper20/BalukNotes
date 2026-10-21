@@ -4,7 +4,7 @@
 
 import { CoreHost, type Core } from "./host";
 import { importFiles, isStored, Persistence, readStored, type Dir, type Files, type Source, type Stored } from "./opfs";
-import type { CoreSource, ResponseMessage, WorkerMessage } from "./protocol";
+import { DEFAULT_VAULT, type CoreSource, type ResponseMessage, type WorkerMessage } from "./protocol";
 
 /** The worker global scope; the DOM types of the project do not mix with `lib.webworker`. */
 interface Scope {
@@ -25,10 +25,10 @@ interface Glue {
     };
 }
 
-/** `files.json` as it is served: base64 contents. */
+/** `files.json` and `packages.json` as they are served: base64 contents. */
 interface Seed {
-  vault: [string, string][];
-  packages: [string, string][];
+  vault?: [string, string][];
+  packages?: [string, string][];
 }
 
 const bytes = (base64: string): Uint8Array => Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -39,7 +39,7 @@ async function fetchSeed(address: string): Promise<{ vault: Files; packages: Fil
   const res = await fetch(address);
   if (!res.ok) throw new Error(`${address}: ${res.status} ${res.statusText}`);
   const seed = (await res.json()) as Seed;
-  return { vault: decode(seed.vault), packages: decode(seed.packages) };
+  return { vault: decode(seed.vault ?? []), packages: decode(seed.packages ?? []) };
 }
 
 /** OPFS of the origin; `null` where the browser has none (the core then keeps nothing between loads). */
@@ -62,7 +62,7 @@ async function readKept(root: Dir | null, vault: string): Promise<Stored | null>
   }
 }
 
-async function load({ module, vault, files }: CoreSource): Promise<Core> {
+async function load({ module, vault = DEFAULT_VAULT, files, packages }: CoreSource): Promise<Core> {
   const glue = (await import(/* @vite-ignore */ module)) as Glue;
   await glue.default();
   const core = new glue.WasmCore(vault);
@@ -72,7 +72,9 @@ async function load({ module, vault, files }: CoreSource): Promise<Core> {
   const kept = await readKept(root, vault);
   if (kept) {
     for (const [path, data] of kept.vault) core.addFile(path, data);
-    for (const [path, data] of kept.packages) core.addPackageFile(path, data);
+    // The packages of an earlier run, or - when it kept none - the bundle's (not written back).
+    const keptPackages = kept.packages.length > 0 || !packages ? kept.packages : (await fetchSeed(packages)).packages;
+    for (const [path, data] of keptPackages) core.addPackageFile(path, data);
     if (kept.settings !== null) {
       try {
         core.setSettings(kept.settings);
@@ -80,8 +82,9 @@ async function load({ module, vault, files }: CoreSource): Promise<Core> {
         console.error(`OPFS: the kept settings are not used: ${e instanceof Error ? e.message : e}`);
       }
     }
-  } else if (files) {
-    const seed = await fetchSeed(files);
+  } else if (files || packages) {
+    const seed = files ? await fetchSeed(files) : { vault: [], packages: [] };
+    if (seed.packages.length === 0 && packages) seed.packages = (await fetchSeed(packages)).packages;
     for (const [path, data] of seed.vault) core.addFile(path, data);
     for (const [path, data] of seed.packages) core.addPackageFile(path, data);
     if (root) {

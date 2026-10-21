@@ -1,12 +1,20 @@
 // Messages between the client (`lib/api/transport.ts`) and the worker that runs
 // the core (`worker/core.ts`).
 
-/** Where the core module and the vault files come from (`ApiConfig.core`). */
+/** The vault name of a core configured without one, until the page names the vault. */
+export const DEFAULT_VAULT = "notes";
+
+/** Where the core module, the packages and the vault files come from (`ApiConfig.core`). */
 export interface CoreSource {
   /** Address of the `notes_wasm.js` glue (the module `notes_wasm_bg.wasm` is next to it). */
   module: string;
-  /** The vault name in the API paths (`/api/vaults/<vault>/...`). */
-  vault: string;
+  /** The vault name in the API paths (`/api/vaults/<vault>/...`); unset: `DEFAULT_VAULT`. */
+  vault?: string;
+  /**
+   * Address of `packages.json`: `{ packages: [[path, base64]] }`, the whitelisted
+   * Typst packages. Read when OPFS and `files` have no packages.
+   */
+  packages?: string;
   /**
    * Address of `files.json`: `{ vault: [[path, base64]], packages: [[path, base64]] }`.
    * It seeds a vault that OPFS does not have yet; afterwards OPFS is the source.

@@ -3,7 +3,12 @@
 # commit over SSH, builds there, installs and restarts (docs/server.md,
 # "Updating"). The laptop builds nothing. An interrupted run can be repeated.
 #
-#   tools/deploy-hub.sh <ssh-host> [--ref <git-ref>] [--jobs <n>]
+#   tools/deploy-hub.sh <ssh-host> [--ref <git-ref>] [--jobs <n>] [--web]
+#
+# --web also sends the browser version: tools/web-bundle.sh builds it here (the
+# VPS has no Typst), from the working tree of this checkout, and it goes to
+# baluk-notes/web, where the root helper takes it from. Without --web the
+# folder on the VPS is left as it is.
 #
 # On the VPS (relative to the home of the SSH user): sources in
 # baluk-notes/src, the build in baluk-notes/target (outside the sources: the
@@ -12,17 +17,19 @@
 set -euo pipefail
 
 usage() {
-    echo "usage: tools/deploy-hub.sh <ssh-host> [--ref <git-ref>] [--jobs <n>]" >&2
+    echo "usage: tools/deploy-hub.sh <ssh-host> [--ref <git-ref>] [--jobs <n>] [--web]" >&2
     exit 2
 }
 
 host=""
 ref=HEAD
 jobs=""
+web=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --ref) [ "$#" -ge 2 ] || usage; ref=$2; shift 2 ;;
         --jobs) [ "$#" -ge 2 ] || usage; jobs=$2; shift 2 ;;
+        --web) web=1; shift ;;
         -*) usage ;;
         *) [ -z "$host" ] || usage; host=$1; shift ;;
     esac
@@ -41,6 +48,15 @@ fi
 # A long quiet build must not drop the session.
 ssh=(ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20)
 fail() { echo "deploy failed at step: $1" >&2; exit 1; }
+
+# Built here before anything is sent: a failed build leaves the VPS untouched.
+bundle=""
+if [ "$web" = 1 ]; then
+    echo "== building the browser version here"
+    bundle=$(mktemp -d)
+    trap 'rm -rf "$bundle"' EXIT
+    tools/web-bundle.sh "$bundle/web" || fail "the browser version (nothing was sent)"
+fi
 
 echo "== sending sources"
 git archive --format=tar "$commit" |
@@ -80,6 +96,13 @@ low=(nice -n 19)
 command -v ionice >/dev/null && low=(ionice -c3 nice -n 19)
 "${low[@]}" cargo build --release --locked -p notes -p notes-hub --no-default-features "${args[@]}"
 REMOTE
+
+if [ "$web" = 1 ]; then
+    echo "== sending the browser version"
+    tar -C "$bundle/web" -c . |
+        "${ssh[@]}" "$host" 'set -e; mkdir -p baluk-notes; cd baluk-notes; rm -rf web.new; mkdir web.new; tar -x -C web.new; rm -rf web; mv web.new web' ||
+        fail "sending the browser version"
+fi
 
 echo "== installing and restarting"
 "${ssh[@]}" "$host" 'sudo -n /usr/local/sbin/baluk-notes-hub-install' ||

@@ -8,3 +8,4 @@ mod common;
 #[cfg(feature = "client")]
 mod e2e;
 mod sync;
+mod web;

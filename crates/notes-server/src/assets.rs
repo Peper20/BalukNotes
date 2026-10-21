@@ -6,6 +6,7 @@ use axum::extract::Path;
 use axum::http::{StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
+use notes_store::serve_rules::{self, CLIENT_CSP};
 
 use crate::AppState;
 
@@ -37,12 +38,12 @@ pub(crate) fn routes() -> Router<AppState> {
 async fn shell() -> Response {
     match notes_assets::index_html() {
         Some(file) => {
-            ([(header::CACHE_CONTROL, "no-cache"), (header::CONTENT_SECURITY_POLICY, csp())], Html(file.data))
+            ([(header::CACHE_CONTROL, "no-cache"), (header::CONTENT_SECURITY_POLICY, CLIENT_CSP)], Html(file.data))
                 .into_response()
         }
         None => (
             StatusCode::SERVICE_UNAVAILABLE,
-            [(header::CACHE_CONTROL, "no-cache"), (header::CONTENT_SECURITY_POLICY, csp())],
+            [(header::CACHE_CONTROL, "no-cache"), (header::CONTENT_SECURITY_POLICY, CLIENT_CSP)],
             Html(NO_CLIENT),
         )
             .into_response(),
@@ -55,35 +56,6 @@ async fn asset(Path(path): Path<String>) -> Response {
     };
     let mime = file.mime;
     // Build files with a hash in the name (index-CX38oHQo.js) never change.
-    let cache = if is_hashed(&path) { "public, max-age=31536000, immutable" } else { "no-cache" };
+    let cache = if serve_rules::is_hashed(&path) { "public, max-age=31536000, immutable" } else { "no-cache" };
     ([(header::CONTENT_TYPE, mime), (header::CACHE_CONTROL, cache.into())], file.data).into_response()
-}
-
-/// `name-XXXXXXXX.ext`: Vite puts 8 characters of the content hash in the name.
-fn is_hashed(path: &str) -> bool {
-    let stem = path.rsplit_once('.').map_or(path, |(s, _)| s);
-    stem.rsplit_once('-')
-        .is_some_and(|(_, h)| h.len() == 8 && h.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'))
-}
-
-/// The CSP for the `notes serve` client: strict, no inline or eval scripts.
-fn csp() -> &'static str {
-    // No unsafe-inline/-eval: scripts come only from files; styles from files
-    // and inline (MathML <style>); style attributes are allowed by default.
-    // 'wasm-unsafe-eval': compiling the WebAssembly core of the browser
-    // client, not `eval` of JS. The worker of the core is a file of 'self'
-    // (`worker-src` falls back to `script-src`).
-    // Images: self and data: (SVG inserts from Typst). Fonts: self.
-    // No dev-server worker (serve does not use Vite).
-    concat!(
-        "default-src 'self';",
-        "script-src 'self' 'wasm-unsafe-eval';",
-        "object-src 'none';",
-        "base-uri 'none';",
-        "img-src 'self' data: blob:;",
-        "style-src 'self' 'unsafe-inline';",
-        "font-src 'self';",
-        "connect-src 'self';",
-        "frame-ancestors 'self'"
-    )
 }

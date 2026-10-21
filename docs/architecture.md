@@ -412,6 +412,13 @@ How to put it on a VPS - `docs/server.md`.
   folder, the truth), `manifest.json` (hash, size and change number `seq` of
   every file, tombstones of deleted ones), `history/<seq>/` (what a write
   replaced or removed: nothing is lost on the server).
+- **The browser version** (`notes hub serve --web <dir>`): the hub serves a
+  folder built on the computer (`tools/web-bundle.sh`): the client with
+  `assets/config.js` turning the core in WASM on, the module and the
+  whitelisted packages (`wasm/`), and the theme stylesheets and font parts that
+  `notes serve` would answer (`api/fonts.css`, `api/themes.css`, `fonts/`),
+  since the hub has no Typst. Other GETs outside the API answer the client
+  page; the CSP is the one of `notes serve`.
 - **Sign-in** (user's decision: login + password from the start;
   `notes_hub::auth`, the same module for the hub and for `notes serve
   --auth`): accounts are created on the machine (`notes users add <login>`,

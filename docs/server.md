@@ -44,7 +44,7 @@ After=network.target
 
 [Service]
 User=baluk-notes
-ExecStart=/usr/local/bin/notes --data /var/lib/baluk-notes hub serve --addr 127.0.0.1:8422
+ExecStart=/usr/local/bin/notes --data /var/lib/baluk-notes hub serve --addr 127.0.0.1:8422 --web /usr/local/share/baluk-notes/web
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
@@ -62,6 +62,11 @@ WantedBy=multi-user.target
 # journalctl -u baluk-notes-hub -f
 ```
 
+`--web` is the browser version (below, "The browser version"): the server
+refuses to start with it while the folder is missing, so the first
+`tools/deploy-hub.sh vps --web` comes before the unit uses it (or leave the
+option out until then). Without `--web` the server answers the API only.
+
 ## 4. nginx
 
 The machine already serves a site with nginx: add a server block for a
@@ -72,6 +77,13 @@ subdomain (a DNS record first), next to the existing one, e.g.
 server {
     listen 80;
     server_name notes.example.org;
+
+    # the hub does not compress: the browser version has a 50 MB module (about
+    # 21 MB gzipped), and a proxied answer is compressed only with
+    # gzip_proxied; the hub sends scripts as text/javascript
+    gzip on;
+    gzip_proxied any;
+    gzip_types application/wasm application/javascript text/javascript text/css application/json;
 
     location / {
         proxy_pass http://127.0.0.1:8422;
@@ -123,6 +135,7 @@ builds nothing and GitHub has no access to the server:
 
 ```sh
 tools/deploy-hub.sh vps                 # the commit HEAD; --ref <git-ref> for another one
+tools/deploy-hub.sh vps --web           # also the browser version (below)
 ```
 
 `vps` is an SSH host (`~/.ssh/config`) of the deploy user. The script
@@ -134,9 +147,13 @@ tools/deploy-hub.sh vps                 # the commit HEAD; --ref <git-ref> for a
    --no-default-features` at the lowest CPU and disk priority (`nice -n 19`,
    `ionice -c3`), after checking the Rust version against `rust-version` and
    at least 1.5 GB of free disk;
-3. calls `sudo -n /usr/local/sbin/baluk-notes-hub-install`, which copies the
-   two binaries to `/usr/local/bin` and restarts the service;
-4. prints `notes --version` (the parts and their versions) and
+3. with `--web`: builds the browser version here before anything is sent
+   (`tools/web-bundle.sh`, the VPS has no Typst) and sends it as a tar over
+   SSH to `~/baluk-notes/web`, replacing the old one;
+4. calls `sudo -n /usr/local/sbin/baluk-notes-hub-install`, which copies the
+   two binaries to `/usr/local/bin`, the folder `~/baluk-notes/web` (when it is
+   there) to `/usr/local/share/baluk-notes/web` and restarts the service;
+5. prints `notes --version` (the parts and their versions) and
    `systemctl is-active`.
 
 A step that fails stops the script with the remote output. A failed build
@@ -175,7 +192,26 @@ that user run exactly this one script without a password:
 The helper takes no arguments: it copies only `notes` and `notes-hub` from
 `/home/<deploy-user>/baluk-notes/target/release` (regular files, a path with
 no symlinks) by a temporary name and a rename, so a running binary is
-replaced safely. The service (section 3) must already exist.
+replaced safely. The folder of the browser version is copied the same way
+(a path with no symlinks, regular files and folders only, owned by root,
+swapped by a rename). The service (section 3) must already exist.
+
+A helper and a unit installed before the browser version existed have to be
+installed again once: the helper does not know the folder, and the unit has no
+`--web`. As the deploy user, then as root (the helper is copied from the
+repository as above):
+
+```sh
+$ tools/deploy-hub.sh vps --web         # sends the folder; the old helper ignores it
+# sed 's/^DEPLOY_USER=.*/DEPLOY_USER=<deploy-user>/' tools/server/baluk-notes-hub-install \
+    | install -m 755 -o root -g root /dev/stdin /usr/local/sbin/baluk-notes-hub-install
+# sudo -u <deploy-user> sudo -n /usr/local/sbin/baluk-notes-hub-install   # installs the folder, restarts
+# sed -i 's|^\(ExecStart=.* hub serve --addr [^ ]*\)$|\1 --web /usr/local/share/baluk-notes/web|' \
+    /etc/systemd/system/baluk-notes-hub.service
+# systemctl daemon-reload && systemctl restart baluk-notes-hub
+```
+
+(Or edit the `ExecStart` line by hand as in section 3.)
 
 ### What the build costs on the VPS
 
@@ -232,6 +268,20 @@ server {
 The page names no address: its text says the app connects to the `api`
 subdomain. `tools/deploy-hub.sh` does not update the page - copy it again
 after an edit.
+
+## The browser version
+
+With `--web` the hub also serves the app: the core runs in the browser (WASM)
+and the page, the module and the fonts come from the hub
+(architecture §9). The VPS has no Typst, so the folder is built on the laptop
+by `tools/web-bundle.sh <dir>` and `tools/deploy-hub.sh vps --web` sends it
+(needs the Rust target `wasm32-unknown-unknown`, `wasm-bindgen-cli` and the
+Typst packages in the cache; the script says what is missing). By hand: copy
+the folder and start `notes hub serve --web <dir>`. The page, its files and the
+two stylesheets need no sign-in; the API does. The hub streams the files
+without compression: the `gzip` lines of the nginx block (section 4) are what
+brings the 50 MB module down for a phone, so keep them. Rebuild and send the folder
+after any change of the client, the library or the themes.
 
 ## The browser version with Typst
 

@@ -557,6 +557,27 @@ expect "uninstall: exit 0, the service stopped, the unit, the runner in Forgejo,
 run_ci uninstall
 expect "uninstall again: exit 0" test $? -eq 0
 
+# --- tools/web-bundle.sh: what it refuses before it builds anything ---
+wb=$root/web-bundle
+mkdir -p "$wb/foreign" "$wb/bundle/assets" "$wb/path"
+echo keep >"$wb/foreign/file"
+touch "$wb/bundle/index.html" "$wb/bundle/assets/config.js"
+for tool in dirname ls; do ln -s "$(command -v "$tool")" "$wb/path/$tool"; done
+run_wb() { "$BASH" tools/web-bundle.sh "$@" >"$root/wb.out" 2>&1; }
+run_wb
+rc=$?
+expect "web-bundle without a folder: exit 2 and the usage" eval '[[ $rc -eq 2 ]] && grep -q "^usage: tools/web-bundle.sh <out-dir>" "$root/wb.out"'
+run_wb "$wb/x" --nope
+expect "web-bundle with an unknown option: exit 2" test $? -eq 2
+run_wb "$wb/foreign"
+rc=$?
+expect "web-bundle refuses a folder that is not empty and not a bundle, and leaves it" \
+  eval '[[ $rc -eq 1 ]] && grep -q "not empty and not a bundle" "$root/wb.out" && [[ $(cat "$wb/foreign/file") == keep ]]'
+PATH=$wb/path run_wb "$wb/bundle"
+rc=$?
+expect "web-bundle accepts an earlier bundle, and names a missing tool before it builds" \
+  eval '[[ $rc -eq 1 ]] && grep -q "node not found" "$root/wb.out" && [[ -f $wb/bundle/index.html ]]'
+
 echo
 if (( fails == 0 )); then
   echo "libs tests passed"
