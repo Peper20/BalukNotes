@@ -494,7 +494,8 @@ fn setting_err(key: &str, reason: &str) -> Error {
 /// rename), so a failure halfway does not spoil the file.
 #[derive(Debug)]
 pub struct SettingsStore {
-    path: PathBuf,
+    /// Where the values are written; none - they live only as long as the store.
+    path: Option<PathBuf>,
     schema: Schema,
     values: RwLock<Map<String, Value>>,
 }
@@ -529,7 +530,14 @@ impl SettingsStore {
         let path = path.into();
         let mut values = schema.defaults();
         values.extend(load(&path, &schema, |_| Ok(()))?);
-        Ok(Self { path, schema, values: RwLock::new(values) })
+        Ok(Self { path: Some(path), schema, values: RwLock::new(values) })
+    }
+
+    /// Settings with no file (the browser build): the schema defaults, changes
+    /// are kept for the life of the store and written nowhere.
+    pub fn in_memory(schema: Schema) -> Self {
+        let values = RwLock::new(schema.defaults());
+        Self { path: None, schema, values }
     }
 
     pub fn schema(&self) -> &Schema {
@@ -587,7 +595,9 @@ impl SettingsStore {
         let mut values = self.values.write();
         let mut next = values.clone();
         next.extend(checked);
-        write_atomic(&self.path, &serde_json::to_vec_pretty(&next)?)?;
+        if let Some(path) = &self.path {
+            write_atomic(path, &serde_json::to_vec_pretty(&next)?)?;
+        }
         *values = next;
         Ok(values.clone())
     }
@@ -741,6 +751,17 @@ mod tests {
             assert!(s.groups.iter().any(|g| g.key == group), "{} has no group", d.key);
             assert_eq!(s.validate(d.key, &d.default).unwrap(), d.default, "{}: invalid default", d.key);
         }
+    }
+
+    #[test]
+    fn in_memory_store_keeps_changes_without_a_file() {
+        let store = SettingsStore::in_memory(schema());
+        assert_eq!(store.values(), schema().defaults());
+        let patch = Map::from_iter([("device.builds".to_owned(), json!(3))]);
+        assert_eq!(store.update(&patch).unwrap()["device.builds"], json!(3));
+        assert_eq!(store.device().builds, 3);
+        assert!(store.update(&Map::from_iter([("device.builds".to_owned(), json!("many"))])).is_err());
+        assert_eq!(store.device().builds, 3);
     }
 
     #[test]

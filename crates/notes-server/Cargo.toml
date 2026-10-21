@@ -14,18 +14,28 @@ ts = ["dep:ts-rs", "notes-core/ts", "notes-hub/ts"]
 [dependencies]
 notes-core.workspace = true
 notes-store.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+ts-rs = { workspace = true, optional = true }
+
+# What has no place in the browser build (`wasm32`, the core in a Web Worker):
+# the server loop, the client files, sign-in, compression, device sync.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
 # Vault sync of this device (the API `/api/device/sync`).
 notes-device = { path = "../notes-device" }
 # Sign-in (`--auth`); no `client`: the server does not pull ureq and TLS.
 notes-hub = { workspace = true, default-features = false }
 axum.workspace = true
 notes-assets.workspace = true
-serde.workspace = true
-serde_json.workspace = true
 tokio = { workspace = true, features = ["sync", "time", "macros"] }
 tower-http.workspace = true
-tracing.workspace = true
-ts-rs = { workspace = true, optional = true }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+# Only what the routes need: JSON bodies and query strings, no server.
+axum = { version = "0.8", default-features = false, features = ["json", "query"] }
+# One thread: only the channels (`watch`).
+tokio = { version = "1", default-features = false, features = ["sync"] }
 
 [dev-dependencies]
 notes-device = { path = "../notes-device", features = ["testing"] }

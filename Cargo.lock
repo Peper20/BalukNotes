@@ -3483,11 +3483,18 @@ dependencies = [
 name = "notes-wasm"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "chrono",
+ "http-body-util",
+ "js-sys",
  "notes-core",
+ "notes-server",
  "notes-store",
  "serde_json",
+ "tokio",
+ "tower",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]

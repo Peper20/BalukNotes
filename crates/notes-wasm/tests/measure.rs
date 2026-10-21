@@ -16,6 +16,22 @@ use std::time::Instant;
 
 use notes_wasm::Core;
 
+/// The vault name in the API paths.
+const VAULT: &str = "vault";
+
+/// Percent-encodes a note path the way a browser sends it.
+fn encode(path: &str) -> String {
+    path.bytes()
+        .map(|b| {
+            if b.is_ascii_alphanumeric() || b"/-_.".contains(&b) {
+                (b as char).to_string()
+            } else {
+                format!("%{b:02X}")
+            }
+        })
+        .collect()
+}
+
 fn add_dir(dir: &Path, add: &mut dyn FnMut(&str, &[u8])) {
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
@@ -48,12 +64,12 @@ fn cpu_ms() -> u64 {
     ticks * 10
 }
 
-#[test]
-fn measure() {
+#[tokio::test]
+async fn measure() {
     let dir = std::env::var_os("E4_DIR")
         .map_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/.data/wasm"), PathBuf::from);
     let notes = std::env::var("E4_NOTES").unwrap_or_else(|_| "демо/визуализация".into());
-    let mut core = Core::new();
+    let mut core = Core::new(VAULT).unwrap();
     let started = Instant::now();
     add_dir(&dir.join("vault"), &mut |p, d| core.add_file(p, d));
     add_dir(&dir.join("packages"), &mut |p, d| core.add_package_file(p, d));
@@ -62,7 +78,9 @@ fn measure() {
     for note in notes.split(',') {
         let started = Instant::now();
         let cpu = cpu_ms();
-        let page: serde_json::Value = serde_json::from_str(&core.page(note).unwrap()).unwrap();
+        let response = core.request("GET", &format!("/api/vaults/{VAULT}/notes/{}", encode(note)), b"").await;
+        assert_eq!(response.status, 200, "{note}");
+        let page: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
         let ms = started.elapsed().as_millis();
         let html = page["rendered"]["body"].as_str().map_or(0, str::len)
             + page["rendered"]["styles"].as_str().map_or(0, str::len);

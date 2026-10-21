@@ -66,11 +66,6 @@ fn is_hashed(path: &str) -> bool {
         .is_some_and(|(_, h)| h.len() == 8 && h.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'))
 }
 
-/// A CSS answer that may change (themes, fonts): no long caching.
-pub(crate) fn css(body: String) -> Response {
-    ([(header::CONTENT_TYPE, "text/css; charset=utf-8"), (header::CACHE_CONTROL, "no-cache")], body).into_response()
-}
-
 /// The CSP for the `notes serve` client: strict, no inline or eval scripts.
 fn csp() -> &'static str {
     // No unsafe-inline/-eval: scripts come only from files; styles from files

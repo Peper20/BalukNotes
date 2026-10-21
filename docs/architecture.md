@@ -48,8 +48,11 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
     in-process (`docs/research/E7.md`).
   - There is no separate API over Tauri IPC. A scheme response is only whole,
     so events use long polling, not SSE.
-  - A browser without installation (not built yet, roadmap M7) - the core in
-    WASM (a Web Worker), the API transport is messages to the worker.
+  - A browser without installation (in progress, roadmap M7) - the core in
+    WASM (`notes-wasm`, a Web Worker), the API transport is messages to the
+    worker: the module serves the same `Router` (`notes-server` for `wasm32`
+    has no server loop, client files, sign-in, compression or device sync;
+    blocking work runs inline, one thread).
 - **The server online** - vault files, their versions, change events,
   sessions; without Typst.
 - **Self-hosted and web version** (user's decision): `notes serve` with Typst

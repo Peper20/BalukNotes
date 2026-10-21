@@ -7,23 +7,29 @@
 //! reach the socket.
 //!
 //! What the browser needs to draw the sign-in screen is public - [`is_public`];
-//! everything else needs a session.
+//! everything else needs a session. The browser build (`wasm32`) has no
+//! sign-in, only the 204.
 
 use axum::Router;
-use axum::http::{Method, StatusCode};
+#[cfg(not(target_family = "wasm"))]
+use axum::http::Method;
+use axum::http::StatusCode;
 use axum::routing::get;
 
 use crate::AppState;
 
 /// Paths of the client page (the shell; the routing is in JS).
+#[cfg(not(target_family = "wasm"))]
 const PAGES: [&str; 4] = ["/v", "/n", "/graph", "/tags"];
 
 /// The API paths of the sign-in screen: the theme and the fonts.
+#[cfg(not(target_family = "wasm"))]
 const OPEN_API: [&str; 3] = ["/api/themes", "/api/themes.css", "/api/fonts.css"];
 
 /// Whether a request needs no session: the client page for every client
 /// route, the client files, the fonts and the themes (the sign-in screen is
 /// drawn with them). Only reads: any other method needs a session.
+#[cfg(not(target_family = "wasm"))]
 pub(crate) fn is_public(method: &Method, path: &str) -> bool {
     if !matches!(*method, Method::GET | Method::HEAD) {
         return false;
@@ -42,7 +48,7 @@ pub(crate) fn no_auth_routes() -> Router<AppState> {
     Router::new().route("/api/session", get(|| async { StatusCode::NO_CONTENT }))
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_family = "wasm")))]
 mod tests {
     use super::*;
 

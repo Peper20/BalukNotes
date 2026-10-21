@@ -24,7 +24,7 @@
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -32,6 +32,7 @@ use axum::routing::{get, patch};
 use axum::{Json, Router};
 use notes_core::figures::FigureOptions;
 use notes_core::settings::{Schema, SettingsStore, VaultSettings};
+use notes_core::time::Instant;
 use notes_core::warm::WarmMode;
 use notes_core::{Notes, NotesConfig, SharedAssets};
 use notes_store::names::VaultName;
@@ -40,7 +41,8 @@ use tokio::sync::watch;
 
 use crate::AppState;
 use crate::api::{ChangeEvent, CreateVaultRequest, RenameVaultRequest, VaultsResponse};
-use crate::device_sync;
+#[cfg(not(target_family = "wasm"))]
+use crate::device_sync::{detach, settle};
 use crate::error::{ApiError, ApiResult, blocking};
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -55,6 +57,17 @@ pub const IDLE_CLOSE: Duration = Duration::from_secs(600);
 /// How often the server checks whether to close inactive vaults.
 const IDLE_POLL_MAX: Duration = Duration::from_secs(30);
 const IDLE_POLL_MIN: Duration = Duration::from_millis(100);
+
+/// The browser build has no device sync: no vault is linked.
+#[cfg(target_family = "wasm")]
+#[expect(clippy::unused_async, reason = "the same signature as the native one")]
+async fn detach(_: &AppState, _: &str) -> bool {
+    false
+}
+
+#[cfg(target_family = "wasm")]
+#[expect(clippy::unused_async, reason = "the same signature as the native one")]
+async fn settle(_: &AppState, _: &str, _: bool, _: bool) {}
 
 /// Only for vaults of the data directory; a server on one vault answers 403.
 fn registry_only(s: &AppState) -> ApiResult<()> {
@@ -91,7 +104,7 @@ async fn rename(
 ) -> ApiResult<Json<VaultsResponse>> {
     registry_only(&s)?;
     // A linked vault: its sync worker stops before the folder moves.
-    let linked = device_sync::detach(&s, &vault).await;
+    let linked = detach(&s, &vault).await;
     let vaults = s.vaults.clone();
     let from = vault.clone();
     let result = blocking(move || {
@@ -99,13 +112,13 @@ async fn rename(
         vaults.describe()
     })
     .await;
-    device_sync::settle(&s, &vault, linked, result.is_ok()).await;
+    settle(&s, &vault, linked, result.is_ok()).await;
     Ok(Json(result?))
 }
 
 async fn remove(State(s): State<AppState>, Path(vault): Path<String>) -> ApiResult<Json<VaultsResponse>> {
     registry_only(&s)?;
-    let linked = device_sync::detach(&s, &vault).await;
+    let linked = detach(&s, &vault).await;
     let vaults = s.vaults.clone();
     let name = vault.clone();
     let result = blocking(move || {
@@ -113,7 +126,7 @@ async fn remove(State(s): State<AppState>, Path(vault): Path<String>) -> ApiResu
         vaults.describe()
     })
     .await;
-    device_sync::settle(&s, &vault, linked, result.is_ok()).await;
+    settle(&s, &vault, linked, result.is_ok()).await;
     Ok(Json(result?))
 }
 
@@ -192,11 +205,13 @@ impl VaultEvents {
 }
 
 /// A `GET .../events` request waits for changes: the vault stays open.
+#[cfg(not(target_family = "wasm"))]
 #[derive(Debug)]
 pub(crate) struct EventsWait {
     vault: Arc<OpenVault>,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl Drop for EventsWait {
     fn drop(&mut self) {
         self.vault.waiting.fetch_sub(1, Ordering::SeqCst);
@@ -237,6 +252,7 @@ impl OpenVault {
 
     /// Waits for changes: a receiver of the number (subscribed before the log is
     /// checked, so no change is lost) and a "waiting" mark while it lives.
+    #[cfg(not(target_family = "wasm"))]
     pub(crate) fn wait_events(self: &Arc<Self>) -> (watch::Receiver<u64>, EventsWait) {
         self.waiting.fetch_add(1, Ordering::SeqCst);
         self.touch();

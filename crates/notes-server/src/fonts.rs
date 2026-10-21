@@ -9,9 +9,8 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use notes_core::fonts::WebVariant;
 
-use crate::AppState;
-use crate::assets::css;
 use crate::error::blocking;
+use crate::{AppState, css};
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new().route("/api/fonts.css", get(fonts_css)).route("/fonts/{family}/{style}/{file}", get(font))

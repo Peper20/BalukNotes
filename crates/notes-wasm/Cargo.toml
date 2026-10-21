@@ -1,6 +1,6 @@
 [package]
 name = "notes-wasm"
-description = "Research prototype (E4): the core in WASM, one thread, a vault from JS"
+description = "The core in WASM for the browser: the HTTP API of notes-server over a vault handed over by JS"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,12 +14,25 @@ publish.workspace = true
 [dependencies]
 notes-core.workspace = true
 notes-store.workspace = true
+notes-server.workspace = true
+# The request and the body types only: no server.
+axum = { version = "0.8", default-features = false }
+http-body-util = "0.1"
+# `oneshot`: one request to the router.
+tower = { version = "0.5", default-features = false, features = ["util"] }
 serde_json.workspace = true
+
+[dev-dependencies]
+# Natively the requests are driven by a current-thread runtime.
+tokio = { workspace = true, features = ["rt", "macros"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 # Exactly the version of wasm-bindgen-cli that generates the JS glue
 # (`harness/build.sh` checks it).
 wasm-bindgen = "=0.2.129"
+# `request` is a JS promise; the response is a plain JS object.
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
 # `datetime.today()` in Typst: the clock of chrono from JS `Date`.
 chrono = { version = "0.4", default-features = false, features = ["wasmbind"] }
 

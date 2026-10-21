@@ -43,6 +43,7 @@ impl From<notes_store::note_id::InvalidId> for ApiError {
 pub(crate) type ApiResult<T> = Result<T, ApiError>;
 
 /// Blocking core work, on a blocking thread.
+#[cfg(not(target_family = "wasm"))]
 pub(crate) async fn blocking<T: Send + 'static>(
     f: impl FnOnce() -> notes_core::Result<T> + Send + 'static,
 ) -> ApiResult<T> {
@@ -50,4 +51,13 @@ pub(crate) async fn blocking<T: Send + 'static>(
         .await
         .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("task failed: {e}")))?
         .map_err(Into::into)
+}
+
+/// Blocking core work, inline: the browser build has one thread and no
+/// blocking pool (a build blocks the worker either way).
+#[cfg(target_family = "wasm")]
+pub(crate) async fn blocking<T: Send + 'static>(
+    f: impl FnOnce() -> notes_core::Result<T> + Send + 'static,
+) -> ApiResult<T> {
+    f().map_err(Into::into)
 }

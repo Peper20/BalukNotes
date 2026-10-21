@@ -59,8 +59,10 @@
 //! needs it. Without it `GET /api/session` answers 204.
 
 pub mod api;
+#[cfg(not(target_family = "wasm"))]
 mod assets;
 mod auth;
+#[cfg(not(target_family = "wasm"))]
 mod device_sync;
 mod error;
 mod events;
@@ -71,13 +73,18 @@ mod search;
 mod settings;
 mod vaults;
 
+#[cfg(not(target_family = "wasm"))]
 use std::future::IntoFuture;
 use std::sync::Arc;
 
 use axum::Router;
+use axum::http::header;
+use axum::response::{IntoResponse, Response};
 use notes_core::settings::SettingsStore;
 use tokio::sync::watch;
+#[cfg(not(target_family = "wasm"))]
 use tower_http::compression::CompressionLayer;
+#[cfg(not(target_family = "wasm"))]
 use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 
 pub use vaults::{OpenVault, VaultSet};
@@ -88,11 +95,13 @@ pub struct AppState {
     pub vaults: Arc<VaultSet>,
     pub settings: Arc<SettingsStore>,
     /// Sign-in: when set, the TCP router needs a session (see `auth`).
+    #[cfg(not(target_family = "wasm"))]
     pub auth: Option<Arc<notes_hub::Auth>>,
     /// The server is stopping: waiting event requests get their answer.
     pub closing: Arc<watch::Sender<bool>>,
     /// Vault sync of this device (`notes serve` sets it): its workers run
     /// while the server does, and `/api/device/sync` works on it.
+    #[cfg(not(target_family = "wasm"))]
     pub device_sync: Option<Arc<notes_device::DeviceSync>>,
 }
 
@@ -106,8 +115,10 @@ impl AppState {
         Self {
             vaults: Arc::new(vaults),
             settings,
+            #[cfg(not(target_family = "wasm"))]
             auth: None,
             closing: Arc::new(watch::Sender::new(false)),
+            #[cfg(not(target_family = "wasm"))]
             device_sync: None,
         }
     }
@@ -126,6 +137,7 @@ impl AppState {
 
     /// With the sync of this device's vaults (the API `/api/device/sync`; the
     /// background workers run while [`serve`] does).
+    #[cfg(not(target_family = "wasm"))]
     #[must_use]
     pub fn with_device_sync(mut self, sync: Option<Arc<notes_device::DeviceSync>>) -> Self {
         self.device_sync = sync;
@@ -133,6 +145,7 @@ impl AppState {
     }
 
     /// With sign-in by login and password.
+    #[cfg(not(target_family = "wasm"))]
     #[must_use]
     pub fn with_auth(mut self, auth: Option<Arc<notes_hub::Auth>>) -> Self {
         self.auth = auth;
@@ -140,31 +153,47 @@ impl AppState {
     }
 }
 
+/// A CSS answer that may change (themes, fonts): no long caching.
+pub(crate) fn css(body: String) -> Response {
+    ([(header::CONTENT_TYPE, "text/css; charset=utf-8"), (header::CACHE_CONTROL, "no-cache")], body).into_response()
+}
+
+/// The API router. Natively it also serves the client files, device sync,
+/// sign-in (with [`AppState::auth`]) and compresses the answers; in the
+/// browser build (`wasm32`) it is the API alone, and `GET /api/session`
+/// answers 204.
 pub fn router(state: AppState) -> Router {
     let app = Router::new()
-        .merge(assets::routes())
         .merge(vaults::routes())
         .merge(notes::routes())
         .merge(graph::routes())
         .merge(search::routes())
         .merge(settings::routes())
         .merge(fonts::routes())
-        .merge(events::routes())
-        .merge(device_sync::routes());
-    let app = match state.auth.clone() {
-        Some(auth) => auth.protect(app, auth::is_public),
-        None => app.merge(auth::no_auth_routes()),
+        .merge(events::routes());
+    #[cfg(not(target_family = "wasm"))]
+    let app = {
+        let app = app.merge(assets::routes()).merge(device_sync::routes());
+        match state.auth.clone() {
+            Some(auth) => auth.protect(app, auth::is_public),
+            None => app.merge(auth::no_auth_routes()),
+        }
     };
+    #[cfg(target_family = "wasm")]
+    let app = app.merge(auth::no_auth_routes());
     // WOFF2 is already brotli-compressed: do not compress it twice.
-    app.layer(
+    #[cfg(not(target_family = "wasm"))]
+    let app = app.layer(
         CompressionLayer::new().compress_when(DefaultPredicate::new().and(NotForContentType::const_new("font/woff2"))),
-    )
-    .with_state(state)
+    );
+    app.with_state(state)
 }
 
 /// Stops the sync workers when the server ends, however it ends.
+#[cfg(not(target_family = "wasm"))]
 struct StopSync(Arc<notes_device::DeviceSync>);
 
+#[cfg(not(target_family = "wasm"))]
 impl Drop for StopSync {
     fn drop(&mut self) {
         self.0.stop();
@@ -172,6 +201,7 @@ impl Drop for StopSync {
 }
 
 /// Where the server listens.
+#[cfg(not(target_family = "wasm"))]
 #[derive(Debug)]
 pub enum Listen {
     /// TCP (`notes serve --addr`): the browser; with sign-in, if set.
@@ -183,6 +213,7 @@ pub enum Listen {
 }
 
 /// Runs the server on the given sockets until `shutdown` resolves.
+#[cfg(not(target_family = "wasm"))]
 pub async fn serve(
     listeners: Vec<Listen>,
     state: AppState,

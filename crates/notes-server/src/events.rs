@@ -9,8 +9,10 @@
 //! SSE: the Tauri window gets an answer of its URL scheme only as a whole
 //! (docs/research/E7.md). Not watching (the watcher broke, an in-memory vault):
 //! nothing to wait for, the answer comes at once. A server stop answers the
-//! waiting requests.
+//! waiting requests. In the browser build (`wasm32`) a vault never watches, so
+//! the answer always comes at once.
 
+#[cfg(not(target_family = "wasm"))]
 use std::time::Duration;
 
 use axum::extract::{Path, Query, State};
@@ -22,6 +24,7 @@ use crate::api::EventsResponse;
 use crate::error::ApiResult;
 
 /// How long a request waits for changes: less than proxy and browser timeouts.
+#[cfg(not(target_family = "wasm"))]
 pub const WAIT: Duration = Duration::from_secs(25);
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -39,9 +42,19 @@ async fn events(
     Query(q): Query<EventsQuery>,
 ) -> ApiResult<Json<EventsResponse>> {
     let vault = s.vault(vault).await?;
+    #[cfg(not(target_family = "wasm"))]
+    wait_for_changes(&s, &vault, q.after).await;
+    let changes = q.after.map(|after| vault.events.since(after)).unwrap_or_default();
+    Ok(Json(EventsResponse { watching: vault.notes.watching(), seq: vault.events.latest(), changes }))
+}
+
+/// Waits for the first change after `after` (if the vault watches and has none
+/// yet), for a server stop or for [`WAIT`].
+#[cfg(not(target_family = "wasm"))]
+async fn wait_for_changes(s: &AppState, vault: &std::sync::Arc<crate::OpenVault>, after: Option<u64>) {
     let (mut seq, _waiting) = vault.wait_events();
     let mut closing = s.closing.subscribe();
-    if let Some(after) = q.after
+    if let Some(after) = after
         && vault.notes.watching()
         && vault.events.since(after).is_empty()
         && !*closing.borrow_and_update()
@@ -52,6 +65,4 @@ async fn events(
             () = tokio::time::sleep(WAIT) => {}
         }
     }
-    let changes = q.after.map(|after| vault.events.since(after)).unwrap_or_default();
-    Ok(Json(EventsResponse { watching: vault.notes.watching(), seq: vault.events.latest(), changes }))
 }

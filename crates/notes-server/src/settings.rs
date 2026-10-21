@@ -9,10 +9,9 @@ use notes_core::settings::SettingsProblem;
 use notes_core::themes::Theme;
 use serde_json::{Map, Value};
 
-use crate::AppState;
 use crate::api::{SettingsResponse, VaultSettingsResponse};
-use crate::assets::css;
 use crate::error::{ApiResult, blocking};
+use crate::{AppState, css};
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
