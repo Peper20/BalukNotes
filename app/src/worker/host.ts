@@ -13,6 +13,14 @@
 // answers at once. With no changes after `N` the host holds the request outside
 // the queue, so other requests go on, and asks the core again after the next
 // round or request that changed vault files, or after 25 s.
+//
+// Restart (architecture §1): a Rust panic aborts the module (no unwinding in
+// wasm32) and WASM memory is never given back. So after a request or a round
+// that ended in a `WebAssembly.RuntimeError`, or left the module's memory over
+// `MEMORY_LIMIT`, the host posts a restart message once and serves nothing
+// more: requests queued or arriving later get no answer from this worker, the
+// client sends them to a fresh one. The answer of the request always goes
+// first. A failed start is not a restart case (a broken start would loop).
 
 import type { CoreSource, RequestMessage, ResponseMessage } from "./protocol";
 
@@ -23,7 +31,16 @@ export interface Core {
   flush?(): Promise<boolean | void>;
   /** One sync round of the vault, persisted (a vault of the hub only); whether vault files changed. Does not throw. */
   sync?(): Promise<boolean>;
+  /** The size of the module's memory in bytes; where it is missing the memory is not checked. */
+  memoryBytes?(): number;
 }
+
+/**
+ * The worker is replaced when the module's memory is over this after a request
+ * (1 GiB): it only grows, a large book takes ~1.5 GB (`docs/research/E4.md`,
+ * "Memory"), and a phone kills a tab that holds more.
+ */
+export const MEMORY_LIMIT = 1024 ** 3;
 
 /** A round this long after the last one. */
 export const ROUND_EVERY_MS = 30_000;
@@ -72,6 +89,10 @@ export class CoreHost {
   /** Why every request gets 503 (400 when the start was refused): the start failed or the module aborted. */
   private broken: string | null = null;
   private brokenStatus = 503;
+  /** Why the worker asks to be replaced, once it did: it serves nothing more. */
+  private stopped: string | null = null;
+  /** The core aborted on a request or a round: the worker is replaced once the request is answered. */
+  private aborted: string | null = null;
   /** The started core, once it is. */
   private core: Core | null = null;
   /** The timer of the next round and when it fires. */
@@ -85,6 +106,8 @@ export class CoreHost {
   constructor(
     private readonly load: Loader,
     private readonly reply: (answer: ResponseMessage) => void,
+    /** Asks the client to replace this worker (posts the restart message). */
+    private readonly restart: (reason: string) => void,
   ) {}
 
   start(source: CoreSource): void {
@@ -106,6 +129,7 @@ export class CoreHost {
   }
 
   request(message: RequestMessage): void {
+    if (this.stopped !== null) return;
     const wait = message.method === "GET" && EVENTS.test(message.uri);
     this.enqueue(() => this.serve(message, wait));
   }
@@ -120,6 +144,7 @@ export class CoreHost {
    * answered.
    */
   private async serve(message: RequestMessage, wait = false): Promise<void> {
+    if (this.stopped !== null) return;
     let answer: ResponseMessage;
     try {
       answer = await this.answer(message);
@@ -132,13 +157,54 @@ export class CoreHost {
         message,
         setTimeout(() => this.release(message), EVENTS_WAIT_MS),
       );
+    } else {
+      this.send(answer, message.id);
+      if (await this.flush()) {
+        this.wake();
+        this.schedule(ROUND_AFTER_CHANGE_MS);
+      }
+    }
+    await this.check();
+  }
+
+  /**
+   * After a request or a round: asks for a restart if the core aborted or its
+   * memory is over the limit. Runs inside the queue, so no request or round is
+   * running, and the answer and the flush are done.
+   */
+  private async check(): Promise<void> {
+    if (this.aborted !== null) return this.stop(this.aborted);
+    let core: Core | null;
+    try {
+      core = this.broken ? null : await this.ready;
+    } catch {
       return;
     }
-    this.send(answer, message.id);
-    if (await this.flush()) {
-      this.wake();
-      this.schedule(ROUND_AFTER_CHANGE_MS);
+    const bytes = core?.memoryBytes?.();
+    if (bytes !== undefined && bytes > MEMORY_LIMIT) {
+      this.stop(`the core's memory is ${Math.round(bytes / 2 ** 20)} MiB, over ${MEMORY_LIMIT / 2 ** 20} MiB`);
     }
+  }
+
+  /** Posts the restart message once; the host then serves nothing more and drops what waits. */
+  private stop(reason: string): void {
+    if (this.stopped !== null) return;
+    this.stopped = reason;
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+    for (const timer of this.held.values()) clearTimeout(timer);
+    this.held.clear();
+    try {
+      this.restart(reason);
+    } catch (e) {
+      console.error(`restart: ${describe(e)}`);
+    }
+  }
+
+  /** The core aborted (a Rust panic): it answers nothing more, the worker is to be replaced. */
+  private abort(e: unknown): void {
+    this.broken = `the core stopped after an error: ${describe(e)}`;
+    this.aborted = this.broken;
   }
 
   /** The held events request goes to the queue again, to be answered whatever the core says. */
@@ -178,6 +244,7 @@ export class CoreHost {
   /** One round from the queue; the next one is scheduled. */
   private async round(): Promise<void> {
     this.roundQueued = false;
+    if (this.stopped !== null) return;
     let core: Core | null;
     try {
       core = this.ready ? await this.ready : null;
@@ -188,10 +255,11 @@ export class CoreHost {
     try {
       if (await core.sync()) this.wake();
     } catch (e) {
-      if (e instanceof WebAssembly.RuntimeError) this.broken = `the core stopped after an error: ${describe(e)}`;
+      if (e instanceof WebAssembly.RuntimeError) this.abort(e);
       console.error(`sync: ${describe(e)}`);
     }
     this.schedule(ROUND_EVERY_MS);
+    await this.check();
   }
 
   /** Posts the answer; if that fails (a failed transfer), tries to answer with an error instead. */
@@ -232,7 +300,7 @@ export class CoreHost {
       return { id, status: r.status, contentType: r.contentType, body: r.body };
     } catch (e) {
       // A Rust panic aborts the module (no unwinding in wasm32): it answers nothing more.
-      if (e instanceof WebAssembly.RuntimeError) this.broken = `the core stopped after an error: ${describe(e)}`;
+      if (e instanceof WebAssembly.RuntimeError) this.abort(e);
       return errorAnswer(id, 500, describe(e));
     }
   }

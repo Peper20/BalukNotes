@@ -6,9 +6,11 @@
 // those of the page's server, the hub (`route`); stylesheets, fonts and the PDF
 // address stay HTTP (`config.ts`). The worker starts on the first request and
 // answers one request at a time (a build blocks it anyway); the queue and the
-// failures are in `worker/host.ts`.
+// failures are in `worker/host.ts`. A worker that asks to be replaced (the core
+// aborted, its memory grew too much) is terminated and a fresh one gets the
+// calls that had no answer (`CoreClient.restart`).
 
-import type { RequestMessage, ResponseMessage, StartMessage } from "../../worker/protocol";
+import type { RequestMessage, ResponseMessage, StartMessage, WorkerReply } from "../../worker/protocol";
 import { vault } from "../vault";
 import { apiConfig, apiUrl, type CoreSource } from "./config";
 import type { VaultsResponse } from "./types/VaultsResponse";
@@ -18,12 +20,13 @@ export type Transport = (path: string, init: RequestInit) => Promise<Response>;
 /** What the client needs of a `Worker` (a fake one in the tests). */
 export interface WorkerLike {
   postMessage(message: StartMessage | RequestMessage, transfer?: Transferable[]): void;
-  addEventListener(type: "message", listener: (e: { data: ResponseMessage }) => void): void;
+  addEventListener(type: "message", listener: (e: { data: WorkerReply }) => void): void;
   addEventListener(type: "error", listener: (e: { message?: string }) => void): void;
   terminate(): void;
 }
 
-type Pending = { resolve: (r: ResponseMessage) => void; reject: (e: Error) => void };
+/** A call without an answer: kept whole, so a fresh worker can be sent the request again. */
+type Pending = { request: RequestMessage; resolve: (r: ResponseMessage) => void; reject: (e: Error) => void };
 
 const abortError = (): Error => new DOMException("The request was aborted", "AbortError");
 
@@ -53,11 +56,13 @@ export class CoreClient {
       };
       signal?.addEventListener("abort", onAbort, { once: true });
       const done = () => signal?.removeEventListener("abort", onAbort);
+      // The body is copied, not transferred: a restart sends the request again.
       this.pending.set(id, {
+        request: { id, method, uri, ...(body && { body }) },
         resolve: (r) => (done(), resolve(r)),
         reject: (e) => (done(), reject(e)),
       });
-      worker.postMessage({ id, method, uri, ...(body && { body }) }, body ? [body.buffer] : []);
+      worker.postMessage({ id, method, uri, ...(body && { body }) });
     });
   }
 
@@ -66,15 +71,23 @@ export class CoreClient {
     const worker = this.worker;
     this.worker = null;
     worker?.terminate();
-    const error = new Error("the core worker was closed");
-    for (const p of this.pending.values()) p.reject(error);
-    this.pending.clear();
+    this.failPending(new Error("the core worker was closed"));
   }
 
   private start(): WorkerLike {
-    if (this.worker) return this.worker;
+    return this.worker ?? this.spawnWorker(false);
+  }
+
+  /** Starts a worker; `fresh`: it replaces one that asked for a restart. */
+  private spawnWorker(fresh: boolean): WorkerLike {
     const worker = this.spawn();
+    let answered = false;
     worker.addEventListener("message", ({ data }) => {
+      if ("restart" in data) {
+        if (this.worker === worker) this.restart(worker, data.restart, fresh && !answered);
+        return;
+      }
+      answered = true;
       const p = this.pending.get(data.id);
       this.pending.delete(data.id);
       p?.resolve(data);
@@ -84,13 +97,35 @@ export class CoreClient {
     worker.addEventListener("error", (e) => {
       worker.terminate();
       if (this.worker === worker) this.worker = null;
-      const error = new Error(e.message || "the core worker failed");
-      for (const p of this.pending.values()) p.reject(error);
-      this.pending.clear();
+      this.failPending(new Error(e.message || "the core worker failed"));
     });
     worker.postMessage({ start: this.source });
     this.worker = worker;
     return worker;
+  }
+
+  /**
+   * The worker asked to be replaced: it serves nothing more and never ran the
+   * calls without an answer, so they go to a fresh worker as they are. A fresh
+   * worker that asks before it answered anything is not replaced again (it
+   * would loop): the calls fail and the next call starts a worker.
+   */
+  private restart(worker: WorkerLike, reason: string, loop: boolean): void {
+    worker.terminate();
+    if (loop) {
+      console.error(`the core worker asked for a restart again before answering: ${reason}`);
+      this.worker = null;
+      this.failPending(new Error(reason));
+      return;
+    }
+    console.warn(`restarting the core worker: ${reason}`);
+    const fresh = this.spawnWorker(true);
+    for (const { request } of this.pending.values()) fresh.postMessage(request);
+  }
+
+  private failPending(error: Error): void {
+    for (const p of this.pending.values()) p.reject(error);
+    this.pending.clear();
   }
 }
 

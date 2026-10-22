@@ -1,10 +1,10 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { api, ApiError, configure, signInRequired } from ".";
 import { CoreHost, StartRefused, type Core } from "../../worker/host";
-import type { RequestMessage, ResponseMessage, StartMessage } from "../../worker/protocol";
+import type { RequestMessage, ResponseMessage, StartMessage, WorkerReply } from "../../worker/protocol";
 import { setVault } from "../vault";
 import { resetSignIn } from "./signin";
-import { setWorkerFactory, type WorkerLike } from "./transport";
+import { setWorkerFactory, transport, type WorkerLike } from "./transport";
 
 const CORE = { module: "/wasm/notes_wasm.js", vault: "vault", files: "/wasm/files.json" };
 const enc = new TextEncoder();
@@ -14,7 +14,7 @@ const dec = new TextDecoder();
 class ScriptedWorker implements WorkerLike {
   sent: (StartMessage | RequestMessage)[] = [];
   terminated = false;
-  private listeners: { message: ((e: { data: ResponseMessage }) => void)[]; error: ((e: { message?: string }) => void)[] } = {
+  private listeners: { message: ((e: { data: WorkerReply }) => void)[]; error: ((e: { message?: string }) => void)[] } = {
     message: [],
     error: [],
   };
@@ -32,6 +32,9 @@ class ScriptedWorker implements WorkerLike {
   get requests(): RequestMessage[] {
     return this.sent.filter((m): m is RequestMessage => "id" in m);
   }
+  restart(reason: string): void {
+    for (const l of this.listeners.message) l({ data: { restart: reason } });
+  }
   answer(id: number, status: number, body: string, contentType = "application/json"): void {
     for (const l of this.listeners.message) l({ data: { id, status, contentType, body: enc.encode(body) } });
   }
@@ -42,8 +45,9 @@ class ScriptedWorker implements WorkerLike {
 
 /** A worker with the real queue (`CoreHost`) over a fake core. */
 function hostedWorker(load: () => Promise<Core>): WorkerLike {
-  const listeners: ((e: { data: ResponseMessage }) => void)[] = [];
-  const host = new CoreHost(load, (answer) => queueMicrotask(() => listeners.forEach((l) => l({ data: answer }))));
+  const listeners: ((e: { data: WorkerReply }) => void)[] = [];
+  const post = (data: WorkerReply) => queueMicrotask(() => listeners.forEach((l) => l({ data })));
+  const host = new CoreHost(load, post, (restart) => post({ restart }));
   return {
     postMessage: (m) => ("start" in m ? host.start(m.start) : host.request(m)),
     addEventListener: ((type: string, l: never) => {
@@ -190,21 +194,6 @@ it("a failed start answers 503 with the message to every request", async () => {
     expect(e).toBeInstanceOf(ApiError);
     expect(e).toMatchObject({ status: 503, message: "the core did not start: no module" });
   }
-});
-
-it("a panic answers that request 500, then 503", async () => {
-  const core: Core = {
-    async request(_m, uri) {
-      if (uri.endsWith("/graph")) throw new WebAssembly.RuntimeError("unreachable");
-      return { status: 200, contentType: "application/json", body: enc.encode("[]") };
-    },
-  };
-  setWorkerFactory(() => hostedWorker(async () => core));
-  configure({ core: CORE });
-  setVault("v");
-  expect(await api.notes()).toEqual([]);
-  await expect(api.graph()).rejects.toMatchObject({ status: 500, message: "unreachable" });
-  await expect(api.notes()).rejects.toMatchObject({ status: 503 });
 });
 
 it("a worker that dies fails the pending calls and is started anew by the next one", async () => {
@@ -374,4 +363,129 @@ it("a vault name the core refuses answers every request 400 with the core's mess
     expect(e).toBeInstanceOf(ApiError);
     expect(e).toMatchObject({ status: 400, message: 'a vault name cannot contain "/"' });
   }
+});
+
+it("on restart the worker is replaced and the calls without an answer go to the new one with their ids", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const workers: ScriptedWorker[] = [];
+  setWorkerFactory(() => {
+    const w = new ScriptedWorker();
+    workers.push(w);
+    return w;
+  });
+  configure({ core: CORE });
+  setVault("vault");
+
+  const first = api.notes();
+  const second = api.saveSettings({ "device.builds": 3 });
+  const aborted = new AbortController();
+  const third = transport("/api/vaults/vault/version/x", {
+    signal: aborted.signal,
+  });
+  const [old] = workers;
+  old!.answer(1, 200, "[]");
+  await first;
+  aborted.abort();
+  await expect(third).rejects.toMatchObject({ name: "AbortError" });
+
+  // The old worker answered request 1 and asks to be replaced: 2 was never run, 3 was aborted.
+  old!.restart("the core's memory is over the limit");
+  expect(old!.terminated).toBe(true);
+  expect(workers).toHaveLength(2);
+  const fresh = workers[1]!;
+  expect(fresh.sent[0]).toEqual({ start: { ...CORE } });
+  expect(fresh.requests.map((r) => r.id)).toEqual([2]);
+  expect(fresh.requests[0]).toMatchObject({
+    method: "PUT",
+    uri: "/api/settings",
+  });
+  expect(dec.decode(fresh.requests[0]!.body)).toBe('{"device.builds":3}');
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining("over the limit"));
+
+  fresh.answer(2, 200, '{"device.builds":3}');
+  await second;
+  // New calls go to the fresh worker, ids go on.
+  const next = api.notes();
+  expect(fresh.requests.map((r) => r.id)).toEqual([2, 4]);
+  fresh.answer(4, 200, "[]");
+  await next;
+  expect(workers).toHaveLength(2);
+});
+
+it("a fresh worker that asks for a restart before answering anything fails the calls instead of looping", async () => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const workers: ScriptedWorker[] = [];
+  setWorkerFactory(() => {
+    const w = new ScriptedWorker();
+    workers.push(w);
+    return w;
+  });
+  configure({ core: CORE });
+  setVault("vault");
+
+  const call = api.notes();
+  const failed = expect(call).rejects.toThrow("memory over");
+  workers[0]!.restart("memory over");
+  expect(workers).toHaveLength(2);
+  workers[1]!.restart("memory over");
+  await failed;
+  expect(workers).toHaveLength(2);
+  expect(workers[1]!.terminated).toBe(true);
+
+  // The next call starts a new worker, as after an error.
+  const again = api.notes();
+  expect(workers).toHaveLength(3);
+  workers[2]!.answer(2, 200, "[]");
+  await again;
+});
+
+it("a fresh worker that answered may ask for a restart again", async () => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  const workers: ScriptedWorker[] = [];
+  setWorkerFactory(() => {
+    const w = new ScriptedWorker();
+    workers.push(w);
+    return w;
+  });
+  configure({ core: CORE });
+  setVault("vault");
+
+  const a = api.notes();
+  workers[0]!.restart("one");
+  workers[1]!.answer(1, 200, "[]");
+  await a;
+  const b = api.notes();
+  workers[1]!.restart("two");
+  expect(workers).toHaveLength(3);
+  expect(workers[2]!.requests.map((r) => r.id)).toEqual([2]);
+  workers[2]!.answer(2, 200, "[]");
+  await b;
+});
+
+it("with the real queue: a panic answers 500, the request behind it is run by the fresh worker", async () => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  let runs = 0;
+  const panicking = (): Promise<Core> =>
+    Promise.resolve({
+      async request(_m, uri) {
+        if (++runs === 1) throw new WebAssembly.RuntimeError("unreachable");
+        return {
+          status: 200,
+          contentType: "application/json",
+          body: enc.encode(JSON.stringify(uri)),
+        };
+      },
+    });
+  setWorkerFactory(() => hostedWorker(panicking));
+  configure({ core: CORE });
+  setVault("vault");
+
+  const boom = transport("/api/vaults/vault/notes/boom", {});
+  const behind = transport("/api/vaults/vault/notes/behind", {});
+  expect((await boom).status).toBe(500);
+  const answer = await behind;
+  expect(answer.status).toBe(200);
+  expect(await answer.json()).toBe("/api/vaults/vault/notes/behind");
 });

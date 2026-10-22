@@ -278,3 +278,15 @@ it("a kept vault gets the package versions a later bundle adds; without the list
   expect([...lastCore().packageFiles.keys()].sort()).toEqual(["preview/p/1.0.0/lib.typ", "preview/p/2.0.0/lib.typ"]);
   expect(error).toHaveBeenCalledWith(expect.stringContaining("/missing.json"));
 });
+
+it("reports the size of the module's memory when the glue exports it, and its growth", async () => {
+  const memory = { buffer: { byteLength: 1000 } };
+  const withMemory = { default: async () => ({ memory }), WasmCore: FakeWasm } as unknown as Glue;
+  const core = await load({ module: "/m.js", vault: "v" }, { ...env(null).env, importGlue: async () => withMemory });
+  expect(core.memoryBytes?.()).toBe(1000);
+  memory.buffer = { byteLength: 5000 };
+  expect(core.memoryBytes?.()).toBe(5000);
+
+  // Without the export (the glue's init resolves to nothing) the memory is not checked.
+  expect((await load({ module: "/m.js", vault: "v" }, env(null).env)).memoryBytes).toBeUndefined();
+});

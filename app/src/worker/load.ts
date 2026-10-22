@@ -13,7 +13,8 @@ export const PLACEHOLDER_VAULT = "placeholder";
 
 /** What `notes_wasm.js` exports (wasm-bindgen, `--target web`). */
 export interface Glue {
-  default(): Promise<unknown>;
+  /** The wasm-bindgen init; resolves to the module's exports (`memory` among them). */
+  default(): Promise<{ memory?: { buffer: { byteLength: number } } } | undefined>;
   WasmCore: new (vault: string) => Core &
     Source & {
       addFile(path: string, data: Uint8Array): void;
@@ -115,7 +116,7 @@ async function addPackages(core: { addPackageFile(path: string, data: Uint8Array
  */
 export async function load({ module, vault, files, packages, hub }: CoreSource, env: Env): Promise<Core> {
   const glue = await env.importGlue(module);
-  await glue.default();
+  const exports = await glue.default();
   let core: InstanceType<Glue["WasmCore"]>;
   try {
     core = new glue.WasmCore(vault ?? PLACEHOLDER_VAULT);
@@ -197,6 +198,7 @@ export async function load({ module, vault, files, packages, hub }: CoreSource, 
   return {
     request: (method, uri, body) => core.request(method, uri, body),
     flush,
+    ...(exports?.memory && { memoryBytes: () => exports.memory!.buffer.byteLength }),
     ...(syncing && { sync }),
   };
 }

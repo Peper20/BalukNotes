@@ -34,6 +34,7 @@ const env: Env = {
 const host = new CoreHost(
   (source) => load(source, env),
   (answer: ResponseMessage) => scope.postMessage(answer, [answer.body.buffer]),
+  (restart: string) => scope.postMessage({ restart }, []),
 );
 
 scope.onmessage = ({ data }) => {

@@ -52,4 +52,17 @@ export interface ResponseMessage {
   body: Uint8Array;
 }
 
+/**
+ * The worker asks to be replaced (`reason`): the core aborted on a request or
+ * its memory is over the limit (`host.ts`). It serves nothing more; the
+ * requests without an answer were never executed, the client sends them to a
+ * fresh worker.
+ */
+export interface RestartMessage {
+  restart: string;
+}
+
 export type WorkerMessage = StartMessage | RequestMessage;
+
+/** What the worker posts to the client. */
+export type WorkerReply = ResponseMessage | RestartMessage;

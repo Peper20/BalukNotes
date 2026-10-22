@@ -61,9 +61,14 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
     `notes/vaults/<vault>/ready`, written last, marks a complete import or
     first sync round)
     after each request; at start it reads it back (`files.json` only seeds an
-    empty vault). With the core in the worker, sign-in and the vault list go
-    to the page's server, the hub: `/api/login|logout|session` and
-    `/api/sync/...` over HTTP, `GET`/`POST /api/vaults` mapped by the
+    empty vault). The worker is replaced by a fresh one after the core
+    aborted on a request (a Rust panic aborts the module; that request
+    answers 500) or when the module's memory is above 1 GiB after a request
+    (WASM memory is never given back, `docs/research/E4.md`): it posts
+    `restart` and serves nothing more, and the client starts a new worker and
+    re-sends the requests that had no answer. With the core in the worker,
+    sign-in and the vault list go to the page's server, the hub:
+    `/api/login|logout|session` and `/api/sync/...` over HTTP, `GET`/`POST /api/vaults` mapped by the
     transport to the hub's vault list and creation (rename and delete are not
     available); the worker runs the vault of the tab.
     When `__NOTES_API__.core.hub` is set (`""`: the page's server; the hub's
@@ -391,7 +396,11 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   change or an empty one after 25 s; a vault keeps a log of the last 64
   batches, lost ones - "check everything"). There is no polling every N
   seconds (user's decision): the server does not watch or the mode is "by
-  button only" - changes come by the "Обновить" button.
+  button only" - changes come by the "Обновить" button. In the browser core
+  there is no file system to watch: the vault changes only through the core
+  and sync, which report them inline (`notes_store::watch`, `Changes` on
+  wasm32), and the worker's host holds an events request until a change or
+  25 s.
 - **No connection to the server** (`state/connection`): a request did not get
   through (including a waiting event request) - a "нет связи" mark in the top
   bar (user's choice; click - check at once), the shown note stays; a probe

@@ -18,7 +18,7 @@
 //! only for `wasm32`.
 
 mod tree;
-#[cfg(target_family = "wasm")]
+#[cfg(any(test, target_family = "wasm"))]
 mod xhr;
 
 use std::path::PathBuf;
