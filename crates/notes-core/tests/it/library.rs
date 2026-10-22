@@ -108,12 +108,14 @@ fn skill_gets_arguments_and_has_no_positional_placeholders() {
 }
 
 /// The examples of the `/baluk-note` skill (`skills/baluk-note/examples/`) show
-/// every public name: a weak model writes by example, not by description.
+/// every public name (except those listed in the test): the model learns what
+/// the library can do from the examples.
 /// That they build without errors is the `baluk-note` step in `tools/check.sh`.
 #[test]
 fn skill_examples_use_every_public_name() {
     // A custom theme is a library edit, not a note: the examples do not have one.
-    const NOT_FOR_NOTES: [&str; 2] = ["customize", "themes"];
+    // `quiz`: the skill does not propose it, it is only in `reference.md` (for a user who asks for it).
+    const NOT_FOR_NOTES: [&str; 3] = ["customize", "themes", "quiz"];
     let mut code = String::new();
     let mut dirs = vec![repo().join("skills/baluk-note/examples")];
     while let Some(dir) = dirs.pop() {

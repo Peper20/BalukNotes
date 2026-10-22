@@ -487,9 +487,8 @@ it. The format and rules - `.claude/rules/docs.md`.
   `allowed-tools` - Claude Code may ask the user.
 - **`writing.md` and `SKILL.md` are checked against the library only
   partly**: the test checks only `#name` calls; names without `#` and the
-  meaning of rules go stale unnoticed. Of the `SKILL.md` snippets only the
-  "Common calls" block is built; the header in the "The file" section is
-  rewritten from `new_note` by hand.
+  meaning of rules go stale unnoticed. No `SKILL.md` snippet is built; the
+  header in the "The file" section is rewritten from `new_note` by hand.
 - **The reference (`reference.md`) is checked only by named parameters**: the
   test finds `#let name(...)` in `baluk/` as text and compares names and
   defaults; positional arguments, descriptions and allowed strings are caught

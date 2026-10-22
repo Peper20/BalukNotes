@@ -133,9 +133,8 @@ vendor_tests() {
 
 # The /baluk-note skill: `notes new` templates (a note and a book; the file
 # name comes from a title with markup characters and characters forbidden in
-# file names), the examples skills/baluk-note/examples and the "Common calls"
-# block of SKILL.md (appended to the note template) build in a temporary vault
-# without errors, warnings or broken links.
+# file names) and the examples skills/baluk-note/examples build in a temporary
+# vault without errors, warnings or broken links.
 baluk_note() {
   local dir=tests/.data/baluk-note notes=(cargo run -q -p notes-typst -- --data tests/.data/baluk-note)
   rm -rf "$dir"
@@ -148,14 +147,9 @@ baluk_note() {
   [[ $("${notes[@]}" new --folder Сеть --title '/\:*?"<>|' | tail -n 1) == "Сеть/Без названия" ]] || return 1
   local vault=$dir/vaults/Проверка
   cp -r skills/baluk-note/examples "$vault/examples"
-  awk '/^## Common calls/ {on = 1} on && /^```$/ {exit} on == 2 {print} on && /^```typst/ {on = 2}' \
-    skills/baluk-note/SKILL.md >>"$vault/Математика/Заметка.typ"
-  # the target of the #see link from the block
-  mkdir -p "$vault/Math"
-  printf '#import "/_baluk/lib.typ": *\n#show: note.with(title: [Производная])\n' >"$vault/Math/Derivative.typ"
   local actual
   actual=$("${notes[@]}" check | tee /dev/stderr | tail -n 1)
-  [[ $actual == "notes: 10, errors: 0, warnings: 0, broken links: 0" ]]
+  [[ $actual == "notes: 9, errors: 0, warnings: 0, broken links: 0" ]]
 }
 
 in_app() { (cd app && "$@"); }

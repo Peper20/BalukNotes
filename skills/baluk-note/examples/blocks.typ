@@ -1,5 +1,6 @@
-// Skill sample: TEXT BLOCKS, a whole note from template to quiz.
-// Start from these calls; the comments say what each block is for.
+// Skill sample: TEXT BLOCKS, a finished note on one topic. It shows what the
+// blocks look like and what they are for; a real note takes the blocks its
+// topic needs, a short one may need only a few.
 #import "/_baluk/lib.typ": *
 #show: note.with(
   lang: "en",                                          // block words in English; omit for Russian
@@ -9,13 +10,13 @@
   tags: ("example", "math"),
 )
 
-// Lead: 2-4 sentences before the first section.
+// Lead: a few sentences before the first section, on why the topic matters.
 #lead[
   The limit of a sequence underlies analysis: derivatives, integrals and
   series sums are defined through it. We rely only on the absolute value.
 ]
 
-// Plan: what the reader will learn (usually at the start of a book chapter).
+// Plan: what the reader will learn (fits a book chapter).
 #plan([read the definition], [prove convergence by squeezing], [keep the order of $epsilon$ and $N$])
 
 // Section "=", subsection "==". A label <...> after a heading is for @... links.
@@ -32,7 +33,7 @@ The numbers $x_n$ get closer to $a$; how to say it strictly? A new term in
 // Key formula of a section, in a box; one or two per section.
 #formula[$ lim_(n -> oo) x_n = a $]
 
-// Callouts: at most one per half page.
+// Callouts: sparingly.
 #idea[The opponent names the precision $epsilon$ first, then we answer with $N$.]
 
 #remark[Russian decimal comma only via `dc`: $dc("0,5") + dc("0,25") = dc("0,75")$.]
@@ -58,7 +59,7 @@ The numbers $x_n$ get closer to $a$; how to say it strictly? A new term in
   #answer[$0$]
 ]
 
-// The main trap, right after the example.
+// A trap readers actually fall into, next to the example that shows it.
 #pitfall[Choosing $N$ before $epsilon$: then every bounded sequence has a "limit".]
 
 #algorithm(title: "proving convergence")[
@@ -110,7 +111,7 @@ $ sh x, quad ch x, quad th x, quad cth x $
 $ rot bold(F), quad grad f, quad C = const $
 $ integral_0^1 x dd(x) = 1 / 2, quad f(x) defeq x^2 $
 
-// At the end of a chapter (section): mistakes, summary, questions.
+// Mistakes and a summary: useful at the end of a long chapter or section.
 #pitfalls(
   ([Choosing $N$ before $epsilon$], [first "for every $epsilon$", then "there is $N$"]),
   ([Writing 0,5 in a Russian formula], [`dc("0,5")`]),
@@ -119,9 +120,4 @@ $ integral_0^1 x dd(x) = 1 / 2, quad f(x) defeq x^2 $
 #summary(
   [A limit: for every precision there is an index.],
   [Squeeze: the unknown between two known ones with a common limit.],
-)
-
-#quiz(
-  ([What is $lim (sin n) / n$?], [$0$]),
-  ([What comes first, $epsilon$ or $N$?], [$epsilon$]),
 )

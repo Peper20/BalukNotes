@@ -76,6 +76,7 @@
 
 = Algorithm as frames
 
+// An algorithm whose state evolves step by step: the reader stops and goes back.
 // frames(k => figure, k: (values: ...) or (from:, to:, step:, value:)): a slider and playback in the app.
 // label: frame caption; pdf: which frames (numbers from 1) the PDF shows in a row.
 #let passes = ((5, 2, 4, 1), (2, 4, 1, 5), (2, 1, 4, 5), (1, 2, 4, 5))

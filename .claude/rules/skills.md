@@ -15,12 +15,15 @@ file - the principles of any skill.
 
 ## Who we write for
 
-- **The reader is a model**, mostly a strong one (Sonnet, Opus); a weak one
-  must cope too, its context starts at ~64k tokens. So rules come **with
-  reasons** (with a reason a strong model handles an unforeseen case), and
-  samples and the reference back up a weak one.
+- **The reader is a strong model** (Sonnet, Opus). Rules come with a reason
+  where it is not obvious: with the reason the model handles an unforeseen
+  case. No hand-holding: the samples and the reference describe the library,
+  the skill does not teach Typst or repeat itself.
 - **Strict - only the process**: paths, commands, checks, the file header,
   boundaries. Content is free: a sample is a starting point, not a limit.
+- **Neutral content rules**: what makes a good note and why, as orientation;
+  no mandated blocks, counts or endings. The model chooses by the topic and
+  the request.
 - A calm tone: no NEVER, caps or extra emphasis - they cause overcaution
   (extra questions, dropping reasonable initiative).
 
@@ -98,23 +101,24 @@ file - the principles of any skill.
   skill, not by the `notes new` template (user's decision);
 - order: language, context (what the program is, where the result goes),
   choosing the task, steps (one of them reads `notes docs writing`, the content
-  rules), reference (paths, syntax, CLI errors), common calls, an index of
-  samples.
+  rules), reference (paths, what is specific to the library, CLI errors), an
+  index of samples.
 
-Together the samples use **every** public library name; comments say what a
-call does and why (parameters are in the reference). The model reads them in
+Together the samples use **every** public library name; except `quiz`: the
+skill does not propose it, it is only in the reference. Comments say what a
+call does and why (parameters are in the reference). The samples read as
+finished notes, not as a template every note follows. The model reads them in
 full before planning, to know what the library can do.
 
 ## Checks
 
 `tools/check.sh --rust`:
 
-- the `baluk-note` step: `notes new` templates, all samples and the "Common
-  calls" block of `SKILL.md` build in a temporary vault without errors,
-  warnings or broken links;
+- the `baluk-note` step: `notes new` templates and all samples build in a
+  temporary vault without errors, warnings or broken links;
 - `cargo test -p notes-core --test it library::`: `#name` calls in `SKILL.md`
-  are public names; every name is in the samples; the reference matches the
-  sources in named parameters and defaults; there is `<request>` with
+  are public names; every name except `quiz` is in the samples; the reference
+  matches the sources in named parameters and defaults; there is `<request>` with
   `$ARGUMENTS` and no `$digit`; the skill texts have no Cyrillic or typography
   (except inline `code` and `argument-hint`); the skill size in characters
   grew by no more than 10 % over `tests/snapshots/skill-size.txt` (an

@@ -1,10 +1,13 @@
 // Skill sample: INTERACTIVE figures: a plot with sliders, a rotating
 // surface, frames with a number. Live in the app; the PDF shows the frame
-// at the default values (value:).
+// at the default values (value:). They fit where the change itself is what the
+// reader must see; a plain static figure reads at a glance and in print.
 #import "/_baluk/lib.typ": *
 #show: note.with(lang: "en", title: [Interactive], tags: ("example", "figures"))
 
 = Parabola with sliders
+
+// Three parameters change the shape in ways a single static plot cannot show together.
 
 // interactive-plot(FORMULA-STRING, x-from, x-to, params: (...), y: (...)), always inside #fig(..., [Caption]).
 // The formula is a STRING: x, parameter names, + - * /, parentheses, calc.sin(...) etc.
@@ -40,6 +43,8 @@
 
 = Surface
 
+// Rotation shows the shape of a surface better than any one view.
+
 // interactive-surface(formula of x and y, (x-from, x-to), (y-from, y-to), params:, z:): rotates with the mouse.
 #fig(
   interactive-surface("calc.sin(k * x) * calc.cos(y)", (-3, 3), (-3, 3),
@@ -49,6 +54,8 @@
 )
 
 = Frames with a number
+
+// Riemann sums: how the rectangles fill the area as n grows is the point.
 
 // frames(n => canvas(...), n: (from:, to:, value:)): any figure with a parameter.
 // An invisible rect(..., stroke: none) of constant size keeps frames from jumping.

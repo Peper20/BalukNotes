@@ -30,4 +30,3 @@
 #pitfall[Off by one: taking $P_r - P_l$ loses $a_r$.]
 
 #summary([Prefixes take one pass.], [A query is one subtraction.])
-#quiz(([What is $P_0$?], [$0$]))
