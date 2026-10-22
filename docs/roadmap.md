@@ -263,8 +263,8 @@ before M7 starts.
       the client, the module, the packages, the theme CSS and the fonts as
       static files built on the computer (`tools/web-bundle.sh`); sign-in and
       the vault list go to the hub, the worker runs the tab's vault (PR #26)
-- [ ] Fonts fetched apart from the module (half of its 12 MB brotli,
-      `docs/research/E4.md`)
+- [x] Fonts fetched apart from the module (PR #30): the module 13.4 -> 8.0 MB
+      brotli, the fonts are files the browser caches for good
 - [x] Restart the worker after a panic or above a memory threshold (PR #29)
 
 ## Later
