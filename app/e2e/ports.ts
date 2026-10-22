@@ -6,7 +6,7 @@
 export const MAX_WORKERS = 8;
 /** The app server of the Playwright worker `parallelIndex`: 8600 + the index. */
 export const appPort = (parallelIndex: number): number => 8600 + parallelIndex;
-/** The server that global-setup warms (the template of the workers' data). */
+/** The server that global-setup warms (the template of the workers' data) and that `prepareData` starts for a moment. */
 export const WARM_PORT = 8644;
 /** The server with sign-in of `auth.spec.ts`. */
 export const AUTH_PORT = 8640;

@@ -5,12 +5,11 @@
 // says so, the right one opens the vault, a reload stays signed in, sign-out
 // returns to the screen and the API answers 401 again.
 import { execFileSync, type ChildProcess } from "node:child_process";
-import { cpSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { VAULT_NAME } from "./helpers";
 import { AUTH_PORT } from "./ports";
-import { BIN, ROOT, TEMPLATE_DATA, exitOf, startApp, stop, waitFor } from "./server";
+import { BIN, ROOT, exitOf, prepareData, startApp, stop, waitFor, warm } from "./server";
 
 const BASE = `http://127.0.0.1:${AUTH_PORT}`;
 const DATA = join(ROOT, "tests/.data/auth-e2e");
@@ -23,10 +22,7 @@ test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
   test.setTimeout(300_000);
-  rmSync(DATA, { recursive: true, force: true });
-  // A copy of the warmed template of the app servers (global-setup.ts): the vault and the disk cache.
-  mkdirSync(DATA, { recursive: true });
-  cpSync(TEMPLATE_DATA, DATA, { recursive: true, preserveTimestamps: true });
+  await prepareData(DATA, AUTH_PORT, VAULT_NAME);
   execFileSync(join(BIN, "notes-hub"), ["--data", DATA, "users", "add", LOGIN, "--password-stdin"], { input: `${PASSWORD}\n`, stdio: ["pipe", "ignore", "inherit"] });
   server = startApp(DATA, AUTH_PORT, true);
   // The sign-in screen's own files are open.
@@ -35,9 +31,7 @@ test.beforeAll(async () => {
   const res = await fetch(`${BASE}/api/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ login: LOGIN, password: PASSWORD }) });
   const { token } = (await res.json()) as { token: string };
   const headers = { Authorization: `Bearer ${token}` };
-  const api = `${BASE}/api/vaults/${VAULT_NAME}`;
-  const list = (await (await fetch(`${api}/notes`, { headers })).json()) as { id: string }[];
-  for (const { id } of list) await (await fetch(`${api}/notes/${id.split("/").map(encodeURIComponent).join("/")}`, { headers })).arrayBuffer();
+  await warm(BASE, VAULT_NAME, headers);
   await fetch(`${BASE}/api/logout`, { method: "POST", headers });
 });
 
