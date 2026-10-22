@@ -75,8 +75,8 @@ npm test        # Vitest; also check, e2e
   of `tests/vault` in `tests/.data/e2e`, warmed up beforehand. A new interface
   feature - a new scenario; phone - `mobile.spec.ts` (400x800: the page is not
   wider than the window, measured after `document.fonts.ready`).
-  `e2e/wasm.spec.ts` needs `tests/.data/wasm/` (the module and `files.json`),
-  which the `wasm-module` step of `tools/check.sh` makes
+  `e2e/wasm.spec.ts` needs `tests/.data/wasm/` (the module, `fonts.json` with
+  `fonts/`, and `files.json`), which the `wasm-module` step of `tools/check.sh` makes
   (`crates/notes-wasm/harness/build.sh` and `node
   crates/notes-wasm/harness/run.mjs --prepare`); `npm run e2e` alone without
   them fails with 404s. `e2e/hub.spec.ts` talks to a second server of

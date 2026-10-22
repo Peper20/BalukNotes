@@ -135,10 +135,11 @@ impl Web {
 
 /// The answer for the file `rel` (below the folder, `/`-separated) of `len` bytes.
 fn served(rel: &str, len: u64, body: Body) -> Response {
-    // Hashed build files never change; the rest (the page, the module, the
-    // stylesheets) can be replaced by a deployment.
-    let cache =
-        if rel.starts_with("assets/") && is_hashed(rel) { "public, max-age=31536000, immutable" } else { "no-cache" };
+    // Hashed build files and the fonts of the core module
+    // (`wasm/fonts/font-<hash>.bin`) never change; the rest (the page, the
+    // module, the lists, the stylesheets) can be replaced by a deployment.
+    let immutable = (rel.starts_with("assets/") || rel.starts_with("wasm/fonts/")) && is_hashed(rel);
+    let cache = if immutable { "public, max-age=31536000, immutable" } else { "no-cache" };
     (
         [
             (header::CONTENT_TYPE, HeaderValue::from_static(content_type(rel))),

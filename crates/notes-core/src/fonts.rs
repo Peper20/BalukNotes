@@ -6,6 +6,9 @@
 //! same on any machine, and nothing has to be installed. System fonts are
 //! for everything else.
 //!
+//! The browser core (WASM) embeds no fonts: the host hands it the same files
+//! ([`embedded_files`] lists them, [`Fonts::from_files`] takes them).
+//!
 //! The browser draws text and formulas itself, so it needs the same font
 //! files as Typst; [`Fonts::web_face`] serves them, in WOFF2 and in chunks
 //! (character sets), see [`crate::webfonts`].
@@ -19,30 +22,60 @@ use std::sync::{Arc, OnceLock};
 
 use parking_lot::Mutex;
 
+#[cfg(not(target_family = "wasm"))]
 use rust_embed::RustEmbed;
 use typst::foundations::Bytes;
 use typst::text::{Font, FontBook, FontInfo, FontStyle, FontVariant, FontWeight};
 use typst::utils::LazyHash;
-use typst_kit::fonts::{self, FontPath, FontStore};
+#[cfg(not(target_family = "wasm"))]
+use typst_kit::fonts;
+use typst_kit::fonts::{FontPath, FontStore};
 
 use crate::themes::WebFamily;
 
 /// The styling fonts from `fonts/`. In a debug build rust-embed reads them
-/// from disk.
+/// from disk. Native targets only: the browser core gets font files from the
+/// host (module size, architecture §10).
+#[cfg(not(target_family = "wasm"))]
 #[derive(RustEmbed)]
 #[folder = "../../fonts/"]
 #[include = "*.ttf"]
 #[include = "*.otf"]
 struct EmbeddedFonts;
 
-/// The styling fonts embedded in the binary.
-fn bundled_fonts() -> impl Iterator<Item = (Font, FontInfo)> {
-    EmbeddedFonts::iter().filter_map(|name| EmbeddedFonts::get(&name)).flat_map(|file| {
-        Font::iter(Bytes::new(file.data.into_owned())).map(|font| {
-            let info = font.info().clone();
-            (font, info)
-        })
+/// The fonts of a font file, a collection has several.
+fn faces(data: Bytes) -> impl Iterator<Item = (Font, FontInfo)> {
+    Font::iter(data).map(|font| {
+        let info = font.info().clone();
+        (font, info)
     })
+}
+
+/// The styling fonts embedded in the binary.
+#[cfg(not(target_family = "wasm"))]
+fn bundled_fonts() -> impl Iterator<Item = (Font, FontInfo)> {
+    EmbeddedFonts::iter()
+        .filter_map(|name| EmbeddedFonts::get(&name))
+        .flat_map(|file| faces(Bytes::new(file.data.into_owned())))
+}
+
+/// Every font file of the embedded set, the styling fonts and the Typst ones,
+/// once each (a collection with several fonts is one file): what the browser
+/// core gets as files from the host, so it renders with the same fonts as the
+/// native binary (`crates/notes-wasm/examples/fonts.rs`).
+#[cfg(not(target_family = "wasm"))]
+pub fn embedded_files() -> Vec<Bytes> {
+    let styling = EmbeddedFonts::iter()
+        .filter_map(|name| EmbeddedFonts::get(&name))
+        .map(|file| Bytes::new(file.data.into_owned()));
+    let typst = fonts::embedded().map(|(font, _)| font.data().clone());
+    let mut files: Vec<Bytes> = Vec::new();
+    for data in styling.chain(typst) {
+        if !files.contains(&data) {
+            files.push(data);
+        }
+    }
+    files
 }
 
 /// Family and variant.
@@ -182,25 +215,41 @@ impl WebFace {
 impl Fonts {
     /// Fonts from `extra_dirs` (given explicitly, they beat all others), the
     /// embedded ones (styling and Typst) and the system ones, except families
-    /// already among the embedded. The browser (WASM) has only the embedded
-    /// ones: no font directories there.
+    /// already among the embedded. The browser (WASM) has none of these: it
+    /// takes font files from the host ([`Self::from_files`]), here its store
+    /// is empty.
+    #[cfg(not(target_family = "wasm"))]
     pub fn load(extra_dirs: &[PathBuf]) -> Self {
         let mut store = FontStore::new();
-        #[cfg(not(target_family = "wasm"))]
         for dir in extra_dirs {
             store.extend(fonts::scan(dir));
         }
-        #[cfg(target_family = "wasm")]
-        let _ = extra_dirs;
         let embedded: Vec<_> = bundled_fonts().chain(fonts::embedded()).collect();
         let shadowed: HashSet<String> = embedded.iter().map(|(_, info)| info.family.to_lowercase()).collect();
         store.extend(embedded);
         // Otherwise a system font of the same family could win the selection
         // (Typst prefers a variable file to a static one).
-        #[cfg(not(target_family = "wasm"))]
         store.extend(fonts::system().filter(|(_, info)| !shadowed.contains(&info.family.to_lowercase())));
-        #[cfg(target_family = "wasm")]
-        drop(shadowed);
+        Self::with_store(store)
+    }
+
+    /// The browser (WASM) has no embedded, system or directory fonts: the empty
+    /// set, the host hands the files over ([`Self::from_files`]).
+    #[cfg(target_family = "wasm")]
+    pub fn load(_extra_dirs: &[PathBuf]) -> Self {
+        Self::with_store(FontStore::new())
+    }
+
+    /// Exactly the fonts of these files, in this order: no system or embedded
+    /// ones. The browser core gets the files of [`embedded_files`] from the
+    /// host, so its set is the one of the native binary without the system fonts.
+    pub fn from_files(files: impl IntoIterator<Item = Bytes>) -> Self {
+        let mut store = FontStore::new();
+        store.extend(files.into_iter().flat_map(faces));
+        Self::with_store(store)
+    }
+
+    fn with_store(store: FontStore) -> Self {
         Self { store, web: Mutex::new(HashMap::new()), web_cache: None }
     }
 
@@ -352,6 +401,8 @@ impl Fonts {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
 
     fn text(name: &str) -> WebFamily {
@@ -393,6 +444,56 @@ mod tests {
         assert!(face.chunks[0].unicode_range.as_deref().unwrap().starts_with("U+20"));
         assert_eq!(&face.file("all").unwrap()[4..8], b"OTTO");
         assert!(Arc::ptr_eq(&face, &fonts.web_face(&math, WebVariant::ALL[0]).unwrap()), "the plan is built once");
+    }
+
+    /// The fonts of a set by lower-case family name.
+    fn families(fonts: &Fonts) -> BTreeMap<String, usize> {
+        fonts.book().families().map(|(family, infos)| (family.to_lowercase(), infos.count())).collect()
+    }
+
+    #[test]
+    fn from_files_has_the_fonts_of_its_files_only() {
+        let mono: Vec<Bytes> = embedded_files()
+            .into_iter()
+            .filter(|file| faces(file.clone()).any(|(_, info)| info.family == "JetBrains Mono"))
+            .collect();
+        assert_eq!(mono.len(), 4, "regular, bold and their italics");
+        let fonts = Fonts::from_files(mono);
+        assert_eq!(families(&fonts), BTreeMap::from([("jetbrains mono".to_owned(), 4)]));
+        let index = fonts.book().select("jetbrains mono", FontVariant::default()).unwrap();
+        assert!(fonts.font(index).is_some());
+        assert!(
+            fonts.web_face(&text("JetBrains Mono"), WebVariant::ALL[0]).is_some(),
+            "the browser parts are made from them too"
+        );
+
+        assert!(families(&Fonts::from_files([])).is_empty(), "no system or embedded fonts are added");
+        assert!(families(&Fonts::from_files([Bytes::new(b"not a font".to_vec())])).is_empty());
+    }
+
+    #[test]
+    fn embedded_files_are_distinct_and_cover_the_embedded_set() {
+        let files = embedded_files();
+        for (i, file) in files.iter().enumerate() {
+            assert!(!files[i + 1..].contains(file), "file {i} is listed twice");
+        }
+        // The same families with the same number of fonts as `Fonts::load` embeds.
+        let mut want = BTreeMap::new();
+        for (_, info) in bundled_fonts().chain(fonts::embedded()) {
+            *want.entry(info.family.to_lowercase()).or_insert(0) += 1;
+        }
+        assert!(want.len() > 5, "{want:?}");
+        let set = Fonts::from_files(files);
+        assert_eq!(families(&set), want);
+        // Every font has its own place (family and variant), so the order of the
+        // files cannot change which font a selection finds.
+        let mut seen = HashSet::new();
+        for (family, infos) in set.book().families() {
+            for index in infos {
+                let variant = set.book().info(index).unwrap().variant;
+                assert!(seen.insert((family.to_lowercase(), variant)), "{family} {variant:?} twice");
+            }
+        }
     }
 
     #[test]

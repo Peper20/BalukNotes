@@ -19,6 +19,8 @@ export interface Glue {
     Source & {
       addFile(path: string, data: Uint8Array): void;
       addPackageFile(path: string, data: Uint8Array): void;
+      /** A font file of the core's font set, before `open`. */
+      addFont(data: Uint8Array): void;
       setSettings(json: string): void;
       open(): void;
       /** One sync round with the hub at `hub`, blocking: `Round` JSON. */
@@ -34,6 +36,11 @@ export type Round =
   | { ok: true; changed: boolean; uploaded: number; downloaded: number; removedLocal: number; removedRemote: number; conflicts: string[]; skipped: string[] }
   | { ok: false; error: string; held: boolean; unauthorized: boolean };
 
+/** `fonts.json` as it is served: the font files, as paths relative to its address. */
+export interface FontList {
+  fonts: string[];
+}
+
 /** `files.json` and `packages.json` as they are served: base64 contents. */
 export interface Seed {
   vault?: [string, string][];
@@ -47,6 +54,8 @@ export interface Env {
   opfsRoot(): Promise<Dir | null>;
   /** The JSON at `address`; throws if it cannot be had. */
   fetchSeed(address: string): Promise<Seed>;
+  /** The bytes at `address`; throws if it cannot be had (a non-OK answer). */
+  fetchBytes(address: string): Promise<Uint8Array>;
 }
 
 const bytes = (base64: string): Uint8Array => Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -108,13 +117,27 @@ async function addPackages(core: { addPackageFile(path: string, data: Uint8Array
 }
 
 /**
+ * Hands the core its fonts: the module carries none. The files of the list at
+ * `address` are fetched (the browser's HTTP cache keeps them between loads;
+ * their names carry a hash of the content) and given to the core in the order
+ * of the list. A font that cannot be had fails the start: the core cannot
+ * render the way a vault needs without them.
+ */
+async function addFonts(core: { addFont(data: Uint8Array): void }, address: string, env: Env): Promise<void> {
+  const { fonts } = JSON.parse(new TextDecoder().decode(await env.fetchBytes(address))) as FontList;
+  const base = address.slice(0, address.lastIndexOf("/") + 1);
+  const data = await Promise.all(fonts.map((path) => env.fetchBytes(base + path)));
+  for (const font of data) core.addFont(font);
+}
+
+/**
  * Starts the core for `source`. The vault is `source.vault`; unset, the core
  * runs an empty placeholder vault that OPFS never sees (the shared settings and
  * the packages are still kept). A vault name the core refuses is `StartRefused`.
  * With `hub` the named vault syncs with the hub: OPFS is its source once the
  * first round completed (`ready`), before that it starts empty.
  */
-export async function load({ module, vault, files, packages, hub }: CoreSource, env: Env): Promise<Core> {
+export async function load({ module, vault, files, packages, fonts, hub }: CoreSource, env: Env): Promise<Core> {
   const glue = await env.importGlue(module);
   const exports = await glue.default();
   let core: InstanceType<Glue["WasmCore"]>;
@@ -175,6 +198,7 @@ export async function load({ module, vault, files, packages, hub }: CoreSource, 
       }
     }
   }
+  if (fonts) await addFonts(core, fonts, env);
   core.open();
   // What was just loaded is in OPFS already (or not meant to be there).
   persistence?.discard();

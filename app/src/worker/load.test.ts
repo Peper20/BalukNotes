@@ -13,6 +13,7 @@ class FakeWasm {
   static created: FakeWasm[] = [];
   vaultFiles = new Map<string, string>();
   packageFiles = new Map<string, string>();
+  fonts: string[] = [];
   settings: string | null = null;
   opened = false;
   changed: string[] = [];
@@ -28,6 +29,10 @@ class FakeWasm {
   }
   addPackageFile(path: string, data: Uint8Array): void {
     this.packageFiles.set(path, dec.decode(data));
+  }
+  addFont(data: Uint8Array): void {
+    if (this.opened) throw new Error("fonts are added before open");
+    this.fonts.push(dec.decode(data));
   }
   setSettings(json: string): void {
     this.settings = json;
@@ -97,11 +102,28 @@ const SEED: Record<string, Seed> = {
   },
 };
 
+/** What `fetchBytes` serves: `fonts.json` and the font files it lists. */
+const BYTES: Record<string, string> = {
+  "/wasm/fonts.json": JSON.stringify({ fonts: ["fonts/font-aaaaaaaa.bin", "fonts/font-bbbbbbbb.bin"] }),
+  "/wasm/fonts/font-aaaaaaaa.bin": "font A",
+  "/wasm/fonts/font-bbbbbbbb.bin": "font B",
+  "https://hub.example/w/fonts.json": JSON.stringify({ fonts: ["fonts/font-cccccccc.bin"] }),
+  "https://hub.example/w/fonts/font-cccccccc.bin": "font C",
+  "/broken/fonts.json": JSON.stringify({ fonts: ["fonts/font-aaaaaaaa.bin", "fonts/missing.bin"] }),
+  "/broken/fonts/font-aaaaaaaa.bin": "font A",
+};
+
 function env(root: FakeDir | null): { env: Env; fetched: string[] } {
   const fetched: string[] = [];
   return {
     fetched,
     env: {
+      fetchBytes: async (address) => {
+        fetched.push(address);
+        const data = BYTES[address];
+        if (data === undefined) throw new Error(`${address}: 404 Not Found`);
+        return enc.encode(data);
+      },
       importGlue: async () => glue,
       opfsRoot: async () => root,
       fetchSeed: async (address) => {
@@ -133,6 +155,26 @@ it("runs the named vault: seeds it into OPFS once, then reads it back from OPFS"
   await load({ module: "/m.js", vault: "Учёба", files: "/files.json" }, second.env);
   expect([...lastCore().vaultFiles.keys()].sort()).toEqual(["a.typ", "b.typ"]);
   expect(second.fetched).toEqual([]);
+});
+
+it("hands the fonts of fonts.json to the core before it opens, resolved against the address of the list", async () => {
+  const first = env(null);
+  await load({ module: "/m.js", vault: "Учёба", fonts: "/wasm/fonts.json" }, first.env);
+  expect(lastCore().fonts).toEqual(["font A", "font B"]);
+  expect(first.fetched).toEqual(["/wasm/fonts.json", "/wasm/fonts/font-aaaaaaaa.bin", "/wasm/fonts/font-bbbbbbbb.bin"]);
+  expect(lastCore().opened).toBe(true);
+
+  await load({ module: "/m.js", fonts: "https://hub.example/w/fonts.json" }, env(null).env);
+  expect(lastCore().fonts).toEqual(["font C"]);
+
+  await load({ module: "/m.js", vault: "Учёба" }, env(null).env);
+  expect(lastCore().fonts).toEqual([]);
+});
+
+it("a font that cannot be fetched fails the start", async () => {
+  await expect(load({ module: "/m.js", vault: "Учёба", fonts: "/broken/fonts.json" }, env(null).env)).rejects.toThrow("/broken/fonts/missing.bin: 404");
+  expect(lastCore().opened).toBe(false);
+  await expect(load({ module: "/m.js", vault: "Учёба", fonts: "/nowhere/fonts.json" }, env(null).env)).rejects.toThrow("/nowhere/fonts.json: 404");
 });
 
 it("without a vault runs the placeholder: nothing of it is read from or written to OPFS, the settings and the packages are kept", async () => {

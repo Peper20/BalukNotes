@@ -435,8 +435,8 @@ How to put it on a VPS - `docs/server.md`.
   replaced or removed: nothing is lost on the server).
 - **The browser version** (`notes hub serve --web <dir>`): the hub serves a
   folder built on the computer (`tools/web-bundle.sh`): the client with
-  `assets/config.js` turning the core in WASM on, the module and the
-  whitelisted packages (`wasm/`), and the theme stylesheets and font parts that
+  `assets/config.js` turning the core in WASM on, the module, its fonts
+  and the whitelisted packages (`wasm/`), and the theme stylesheets and font parts that
   `notes serve` would answer (`api/fonts.css`, `api/themes.css`, `fonts/`),
   since the hub has no Typst. Other GETs outside the API answer the client
   page; the CSP is the one of `notes serve`.
@@ -508,7 +508,11 @@ How to put it on a VPS - `docs/server.md`.
 
 The layout fonts (`fonts/README.md`) are embedded in the binary together with
 the Typst fonts and shadow system ones: rendering does not depend on the
-machine. The browser gets WOFF2 in parts with `unicode-range`
+machine. The browser core (WASM) embeds none: the same set is built as files
+(`wasm/fonts/font-<hash>.bin` and their list `fonts.json`,
+`crates/notes-wasm/harness/build.sh`), and the worker fetches them before
+opening the vault (`WasmCore.addFont`); the hub serves them as immutable, so
+the browser downloads them once. The browser gets WOFF2 in parts with `unicode-range`
 (`notes-core::webfonts`: subsetting - `fontcull`, WOFF2 - `ttf2woff2` with the
 `glyf` transform for TrueType, for CFF - our own encoder): a Russian page needs
 Latin and Cyrillic, ~35 KB per style instead of ~0.9 MB. The math font (CFF +

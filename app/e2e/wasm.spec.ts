@@ -1,7 +1,7 @@
 // The core in a Web Worker (docs/architecture.md, 1): with `__NOTES_API__.core`
 // the client sends its `/api/...` requests to the notes-wasm module in a
-// worker, so a note opens and builds in the browser itself. The module and the
-// vault files (tests/.data/wasm, made by the `wasm-module` step of check.sh)
+// worker, so a note opens and builds in the browser itself. The module, its
+// fonts and the vault files (tests/.data/wasm, made by the `wasm-module` step of check.sh)
 // are answered under /wasm/ by the test; the server on 8433 serves the client
 // and the stylesheets only. The first build in WASM takes tens of seconds.
 // The worker keeps the vault and the settings in OPFS (`worker/opfs.ts`).
@@ -42,9 +42,9 @@ const opfsText = (page: Page, path: string) =>
 /** The page of the e2e server with the core in a worker; returns the paths of the requests the server got under /api/. */
 async function withCore(page: Page): Promise<string[]> {
   await page.addInitScript((vault) => {
-    globalThis.__NOTES_API__ = { core: { module: "/wasm/pkg/notes_wasm.js", vault, files: "/wasm/files.json" } };
+    globalThis.__NOTES_API__ = { core: { module: "/wasm/pkg/notes_wasm.js", vault, files: "/wasm/files.json", fonts: "/wasm/fonts.json" } };
   }, VAULT_NAME);
-  // The route must see the requests of the worker too (module, .wasm, files.json).
+  // The route must see the requests of the worker too (module, .wasm, files.json, fonts).
   await page.route("**/wasm/**", async (route) => {
     const file = new URL(route.request().url()).pathname.replace(/^\/wasm\//, "");
     if (!existsSync(WASM_DIR + file)) return route.fulfill({ status: 404 });
@@ -69,6 +69,9 @@ test("a note builds in the browser: formula, CeTZ figure, the list and search; t
   const served = await withCore(page);
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
+  // The module carries no fonts: the worker fetches the list and the files.
+  const fetched: string[] = [];
+  page.on("request", (request) => fetched.push(new URL(request.url()).pathname));
 
   await page.goto(noteUrl("Особые случаи/Свои слова"));
   await settled(page);
@@ -94,6 +97,8 @@ test("a note builds in the browser: formula, CeTZ figure, the list and search; t
   // Only the stylesheets and the session (sign-in is the server's) come from the server; not a single vault, note or settings request.
   expect(served.filter((path) => !SERVER_PATHS.has(path))).toEqual([]);
   expect(errors).toEqual([]);
+  expect(fetched).toContain("/wasm/fonts.json");
+  expect(fetched.filter((path) => path.startsWith("/wasm/fonts/font-")).length).toBeGreaterThan(0);
 });
 
 test("the vault and the settings stay in OPFS: a reload reads them back, files.json is fetched once", async ({ page }) => {

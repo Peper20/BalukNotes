@@ -9,14 +9,15 @@
 # <out-dir> is created or replaced (it must be absent, empty or an earlier
 # bundle). --reuse-dist keeps an existing app/dist instead of building the
 # client again. --reuse-wasm takes the core module and the packages from <dir>
-# (what the `wasm-module` step of check.sh made in tests/.data/wasm: pkg/ and
-# files.json) instead of building them again.
+# (what the `wasm-module` step of check.sh made in tests/.data/wasm: pkg/,
+# fonts.json, fonts/ and files.json) instead of building them again.
 #
 # The folder (the list of files is the same for the same sources; it is not
 # committed):
 #   index.html, assets/...        the client (app/dist)
-#   assets/config.js              the core in WASM on, syncing with the hub: { core: { module, packages, hub } }
+#   assets/config.js              the core in WASM on, syncing with the hub: { core: { module, packages, fonts, hub } }
 #   wasm/notes_wasm.js, wasm/notes_wasm_bg.wasm    the core module (crates/notes-wasm/harness/build.sh)
+#   wasm/fonts.json, wasm/fonts/font-<hash>.bin    the fonts of the core module, which carries none (the worker fetches them)
 #   wasm/packages.json            { packages: [[path, base64]] }, the whitelisted Typst packages
 #   api/fonts.css, api/themes.css, fonts/<family>/<style>/<part>.woff2
 #                                 what `notes serve` answers for them, taken from a
@@ -63,7 +64,7 @@ if [[ -e $out ]]; then
 fi
 
 if [[ -n $reuse_wasm ]]; then
-  for f in pkg/notes_wasm.js pkg/notes_wasm_bg.wasm files.json; do
+  for f in pkg/notes_wasm.js pkg/notes_wasm_bg.wasm fonts.json files.json; do
     [[ -f $reuse_wasm/$f ]] || fail "--reuse-wasm: $reuse_wasm has no $f"
   done
   reuse_wasm=$(cd "$reuse_wasm" && pwd)
@@ -111,6 +112,10 @@ for f in notes_wasm.js notes_wasm_bg.wasm; do
   [[ -f $wasm/pkg/$f ]] || fail "the module build left no $f"
   cp "$wasm/pkg/$f" "$stage/wasm/$f"
 done
+# The fonts of the module: the list and the files it names (paths relative to the list).
+[[ -f $wasm/fonts.json && -d $wasm/fonts ]] || fail "the module build left no fonts.json and fonts/"
+cp "$wasm/fonts.json" "$stage/wasm/fonts.json"
+cp -R "$wasm/fonts" "$stage/wasm/fonts"
 
 echo "== packages"
 # The packages are the whitelist of run.mjs, in the form of the worker's seed.
@@ -159,7 +164,7 @@ server_pid=""
 cat >"$stage/assets/config.js" <<'JS'
 // The browser version served by the hub: the core runs in a Web Worker
 // (tools/web-bundle.sh).
-globalThis.__NOTES_API__ = { core: { module: "/wasm/notes_wasm.js", packages: "/wasm/packages.json", hub: "" } };
+globalThis.__NOTES_API__ = { core: { module: "/wasm/notes_wasm.js", packages: "/wasm/packages.json", fonts: "/wasm/fonts.json", hub: "" } };
 JS
 
 # In place of the old folder (the stage is on another file system maybe: copy).

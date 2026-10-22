@@ -17,6 +17,8 @@ fn bundle(dir: &Path) {
         ("assets/index-AbCd1234.js", b"console.log(1)".as_slice()),
         ("assets/config.js", b"globalThis.__NOTES_API__ = {};"),
         ("wasm/notes_wasm_bg.wasm", b"\0asm\x01\0\0\0"),
+        ("wasm/fonts.json", br#"{"fonts":["fonts/font-0a1b2c3d.bin"]}"#),
+        ("wasm/fonts/font-0a1b2c3d.bin", b"\0\x01\0\0font"),
         ("api/fonts.css", b"@font-face{}"),
         ("api/themes.css", b":root{}"),
         ("fonts/Some Font/regular/a.woff2", b"wOF2"),
@@ -51,6 +53,15 @@ async fn files_with_type_cache_and_csp() {
     assert_eq!(hashed.header("cache-control"), "public, max-age=31536000, immutable");
     let config = send(&app, "GET", "/assets/config.js", &[], vec![]).await;
     assert_eq!(config.header("cache-control"), "no-cache");
+
+    // The fonts of the core module are named by a hash of their content: immutable; their list is not.
+    let font = send(&app, "GET", "/wasm/fonts/font-0a1b2c3d.bin", &[], vec![]).await;
+    assert_eq!((font.status, font.header("content-type")), (StatusCode::OK, "application/octet-stream"));
+    assert_eq!(font.header("cache-control"), "public, max-age=31536000, immutable");
+    assert_eq!(font.body, b"\0\x01\0\0font");
+    let list = send(&app, "GET", "/wasm/fonts.json", &[], vec![]).await;
+    assert_eq!((list.status, list.header("content-type")), (StatusCode::OK, "application/json"));
+    assert_eq!(list.header("cache-control"), "no-cache");
 
     // Nobody is signed in: the stylesheets and the fonts are public, a name is percent-decoded.
     for uri in ["/api/fonts.css", "/api/themes.css"] {

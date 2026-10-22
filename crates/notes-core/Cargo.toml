@@ -57,11 +57,12 @@ ts-rs = { workspace = true, optional = true }
 # NFC of file names made from titles (new_note.rs).
 unicode-normalization.workspace = true
 
-# Native targets: system fonts, package files on disk and their downloader. The
-# browser (WASM, crates/notes-wasm) has none of these: fonts are embedded and
-# packages come from the vault storage (`world::Packages`).
+# Native targets: embedded and system fonts, package files on disk and their
+# downloader. The browser (WASM, crates/notes-wasm) has none of these: fonts
+# are files the host hands over (`Fonts::from_files`), packages come from the
+# vault storage (`world::Packages`).
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-typst-kit = { workspace = true, features = ["scan-fonts", "system-files", "system-downloader"] }
+typst-kit = { workspace = true, features = ["embedded-fonts", "scan-fonts", "system-files", "system-downloader"] }
 
 # The browser has no `std::time::Instant` (it panics on wasm32-unknown-unknown):
 # `crate::time` takes it from `performance.now()`. It has no disk either, so the

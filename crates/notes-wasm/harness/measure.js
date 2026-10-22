@@ -19,6 +19,10 @@ export async function measure(notes) {
   const t2 = performance.now();
   const files = await (await fetch("./files.json")).json();
   const core = new WasmCore(VAULT);
+  // The module carries no fonts: fetched the way the worker does (app/src/worker/load.ts).
+  const list = await (await fetch("./fonts.json")).json();
+  const fonts = await Promise.all(list.fonts.map(async (path) => new Uint8Array(await (await fetch(`./${path}`)).arrayBuffer())));
+  for (const font of fonts) core.addFont(font);
   for (const [path, data] of files.vault) core.addFile(path, decode(data));
   for (const [path, data] of files.packages) core.addPackageFile(path, decode(data));
   const t3 = performance.now();

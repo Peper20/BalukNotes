@@ -17,6 +17,13 @@ export interface CoreSource {
    */
   packages?: string;
   /**
+   * Address of `fonts.json`: `{ fonts: [path] }`, the font files of the core
+   * (paths relative to the address of `fonts.json`). The module carries no
+   * fonts: they are fetched and handed to the core before it opens the vault
+   * (`load.ts`). The core cannot start without them.
+   */
+  fonts?: string;
+  /**
    * Address of `files.json`: `{ vault: [[path, base64]], packages: [[path, base64]] }`.
    * It seeds a vault that OPFS does not have yet; afterwards OPFS is the source.
    */

@@ -44,8 +44,8 @@ tools/check.sh          # full (~3 min warm); CI runs it on every pull request p
 (`-D warnings`), fmt; clippy of `notes-wasm` for `wasm32-unknown-unknown`
 (the step `wasm`: fails with the install command when the target is missing,
 `rustup target add wasm32-unknown-unknown`; the step `wasm-module`, in the
-full run before e2e, builds the release module and `files.json` into
-`tests/.data/wasm` for `app/e2e/wasm.spec.ts`; the step `web-bundle`, after the
+full run before e2e, builds the release module with its fonts (`fonts.json`,
+`fonts/`) and `files.json` into `tests/.data/wasm` for `app/e2e/wasm.spec.ts`; the step `web-bundle`, after the
 client build and before e2e, runs `tools/web-bundle.sh tests/.data/web
 --reuse-dist --reuse-wasm tests/.data/wasm` for `app/e2e/hub.spec.ts`: it
 takes the lock of heavy work itself where it needs it, not as a locked step);

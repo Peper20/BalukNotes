@@ -29,6 +29,11 @@ const env: Env = {
     if (!res.ok) throw new Error(`${address}: ${res.status} ${res.statusText}`);
     return (await res.json()) as Seed;
   },
+  async fetchBytes(address) {
+    const res = await fetch(address);
+    if (!res.ok) throw new Error(`${address}: ${res.status} ${res.statusText}`);
+    return new Uint8Array(await res.arrayBuffer());
+  },
 };
 
 const host = new CoreHost(

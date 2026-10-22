@@ -15,6 +15,8 @@ publish.workspace = true
 notes-core.workspace = true
 notes-store.workspace = true
 notes-server.workspace = true
+# `Bytes`, the type of a font file (`Core::add_font`).
+typst.workspace = true
 # The request and the body types only: no server.
 axum = { version = "0.8", default-features = false }
 http-body-util = "0.1"

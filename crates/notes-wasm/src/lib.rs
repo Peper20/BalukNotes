@@ -4,6 +4,8 @@
 //! Typst package files over as bytes, the core keeps them in memory
 //! ([`MemStorage`]) and answers the HTTP API requests the host passes in
 //! ([`Core::request`]) with the same `notes-server` `Router` as `notes serve`.
+//! The module carries no fonts: the host hands the font files over before the
+//! vault is opened ([`Core::add_font`], architecture §10).
 //! The core knows no disk: the host persists what changed ([`Core::take_changes`],
 //! [`Core::read_file`], [`Core::settings_json`]) and hands it back at the next
 //! start (`add_file`, [`Core::set_settings`]); the worker writes it to OPFS
@@ -28,6 +30,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, header};
 use http_body_util::BodyExt;
+use notes_core::fonts::Fonts;
 use notes_core::settings::{Schema, SettingsStore};
 use notes_core::{LibrarySource, Notes, NotesConfig, SharedAssets};
 use notes_server::{AppState, VaultSet, router};
@@ -37,6 +40,7 @@ use notes_store::storage::{MemStorage, Storage};
 use notes_store::sync::{self, Error as SyncError, Options, Prefer, Remote, Report, State};
 use serde_json::{Map, Value, json};
 use tower::ServiceExt;
+use typst::foundations::Bytes;
 
 use crate::tree::VaultTree;
 
@@ -103,13 +107,29 @@ pub struct Core {
     tree: VaultTree,
     sync: Mutex<SyncState>,
     packages: Arc<MemStorage>,
+    /// The font files the host handed over before [`Core::open`].
+    fonts: Vec<Bytes>,
     /// The shared settings the host handed over before [`Core::open`].
     stored: Map<String, Value>,
     open: Option<Open>,
 }
 
-/// The core over `vault` and `packages`, with settings in memory.
-fn open_notes(vault: &Arc<MemStorage>, packages: &Arc<MemStorage>) -> Result<Arc<Notes>, String> {
+/// The fonts of the core from the files the host added. A native build without
+/// any keeps the embedded and system fonts (`Fonts::load`); the browser module
+/// has none of its own, so there it is an error.
+fn core_fonts(added: Vec<Bytes>, builtin: bool) -> Result<Option<Arc<Fonts>>, String> {
+    if !added.is_empty() {
+        return Ok(Some(Arc::new(Fonts::from_files(added))));
+    }
+    if builtin {
+        return Ok(None);
+    }
+    Err("no fonts were added: the host passes fonts.json".into())
+}
+
+/// The core over `vault` and `packages`, with settings in memory; `fonts` are
+/// the font files of the host (see [`core_fonts`]).
+fn open_notes(vault: &Arc<MemStorage>, packages: &Arc<MemStorage>, fonts: Vec<Bytes>) -> Result<Arc<Notes>, String> {
     let config = NotesConfig {
         vault: PathBuf::from("memory"),
         library: LibrarySource::Embedded,
@@ -117,7 +137,8 @@ fn open_notes(vault: &Arc<MemStorage>, packages: &Arc<MemStorage>) -> Result<Arc
         cache: None,
         trash: None,
     };
-    let shared = SharedAssets { packages: Some(packages.clone()), ..SharedAssets::default() };
+    let fonts = core_fonts(fonts, cfg!(not(target_family = "wasm")))?;
+    let shared = SharedAssets { packages: Some(packages.clone()), fonts, ..SharedAssets::default() };
     Notes::with_storage_shared(vault.clone(), &config, &shared).map(Arc::new).map_err(|e| e.to_string())
 }
 
@@ -145,6 +166,7 @@ impl Core {
             vault,
             sync: Mutex::default(),
             packages: Arc::new(MemStorage::new()),
+            fonts: Vec::new(),
             stored: Map::new(),
             open: None,
         })
@@ -198,15 +220,28 @@ impl Core {
         self.packages.write(path, data);
     }
 
-    /// Opens the vault: loads the embedded fonts, builds the themes and the
-    /// router. Once; files added later are seen by the next build. The
+    /// Adds a font file (`.ttf`, `.otf`, a collection) to the fonts of the core.
+    /// The browser core needs the files of `notes_core::fonts::embedded_files`
+    /// to render as the native one; only before [`Self::open`] (an error after
+    /// it).
+    pub fn add_font(&mut self, data: &[u8]) -> Result<(), String> {
+        if self.open.is_some() {
+            return Err("the fonts are added before the vault is opened".into());
+        }
+        self.fonts.push(Bytes::new(data.to_vec()));
+        Ok(())
+    }
+
+    /// Opens the vault: builds the fonts from the added files, the themes and
+    /// the router. Once; files added later are seen by the next build. The
     /// settings live in memory for the life of the core; the host persists
     /// them ([`Self::take_changes`]).
     pub fn open(&mut self) -> Result<(), String> {
         if self.open.is_some() {
             return Ok(());
         }
-        let notes = open_notes(&self.vault, &self.packages)?;
+        let notes = open_notes(&self.vault, &self.packages, self.fonts.clone())?;
+        self.fonts = Vec::new();
         // The vault reports its changes (architecture §8): `GET .../events`
         // answers `watching: true`, and the host holds the request until
         // something changes (a request, a sync round).
@@ -326,6 +361,7 @@ pub fn round_json(round: &sync::Result<Report>) -> String {
 
 #[cfg(test)]
 mod tests {
+    use notes_core::fonts::embedded_files;
     use serde_json::{Value, json};
 
     use super::*;
@@ -363,9 +399,14 @@ mod tests {
         core
     }
 
+    /// A core with the fonts of the native binary handed over as files, the way
+    /// the browser worker does.
     fn core() -> Core {
-        let core = Core::new(VAULT).unwrap();
+        let mut core = Core::new(VAULT).unwrap();
         fill(&core.vault, &core.packages);
+        for file in embedded_files() {
+            core.add_font(&file).unwrap();
+        }
         open(core)
     }
 
@@ -535,6 +576,28 @@ mod tests {
         assert_eq!(settings["own"]["appearance.measure"], 50, "{settings}");
     }
 
+    /// The fonts are files of the host: a note with text and a formula renders
+    /// with them without a diagnostic, a font added after `open` is an error,
+    /// and without any font the browser core refuses to open.
+    #[tokio::test]
+    async fn takes_its_fonts_from_the_host() {
+        let mut core = core();
+        let note = core.request("GET", &format!("/api/vaults/{VAULT}/notes/{}", uri("Привет")), b"").await;
+        assert_eq!(note.status, 200);
+        let note = json_of(&note);
+        assert_eq!(note["errors"], json!([]), "{note}");
+        let body = note["rendered"]["body"].as_str().unwrap();
+        assert!(body.contains("Текст") && body.contains("<math"), "{body}");
+
+        assert!(core.add_font(b"font").is_err(), "after open");
+
+        let one = embedded_files().remove(0);
+        assert!(core_fonts(vec![one], false).unwrap().is_some());
+        assert!(core_fonts(Vec::new(), true).unwrap().is_none(), "natively the embedded and system fonts");
+        let error = core_fonts(Vec::new(), false).unwrap_err();
+        assert_eq!(error, "no fonts were added: the host passes fonts.json");
+    }
+
     /// A request before `open` and a malformed one are answers, not failures.
     #[tokio::test]
     async fn answers_bad_requests() {
@@ -555,7 +618,7 @@ mod tests {
         let vault = Arc::new(MemStorage::new());
         let packages = Arc::new(MemStorage::new());
         fill(&vault, &packages);
-        let notes = open_notes(&vault, &packages).unwrap();
+        let notes = open_notes(&vault, &packages, Vec::new()).unwrap();
         let settings = shared_settings(&notes, Map::new());
         let native = router(app_state(VaultName::new(VAULT).unwrap(), notes, settings));
 
@@ -746,6 +809,12 @@ pub mod wasm {
             set("contentType", JsValue::from_str(&response.content_type))?;
             set("body", Uint8Array::from(response.body.as_slice()).into())?;
             Ok(object.into())
+        }
+
+        /// A font file for the core, before `open`.
+        #[wasm_bindgen(js_name = addFont)]
+        pub fn add_font(&mut self, data: &[u8]) -> Result<(), JsError> {
+            self.0.add_font(data).map_err(|e| JsError::new(&e))
         }
 
         /// The shared settings the host kept (JSON), before `open`.
