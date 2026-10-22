@@ -394,21 +394,22 @@ it. The format and rules - `.claude/rules/docs.md`.
 - **`/_vault/title/...` without a watcher walks the vault** for every title
   (`notes check`: 10 links - 10 `stat` walks, tens of ms). How to close: a
   walk cache for the duration of a command.
-- **The e2e warm-up adds 20 s to a run** (`e2e/global-setup.ts`) for the sake
-  of short waits; `01-switch` checks a repeated long build, not the first.
+- **The e2e warm-up adds ~9 s to a run** (`e2e/global-setup.ts` warms one
+  template that the workers copy) for the sake of short waits; `01-switch`
+  checks a repeated long build, not the first.
 - **`tools/check.sh` is sequential** (~3 min warm with e2e, ~16 min from an
-  empty target dir): e2e is ~105 s of it (one Playwright worker on one server,
-  20 s of it the warm-up), `cargo test` ~35 s (the test binaries run at the
+  empty target dir): e2e is ~75 s of it (`PLAYWRIGHT_WORKERS`, each worker
+  with its own server; ~9 s of it the template warm-up), `cargo test` ~35 s (the test binaries run at the
   same time, the floor is the longest, `notes-core` `tests/it`), the other steps are seconds each. The run uses ~2.5 CPUs
   on average of the CPUs it may (`.claude/rules/tools.md`, "CPU cap"), but steps
   do not overlap even inside one run: the lock of heavy work is per step. A
   new dependency or feature changes the feature set of shared crates - the
   Typst stack is rebuilt in all profiles (minutes, once); `cargo run -p
-  notes-typst` (`notes check`, e2e) and `cargo test --workspace` unify features
+  notes-typst` (`notes check`), the e2e build (`-p notes -p notes-typst -p
+  notes-hub`) and `cargo test --workspace` unify features
   differently and build the web stack twice (~20 s from scratch). How to close:
   run the client steps (Vitest, build, e2e) next to the Rust ones, replacing
-  the one lock by a budget of `CHECK_JOBS` slots shared by all runs, and split
-  the e2e files over workers with their own servers and ports (~1 min saved).
+  the one lock by a budget of `CHECK_JOBS` slots shared by all runs.
 - **The installed `notes` and skill are a snapshot at `tools/install.sh`
   time**: without reinstalling they lag behind the repository; an open window
   (its core) and a `notes serve` started by hand run the old version until a
