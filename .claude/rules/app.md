@@ -78,16 +78,16 @@ npm test        # Vitest; also check, e2e
   that `e2e/global-setup.ts` warms once (the binaries are built there, too);
   the files run in parallel, the tests of a file in order, so a file relies only
   on the fixture vault and on what it does itself. The number of workers is
-  `PLAYWRIGHT_WORKERS` (`.claude/rules/tools.md`, "CPU cap"; unset: one). A new interface
-  feature - a new scenario; phone - `mobile.spec.ts` (400x800: the page is not
+  `PLAYWRIGHT_WORKERS` (`.claude/rules/tools.md`, "CPU cap"; unset: one). A new
+  interface feature - a new scenario; phone - `mobile.spec.ts` (400x800: the page is not
   wider than the window, measured after `document.fonts.ready`).
   `e2e/wasm.spec.ts` needs `tests/.data/wasm/` (the module, `fonts.json` with
   `fonts/`, and `files.json`), which the `wasm-module` step of `tools/check.sh` makes
   (`crates/notes-wasm/harness/build.sh` and `node
   crates/notes-wasm/harness/run.mjs --prepare`); `npm run e2e` alone without
   them fails with 404s. `e2e/hub.spec.ts` talks to a second server of
-  `playwright.config.ts`, `notes-hub --web tests/.data/web`, over the bundle that the
-  `web-bundle` step of `tools/check.sh` makes (`tools/web-bundle.sh`); without
+  `playwright.config.ts`, `notes-hub --web tests/.data/web`, over the bundle
+  that the `web-bundle` step of `tools/check.sh` makes (`tools/web-bundle.sh`); without
   `tests/.data/web` `npm run e2e` fails at the start of that server. It sets
   `core.syncEvery` (1 s, `CoreSource`) in the bundle's `assets/config.js` by a
   page route, so the sync scenario does not wait for the 30 s round. Ports of

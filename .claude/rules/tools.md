@@ -117,8 +117,9 @@ A second run for the same pull request while one is going exits 2 (a lock
 `check-pr-<number>.lock` next to the lock of heavy work, which `check.sh` takes
 step by step).
 Without `app/dist` (a fresh checkout) the client is built before the Rust
-steps - server tests serve it. e2e listens on fixed ports: the lock of heavy
-work (below) keeps runs from overlapping.
+steps - server tests serve it. e2e listens on fixed ports (8600-8649,
+`app/e2e/ports.ts`): the lock of heavy work (below) keeps runs from
+overlapping.
 
 ## CI
 
@@ -171,8 +172,10 @@ above (`nice` 2 and 1); the cap is on top of it.
   of all the binaries running at once, see below), `RAYON_NUM_THREADS`
   (two below: Typst layout in the tests and in the e2e server; the core builds
   two themes in threads of its own next to it), `TOKIO_WORKER_THREADS`,
-  `VITEST_MAX_WORKERS` (one below). Playwright runs one worker. Our code and
-  its settings (`PARALLEL` themes) are not changed.
+  `VITEST_MAX_WORKERS` (one below), `PLAYWRIGHT_WORKERS` (a third of
+  `CHECK_JOBS`, at least 1, at most 8: each worker has its own app server and
+  browser; unset - `npm run e2e` by hand - one). Our code and its settings
+  (`PARALLEL` themes) are not changed.
 - The step `cargo-test` does not use `cargo test`'s one binary after another
   (`lib/cargo-test.sh`): cargo only builds (`--no-run`), then the binaries run
   at the same time, each as cargo runs it (the directory and the variables of

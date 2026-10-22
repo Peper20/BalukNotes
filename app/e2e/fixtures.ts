@@ -26,7 +26,10 @@ export const test = base.extend<object, { app: { url: string } }>({
       const url = `http://127.0.0.1:${port}`;
       try {
         await waitFor(`${url}/api/vaults`, 120_000, false, exitOf(server));
-        await warm(url, VAULT_NAME);
+        // With the template's cache every note is a disk read: the line shows whether it was.
+        const started = Date.now();
+        const count = await warm(url, VAULT_NAME);
+        console.log(`e2e worker ${index}: ${count} notes ready in ${((Date.now() - started) / 1000).toFixed(1)} s`);
         await use({ url });
       } finally {
         await stop(server);
