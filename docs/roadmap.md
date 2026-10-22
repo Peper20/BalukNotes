@@ -265,7 +265,7 @@ before M7 starts.
       the vault list go to the hub, the worker runs the tab's vault (PR #26)
 - [ ] Fonts fetched apart from the module (half of its 12 MB brotli,
       `docs/research/E4.md`)
-- [ ] Restart the worker after a panic or above a memory threshold
+- [x] Restart the worker after a panic or above a memory threshold (PR #29)
 
 ## Later
 
