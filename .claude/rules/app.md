@@ -75,7 +75,9 @@ npm test        # Vitest; also check, e2e
   worker has its own app server on its own copy of `tests/vault`
   (`tests/.data/e2e/w<index>`, the `app` fixture of `e2e/fixtures.ts`: specs
   import `test` and `expect` from it), started on a copy of the template data
-  that `e2e/global-setup.ts` warms once (the binaries are built there, too);
+  that `e2e/global-setup.ts` warms once (the binaries are built there, too;
+  `e2e/cache-key.ts` mirrors the cache directory name of
+  `notes-core::cache::DiskCache::new` and must change with it);
   the files run in parallel, the tests of a file in order, so a file relies only
   on the fixture vault and on what it does itself. The number of workers is
   `PLAYWRIGHT_WORKERS` (`.claude/rules/tools.md`, "CPU cap"; unset: one). A new
