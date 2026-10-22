@@ -172,7 +172,7 @@ above (`nice` 2 and 1); the cap is on top of it.
   of all the binaries running at once, see below), `RAYON_NUM_THREADS`
   (two below: Typst layout in the tests and in the e2e server; the core builds
   two themes in threads of its own next to it), `TOKIO_WORKER_THREADS`,
-  `VITEST_MAX_WORKERS` (one below), `PLAYWRIGHT_WORKERS` (a third of
+  `VITEST_MAX_WORKERS` (one below), `PLAYWRIGHT_WORKERS` (a quarter of
   `CHECK_JOBS`, at least 1, at most 8: each worker has its own app server and
   browser; unset - `npm run e2e` by hand - one). Our code and its settings
   (`PARALLEL` themes) are not changed.
