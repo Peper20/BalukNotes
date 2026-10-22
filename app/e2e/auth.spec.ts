@@ -22,7 +22,7 @@ test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
   test.setTimeout(300_000);
-  await prepareData(DATA, AUTH_PORT, VAULT_NAME);
+  prepareData(DATA, VAULT_NAME);
   execFileSync(join(BIN, "notes-hub"), ["--data", DATA, "users", "add", LOGIN, "--password-stdin"], { input: `${PASSWORD}\n`, stdio: ["pipe", "ignore", "inherit"] });
   server = startApp(DATA, AUTH_PORT, true);
   // The sign-in screen's own files are open.

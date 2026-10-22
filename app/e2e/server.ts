@@ -2,10 +2,11 @@
 // the built binaries (global-setup.ts builds them once, the specs and workers
 // start them directly, not with `cargo run`) and the data directories.
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { NoteListItem } from "../src/lib/api/types/NoteListItem";
+import { vaultCacheKey } from "./cache-key";
 
 export const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 /** The built binaries: the target directory that tools/lib/worktree-target.sh gives (check.sh exports it), else ROOT/target. */
@@ -72,40 +73,21 @@ export async function stop(child: ChildProcess | undefined): Promise<void> {
   clearTimeout(timer);
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-/** The cache directories of the vaults in a data directory (`<data>/cache/pages/<hash of the vault's path>`). */
-const cacheKeys = (data: string): string[] => (existsSync(join(data, "cache", "pages")) ? readdirSync(join(data, "cache", "pages")) : []);
-
 /**
  * Makes `data` a copy of the warmed template (global-setup.ts) whose disk cache
- * the server accepts. The cache of a vault lies under a name that is a hash of
- * the vault's path, so a plain copy is cold: a server started on `data` for a
- * moment shows the name for the new path (the first note it caches), and the
- * template's directory is renamed to it. The file times are kept (`cp -a`), the
- * records stay valid. If the names cannot be told apart, the copy stays cold and
- * the caller's `warm` builds the notes.
+ * the server accepts: the file times are kept (`cp -a`), and the cache of the
+ * vault, which lies under a hash of the vault's path (e2e/cache-key.ts), is moved
+ * under the hash of the copy's path. A template whose cache is not where the hash
+ * says is an error: the scheme of the core changed and the copies would be cold.
  */
-export async function prepareData(data: string, port: number, vault: string): Promise<void> {
+export function prepareData(data: string, vault: string): void {
   rmSync(data, { recursive: true, force: true });
   copyTree(TEMPLATE_DATA, data);
   const pages = join(data, "cache", "pages");
-  const copied = cacheKeys(data);
-  const probe = startApp(data, port);
-  try {
-    const base = `http://127.0.0.1:${port}`;
-    await waitFor(`${base}/api/vaults`, 120_000, false, exitOf(probe));
-    // Opens the vault; its warm-up caches the first note soon.
-    await fetch(`${base}/api/vaults/${vault}/notes`);
-    for (const until = Date.now() + 60_000; cacheKeys(data).length === copied.length && Date.now() < until; ) await sleep(50);
-  } finally {
-    await stop(probe);
-  }
-  const fresh = cacheKeys(data).filter((key) => !copied.includes(key));
-  const size = (key: string) => readdirSync(join(pages, key)).length;
-  const template = copied.sort((a, b) => size(b) - size(a))[0];
-  if (fresh.length !== 1 || template === undefined) return;
-  rmSync(join(pages, fresh[0]!), { recursive: true, force: true });
-  renameSync(join(pages, template), join(pages, fresh[0]!));
+  const from = vaultCacheKey(realpathSync(join(TEMPLATE_DATA, "vaults", vault)));
+  if (!existsSync(join(pages, from)))
+    throw new Error(`the template has no disk cache ${from} for its vault: did the cache key of notes-core::cache::DiskCache change? (e2e/cache-key.ts)`);
+  renameSync(join(pages, from), join(pages, vaultCacheKey(realpathSync(join(data, "vaults", vault)))));
 }
 
 /**

@@ -21,7 +21,7 @@ export const test = base.extend<object, { app: { url: string } }>({
       if (index >= MAX_WORKERS) throw new Error(`at most ${MAX_WORKERS} workers: no port for the worker ${index}`);
       const data = workerData(index);
       const port = appPort(index);
-      await prepareData(data, port, VAULT_NAME);
+      prepareData(data, VAULT_NAME);
       const server = startApp(data, port);
       const url = `http://127.0.0.1:${port}`;
       try {
