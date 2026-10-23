@@ -298,7 +298,7 @@ is merged, one task at a time.
 - [~] Code skills: a language-neutral `code-quality` skill (comments must
       prove they are needed; up to 1000-1500 tokens) preloaded in every
       developer and the reviewer; the Rust skill rewritten for agents,
-      portable, no emoji. Then one mechanism in the mod: an edit of a file
+      portable, no emoji (done, PR #34). Then one mechanism in the mod: an edit of a file
       whose language has a skill in `.claude/pipeline.toml` needs that skill
       loaded (replaces `.claude/hooks/require-rust-skill.py`)
 - [ ] The main agent is renamed from `liaison` to `lead`
