@@ -267,6 +267,40 @@ before M7 starts.
       brotli, the fonts are files the browser caches for good
 - [x] Restart the worker after a panic or above a memory threshold (PR #29)
 
+## The development cycle as a kit
+
+User's decisions (2026-10-23): the development cycle becomes a kit that will
+later move to its own repository; it is made less tied to this project, and a
+project adapts it with a thin layer of its own. Order: after `e2e-parallel`
+is merged, one task at a time.
+
+- [~] Test speed: cargo-test binaries at the same time (PR #33), e2e on
+      several Playwright workers with a server each (PR #32); heavy steps use
+      about 5/6 of the CPUs (all at 1-2) with a raised nice
+- [ ] The kit in `pipeline/`, a Claude Code plugin: the agents, the skills
+      (`dev-workflow`, `forge`, `sdd`), the mod, the generic scripts (targeted
+      tests by changed paths, the full check runner with its locks, CPU cap,
+      nice, step table and CI summary, a speed measurement script), the
+      Forgejo part (workflow template, runner setup, agent accounts),
+      templates and the cycle's docs. No project details in it
+- [ ] The project layer: `.claude/pipeline.toml` (full check steps, the map
+      of paths to targeted tests, the forge address, what runs after a merge,
+      where the documents are); the project's own steps stay in `tools/`, its
+      code rules in `.claude/rules/`
+- [ ] Spec-driven development, the spec-anchored level: living behaviour
+      specs `docs/specs/<area>.md` with stable requirement ids; a task's brief
+      carries the spec delta, the developer applies it in the same pull
+      request as the code, the reviewer checks against the ids; specs grow
+      as areas are touched, plus a first task for sync, paths and the HTTP
+      API. The brief itself is not kept. Own light Markdown format
+- [ ] The user approves tasks (or autonomous work) in the chat; the full
+      descriptions are there to read at will
+- [ ] The main agent is renamed from `liaison` to `lead`
+- [ ] The mod: a cancelled check (a machine shutdown) is re-run and costs no
+      round; at start it reconciles dead agents, their unsaved work and their
+      worktrees
+- [ ] What makes the shared `target/` reach its 30 GB limit
+
 ## Later
 
 - Spec-driven development (user's plan): every task is written to a file in
