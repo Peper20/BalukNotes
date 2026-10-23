@@ -36,33 +36,28 @@ The app icon has one source, `app/public/assets/icon.svg` (site favicon, menu -
 `rsvg-convert -w 256 -h 256 app/public/assets/icon.svg -o
 crates/notes-app/icons/icon.png`.
 
-General Rust rules - the Claude Code skill `rust-best-practices`
-(`.claude/skills/`, the `apollographql/skills` handbook, MIT, with fixed
-examples; the skill is generic, it knows nothing about the project). The rules
-of this file override the skill. Without the skill loaded (after a context
-compaction - loaded again) the hook `.claude/hooks/require-rust-skill.py`
-(`.claude/settings.json`) blocks editing `.rs` (Edit, Write and writes from
-Bash).
+General Rust rules - the Claude Code skill `rust` (`.claude/skills/`, generic,
+it knows nothing about the project); language-neutral rules (comments, naming,
+abstraction) - the skill `code-quality`. The rules of this file override them.
+Without the `rust` skill loaded (after a context compaction - loaded again) the
+hook `.claude/hooks/require-rust-skill.py` (`.claude/settings.json`) blocks
+editing `.rs` (Edit, Write and writes from Bash).
 
 Where the project differs from the skill:
 
-- **Panics**: as in the skill - no `unwrap`/`expect` outside tests (lints
-  `clippy::unwrap_used`/`expect_used`); `expect` on an invariant the code
-  guarantees itself - under `#[expect(clippy::expect_used, reason = "...")]`.
-  Allowed in tests: `#[test]` and `#[cfg(test)]` - `clippy.toml`, helpers of
-  end-to-end tests - `#![allow(...)]` on the whole test crate (a crate rule,
-  not a stub). A Typst panic during a build is a build error of the note
+- **Panics**: lints `clippy::unwrap_used`/`expect_used`; tests are covered by
+  `clippy.toml`, helpers of end-to-end tests - `#![allow(...)]` on the whole
+  test crate. A Typst panic during a build is a build error of the note
   (`world.rs`, `panic_error`).
-- **Performance**: its chapters are advice, the rule is
-  `.claude/rules/project.md` (do not optimize small things, weak spots go to
-  `docs/tech-debt.md`). Measurements - the `measure` feature,
-  `RUST_LOG=notes_core=debug`, reports - `docs/research/`.
-- **Tests**: a test is one behavior but several cases in a row (Typst builds
-  are slow, setup is shared), a short name (`filters`); `rstest` and `insta`
-  are not used - snapshots live in `tests/snapshots/`.
+- **Performance**: the rule is `.claude/rules/project.md` (do not optimize
+  small things, weak spots go to `docs/tech-debt.md`). Measurements - the
+  `measure` feature, `RUST_LOG=notes_core=debug`, reports - `docs/research/`.
+- **Tests**: a short name (`filters`), several cases in a row when setup is
+  shared (Typst builds are slow); `rstest` and `insta` are not used -
+  snapshots live in `tests/snapshots/`.
 - **Comments**: long rationale goes to `docs/architecture.md`, the code has a
   reference (`architecture §1`); no `TODO` in code - debt goes to
-  `docs/tech-debt.md`; `missing_docs` is off (the crates are internal).
+  `docs/tech-debt.md`.
 - **Language**: code, comments, logs, API errors and `notes` output are in
   English (with the tests of message texts). Interface texts in the core
   (setting labels in `settings.rs`, the name `new_note::UNTITLED`, the group

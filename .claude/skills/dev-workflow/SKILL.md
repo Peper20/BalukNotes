@@ -13,7 +13,7 @@ You work alone in your own git worktree. Work in English.
 - Read the parts of `docs/architecture.md` the brief names and the architecture part of the brief.
 - Name your branch as the brief says: `git switch -c task/<short-slug>`.
 - If the brief says the branch and its pull request already exist, do not create the branch: get it as the `forge` skill describes, read the pull request's comments and commits, and continue from the existing commits.
-- Before the first edit of a `.rs` file, load the `rust-best-practices` skill (a hook denies the edit otherwise; load it again after a context compaction).
+- Before the first edit of a `.rs` file, load the `rust` skill (a hook denies the edit otherwise; load it again after a context compaction).
 
 ## 2. Implement
 

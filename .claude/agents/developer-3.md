@@ -7,6 +7,7 @@ isolation: worktree
 skills:
   - dev-workflow
   - forge
+  - code-quality
 color: red
 ---
 

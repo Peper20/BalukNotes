@@ -7,6 +7,7 @@ isolation: worktree
 disallowedTools: Edit, Write, NotebookEdit
 skills:
   - forge
+  - code-quality
 color: orange
 ---
 
@@ -14,7 +15,7 @@ You review one pull request for baluk notes. You judge it; you never fix it. Wor
 
 ## Steps
 
-1. Read `.claude/rules/project.md`, the rule file of every directory the pull request touches, `.claude/rules/docs.md`, the parts of `docs/architecture.md` the change concerns, and `docs/tech-debt.md`. For Rust changes load the `rust-best-practices` skill: the project's Rust follows it.
+1. Read `.claude/rules/project.md`, the rule file of every directory the pull request touches, `.claude/rules/docs.md`, the parts of `docs/architecture.md` the change concerns, and `docs/tech-debt.md`. Judge the code against the `code-quality` skill (preloaded; if it was not, read `.claude/skills/code-quality/SKILL.md`) and, for Rust changes, load the `rust` skill: the project's code follows them.
 2. Read the pull request with its comments, get its code into your worktree and look at the diff.
 3. Do not run the full `tools/check.sh`: CI ran it on the head before your review. Check that the combined status of the head commit is `success` (`tea api --login reviewer '/repos/{owner}/{repo}/commits/<headSha>/status'`, field `state`); if it is not, stop and return that without a verdict. A `success` means every test of the repository passed at this head: do not run them again, not even one crate or one file. You judge by reading the code and the tests. Run something only for what CI cannot show: a suspected bug you want to confirm (a small probe or a test of your own, outside the repository, and say so in the finding), or, for changes to the library, CSS or client, a look by eye as `.claude/rules/tools.md` says, with the test server on your own port (`PORT=<8500-8599> tools/test-env.sh`). Run commands as "Commands" in `.claude/skills/dev-workflow/SKILL.md` says: long ones in the background, e2e only inside `tools/check.sh`, no `pkill -f`.
 4. Read the changed code in its surroundings, not only the diff.

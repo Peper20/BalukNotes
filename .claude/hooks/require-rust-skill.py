@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: Rust edits only after the rust-best-practices skill.
+"""PreToolUse hook: Rust edits only after the rust skill.
 
 An edit is Edit/Write/MultiEdit of a .rs file or a Bash command that writes
 to a .rs file: one part of the command (between ;, &&, ||, | and new lines)
@@ -8,7 +8,7 @@ or the command redirects into one (> file.rs). A part that only mentions a .rs
 file while writing another file (a document about the code) is not an edit;
 nor is a file outside the project (a scratch .rs in /tmp). The
 skill counts as loaded when the transcript has a Skill call with it or the
-/rust-best-practices command after the last context compaction: a compaction
+/rust command after the last context compaction: a compaction
 summarizes the skill text away, so it is loaded again in full. A subagent
 (agent_id) has its own context and its own transcript, next to the session's
 (transcript_path): <session>/subagents/agent-<id>.jsonl - the skill has to be
@@ -21,7 +21,10 @@ import os
 import re
 import sys
 
-SKILL = "rust-best-practices"
+SKILL = "rust"
+
+# A compaction writes this system record into the transcript, before its summary.
+COMPACTION = '"subtype":"compact_boundary"'
 
 # Signs of writing a file in one part of a shell command (reading - grep, sed -n, cat - is not).
 WRITES = re.compile(
