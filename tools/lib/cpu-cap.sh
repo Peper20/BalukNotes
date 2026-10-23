@@ -2,18 +2,32 @@
 # (only for HEAVY_LOCK): the CPU cap and the lock that keeps parallel runs
 # within it (`.claude/rules/tools.md`, "CPU cap").
 #
-# CHECK_JOBS (default 9) is the number of logical CPUs the scripts may keep
-# busy; never more than the machine has. It is exported to every tool the
-# scripts start, in the form each tool understands. Tools that use their own
-# thread pools can overshoot a bare job count: the values below are the ones
-# measured to keep the total at or under CHECK_JOBS + 1.
+# CHECK_JOBS is the number of logical CPUs the scripts may keep busy; never
+# more than the machine has. Unset, it is all of a machine with 1-2 CPUs and
+# otherwise about five sixths of it: n - round(n/6) (12 -> 10, 6 -> 5, 4 -> 3).
+# It is exported to every tool the scripts start, in the form each tool
+# understands. Tools that use their own thread pools can overshoot a bare job
+# count: the values below are the ones measured to keep the total at or under
+# CHECK_JOBS + 1.
 
-CHECK_JOBS=${CHECK_JOBS:-9}
+# default_check_jobs <cpus>: the cap of a machine with <cpus> logical CPUs.
+# round(n/6), halves up, is (n + 3) / 6 in integers.
+default_check_jobs() {
+  local n=$1
+  if (( n <= 2 )); then
+    echo "$n"
+  else
+    echo $(( n - (n + 3) / 6 ))
+  fi
+}
+
+cpus=$(nproc 2>/dev/null) || cpus=${CHECK_JOBS:-1}
+[[ $cpus =~ ^[1-9][0-9]*$ ]] || cpus=1
+CHECK_JOBS=${CHECK_JOBS:-$(default_check_jobs "$cpus")}
 if [[ ! $CHECK_JOBS =~ ^[1-9][0-9]*$ ]]; then
   echo "CHECK_JOBS must be a positive integer, got: $CHECK_JOBS" >&2
   exit 2
 fi
-cpus=$(nproc 2>/dev/null || echo "$CHECK_JOBS")
 (( CHECK_JOBS > cpus )) && CHECK_JOBS=$cpus
 unset cpus
 export CHECK_JOBS
@@ -30,9 +44,11 @@ below() {
 # limited in .cargo/config.toml) and C compilers run next to the last rustc.
 # Overrides `[build] jobs` of ~/.cargo/config.toml.
 export CARGO_BUILD_JOBS=$(below 1)
-# The libtest harness: tests of one binary in parallel (binaries run in turn).
-# One below: the test threads, the rayon pool and the server threads of the
-# tests add up to more than the thread count.
+# The libtest harness: the test threads of all the binaries running at once
+# (the step cargo-test of check.sh shares them between the binaries,
+# tools/lib/cargo-test.sh; a plain `cargo test` runs the binaries in turn, each
+# with all of them). One below: the test threads, the rayon pool and the server
+# threads of the tests add up to more than the thread count.
 export RUST_TEST_THREADS=$(below 1)
 # The global rayon pool (Typst layout in tests and in the e2e server, the
 # bundler of Vite). Two below: the core also builds two themes at once, each

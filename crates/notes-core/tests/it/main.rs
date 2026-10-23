@@ -5,6 +5,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, reason = "test helpers fail the test by panicking")]
 
+mod cache;
 mod common;
 mod library;
 mod packages;

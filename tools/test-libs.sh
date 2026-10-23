@@ -143,6 +143,43 @@ expect "the setting is announced on stderr" grep -q "cloud session - line tables
 expect "without WebKitGTK (pkg-config reports nothing) has_webkit fails" \
   test "$(PATH="$root/no-webkit:$PATH"; source tools/lib/build-env.sh 2>/dev/null; has_webkit >/dev/null 2>&1; echo $?)" -ne 0
 
+echo "the CPU cap:"
+# default_cap <cpus>: the default cap of a machine with that many CPUs.
+default_cap() { (source tools/lib/cpu-cap.sh; default_check_jobs "$1"); }
+expect "1 CPU: the cap is 1" test "$(default_cap 1)" = 1
+expect "2 CPUs: all of them" test "$(default_cap 2)" = 2
+expect "3 CPUs: 2" test "$(default_cap 3)" = 2
+expect "4 CPUs: 3" test "$(default_cap 4)" = 3
+expect "6 CPUs: 5" test "$(default_cap 6)" = 5
+expect "8 CPUs: 7" test "$(default_cap 8)" = 7
+expect "9 CPUs: 7 (1.5 rounds up)" test "$(default_cap 9)" = 7
+expect "12 CPUs: 10" test "$(default_cap 12)" = 10
+expect "16 CPUs: 13" test "$(default_cap 16)" = 13
+# cap_values <cpus> [CHECK_JOBS]: CHECK_JOBS, the jobs of cargo, the test threads and
+# the rayon threads that cpu-cap.sh sets on a machine with that many CPUs (an nproc shim).
+mkdir -p "$root/nproc-bin"
+printf '#!/bin/sh\necho "$NPROC_SHIM"\n' >"$root/nproc-bin/nproc"
+chmod +x "$root/nproc-bin/nproc"
+cap_values() {
+  (
+    export NPROC_SHIM=$1 PATH="$root/nproc-bin:$PATH"
+    unset CHECK_JOBS
+    [[ -z ${2:-} ]] || export CHECK_JOBS=$2
+    source tools/lib/cpu-cap.sh
+    echo "$CHECK_JOBS $CARGO_BUILD_JOBS $RUST_TEST_THREADS $RAYON_NUM_THREADS"
+  )
+}
+expect "12 CPUs, CHECK_JOBS unset: cap 10, cargo 9, test threads 9, rayon 8" test "$(cap_values 12)" = "10 9 9 8"
+expect "an explicit CHECK_JOBS wins" test "$(cap_values 12 4)" = "4 3 3 2"
+expect "an explicit CHECK_JOBS is capped at the CPUs of the machine" test "$(cap_values 6 20)" = "6 5 5 4"
+expect "1 CPU: everything is 1" test "$(cap_values 1)" = "1 1 1 1"
+expect "2 CPUs: the cap is 2, the rest at least 1" test "$(cap_values 2)" = "2 1 1 1"
+expect "3 CPUs: cap 2" test "$(cap_values 3)" = "2 1 1 1"
+expect "a cap of 1 gives 1 everywhere" test "$(cap_values 12 1)" = "1 1 1 1"
+(export NPROC_SHIM=4 PATH="$root/nproc-bin:$PATH" CHECK_JOBS=lots; source tools/lib/cpu-cap.sh) >"$root/cap-bad.log" 2>&1
+rc=$?
+expect "CHECK_JOBS that is not a number is refused with exit 2" eval '[[ $rc -eq 2 ]] && grep -q "CHECK_JOBS must be a positive integer" "$root/cap-bad.log"'
+
 echo "the lock's record of the checkout:"
 (
   export HEAVY_LOCK=$root/heavy.lock
@@ -657,6 +694,191 @@ pt_tsc() { (cd "$1" && source "$pt_lib" && pipeline_tsc); }
 expect "a worktree without node_modules takes the main checkout's tsc" \
   eval '[[ $(pt_tsc "$pt/wt") == */pipeline-types/main/app/node_modules/.bin/tsc ]]'
 expect "a checkout with its own tsc takes it first" test "$(pt_tsc "$pt/wt-none")" = "app/node_modules/.bin/tsc"
+
+# --- tools/lib/cargo-test.sh: the test binaries run at the same time ---
+echo "tools/lib/cargo-test.sh (fake test binaries, a cargo shim):"
+ct=$root/cargo-test
+rm -rf "$ct"
+mkdir -p "$ct/bin" "$ct/crates"
+# fake_test <kind> <package> <name> <tests> <seconds> <exit code> [failing test]: a
+# test binary that lists <tests> tests, writes where it runs and with what to
+# $ct/runs, and marks its start and end in $ct/events (time in ms, threads).
+# Its line of the build's JSON goes to $ct/build.json; the id of the package
+# `beta` is in the old form of cargo.
+fake_test() {
+  local kind=$1 pkg=$2 name=$3 tests=$4 secs=$5 rc=$6 failing=${7:-} id
+  mkdir -p "$ct/crates/$pkg"
+  printf '[package]\nname = "%s"\n' "$pkg" >"$ct/crates/$pkg/Cargo.toml"
+  cat >"$ct/bin/$name" <<BIN
+#!/bin/bash
+if [[ \${1:-} == --list ]]; then
+  for ((i = 1; i <= $tests; i++)); do echo "case_\$i: test"; done
+  echo "a_bench: benchmark"
+  exit 0
+fi
+now() { echo \$((\$(date +%s%N) / 1000000)); }
+echo "$name \$PWD \$CARGO_MANIFEST_DIR \$CARGO_PKG_NAME \$CARGO_PKG_VERSION" >>"$ct/runs"
+echo "start \$(now) \$RUST_TEST_THREADS" >>"$ct/events"
+ps -o ni= -p \$\$ | tr -d ' ' >>"$ct/nice"
+sleep $secs
+echo "end \$(now) \$RUST_TEST_THREADS" >>"$ct/events"
+[[ -z "$failing" ]] || echo "test $failing ... FAILED"
+echo "test result: done"
+exit $rc
+BIN
+  chmod +x "$ct/bin/$name"
+  id="path+file://$ct/crates/$pkg#0.1.0"
+  [[ $pkg == beta ]] && id="beta 0.1.0 (path+file://$ct/crates/$pkg)"
+  printf '{"reason":"compiler-artifact","package_id":"%s","manifest_path":"%s","target":{"kind":["%s"],"name":"%s"},"profile":{"test":true},"executable":"%s"}\n' \
+    "$id" "$ct/crates/$pkg/Cargo.toml" "$kind" "$name" "$ct/bin/$name" >>"$ct/build.json"
+}
+# The start of the build's JSON: a line that is not JSON, a message that is not
+# an artifact and a build that is not a test stay out of the list.
+ct_json_start() {
+  printf 'not json\n{"reason":"build-finished","success":true}\n' >"$ct/build.json"
+  printf '{"reason":"compiler-artifact","package_id":"x","manifest_path":"/x/Cargo.toml","target":{"kind":["lib"],"name":"x"},"profile":{"test":false},"executable":null}\n' >>"$ct/build.json"
+}
+# cargo: --no-run prints the JSON (or fails with CT_BUILD_RC), --doc prints the
+# threads it was given and exits with CT_DOC_RC.
+cat >"$ct/bin/cargo" <<SHIM
+#!/bin/sh
+case " \$* " in
+  *" --no-run "*)
+    echo "cargo shim: \$*" >>"$ct/cargo.args"
+    if [ -n "\${CT_BUILD_RC:-}" ]; then echo "error: the build broke" >&2; exit "\$CT_BUILD_RC"; fi
+    cat "$ct/build.json"
+    echo "    Finished test profile" >&2 ;;
+  *" --doc "*)
+    echo "doc tests run with \$RUST_TEST_THREADS thread(s)"
+    exit "\${CT_DOC_RC:-0}" ;;
+esac
+SHIM
+chmod +x "$ct/bin/cargo"
+# run_ct <budget> <cargo arguments...>: cargo_test with the shim, the output in
+# $ct/out.log; ct_rc is its exit code.
+run_ct() {
+  local budget=$1
+  shift
+  (PATH="$ct/bin:$PATH"; RUST_TEST_THREADS=$budget; CARGO_TEST_TIMES=$ct/times
+    source tools/lib/cargo-test.sh; cargo_test "$ct/work" "$@") >"$ct/out.log" 2>&1
+  ct_rc=$?
+}
+# ct_threads_of <rank> <tests> <budget>
+ct_threads_of() { (source tools/lib/cargo-test.sh; cargo_test_threads "$@"); }
+
+expect "the longest binary gets half of the budget, rounded up (9 -> 5)" test "$(ct_threads_of 0 100 9)" = 5
+expect "the others get a quarter (8 -> 2), rounded up (9 -> 3)" test "$(ct_threads_of 1 100 8)$(ct_threads_of 3 100 9)" = 23
+expect "not more threads than tests" test "$(ct_threads_of 0 2 9)" = 2
+expect "a binary of 0 tests gets 1" test "$(ct_threads_of 0 0 9)" = 1
+expect "never more than the budget" test "$(ct_threads_of 0 50 1)$(ct_threads_of 1 50 1)$(ct_threads_of 0 50 3)" = 112
+
+ct_json_start
+fake_test lib gamma gamma_lib 3 0.3 0
+fake_test test alpha it 6 0.5 0
+fake_test bin beta beta_bin 2 0.3 0
+fake_test lib alpha alpha_lib 6 0.5 0
+run_ct 6 --workspace --exclude notes-app
+expect "all binaries pass: the step passes" test "$ct_rc" -eq 0
+expect "cargo got the arguments and --no-run" grep -q 'cargo shim: test --workspace --exclude notes-app --no-run' "$ct/cargo.args"
+expect "every binary ran (4), and the doc tests" \
+  eval '[[ $(wc -l <"$ct/runs") -eq 4 ]] && grep -q "doc tests run with 1 thread" "$ct/out.log"'
+expect "the logs follow the order of the labels, the doc tests last" \
+  eval '[[ $(grep "^=====" "$ct/out.log" | grep -v summary | sed "s/ (.*//") == $(printf "%s\n" "===== alpha lib" "===== alpha test it" "===== beta bin beta_bin" "===== gamma lib" "===== doc tests") ]]'
+expect "a binary runs in the directory of its package with the variables of the package (also the old form of the id)" \
+  eval '[[ $(grep "^alpha_lib " "$ct/runs" | cut -d" " -f2-) == "$ct/crates/alpha $ct/crates/alpha alpha 0.1.0" && $(grep "^beta_bin " "$ct/runs" | cut -d" " -f2-) == "$ct/crates/beta $ct/crates/beta beta 0.1.0" ]]'
+expect "the summary lists a binary with its tests, as ok" \
+  eval 'grep -Eq "^gamma lib +3 +[0-9]+ +[0-9]+ +ok$" "$ct/out.log" && ! grep -q FAILED "$ct/out.log"'
+expect "jq was not needed" eval '! grep -q "jq must not be called" "$ct/out.log"'
+# The threads of the binaries running at once (from the start and end marks).
+ct_peak() {
+  python3 -I - "$ct/events" <<'PY'
+import sys
+events = []
+for line in open(sys.argv[1]):
+    kind, ms, threads = line.split()
+    events.append((int(ms), kind == "start", int(threads)))
+events.sort(key=lambda e: (e[0], e[1]))  # an end before a start of the same millisecond
+threads_now = binaries_now = most_threads = most_binaries = 0
+for _, start, threads in events:
+    sign = 1 if start else -1
+    threads_now += sign * threads
+    binaries_now += sign
+    most_threads = max(most_threads, threads_now)
+    most_binaries = max(most_binaries, binaries_now)
+print(most_threads, most_binaries)
+PY
+}
+read -r ct_threads ct_binaries < <(ct_peak)
+expect "the test threads running at once stay within the budget (6)" test "$ct_threads" -le 6
+expect "and binaries ran at the same time" test "$ct_binaries" -ge 2
+
+# The priority of the step reaches the binaries (check.sh lowers its own).
+rm -f "$ct/nice" "$ct/events"
+(renice -n 3 -p "$BASHPID" >/dev/null; run_ct 4 --workspace)
+expect "the binaries inherit the priority of the step" \
+  eval '[[ $(wc -l <"$ct/nice") -eq 4 && $(sort -u "$ct/nice") == 3 ]]'
+# A cap of 1-2 gives a budget of 1: the binaries run in turn.
+rm -f "$ct/events"
+run_ct 1 --workspace
+read -r ct_threads ct_binaries < <(ct_peak)
+expect "a budget of 1 thread: the binaries run in turn" eval '[[ $ct_rc -eq 0 && $ct_threads -eq 1 && $ct_binaries -eq 1 ]]'
+rm -f "$ct/events"
+run_ct 2 --workspace
+read -r ct_threads ct_binaries < <(ct_peak)
+expect "a budget of 2: at most 2 threads at once" test "$ct_threads" -le 2
+
+ct_json_start
+fake_test lib alpha alpha_lib 6 0.2 0
+fake_test test alpha it 6 0.2 101 "api::signs_in"
+fake_test lib gamma gamma_lib 3 0.2 0
+run_ct 4 --workspace
+expect "a failing binary: the step fails" test "$ct_rc" -eq 1
+expect "the log names the failed binary and its failed test at the end" \
+  eval '[[ $(tail -n 3 "$ct/out.log") == $(printf "%s\n" "FAILED test binaries:" "  alpha test it (exit 101)" "    api::signs_in") ]]'
+expect "the others are ok in the summary" eval 'grep -Eq "^gamma lib +3 +[0-9]+ +[0-9]+ +ok$" "$ct/out.log"'
+CT_DOC_RC=1 run_ct 4 --workspace
+expect "failed doc tests fail the step and are named" \
+  eval '[[ $ct_rc -eq 1 ]] && tail -n 3 "$ct/out.log" | grep -q "doc tests (exit 1)"'
+CT_BUILD_RC=101 run_ct 4 --workspace
+expect "a failing build: the step fails with the message of the build" \
+  eval '[[ $ct_rc -eq 1 ]] && grep -q "error: the build broke" "$ct/out.log"'
+ct_json_start
+run_ct 4 --workspace
+expect "a build without test binaries fails" eval '[[ $ct_rc -eq 1 ]] && grep -q "no test binaries" "$ct/out.log"'
+
+# The order of starting: the threads of a binary in the summary say its rank
+# (budget 9: the first gets 5, the others 3).
+# ct_threads_in_summary <label>: the threads column of that binary.
+ct_threads_in_summary() {
+  sed -n '/^===== summary/,$p' "$ct/out.log" | grep -E "^$1 +[0-9]" | awk '{print $(NF - 2)}'
+}
+ct_json_start
+fake_test lib alpha alpha_lib 8 0.2 0
+fake_test test alpha it 8 0.2 0
+fake_test lib gamma gamma_lib 9 0.2 0
+rm -f "$ct/times"
+run_ct 9 --workspace
+expect "no seconds of a last run: the binary with the most tests goes first" \
+  eval '[[ $ct_rc -eq 0 && $(ct_threads_in_summary "gamma lib") == 5 && $(ct_threads_in_summary "alpha lib") == 3 ]]'
+expect "the seconds of every binary that passed are kept for the next run" \
+  eval '[[ $(cut -f1 "$ct/times" | tr "\n" ,) == "alpha lib,alpha test it,doc tests,gamma lib," ]] && ! grep -qvP "\t[0-9]+$" "$ct/times"'
+printf 'alpha test it\t30\ngamma lib\t5\nalpha lib\t4\ngone lib\t7\n' >"$ct/times"
+run_ct 9 --workspace
+expect "the longest binary of the last run goes first" \
+  eval '[[ $(ct_threads_in_summary "alpha test it") == 5 && $(ct_threads_in_summary "gamma lib") == 3 ]]'
+expect "the seconds of a binary no longer built stay" grep -qP '^gone lib\t7$' "$ct/times"
+printf 'alpha test it\t30\ngamma lib\t5\nalpha lib\t4\n' >"$ct/times"
+ct_json_start
+fake_test lib alpha alpha_lib 8 0.2 0
+fake_test test alpha it 8 0.2 101 "api::signs_in"
+fake_test lib gamma gamma_lib 9 0.2 0
+run_ct 9 --workspace
+expect "a failed binary keeps its seconds of the last run, the others are updated" \
+  eval '[[ $ct_rc -eq 1 ]] && grep -qP "^alpha test it\t30$" "$ct/times" && ! grep -qP "^gamma lib\t5$" "$ct/times"'
+expect "a times file that cannot be written is no failure" \
+  eval 'ct_json_start; fake_test lib gamma gamma_lib 9 0.1 0;
+    (PATH="$ct/bin:$PATH"; RUST_TEST_THREADS=4; CARGO_TEST_TIMES=/proc/no-such/times
+      source tools/lib/cargo-test.sh; cargo_test "$ct/work" --workspace) >"$ct/out.log" 2>&1'
 
 echo
 if (( fails == 0 )); then

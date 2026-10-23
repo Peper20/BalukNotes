@@ -82,7 +82,8 @@ decides whether it waits. Requirements to both documents - `.claude/rules/docs.m
 - The heavy steps of all runs (`tools/check.sh`, `tools/cargo.sh`, the builds in
   `tools/install.sh` and `tools/test-env.sh`) take turns on one lock,
   `~/.cache/baluk-notes/heavy.lock`, and each run is capped at `CHECK_JOBS`
-  CPUs (default 9, `tools/lib/cpu-cap.sh`). Measurements are run the same
+  CPUs (default n - round(n/6) of n CPUs, all of 1-2;
+  `tools/lib/cpu-cap.sh`). Measurements are run the same
   way: `nice -n 2`, within the cap. The test server of an agent takes its own
   port (`PORT=... tools/test-env.sh`).
 - An agent never opens a window on the user's display: anything that needs a

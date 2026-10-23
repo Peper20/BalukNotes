@@ -22,7 +22,7 @@ cd "$(dirname "$0")/.."
 renice -n 1 -p $$ >/dev/null 2>&1 || true
 ionice -c 2 -n 5 -p $$ >/dev/null 2>&1 || true
 
-# At most CHECK_JOBS (9) CPUs for the builds, taking turns with the other heavy
+# At most CHECK_JOBS CPUs for the builds, taking turns with the other heavy
 # runs of the machine (tools/lib/cpu-cap.sh); the build settings of a small disk
 # and a cloud session (tools/lib/build-env.sh).
 source tools/lib/cpu-cap.sh

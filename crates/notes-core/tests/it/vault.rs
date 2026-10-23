@@ -241,35 +241,6 @@ fn walkdir(dir: &std::path::Path) -> Vec<PathBuf> {
 }
 
 #[test]
-fn warm_builds_everything_once_across_restarts() {
-    let dir = tempfile::tempdir().unwrap();
-    let open = || {
-        Notes::open(&NotesConfig {
-            trash: None,
-            vault: repo().join("tests/vault"),
-            library: LibrarySource::Dir(repo().join("baluk")),
-            font_dirs: vec![],
-            cache: Some(dir.path().to_path_buf()),
-        })
-        .unwrap()
-    };
-    let first = open();
-    let all = first.entries().unwrap().len();
-    first.hint_warm(vec![id("Книга")]);
-    let stats = first.warm_pass();
-    assert_eq!((stats.built, stats.skipped), (all, 0), "the first round builds everything");
-    assert_eq!(first.memory().0, 0, "warming goes to disk only");
-    assert_eq!(first.warm_pass().built, 0, "the second builds nothing");
-
-    // A new start: what was built (and notes with errors) lies on disk.
-    let failed =
-        first.entries().unwrap().iter().filter(|e| !first.page(&e.id, OPTS).unwrap().errors.is_empty()).count();
-    assert!(failed > 0, "tests/vault has a note with an error");
-    let stats = open().warm_pass();
-    assert_eq!((stats.built, stats.skipped), (0, all));
-}
-
-#[test]
 fn vault_graph_follows_the_vault() {
     let dir = tempfile::tempdir().unwrap();
     let head = "#import \"/_baluk/lib.typ\": *\n#show: note.with(title: [x])\n";

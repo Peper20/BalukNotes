@@ -464,7 +464,10 @@ mod tests {
         assert_eq!(unknown.status, 404);
         assert!(json_of(&unknown)["error"].is_string());
 
-        let events = core.request("GET", &format!("{base}/events?after=0"), b"").await;
+        // Without `after`: natively a request with `after` and no changes waits
+        // for them (long polling, 25 s); the changes after `after` are the
+        // sync tests' (`events_after`).
+        let events = core.request("GET", &format!("{base}/events"), b"").await;
         assert_eq!(events.status, 200);
         let events = json_of(&events);
         assert_eq!(events["watching"], true, "the vault reports its changes");

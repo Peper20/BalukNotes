@@ -42,6 +42,8 @@ source tools/lib/cpu-cap.sh
 source tools/lib/build-env.sh
 # The types of the pipeline mod in a linked worktree (the step pipeline-mod).
 source tools/lib/pipeline-types.sh
+# The step cargo-test: the test binaries run at the same time.
+source tools/lib/cargo-test.sh
 
 # The shared build dir grows without limit: pruning and the size limit
 # (tools/lib/target-limit.sh) run first, under the lock of heavy work.
@@ -216,7 +218,9 @@ if [[ $rust == 1 ]]; then
     [[ -d app/node_modules ]] || step npm-ci in_app npm ci
     step client-dist in_app npm run -s build
   fi
-  step cargo-test cargo test --workspace "${no_webkit[@]}"
+  # The binaries run at the same time within RUST_TEST_THREADS (lib/cargo-test.sh);
+  # the log of each is in $logs/cargo-test/, the step log holds them in turn.
+  step cargo-test cargo_test "$logs/cargo-test" --workspace "${no_webkit[@]}"
   # With the measure feature - also the heavy memory measurements (they do not run as tests).
   step clippy cargo clippy --workspace "${no_webkit[@]}" --all-targets --features notes-core/measure,notes-wasm/measure -- -D warnings
   step wasm wasm_check

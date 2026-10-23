@@ -20,8 +20,9 @@ paths:
 | `lib/target-limit.sh` | pruning and the size limit of that dir, sourced by `check.sh` (the crate list by python3, no `jq`) |
 | `lib/cpu-cap.sh` | the CPU cap `CHECK_JOBS` and the lock of heavy work and `freshen_sources`, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh`, `check-pr.sh` |
 | `lib/build-env.sh` | the build settings of a small disk and a cloud session (`CARGO_PROFILE_DEV_DEBUG`) and the WebKitGTK check, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh` |
+| `lib/cargo-test.sh` | the step `cargo-test` of `check.sh`: the test binaries run at the same time within `RUST_TEST_THREADS` (below, "CPU cap") |
 | `lib/pipeline-types.sh` | the types of the pipeline mod in a linked worktree: a copy of the main checkout's on every run (marked, ignored by git), `tsc` from this checkout or else the main one; sourced by `check.sh` (step `pipeline-mod`, "Pipeline mod") |
-| `test-libs.sh` | tests of the libraries above, of `cargo.sh`, `check-pr.sh` and `ci-runner.sh`, the refusals of `web-bundle.sh` and the copy of the mod's types, without a cargo build - the first step of `check.sh` |
+| `test-libs.sh` | tests of the libraries above (the scheme of `lib/cargo-test.sh` with fake test binaries), of `cargo.sh`, `check-pr.sh` and `ci-runner.sh`, the refusals of `web-bundle.sh` and the copy of the mod's types, without a cargo build - the first step of `check.sh` |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 | `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; runs itself inside a headless gamescope |
 | `app-smoke.sh` | a smoke launch of the `notes-app` window inside a headless gamescope: it opens, loads the fixture vault, quits cleanly (~6 s); not in `check.sh` (needs gamescope and an installed or built `notes-app`) |
@@ -158,17 +159,33 @@ removes it, `status` shows the unit and the runner as Forgejo sees it.
 ## CPU cap
 
 `check.sh`, `install.sh`, `test-env.sh` (its build) and `cargo.sh` keep at most
-`CHECK_JOBS` logical CPUs busy (default 9, never more than the machine has),
+`CHECK_JOBS` logical CPUs busy (default: all of a machine with 1-2 CPUs,
+otherwise about five sixths: n - round(n/6), so 12 -> 10, 6 -> 5; never more
+than the machine has),
 also when several runs go at once (agents in worktrees). Priority stays as
 above (`nice` 2 and 1); the cap is on top of it.
 
 - `lib/cpu-cap.sh` turns the number into the setting of each tool:
   `CARGO_BUILD_JOBS` (one below `CHECK_JOBS`; overrides `jobs` of
-  `~/.cargo/config.toml`), `RUST_TEST_THREADS` (one below), `RAYON_NUM_THREADS`
+  `~/.cargo/config.toml`), `RUST_TEST_THREADS` (one below: the test threads
+  of all the binaries running at once, see below), `RAYON_NUM_THREADS`
   (two below: Typst layout in the tests and in the e2e server; the core builds
   two themes in threads of its own next to it), `TOKIO_WORKER_THREADS`,
   `VITEST_MAX_WORKERS` (one below). Playwright runs one worker. Our code and
   its settings (`PARALLEL` themes) are not changed.
+- The step `cargo-test` does not use `cargo test`'s one binary after another
+  (`lib/cargo-test.sh`): cargo only builds (`--no-run`), then the binaries run
+  at the same time, each as cargo runs it (the directory and the variables of
+  its package), the longest of the last run first (their seconds are in
+  `~/.cache/baluk-notes/cargo-test-times`). The longest gets half of
+  `RUST_TEST_THREADS`, the others a quarter, and a binary starts when that
+  many are free, so the threads running at once never exceed it (measured
+  against two thirds and a third, and thirds for all); `cargo test --doc` is one more
+  job. The log of each binary is `tests/.data/check/cargo-test/<n>.log`; the
+  step log holds them in the order of the names, a table (tests, threads,
+  seconds), and at the end the failed binaries with their failed tests. A
+  plain `cargo test` (`tools/cargo.sh test -p <crate>`) runs the binaries in
+  turn, each with all the threads.
 - The linker (lld) takes a thread per CPU and cargo links the test binaries
   all at once: `.cargo/config.toml` limits it to one thread per link. It is a
   static entry, not `RUSTFLAGS` of the script: a flag change rebuilds
@@ -184,7 +201,7 @@ above (`nice` 2 and 1); the cap is on top of it.
   of their own at the start of `check.sh`. A plain `cargo` and `npm` started
   by hand are outside the cap; `tools/cargo.sh` is within it.
 - Measured on the 12-CPU laptop (CPU time of the whole run in a cgroup, windows
-  of 0.5 s): a full run at the default peaks at 8.9 busy cores from an empty
+  of 0.5 s): a full run at `CHECK_JOBS=9` peaks at 8.9 busy cores from an empty
   target dir (before: 11.2); `CHECK_JOBS=4` on `--app` - 5.8 (the e2e browser
   and server add to the settings of the tools, so a peak can exceed
   `CHECK_JOBS` by 1-2). Not measured: two runs started at once, the cap of

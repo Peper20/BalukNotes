@@ -398,9 +398,9 @@ it. The format and rules - `.claude/rules/docs.md`.
   of short waits; `01-switch` checks a repeated long build, not the first.
 - **`tools/check.sh` is sequential** (~3 min warm with e2e, ~16 min from an
   empty target dir): e2e is ~105 s of it (one Playwright worker on one server,
-  20 s of it the warm-up), `cargo test` ~43 s (test binaries run in turn, the
-  longest are ~15 s), the other steps are seconds each. The run uses ~2.5 CPUs
-  on average of the 9 it may (`.claude/rules/tools.md`, "CPU cap"), but steps
+  20 s of it the warm-up), `cargo test` ~35 s (the test binaries run at the
+  same time, the floor is the longest, `notes-core` `tests/it`), the other steps are seconds each. The run uses ~2.5 CPUs
+  on average of the CPUs it may (`.claude/rules/tools.md`, "CPU cap"), but steps
   do not overlap even inside one run: the lock of heavy work is per step. A
   new dependency or feature changes the feature set of shared crates - the
   Typst stack is rebuilt in all profiles (minutes, once); `cargo run -p
