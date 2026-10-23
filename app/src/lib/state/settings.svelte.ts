@@ -12,8 +12,7 @@
 // Changes go to the server one at a time, in the order they were made: the
 // server applies concurrent requests in any order, and each answer carries all
 // the values, so an older answer arriving last would bring an older value back
-// (a number field sends its change again when it loses focus to a button, and
-// the button's own change raced it).
+// (a number field sends its change again when it loses focus to a button).
 
 import { api, type Schema, type SettingsProblem, type SettingValues, type Theme, type VaultSettingsResponse } from "../api";
 import { applyAppearance, nextTheme, resolveTheme, themeMemo } from "../appearance";
