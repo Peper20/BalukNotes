@@ -304,7 +304,11 @@ is merged, one task at a time.
 - [ ] The main agent is renamed from `liaison` to `lead`
 - [ ] The mod: a cancelled check (a machine shutdown) is re-run and costs no
       round; at start it reconciles dead agents, their unsaved work and their
-      worktrees
+      worktrees. It does not pile up tasks: `pipeline_status` shows the live
+      tasks, the last 3 merged ones and a count of the rest (all with a
+      parameter); a merged task is dropped from the mod's state after 14
+      days, a dropped one right after its cleanup; a blocked one stays and is
+      marked stale after 14 days
 - [ ] What makes the shared `target/` reach its 30 GB limit
 
 ## Later
