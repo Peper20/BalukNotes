@@ -57,7 +57,8 @@ Where the project differs from the skill:
   snapshots live in `tests/snapshots/`.
 - **Comments**: long rationale goes to `docs/architecture.md`, the code has a
   reference (`architecture §1`); no `TODO` in code - debt goes to
-  `docs/tech-debt.md`.
+  `docs/tech-debt.md`; `missing_docs` is off (the crates are internal), a
+  public item gets a `///` only when its name and types do not say enough.
 - **Language**: code, comments, logs, API errors and `notes` output are in
   English (with the tests of message texts). Interface texts in the core
   (setting labels in `settings.rs`, the name `new_note::UNTITLED`, the group
