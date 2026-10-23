@@ -8,6 +8,12 @@
 // ones it is for all (user's decisions), unless the vault has its own value
 // - then for it. "For all vaults" is `forAll`, "only here" is `onlyHere`.
 // Without a vault (the picker screen), only the shared ones.
+//
+// Changes go to the server one at a time, in the order they were made: the
+// server applies concurrent requests in any order, and each answer carries all
+// the values, so an older answer arriving last would bring an older value back
+// (a number field sends its change again when it loses focus to a button, and
+// the button's own change raced it).
 
 import { api, type Schema, type SettingsProblem, type SettingValues, type Theme, type VaultSettingsResponse } from "../api";
 import { applyAppearance, nextTheme, resolveTheme, themeMemo } from "../appearance";
@@ -79,14 +85,25 @@ class Settings {
     this.#saved.push(fn);
   }
 
-  async #run(keys: string[], action: () => Promise<void>): Promise<void> {
-    try {
-      await action();
-      this.error = null;
-      for (const fn of this.#saved) fn(keys);
-    } catch (e) {
-      this.error = (e as Error).message;
-    }
+  /** The last change sent: the next one waits for it. */
+  #queue: Promise<void> = Promise.resolve();
+
+  /**
+   * Runs `action` after the changes before it (it never rejects: an error goes
+   * to `error`). An action that answers `false` had nothing to change.
+   */
+  #run(keys: string[], action: () => Promise<boolean | void>): Promise<void> {
+    const run = async () => {
+      try {
+        if ((await action()) === false) return;
+        this.error = null;
+        for (const fn of this.#saved) fn(keys);
+      } catch (e) {
+        this.error = (e as Error).message;
+      }
+    };
+    this.#queue = this.#queue.then(run);
+    return this.#queue;
   }
 
   /** A change of `key` is shared by all vaults (otherwise only for the shown one). */
@@ -99,9 +116,10 @@ class Settings {
 
   /** Changes it for the shown vault or for all (`#everywhere`). */
   async save(patch: SettingValues): Promise<void> {
-    const shared = Object.fromEntries(Object.entries(patch).filter(([k]) => this.#everywhere(k)));
-    const own = Object.fromEntries(Object.entries(patch).filter(([k]) => !this.#everywhere(k)));
     await this.#run(Object.keys(patch), async () => {
+      // Where it goes is decided in its turn: a change before it may have made the value the vault's own.
+      const shared = Object.fromEntries(Object.entries(patch).filter(([k]) => this.#everywhere(k)));
+      const own = Object.fromEntries(Object.entries(patch).filter(([k]) => !this.#everywhere(k)));
       if (Object.keys(shared).length) this.#shared(await api.saveSettings(shared));
       if (Object.keys(own).length) this.#take(await api.saveVaultSettings(own));
     });
@@ -109,9 +127,9 @@ class Settings {
 
   /** This vault's value becomes shared by all; the vault takes the shared one again. */
   async forAll(key: string): Promise<void> {
-    const value: Value | undefined = this.own[key];
-    if (value === undefined) return;
     await this.#run([key], async () => {
+      const value: Value | undefined = this.own[key];
+      if (value === undefined) return false;
       this.#shared(await api.saveSettings({ [key]: value }));
       this.#take(await api.saveVaultSettings({ [key]: null }));
     });
@@ -119,9 +137,11 @@ class Settings {
 
   /** The current value becomes the vault's own: further changes are only for it. */
   async onlyHere(key: string): Promise<void> {
-    const value: Value | undefined = this.values[key];
-    if (value === undefined || vault() == null) return;
-    await this.#run([key], async () => this.#take(await api.saveVaultSettings({ [key]: value })));
+    await this.#run([key], async () => {
+      const value: Value | undefined = this.values[key];
+      if (value === undefined || vault() == null) return false;
+      this.#take(await api.saveVaultSettings({ [key]: value }));
+    });
   }
 
   /** Removes the vault's own value: shared again. */

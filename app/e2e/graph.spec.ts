@@ -267,9 +267,12 @@ test("graph forces: a sliding side panel, \"Папки\" changes the layout, the
       })
       .toBeGreaterThanOrEqual(-1);
     const clusters = page.locator('input[data-key="graph.clusters"]');
+    // The reload below must not cut the save short: the layout shows the value before it is saved.
+    const saved = page.waitForResponse((r) => r.url().endsWith("/api/settings") && r.request().method() === "PUT");
     await clusters.fill("300");
     await expect.poll(() => nodeAt(page, "Сеть/SSH")).not.toBe(before);
     await expect(panel.locator("output").first()).toHaveText("300 %");
+    expect((await saved).ok()).toBe(true);
 
     await page.reload();
     await ready(page);
