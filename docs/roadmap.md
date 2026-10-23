@@ -310,6 +310,11 @@ is merged, one task at a time.
       days, a dropped one right after its cleanup; a blocked one stays and is
       marked stale after 14 days
 - [ ] What makes the shared `target/` reach its 30 GB limit
+- [ ] A task that measures has a budget (a number of runs, or stop at the
+      target); such tasks run one after another, not side by side
+- [ ] After `e2e-parallel`: re-wrap the long lines in `docs/tech-debt.md`
+      ("tools/check.sh is sequential") and `docs/architecture.md`, and drop
+      the history parenthesis from `.claude/rules/tools.md` "CPU cap"
 
 ## Later
 
