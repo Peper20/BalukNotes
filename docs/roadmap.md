@@ -308,8 +308,12 @@ is merged, one task at a time.
       tasks, the last 3 merged ones and a count of the rest (all with a
       parameter); a merged task is dropped from the mod's state after 14
       days, a dropped one right after its cleanup; a blocked one stays and is
-      marked stale after 14 days
+      marked stale after 14 days. A `pipeline_send` that comes just before
+      the task reaches the liaison stage is kept, not lost
 - [ ] What makes the shared `target/` reach its 30 GB limit
+- [ ] The `tools-libs` test "the binaries inherit the priority of the step"
+      fails in a shell already above nice 2 (an agent's shell runs at nice
+      5): check the priority relative to the step's, not the number 2
 - [ ] A task that measures has a budget (a number of runs, or stop at the
       target); such tasks run one after another, not side by side
 - [ ] After `e2e-parallel`: re-wrap the long lines in `docs/tech-debt.md`
