@@ -275,7 +275,9 @@ project adapts it with a thin layer of its own. Order: after `e2e-parallel`
 is merged, one task at a time.
 
 - [~] Test speed: cargo-test binaries at the same time (PR #33), e2e on
-      several Playwright workers with a server each (PR #32); heavy steps use
+      several Playwright workers with a server each (PR #32, paused: the
+      graph forces scenario fails now and then in the full check; the
+      hypotheses are in the PR comment "Status for the next developer"); heavy steps use
       about 5/6 of the CPUs (all at 1-2) with a raised nice
 - [ ] The kit in `pipeline/`, a Claude Code plugin: the agents, the skills
       (`dev-workflow`, `forge`, `sdd`), the mod, the generic scripts (targeted
