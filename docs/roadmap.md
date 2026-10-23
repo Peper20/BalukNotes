@@ -295,6 +295,12 @@ is merged, one task at a time.
       API. The brief itself is not kept. Own light Markdown format
 - [ ] The user approves tasks (or autonomous work) in the chat; the full
       descriptions are there to read at will
+- [~] Code skills: a language-neutral `code-quality` skill (comments must
+      prove they are needed; up to 1000-1500 tokens) preloaded in every
+      developer and the reviewer; the Rust skill rewritten for agents,
+      portable, no emoji. Then one mechanism in the mod: an edit of a file
+      whose language has a skill in `.claude/pipeline.toml` needs that skill
+      loaded (replaces `.claude/hooks/require-rust-skill.py`)
 - [ ] The main agent is renamed from `liaison` to `lead`
 - [ ] The mod: a cancelled check (a machine shutdown) is re-run and costs no
       round; at start it reconciles dead agents, their unsaved work and their
