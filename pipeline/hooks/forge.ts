@@ -6,6 +6,7 @@
 // commit it was given (the server refuses a moved head), never pushes to `main`,
 // never force-pushes, never removes a worktree with `--force`, and touches only
 // worktrees under `.claude/worktrees/` of the main checkout.
+import type { AfterMerge } from './config'
 import type { Ci } from './model'
 
 export type RunResult = { exitCode: number; stdout: string; stderr: string }
@@ -44,6 +45,7 @@ export type Forge = {
   /** A blocked task: the local task branch goes only when the server holds the same commit; the leftovers. */
   cleanupBlocked(a: { slug: string; pr?: number }): Promise<string[]>
   pullMain(): Promise<PullOutcome>
+  /** The `afterMerge` command of the config, run in the main checkout. */
   install(): Promise<{ ok: boolean; note: string }>
 }
 
@@ -53,14 +55,11 @@ export type ForgeOptions = {
   sleep: (ms: number) => Promise<void>
   /** Waits between tries of a merge the server calls not mergeable yet. */
   mergeWaitMs?: number
+  /** The command run in the main checkout after a merge that changed the paths it names. */
+  afterMerge?: AfterMerge
 }
 
 const MAIN = 'main'
-const INSTALL_PATHS = /^(crates|app|baluk|skills)\//
-
-/** Whether a merged change needs `tools/install.sh`. */
-export const needsInstall = (paths: readonly string[]): boolean => paths.some(p => INSTALL_PATHS.test(p))
-
 const firstLine = (text: string): string => text.trim().split('\n')[0] ?? ''
 
 function json(r: RunResult, what: string): unknown {
@@ -313,13 +312,15 @@ export function makeForge(run: Run, opts: ForgeOptions): Forge {
   }
 
   async function install(): Promise<{ ok: boolean; note: string }> {
+    const { afterMerge } = opts
+    if (afterMerge === undefined) return { ok: false, note: 'no afterMerge command in the config' }
     try {
-      const r = await sh(['tools/install.sh'], 600_000)
+      const r = await sh(afterMerge.command, afterMerge.timeoutSeconds * 1000)
       if (r.exitCode === 0) return { ok: true, note: '' }
       const tail = (r.stderr || r.stdout).trim().split('\n').slice(-3).join(' / ')
       return { ok: false, note: `exit ${r.exitCode}: ${tail}` }
     } catch (err) {
-      return { ok: false, note: `${String(err)} (run tools/install.sh by hand)` }
+      return { ok: false, note: `${String(err)} (run ${afterMerge.command.join(' ')} by hand)` }
     }
   }
 

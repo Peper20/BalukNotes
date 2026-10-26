@@ -7,7 +7,7 @@
 # tools/check-pr.sh (its arguments, comment text, exit codes, worktree) and
 # tools/ci-runner.sh (its arguments, the generated config and unit, install and
 # uninstall in scratch places) and the copy of the pipeline mod's types into a
-# linked worktree (tools/lib/pipeline-types.sh).
+# linked worktree (tools/lib/pipeline-types.sh), and pipeline/setup.sh.
 # No cargo build: cargo runs for `cargo metadata` and for `cargo clean` of a
 # scratch dir; tools/cargo.sh and tools/check-pr.sh run in scratch checkouts
 # against a cargo, a tea and a check.sh shim; tools/ci-runner.sh against a tea
@@ -624,17 +624,18 @@ expect "web-bundle accepts an earlier bundle, and names a missing tool before it
 
 # --- tools/lib/pipeline-types.sh: the types of the pipeline mod in a linked worktree ---
 echo "tools/lib/pipeline-types.sh (scratch checkouts: a main checkout with the types, a worktree of it, a checkout without them):"
-pt=$root/pipeline-types pt_types=tools/pipeline/.claude-plugin/types pt_lib=$PWD/tools/lib/pipeline-types.sh
+pt=$root/pipeline-types pt_types=pipeline/.claude-plugin/types pt_lib=$PWD/tools/lib/pipeline-types.sh
 rm -rf "$pt"
-# pt_repo <dir> <yes|no>: a checkout with one commit; with yes, the types are laid as Claude Code
-# lays them: untracked, and ignored by the .gitignore of their folder.
+# pt_repo <dir> <yes|no> [types dir]: a checkout with one commit; with yes, the types are laid as
+# Claude Code lays them: untracked, and ignored by the .gitignore of their folder.
 pt_repo() {
+  local dir=${3:-$pt_types}
   mkdir -p "$1"
   if [[ $2 == yes ]]; then
-    mkdir -p "$1/$pt_types/claude-code"
-    printf '{"compilerOptions":{}}\n' >"$1/$pt_types/tsconfig.json"
-    printf '*\n' >"$1/$pt_types/.gitignore"
-    printf 'export {};\n' >"$1/$pt_types/claude-code/index.d.ts"
+    mkdir -p "$1/$dir/claude-code"
+    printf '{"compilerOptions":{}}\n' >"$1/$dir/tsconfig.json"
+    printf '*\n' >"$1/$dir/.gitignore"
+    printf 'export {};\n' >"$1/$dir/claude-code/index.d.ts"
   fi
   printf 'x\n' >"$1/README"
   git init -q -b main "$1"
@@ -643,7 +644,9 @@ pt_repo() {
 }
 pt_repo "$pt/main" yes
 pt_repo "$pt/none" no
+pt_repo "$pt/old" yes tools/pipeline/.claude-plugin/types
 git -C "$pt/main" worktree add -q --detach "$pt/wt"
+git -C "$pt/old" worktree add -q --detach "$pt/wt-old"
 git -C "$pt/none" worktree add -q --detach "$pt/wt-none"
 # pt_lay <checkout>: lay_pipeline_types in it; its output in $pt/lay.out.
 pt_lay() { (cd "$1" && source "$pt_lib" && lay_pipeline_types) >"$pt/lay.out" 2>&1; }
@@ -670,6 +673,10 @@ pt_lay "$pt/wt-laid"
 rc=$?
 expect "types laid by Claude Code in a linked worktree (no mark) are left alone" \
   eval '[[ $rc -eq 0 && $(cat "$pt/wt-laid/$pt_types/tsconfig.json") == laid && ! -e $pt/wt-laid/$pt_types/.copied-from-main && ! -s $pt/lay.out ]]'
+pt_lay "$pt/wt-old"
+rc=$?
+expect "a main checkout from before the move of the mod: its types at the old place are copied" \
+  eval '[[ $rc -eq 0 && -f $pt/wt-old/$pt_types/tsconfig.json && -f $pt/wt-old/$pt_types/.copied-from-main ]]'
 pt_lay "$pt/main"
 rc=$?
 expect "the main checkout, which has the types, copies nothing onto itself" \
@@ -694,6 +701,38 @@ pt_tsc() { (cd "$1" && source "$pt_lib" && pipeline_tsc); }
 expect "a worktree without node_modules takes the main checkout's tsc" \
   eval '[[ $(pt_tsc "$pt/wt") == */pipeline-types/main/app/node_modules/.bin/tsc ]]'
 expect "a checkout with its own tsc takes it first" test "$(pt_tsc "$pt/wt-none")" = "app/node_modules/.bin/tsc"
+
+# --- pipeline/setup.sh: the links of the kit's agents and skills into a project ---
+echo "pipeline/setup.sh (a scratch kit and a scratch project):"
+su=$root/setup
+rm -rf "$su"
+mkdir -p "$su/kit/claude/agents" "$su/kit/claude/skills/s1" "$su/kit/claude/skills/s2" "$su/proj"
+cp pipeline/setup.sh "$su/kit/setup.sh"
+printf -- '---\nname: a1\n---\n' >"$su/kit/claude/agents/a1.md"
+printf 'skill\n' >"$su/kit/claude/skills/s1/SKILL.md"
+printf 'skill\n' >"$su/kit/claude/skills/s2/SKILL.md"
+"$su/kit/setup.sh" "$su/proj" >"$su/setup.out" 2>&1
+rc=$?
+expect "the kit's agents and skills are linked into .claude of the project, by relative links that resolve" \
+  eval '[[ $rc -eq 0 && $(readlink "$su/proj/.claude/agents/a1.md") == ../../../kit/claude/agents/a1.md && $(readlink "$su/proj/.claude/skills/s1") == ../../../kit/claude/skills/s1 && -f $su/proj/.claude/skills/s2/SKILL.md && -f $su/proj/.claude/agents/a1.md ]]'
+expect "it says what it linked and that the config is missing" \
+  eval 'grep -q "linked .claude/agents/a1.md" "$su/setup.out" && grep -q "pipeline.json is missing" "$su/setup.out"'
+"$su/kit/setup.sh" "$su/proj" >"$su/setup.out" 2>&1
+rc=$?
+expect "a second run links nothing" \
+  eval '[[ $rc -eq 0 ]] && ! grep -q "^linked" "$su/setup.out"'
+rm "$su/proj/.claude/skills/s2" "$su/proj/.claude/agents/a1.md"
+printf 'mine\n' >"$su/proj/.claude/agents/a1.md"
+"$su/kit/setup.sh" "$su/proj" >"$su/setup.out" 2>&1
+rc=$?
+expect "a plain file in the place of a link is refused, and nothing else is linked" \
+  eval '[[ $rc -eq 1 && $(cat "$su/proj/.claude/agents/a1.md") == mine && ! -e $su/proj/.claude/skills/s2 ]] && grep -q "is not a link" "$su/setup.out"'
+rm "$su/proj/.claude/agents/a1.md"
+ln -s ../../elsewhere "$su/proj/.claude/agents/a1.md"
+"$su/kit/setup.sh" "$su/proj" >"$su/setup.out" 2>&1
+rc=$?
+expect "a link to something else is refused too" \
+  eval '[[ $rc -eq 1 && $(readlink "$su/proj/.claude/agents/a1.md") == ../../elsewhere ]] && grep -q "not to the kit" "$su/setup.out"'
 
 # --- tools/lib/cargo-test.sh: the test binaries run at the same time ---
 echo "tools/lib/cargo-test.sh (fake test binaries, a cargo shim):"

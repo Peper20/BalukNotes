@@ -1,6 +1,7 @@
 ---
 paths:
   - "tools/**"
+  - "pipeline/**"
 ---
 
 # tools - checks, screenshots, installation
@@ -21,12 +22,12 @@ paths:
 | `lib/cpu-cap.sh` | the CPU cap `CHECK_JOBS` and the lock of heavy work and `freshen_sources`, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh`, `check-pr.sh` |
 | `lib/build-env.sh` | the build settings of a small disk and a cloud session (`CARGO_PROFILE_DEV_DEBUG`) and the WebKitGTK check, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh` |
 | `lib/cargo-test.sh` | the step `cargo-test` of `check.sh`: the test binaries run at the same time within `RUST_TEST_THREADS` (below, "CPU cap") |
-| `lib/pipeline-types.sh` | the types of the pipeline mod in a linked worktree: a copy of the main checkout's on every run (marked, ignored by git), `tsc` from this checkout or else the main one; sourced by `check.sh` (step `pipeline-mod`, "Pipeline mod") |
-| `test-libs.sh` | tests of the libraries above (the scheme of `lib/cargo-test.sh` with fake test binaries), of `cargo.sh`, `check-pr.sh` and `ci-runner.sh`, the refusals of `web-bundle.sh` and the copy of the mod's types, without a cargo build - the first step of `check.sh` |
+| `lib/pipeline-types.sh` | the types of the pipeline mod in a linked worktree: a copy of the main checkout's on every run (marked, ignored by git; a main checkout from before the move of the mod has them at `tools/pipeline/.claude-plugin/types`), `tsc` from this checkout or else the main one; sourced by `check.sh` (step `pipeline-mod`, "Pipeline mod") |
+| `test-libs.sh` | tests of the libraries above (the scheme of `lib/cargo-test.sh` with fake test binaries), of `cargo.sh`, `check-pr.sh` and `ci-runner.sh`, the refusals of `web-bundle.sh`, the copy of the mod's types and `pipeline/setup.sh`, without a cargo build - the first step of `check.sh` |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 | `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; runs itself inside a headless gamescope |
 | `app-smoke.sh` | a smoke launch of the `notes-app` window inside a headless gamescope: it opens, loads the fixture vault, quits cleanly (~6 s); not in `check.sh` (needs gamescope and an installed or built `notes-app`) |
-| `pipeline/` | the pipeline mod: a Claude Code plugin that runs developers, the full check, review, merge and cleanup by code ("Pipeline mod") |
+| `../pipeline/` | the development cycle kit (the mod, the agents, the skills, its documents), in the repository root; `tools/pipeline` is a link to it ("Pipeline mod") |
 
 ## Checks
 
@@ -360,52 +361,26 @@ Working in the session:
 
 ## Pipeline mod
 
-`tools/pipeline/` is a Claude Code plugin (a "mod") that the liaison's session
-loads (`docs/agents.md`). No model decides a routine step. It starts
-developers and reviewers as subagents (they show in the session window), reacts to the commit status and the review on the server,
-counts rounds, merges, cleans up and reports to the liaison.
+The development cycle is a kit in `pipeline/` (the mod, the agents, the skills,
+`pipeline/docs/README.md`, the project layer reference `pipeline/config.md`);
+this project's side is `docs/agents.md` and `.claude/pipeline.json`. The kit's
+agents and skills are linked into `.claude/agents` and `.claude/skills` by
+`pipeline/setup.sh`; `tools/pipeline` is a link to `pipeline/` for sessions
+started with the old path.
 
-- **Load**, with no edit of `.claude/settings*.json`: from the main checkout
-  `claude --agent liaison --plugin-dir tools/pipeline` (an absolute path from
-  elsewhere), or `CLAUDE_CODE_PLUGIN_DIRS=<absolute path>` where no flag can
-  be given. The mod keeps working over a restart: its tasks are in `$.store`
-  (key `tasks`, so in the user's Claude Code state, not in the repository).
-- **Tools of the liaison** (`mcp__pipeline__<name>`): `pipeline_start { slug,
-  developer, brief, after? }` (the developer gets the brief, the branch
-  `task/<slug>` and the contract: targeted tests only, push, open the pull
-  request, end with `PIPELINE: pr=<n>`, `PIPELINE: pr=<n> liaison` or `PIPELINE:
-  question`), `pipeline_status`, `pipeline_send { slug, text }` (an answer to a
-  developer; resumes the task), `pipeline_stop { slug?, reason }`.
-- **Stages** of a task: waiting (for `after`), developing, liaison (waits for
-  `pipeline_send`), checking (the status of the head, polled every 60 s),
-  reviewing, merging, merged, blocked. Rounds, hand-over to `developer-3` and
-  the block follow `docs/agents.md`, "The path of a task"; the merge only
-  with an approval of `reviewer` and a `success` status at the same head commit
-  (a head approved while its status was still pending is merged when the status
-  passes, with no second review; a new head clears the approval), squash as
-  `owner`; a merge that fails for any reason but a conflict or a moved head
-  goes to the liaison, never retried by the mod. Then cleanup (the worktrees
-  and branches of its agents, the local `task/<slug>` when it equals the
-  merged head, `check-pr-<n>`) and `tools/install.sh`
-  when the diff touches `crates/`, `app/`, `baluk/` or `skills/`. The mod never
-  pushes to `main`, never forces a push, never runs `tools/deploy-hub.sh`.
-- **View**: the pane `/pipeline` (a row per task: stage, pull request, status,
-  developer, rounds, last event) and the status line under the prompt, the counts
-  by stage (`1 developing · 2 checking`; the engine puts the plugin's name before it).
-- **Code**: `hooks/machine.ts` decides (state and event in, state and actions
-  out; no clock, no server), `hooks/driver.ts` carries the actions out and feeds
-  results back as events, `hooks/forge.ts` holds every `tea` and `git` call,
-  `hooks/register.tsx` only wires events, timers and `$` to them. Tests
-  (`tests/*.test.ts`) use a fake server and fake ports (`tests/helpers.ts`); none
-  talks to the server.
-- **Checks**: `claude plugin validate tools/pipeline`, `claude plugin test
-  tools/pipeline` and `tsc -p tools/pipeline` are the step `pipeline-mod` of
-  `check.sh`. The types of the engine (`tools/pipeline/.claude-plugin/types/`,
-  not in the repository) are laid by Claude Code when it loads the mod from the
-  main checkout. A linked worktree (agents, `check-pr-<n>`) has none: the step
-  copies them from the main checkout into its own ignored folder on every run
+- **Checks**: `claude plugin validate pipeline`, `claude plugin test pipeline`
+  and `tsc -p pipeline` are the step `pipeline-mod` of `check.sh`. The types of
+  the engine (`pipeline/.claude-plugin/types/`, not in the repository) are laid
+  by Claude Code when it loads the mod from the main checkout. A linked
+  worktree (agents, `check-pr-<n>`) has none: the step copies them from the
+  main checkout into its own ignored folder on every run
   (`lib/pipeline-types.sh`; the copy is marked `.copied-from-main`, a folder
-  without the mark is laid by Claude Code and is left alone). `tsc` is `app/node_modules/.bin/tsc` of this checkout, else the
-  main checkout's. The `tsc` part is left out with a line in the log only when
-  neither checkout has the types or a `tsc`. Without a `claude` that has plugin
-  tests (a cloud session) the step is skipped.
+  without the mark is laid by Claude Code and is left alone). `tsc` is
+  `app/node_modules/.bin/tsc` of this checkout, else the main checkout's. The
+  `tsc` part is left out with a line in the log only when neither checkout has
+  the types or a `tsc`. Without a `claude` that has plugin tests (a cloud
+  session) the step is skipped.
+- **Links**: `pipeline/setup.sh [<project root>]` creates the relative links of
+  the kit's agent files and skill directories under `.claude/`; it is
+  idempotent and refuses, changing nothing, when a place holds a file that is
+  not a link or a link to something else. `tools/test-libs.sh` tests it.

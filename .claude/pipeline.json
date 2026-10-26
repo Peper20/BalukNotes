@@ -1,0 +1,12 @@
+{
+  "project": "baluk notes",
+  "guide": "docs/agents.md",
+  "map": ".claude/rules/project.md",
+  "forge": { "url": "http://localhost:3000", "repo": "ibaluk/baluk-notes" },
+  "afterMerge": {
+    "paths": ["crates/", "app/", "baluk/", "skills/"],
+    "command": ["tools/install.sh"],
+    "timeoutSeconds": 600
+  },
+  "targetedTests": "tools/cargo.sh test -p <crate> ..., npm test"
+}

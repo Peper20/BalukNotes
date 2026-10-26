@@ -12,7 +12,7 @@
 # failure the absolute paths of the logs of the failed steps. The worktree stays
 # (no branch; a later run reuses it - the ignored build output such as
 # app/node_modules saves the work); the pipeline mod removes it with the task's
-# cleanup (tools/pipeline/). The whole output of check.sh is in <worktree>/tests/.data/check/run.log.
+# cleanup (pipeline/). The whole output of check.sh is in <worktree>/tests/.data/check/run.log.
 #
 # Exit codes: 0 passed, 1 failed, 2 could not run (it says what: the argument,
 # the server, git, the worktree, the comment). A second run for the same pull

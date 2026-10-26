@@ -1,11 +1,14 @@
 // The driver: carries out the actions of the machine through ports (the
 // server, the agents, the clock, the store) and feeds the results back as events.
 // register.ts builds the ports out of `$`; tests build them out of fakes.
-import { type Forge, needsInstall } from './forge'
+import { type Config, needsAfterMerge } from './config'
+import type { Forge } from './forge'
 import { type Action, type Event, type Result, type State } from './model'
 import { emptyState, step } from './machine'
 
 export type Ports = {
+  /** The project layer, read at session start. */
+  config: Config
   now(): Promise<number>
   load(): Promise<State | undefined>
   save(state: State): Promise<void>
@@ -58,7 +61,7 @@ export function createPipeline(ports: Ports): Pipeline {
 
   async function handle(input: Input): Promise<Reply> {
     const ev = { ...input, now: await ports.now() } as Event
-    const result: Result = step(state, ev)
+    const result: Result = step(state, ev, ports.config)
     state = result.state
     await ports.save(state)
     ports.show(state)
@@ -216,7 +219,7 @@ export function createPipeline(ports: Ports): Pipeline {
     const pulled = await ports.forge.pullMain()
     let install: 'ok' | 'failed' | 'skipped' = 'skipped'
     let note = pulled.note
-    if (pulled.pull === 'ok' && needsInstall(pulled.changed)) {
+    if (pulled.pull === 'ok' && needsAfterMerge(pulled.changed, ports.config.afterMerge)) {
       const r = await ports.forge.install()
       install = r.ok ? 'ok' : 'failed'
       note = r.note

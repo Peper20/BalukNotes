@@ -460,7 +460,7 @@ describe('dependencies', () => {
     expect(spawn?.type === 'spawn' && spawn.tier).toBe('developer-2')
     expect(spawn?.type === 'spawn' && spawn.prompt).toContain('task/b')
     const report = res.actions.find(a => a.type === 'notify')
-    expect(report?.type === 'notify' && report.text).toContain('http://localhost:3000/ibaluk/baluk-notes/pulls/5')
+    expect(report?.type === 'notify' && report.text).toContain('http://forge.test/acme/widgets/pulls/5')
     expect(report?.type === 'notify' && report.text).toContain('started: b')
   })
 

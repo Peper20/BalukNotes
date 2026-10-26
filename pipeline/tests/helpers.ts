@@ -1,9 +1,20 @@
 // Fakes for the tests: a server and a repository in memory (the test double of
 // forge.ts) and the ports of the driver. No test talks to the real server.
+import type { Config } from '../hooks/config'
 import type { Input, Ports } from '../hooks/driver'
 import type { Forge, MergeOutcome, PrInfo, PullOutcome, ReviewInfo, StatusInfo } from '../hooks/forge'
 import { emptyState, step } from '../hooks/machine'
 import type { Action, Event, Result, State, Task } from '../hooks/model'
+
+/** A project layer for the tests: every key set. */
+export const TEST_CONFIG: Config = {
+  project: 'widgets',
+  guide: 'docs/pipeline.md',
+  map: 'docs/rules.md',
+  forge: { url: 'http://forge.test', repo: 'acme/widgets' },
+  afterMerge: { paths: ['src/', 'lib/'], command: ['scripts/after.sh'], timeoutSeconds: 600 },
+  targetedTests: 'make test-one T=<name>',
+}
 
 export class FakeServer {
   prs = new Map<number, PrInfo>()
@@ -116,6 +127,7 @@ export function fakes(): Fakes {
   }
   let n = 0
   f.ports = {
+    config: TEST_CONFIG,
     now: async () => (f.time.now += 10),
     load: async () => f.store.value,
     save: async s => {
@@ -163,7 +175,7 @@ export class Run {
 
   feed(ev: DistributiveOmit<Event, 'now'>): Result {
     this.now += 1_000
-    this.last = step(this.state, { ...ev, now: this.now } as Event)
+    this.last = step(this.state, { ...ev, now: this.now } as Event, TEST_CONFIG)
     this.state = this.last.state
     this.all.push(...this.last.actions)
     return this.last

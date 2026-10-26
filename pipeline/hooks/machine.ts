@@ -1,7 +1,8 @@
-// The state machine of the pipeline: (state, event) -> (new state, actions).
+// The state machine of the pipeline: (state, event, config) -> (new state, actions).
 // No clock, no server, no agents: everything the pipeline decides is here, the
 // driver (driver.ts) only carries the actions out and feeds their results back
 // as events. The input state is never changed.
+import { type Config, pullsUrl } from './config'
 import {
   type AgentRef,
   type Developer,
@@ -9,7 +10,6 @@ import {
   type Event,
   KEEP_MERGED,
   MAX_ROUNDS,
-  PR_URL,
   RETRY_MS,
   type Result,
   type State,
@@ -32,15 +32,15 @@ const roundsText = (t: Task): string => DEVELOPERS.map(d => `${d} ${t.rounds[d]}
 
 type Event_<T extends Event['type']> = Extract<Event, { type: T }>
 
-export function step(prev: State, ev: Event): Result {
+export function step(prev: State, ev: Event, cfg: Config): Result {
   const state: State = JSON.parse(JSON.stringify(prev))
   const out: Result = { state, actions: [] }
   switch (ev.type) {
     case 'start':
-      onStart(state, ev, out)
+      onStart(state, ev, out, cfg)
       break
     case 'send':
-      onSend(state, ev, out)
+      onSend(state, ev, out, cfg)
       break
     case 'stop':
       onStop(state, ev, out)
@@ -52,22 +52,22 @@ export function step(prev: State, ev: Event): Result {
       onSpawnFailed(state, ev, out)
       break
     case 'undelivered':
-      onUndelivered(state, ev, out)
+      onUndelivered(state, ev, out, cfg)
       break
     case 'turn-end':
       onTurnEnd(state, ev, out)
       break
     case 'polled':
-      onPolled(state, ev, out)
+      onPolled(state, ev, out, cfg)
       break
     case 'reviewed':
-      onReviewed(state, ev, out)
+      onReviewed(state, ev, out, cfg)
       break
     case 'merge-result':
-      onMergeResult(state, ev, out)
+      onMergeResult(state, ev, out, cfg)
       break
     case 'post-merge':
-      onPostMerge(state, ev, out)
+      onPostMerge(state, ev, out, cfg)
       break
     case 'handover-failed':
       onHandoverFailed(state, ev, out)
@@ -76,10 +76,10 @@ export function step(prev: State, ev: Event): Result {
       onCleaned(state, ev, out)
       break
     case 'tick':
-      onTick(state, ev, out)
+      onTick(state, ev, out, cfg)
       break
     case 'restore':
-      onRestore(state, ev, out)
+      onRestore(state, ev, out, cfg)
       break
   }
   return out
@@ -104,12 +104,12 @@ function spawnDeveloper(t: Task, prompt: string, out: Result): void {
 }
 
 /** To the developer of the task: a message, or a new developer of the same tier when none is left. */
-function toDeveloper(t: Task, text: string, out: Result): void {
+function toDeveloper(t: Task, text: string, out: Result, cfg: Config): void {
   if (t.agentId !== undefined) tell(t, t.agentId, text, out)
-  else spawnDeveloper(t, P.continuePrompt(t, text), out)
+  else spawnDeveloper(t, P.continuePrompt(t, text, cfg), out)
 }
 
-function spawnReviewer(t: Task, out: Result): void {
+function spawnReviewer(t: Task, out: Result, cfg: Config): void {
   if (t.pr === undefined || t.head === undefined) return
   t.reviewerId = undefined
   out.actions.push({
@@ -117,24 +117,24 @@ function spawnReviewer(t: Task, out: Result): void {
     slug: t.slug,
     role: 'reviewer',
     tier: 'reviewer',
-    prompt: P.reviewerPrompt(t, t.pr, t.head),
+    prompt: P.reviewerPrompt(t, t.pr, t.head, cfg),
     description: `review ${t.slug}`,
   })
 }
 
-function begin(t: Task, now: number, out: Result): void {
+function begin(t: Task, now: number, out: Result, cfg: Config): void {
   t.stage = 'developing'
   note(t, now, `started on ${t.developer}`)
-  spawnDeveloper(t, P.developerPrompt(t), out)
+  spawnDeveloper(t, P.developerPrompt(t, cfg), out)
 }
 
 const ready = (s: State, t: Task): boolean => t.after.every(a => find(s, a)?.stage === 'merged')
 
-function startWaiting(s: State, now: number, out: Result): string[] {
+function startWaiting(s: State, now: number, out: Result, cfg: Config): string[] {
   const started: string[] = []
   for (const t of s.tasks) {
     if (t.stage === 'waiting' && ready(s, t)) {
-      begin(t, now, out)
+      begin(t, now, out, cfg)
       started.push(t.slug)
     }
   }
@@ -164,7 +164,7 @@ function block(t: Task, now: number, reason: string, findings: string, out: Resu
 }
 
 /** The pull request goes back to a developer with findings: a round, a hand-over or a block. */
-function giveBack(t: Task, now: number, kind: 'check' | 'review', findings: string, out: Result): void {
+function giveBack(t: Task, now: number, kind: 'check' | 'review', findings: string, out: Result, cfg: Config): void {
   const cur = t.developer
   const used = t.rounds[cur]
   t.findings = findings
@@ -175,7 +175,7 @@ function giveBack(t: Task, now: number, kind: 'check' | 'review', findings: stri
     const text =
       kind === 'check' ? P.checkFailedMessage(t, used + 1, findings) : P.changesMessage(t, used + 1, findings)
     note(t, now, `${kind === 'check' ? 'check failed' : 'changes requested'}: round ${used + 1} of ${cur}`)
-    toDeveloper(t, text, out)
+    toDeveloper(t, text, out, cfg)
     return
   }
   if (cur === 'developer-3') {
@@ -195,23 +195,24 @@ function giveBack(t: Task, now: number, kind: 'check' | 'review', findings: stri
     prompt: P.continuePrompt(
       t,
       `The previous developer (${cur}) used its two rounds without an approved pull request. You take the task over: this is your first round. The open findings:\n\n${findings.trim()}`,
+      cfg,
     ),
   })
 }
 
 /** The pull request conflicts with main: the developer rebases. Not a round. */
-function sendToRebase(t: Task, now: number, out: Result): void {
+function sendToRebase(t: Task, now: number, out: Result, cfg: Config): void {
   t.conflictHead = t.head ?? ''
   t.unmergeable = 0
   t.stage = 'developing'
   t.nudged = false
   note(t, now, 'conflicts with main: the developer rebases')
-  toDeveloper(t, P.rebaseMessage(t), out)
+  toDeveloper(t, P.rebaseMessage(t), out, cfg)
 }
 
 // --- events -----------------------------------------------------------------
 
-function onStart(s: State, ev: Event_<'start'>, out: Result): void {
+function onStart(s: State, ev: Event_<'start'>, out: Result, cfg: Config): void {
   if (!/^[a-z0-9][a-z0-9._-]*$/.test(ev.slug)) {
     out.error = `bad slug "${ev.slug}": lower case letters, digits, "-", "_" and "."`
     return
@@ -246,7 +247,7 @@ function onStart(s: State, ev: Event_<'start'>, out: Result): void {
   }
   s.tasks.push(t)
   if (ready(s, t)) {
-    begin(t, ev.now, out)
+    begin(t, ev.now, out, cfg)
     out.reply = `${t.slug}: ${t.developer} is starting on ${P.branchOf(t.slug)}`
   } else {
     const missing = t.after.filter(a => find(s, a)?.stage !== 'merged')
@@ -255,7 +256,7 @@ function onStart(s: State, ev: Event_<'start'>, out: Result): void {
   }
 }
 
-function onSend(s: State, ev: Event_<'send'>, out: Result): void {
+function onSend(s: State, ev: Event_<'send'>, out: Result, cfg: Config): void {
   const t = find(s, ev.slug)
   if (!t) {
     out.error = `no task "${ev.slug}"`
@@ -280,7 +281,7 @@ function onSend(s: State, ev: Event_<'send'>, out: Result): void {
       t.nudged = false
       t.retryAt = undefined
       note(t, ev.now, 'resumed by the liaison on developer-3')
-      spawnDeveloper(t, P.continuePrompt(t, `The task was blocked and is resumed.\n\n${ev.text.trim()}\n\nOpen findings:\n${t.findings ?? '(none recorded)'}`), out)
+      spawnDeveloper(t, P.continuePrompt(t, `The task was blocked and is resumed.\n\n${ev.text.trim()}\n\nOpen findings:\n${t.findings ?? '(none recorded)'}`, cfg), out)
       out.reply = `${t.slug}: resumed on a new developer-3`
       return
     case 'developing':
@@ -298,7 +299,7 @@ function onSend(s: State, ev: Event_<'send'>, out: Result): void {
       t.nudged = false
       t.retryAt = undefined
       note(t, ev.now, 'the liaison sent a message')
-      toDeveloper(t, ev.text, out)
+      toDeveloper(t, ev.text, out, cfg)
       out.reply = `${t.slug}: sent to ${t.developer}; the task is developing`
   }
 }
@@ -354,7 +355,7 @@ function onSpawnFailed(s: State, ev: Event_<'spawn-failed'>, out: Result): void 
   notify(t, `the ${ev.role} could not be started: ${ev.reason}. Answer with pipeline_send to try again.`, out)
 }
 
-function onUndelivered(s: State, ev: Event_<'undelivered'>, out: Result): void {
+function onUndelivered(s: State, ev: Event_<'undelivered'>, out: Result, cfg: Config): void {
   const t = find(s, ev.slug)
   const a = t && agentOf(t, ev.agentId)
   if (!t || !a) return
@@ -365,10 +366,10 @@ function onUndelivered(s: State, ev: Event_<'undelivered'>, out: Result): void {
   }
   if (a.role === 'developer' && ev.agentId === t.agentId && isLive(t)) {
     note(t, ev.now, `${a.tier} is gone: a new one continues`)
-    spawnDeveloper(t, P.continuePrompt(t, ev.text), out)
+    spawnDeveloper(t, P.continuePrompt(t, ev.text, cfg), out)
   } else if (a.role === 'reviewer' && ev.agentId === t.reviewerId && t.stage === 'reviewing') {
     note(t, ev.now, 'the reviewer is gone: a new one reviews')
-    spawnReviewer(t, out)
+    spawnReviewer(t, out, cfg)
   }
 }
 
@@ -452,7 +453,7 @@ function scheduleRetry(t: Task, ev: Event_<'turn-end'>, out: Result): void {
   }
 }
 
-function onPolled(s: State, ev: Event_<'polled'>, out: Result): void {
+function onPolled(s: State, ev: Event_<'polled'>, out: Result, cfg: Config): void {
   const t = find(s, ev.slug)
   if (!t || t.stage !== 'checking' || t.pr !== ev.pr) return
   if (ev.prState === 'merged') {
@@ -471,7 +472,7 @@ function onPolled(s: State, ev: Event_<'polled'>, out: Result): void {
   t.unmergeable = ev.mergeable ? 0 : t.unmergeable + 1
   // The server says "not mergeable" while it checks too: two polls in a row make a conflict.
   if (t.unmergeable >= 2 && t.conflictHead !== ev.head) {
-    sendToRebase(t, ev.now, out)
+    sendToRebase(t, ev.now, out, cfg)
     return
   }
   switch (ev.ci) {
@@ -485,18 +486,18 @@ function onPolled(s: State, ev: Event_<'polled'>, out: Result): void {
       }
       t.stage = 'reviewing'
       note(t, ev.now, `check passed at ${short(ev.head)}: review`)
-      spawnReviewer(t, out)
+      spawnReviewer(t, out, cfg)
       return
     case 'failure':
     case 'error':
-      giveBack(t, ev.now, 'check', ev.detail, out)
+      giveBack(t, ev.now, 'check', ev.detail, out, cfg)
       return
     default:
       note(t, ev.now, `check ${ev.ci} at ${short(ev.head)}`)
   }
 }
 
-function onReviewed(s: State, ev: Event_<'reviewed'>, out: Result): void {
+function onReviewed(s: State, ev: Event_<'reviewed'>, out: Result, cfg: Config): void {
   const t = find(s, ev.slug)
   if (!t || t.stage !== 'reviewing' || t.pr !== ev.pr) return
   if (t.reviewerId !== undefined) {
@@ -527,7 +528,7 @@ function onReviewed(s: State, ev: Event_<'reviewed'>, out: Result): void {
       }
       return
     case 'REQUEST_CHANGES':
-      giveBack(t, ev.now, 'review', ev.text, out)
+      giveBack(t, ev.now, 'review', ev.text, out, cfg)
       return
     case 'none':
       t.stage = 'liaison'
@@ -550,7 +551,7 @@ function mergedNow(t: Task, now: number, post: boolean, out: Result): void {
   }
 }
 
-function onMergeResult(s: State, ev: Event_<'merge-result'>, out: Result): void {
+function onMergeResult(s: State, ev: Event_<'merge-result'>, out: Result, cfg: Config): void {
   const t = find(s, ev.slug)
   if (!t) return
   if (ev.ok) {
@@ -561,7 +562,7 @@ function onMergeResult(s: State, ev: Event_<'merge-result'>, out: Result): void 
   if (t.stage !== 'merging') return
   switch (ev.kind) {
     case 'conflict':
-      sendToRebase(t, ev.now, out)
+      sendToRebase(t, ev.now, out, cfg)
       return
     case 'moved':
       t.stage = 'checking'
@@ -576,7 +577,7 @@ function onMergeResult(s: State, ev: Event_<'merge-result'>, out: Result): void 
   }
 }
 
-function onPostMerge(s: State, ev: Event_<'post-merge'>, out: Result): void {
+function onPostMerge(s: State, ev: Event_<'post-merge'>, out: Result, cfg: Config): void {
   const t = find(s, ev.slug)
   if (!t) return
   note(t, ev.now, 'merged and cleaned up')
@@ -585,11 +586,11 @@ function onPostMerge(s: State, ev: Event_<'post-merge'>, out: Result): void {
     const c = find(s, slug)
     if (!c || c === t || c.pr === undefined || (c.conflictHead !== undefined && c.conflictHead === c.head)) continue
     if (c.stage === 'checking' || c.stage === 'reviewing' || c.stage === 'developing') {
-      sendToRebase(c, ev.now, out)
+      sendToRebase(c, ev.now, out, cfg)
       told.push(slug)
     }
   }
-  const started = startWaiting(s, ev.now, out)
+  const started = startWaiting(s, ev.now, out, cfg)
   // Keep the store small: the oldest merged tasks go.
   const merged = s.tasks.filter(x => x.stage === 'merged')
   if (merged.length > KEEP_MERGED) {
@@ -597,7 +598,7 @@ function onPostMerge(s: State, ev: Event_<'post-merge'>, out: Result): void {
     s.tasks = s.tasks.filter(x => !drop.has(x.slug))
   }
   const lines = [
-    `[pipeline] ${t.slug} merged: ${PR_URL}${t.pr}`,
+    `[pipeline] ${t.slug} merged: ${pullsUrl(cfg)}${t.pr}`,
     `rounds: ${roundsText(t)}`,
     `main: pull ${ev.pull}; install: ${ev.install}${ev.note === '' ? '' : ` (${ev.note})`}`,
     ev.leftovers.length === 0 ? 'cleanup: nothing left' : `cleanup left:\n- ${ev.leftovers.join('\n- ')}`,
@@ -620,7 +621,7 @@ function onCleaned(s: State, ev: Event_<'cleaned'>, out: Result): void {
   if (t.stage === 'blocked') notify(t, `cleanup left:\n- ${ev.leftovers.join('\n- ')}`, out)
 }
 
-function onTick(s: State, ev: Event_<'tick'>, out: Result): void {
+function onTick(s: State, ev: Event_<'tick'>, out: Result, cfg: Config): void {
   for (const t of s.tasks) {
     if (t.stage === 'checking' && t.pr !== undefined) {
       out.actions.push({ type: 'poll', slug: t.slug, pr: t.pr })
@@ -631,21 +632,21 @@ function onTick(s: State, ev: Event_<'tick'>, out: Result): void {
       tell(t, t.retryAgent, P.retryMessage(), out, 'send')
     }
   }
-  startWaiting(s, ev.now, out)
+  startWaiting(s, ev.now, out, cfg)
 }
 
 /** The session started: wake what the store says is going. */
-function onRestore(s: State, ev: Event_<'restore'>, out: Result): void {
+function onRestore(s: State, ev: Event_<'restore'>, out: Result, cfg: Config): void {
   for (const t of s.tasks) {
     for (const a of t.agents) a.running = false
     switch (t.stage) {
       case 'developing':
         note(t, ev.now, 'the pipeline restarted')
-        toDeveloper(t, P.restartMessage(), out)
+        toDeveloper(t, P.restartMessage(), out, cfg)
         break
       case 'reviewing':
         if (t.reviewerId !== undefined) tell(t, t.reviewerId, P.restartMessage(), out, 'send')
-        else spawnReviewer(t, out)
+        else spawnReviewer(t, out, cfg)
         break
       case 'checking':
         if (t.pr !== undefined) out.actions.push({ type: 'poll', slug: t.slug, pr: t.pr })
@@ -664,5 +665,5 @@ function onRestore(s: State, ev: Event_<'restore'>, out: Result): void {
       default:
     }
   }
-  startWaiting(s, ev.now, out)
+  startWaiting(s, ev.now, out, cfg)
 }

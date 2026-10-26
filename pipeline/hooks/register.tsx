@@ -2,8 +2,9 @@
 // subagents, the timer, the pane and the status line. Decisions are in
 // machine.ts, the carrying out of them in driver.ts, the server and git in
 // forge.ts.
-import type { Register } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
+import { type Config, CONFIG_PATH, parseConfig } from './config'
 import { createPipeline, type Input, type Pipeline, type Ports } from './driver'
 import { makeForge } from './forge'
 import { DEVELOPERS, type Developer, POLL_MS, type State } from './model'
@@ -59,67 +60,117 @@ const TOOLS = [
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
+/** Why the project layer is unusable, or the config. */
+async function loadConfig($: EngineInterface, root: string): Promise<{ config: Config } | { error: string }> {
+  let text: string
+  try {
+    text = await $.fs.read(`${root}/${CONFIG_PATH}`)
+  } catch (err) {
+    return { error: `${CONFIG_PATH} could not be read: ${err instanceof Error ? err.message : String(err)}` }
+  }
+  const parsed = parseConfig(text)
+  return parsed.ok ? { config: parsed.config } : { error: parsed.error }
+}
+
+/** What the registration keeps between events: the pipeline once it started, the project layer, the state of the start. */
+type Runtime = {
+  pipeline?: Pipeline
+  config?: Config
+  root: string
+  /** The problem with the project layer that the last start found; the mod starts no task while it stands. */
+  configError?: string
+  reportedError?: string
+}
+
+/** Reads the project layer and starts the pipeline; on a bad file it reports once and starts nothing. */
+async function boot($: EngineInterface, rt: Runtime): Promise<void> {
+  const loaded = await loadConfig($, rt.root)
+  if ('error' in loaded) {
+    rt.configError = loaded.error
+    if (rt.reportedError !== loaded.error) {
+      rt.reportedError = loaded.error
+      $.ui.log(`pipeline: ${loaded.error}`)
+      void $.prompt
+        .submit({ text: `[pipeline] ${loaded.error}. The pipeline starts no task until the file is fixed (see config.md of the kit); call a pipeline tool again to read it anew.` })
+        .catch(() => undefined)
+    }
+    return
+  }
+  rt.configError = undefined
+  rt.config = loaded.config
+  const ports: Ports = {
+    config: loaded.config,
+    now: () => $.clock.now(),
+    load: async () => {
+      const v = await $.store.get(STORE_KEY)
+      return v && typeof v === 'object' && Array.isArray((v as State).tasks) ? (v as State) : undefined
+    },
+    save: state => $.store.set(STORE_KEY, state),
+    show: state => {
+      $.ui.status(summary(state))
+      void $.state.set(rows, viewRows(state)).catch(() => undefined)
+    },
+    forge: makeForge((argv, init) => $.process.run(argv, init), {
+      root: rt.root,
+      sleep: ms => $.clock.sleep(ms),
+      afterMerge: loaded.config.afterMerge,
+    }),
+    agents: {
+      spawn: async a => {
+        const r = await $.agent.spawn({ prompt: a.prompt, subagentType: a.tier, description: a.description })
+        return r.deny !== undefined ? { deny: r.deny } : { agentId: r.agentId }
+      },
+      send: async (agentId, text) => {
+        try {
+          return (await $.session.send({ to: { agentId }, text })).isDelivered
+        } catch {
+          return false
+        }
+      },
+      append: async (agentId, text) => {
+        try {
+          await $.session.append({ agentId, message: { type: 'user', content: [{ type: 'text', text }] } })
+          return true
+        } catch {
+          return false
+        }
+      },
+    },
+    notify: text => {
+      void $.prompt.submit({ text }).catch(() => undefined)
+    },
+    sleep: ms => $.clock.sleep(ms),
+    log: text => $.ui.log(`pipeline: ${text}`),
+  }
+  const p = createPipeline(ports)
+  rt.pipeline = p
+  await p.start()
+  $.clock.every(POLL_MS, () => {
+    p.tick().catch(err => $.ui.log(`pipeline: tick failed: ${String(err)}`))
+  })
+}
+
 export const register: Register = on => {
-  let pipeline: Pipeline | undefined
+  const rt: Runtime = { root: '' }
 
   on('session.start', async ($, e, next) => {
-    const root = await $.session.root()
-    const ports: Ports = {
-      now: () => $.clock.now(),
-      load: async () => {
-        const v = await $.store.get(STORE_KEY)
-        return v && typeof v === 'object' && Array.isArray((v as State).tasks) ? (v as State) : undefined
-      },
-      save: state => $.store.set(STORE_KEY, state),
-      show: state => {
-        $.ui.status(summary(state))
-        void $.state.set(rows, viewRows(state)).catch(() => undefined)
-      },
-      forge: makeForge((argv, init) => $.process.run(argv, init), { root, sleep: ms => $.clock.sleep(ms) }),
-      agents: {
-        spawn: async a => {
-          const r = await $.agent.spawn({ prompt: a.prompt, subagentType: a.tier, description: a.description })
-          return r.deny !== undefined ? { deny: r.deny } : { agentId: r.agentId }
-        },
-        send: async (agentId, text) => {
-          try {
-            return (await $.session.send({ to: { agentId }, text })).isDelivered
-          } catch {
-            return false
-          }
-        },
-        append: async (agentId, text) => {
-          try {
-            await $.session.append({ agentId, message: { type: 'user', content: [{ type: 'text', text }] } })
-            return true
-          } catch {
-            return false
-          }
-        },
-      },
-      notify: text => {
-        void $.prompt.submit({ text }).catch(() => undefined)
-      },
-      sleep: ms => $.clock.sleep(ms),
-      log: text => $.ui.log(`pipeline: ${text}`),
-    }
-    const p = createPipeline(ports)
-    pipeline = p
+    rt.root = await $.session.root()
     for (const t of TOOLS) await $.tool.register({ ...t, isDeferred: false })
     await $.command.register({ name: 'pipeline', description: 'Show the tasks of the development pipeline' })
-    await p.start()
-    $.clock.every(POLL_MS, () => {
-      p.tick().catch(err => $.ui.log(`pipeline: tick failed: ${String(err)}`))
-    })
+    await boot($, rt)
     return next(e)
   })
 
-  const served = (name: string, handle: (p: Pipeline, args: Record<string, unknown>) => Promise<string>): void => {
-    on('tool.call', { tool: new RegExp(`^${TOOL(name)}$`) }, async (_$, e) => {
+  const served = (name: string, handle: (p: Pipeline, c: Config, args: Record<string, unknown>) => Promise<string>): void => {
+    on('tool.call', { tool: new RegExp(`^${TOOL(name)}$`) }, async ($, e) => {
       if (e.agentId !== undefined) return { deny: 'the pipeline tools are for the liaison, not for subagents' }
-      if (!pipeline) return { deny: 'the pipeline is not started yet' }
+      if (!rt.pipeline && rt.configError !== undefined) await boot($, rt)
+      const { pipeline, config } = rt
+      if (!pipeline || !config) {
+        return { deny: rt.configError === undefined ? 'the pipeline is not started yet' : `the pipeline is not started: ${rt.configError}` }
+      }
       try {
-        return { result: await handle(pipeline, e as unknown as Record<string, unknown>) }
+        return { result: await handle(pipeline, config, e as unknown as Record<string, unknown>) }
       } catch (err) {
         return { deny: String(err instanceof Error ? err.message : err) }
       }
@@ -132,7 +183,7 @@ export const register: Register = on => {
     return r.reply ?? 'ok'
   }
 
-  served('pipeline_start', (p, a) =>
+  served('pipeline_start', (p, _c, a) =>
     reply(p, {
       type: 'start',
       slug: str(a.slug),
@@ -141,16 +192,16 @@ export const register: Register = on => {
       after: Array.isArray(a.after) ? a.after.map(str).filter(s => s !== '') : [],
     }),
   )
-  served('pipeline_status', async p => describeAll(p.state()))
-  served('pipeline_send', (p, a) => reply(p, { type: 'send', slug: str(a.slug), text: str(a.text) }))
-  served('pipeline_stop', (p, a) =>
+  served('pipeline_status', async (p, c) => describeAll(p.state(), c))
+  served('pipeline_send', (p, _c, a) => reply(p, { type: 'send', slug: str(a.slug), text: str(a.text) }))
+  served('pipeline_stop', (p, _c, a) =>
     reply(p, { type: 'stop', slug: str(a.slug) || undefined, reason: str(a.reason) || 'no reason given' }),
   )
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    if (pipeline && e.agentId !== undefined) {
-      pipeline
+    if (rt.pipeline && e.agentId !== undefined) {
+      rt.pipeline
         .dispatch({ type: 'turn-end', agentId: e.agentId, reason: e.reason, text: done.text })
         .catch(err => $.ui.log(`pipeline: turn end failed: ${String(err)}`))
     }

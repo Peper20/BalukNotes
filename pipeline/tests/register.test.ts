@@ -1,8 +1,14 @@
 // register.tsx through the engine: the tools, the events of the subagents and
 // the pane. The server and git are not reached: process.run is answered here.
-import { expect, mock, test } from 'claude-code/testing'
+import type { On } from 'claude-code'
+import { type Engine, expect, mock, test } from 'claude-code/testing'
 
 const TOOL = 'mcp__pipeline__pipeline_start'
+const CONFIG = JSON.stringify({
+  project: 'widgets',
+  forge: { url: 'http://forge.test', repo: 'acme/widgets' },
+  targetedTests: 'make test-one',
+})
 
 test('the tools are registered and pipeline_start starts a developer', async ($, on) => {
   mock.clock(on)
@@ -14,6 +20,7 @@ test('the tools are registered and pipeline_start starts a developer', async ($,
   const submitted: string[] = []
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   on('session.root', async () => ({ value: '/repo' }))
+  on('fs.read', async () => ({ value: CONFIG }))
   on('tool.register', async (_$, e) => {
     registered.push(e.name)
     return { value: { tool: `mcp__pipeline__${e.name}` } }
@@ -52,6 +59,8 @@ test('the tools are registered and pipeline_start starts a developer', async ($,
   expect(spawned).toHaveLength(1)
   expect(spawned[0]?.prompt).toContain('Do the thing.')
   expect(spawned[0]?.prompt).toContain('task/feat')
+  expect(spawned[0]?.prompt).toContain('make test-one')
+  expect(spawned[0]?.prompt).toContain('Project: widgets')
 
   const status = await $.tool.call({ tool: 'mcp__pipeline__pipeline_status' } as never)
   expect(String(status.text ?? status.result)).toContain('feat:')
@@ -91,6 +100,7 @@ test('a task from the store is woken, its turn end is read, the pane shows it', 
   const submitted: string[] = []
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   on('session.root', async () => ({ value: '/repo' }))
+  on('fs.read', async () => ({ value: CONFIG }))
   on('tool.register', async (_$, e) => ({ value: { tool: `mcp__pipeline__${e.name}` } }))
   on('command.register', async () => ({ value: { command: 'pipeline' } }))
   on('ui.status', async () => ({ value: undefined }))
@@ -122,4 +132,66 @@ test('a task from the store is woken, its turn end is read, the pane shows it', 
   const pane = await $.ui.mount({ plugin: 'pipeline', surface: 'terminal', component: 'Pane', props: {} as never, requestId: 'pipeline' })
   expect((await pane.find({ type: 'Text', text: /feat/ }))?.text).toContain('developer-2')
   await pane.unmount()
+})
+
+/** A session whose project layer is whatever `config.file` holds (undefined: the file cannot be read). */
+async function configSession($: Engine, on: On, config: { file?: string }) {
+  mock.clock(on)
+  mock.store(on)
+  const submitted: string[] = []
+  const spawned: string[] = []
+  on('session.start', async (_$, e) => ({ cwd: e.cwd }))
+  on('session.root', async () => ({ value: '/repo' }))
+  if (config.file !== undefined) on('fs.read', async () => ({ value: config.file as string }))
+  on('tool.register', async (_$, e) => ({ value: { tool: `mcp__pipeline__${e.name}` } }))
+  on('command.register', async () => ({ value: { command: 'pipeline' } }))
+  on('ui.status', async () => ({ value: undefined }))
+  on('ui.log', async () => ({ value: undefined }))
+  on('agent.spawn', async (_$, e) => {
+    spawned.push(e.prompt)
+    return { model: 'm', agentId: 'agent-1' }
+  })
+  on('process.run', async () => ({ value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  on('turn.complete', async (_$, e) => ({ text: e.answer }))
+  on('prompt.submit', async (_$, e) => {
+    submitted.push(e.text)
+    return { text: e.text }
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  return { submitted, spawned }
+}
+
+const START = { tool: TOOL, slug: 'feat', developer: 'developer-1', brief: 'x' } as never
+/** The announcements are not awaited by the mod: let them through. */
+const flush = async ($: Engine): Promise<void> => {
+  for (let i = 0; i < 5; i++) await $.tool.call({ tool: 'mcp__pipeline__pipeline_status' } as never)
+}
+
+test('a config file that cannot be read: reported once, no task starts', async ($, on) => {
+  const { submitted, spawned } = await configSession($, on, {})
+  await flush($)
+  expect(submitted).toHaveLength(1)
+  expect(submitted[0]).toContain('.claude/pipeline.json could not be read')
+  const refused = await $.tool.call(START)
+  expect(refused.deny).toContain('the pipeline is not started')
+  expect(refused.deny).toContain('could not be read')
+  expect(spawned).toHaveLength(0)
+  await flush($)
+  expect(submitted).toHaveLength(1)
+})
+
+test('an invalid config: reported once, no task starts; the fixed file is read on the next call', async ($, on) => {
+  const config = { file: '{ "forge": { "url": "nope" } }' }
+  const { submitted, spawned } = await configSession($, on, config)
+  await flush($)
+  expect(submitted).toHaveLength(1)
+  expect(submitted[0]).toContain('"forge.url" must be an http(s) URL')
+  expect((await $.tool.call(START)).deny).toContain('"forge.url" must be an http(s) URL')
+  expect(spawned).toHaveLength(0)
+  expect(submitted).toHaveLength(1)
+
+  config.file = CONFIG
+  const started = await $.tool.call(START)
+  expect(started.deny).toBeUndefined()
+  expect(spawned).toHaveLength(1)
 })

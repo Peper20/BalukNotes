@@ -2,7 +2,8 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { Stage, State, Task } from '../hooks/model'
-import { summary } from '../hooks/view'
+import { describeTask, summary } from '../hooks/view'
+import { TEST_CONFIG } from './helpers'
 
 /** A task in `stage`; the other fields are those of a fresh task. */
 function task(slug: string, stage: Stage): Task {
@@ -40,5 +41,12 @@ describe('the status line', () => {
 
   test('a blocked task is counted', async () => {
     expect(summary({ tasks: [task('a', 'blocked'), task('b', 'liaison')] })).toBe('1 liaison · 1 blocked')
+  })
+})
+
+describe('the status of a task', () => {
+  test('the pull request address comes from the config', async () => {
+    const t = { ...task('a', 'checking'), pr: 5 }
+    expect(describeTask(t, TEST_CONFIG)).toContain('PR #5 (http://forge.test/acme/widgets/pulls/5)')
   })
 })

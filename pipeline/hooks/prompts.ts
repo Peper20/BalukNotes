@@ -1,4 +1,5 @@
 // The texts the pipeline sends: to developers, reviewers and the liaison.
+import { CONFIG_PATH, type Config } from './config'
 import { type Ending, MAX_ROUNDS, type Task } from './model'
 
 export const branchOf = (slug: string): string => `task/${slug}`
@@ -17,10 +18,18 @@ export function parseEnding(text: string): Ending | undefined {
   return undefined
 }
 
-export const contract = (slug: string): string =>
+/** What the project layer tells an agent to read first, or nothing when the file names no page. */
+export function projectLine(cfg: Config): string {
+  const pages = [cfg.guide && `its pipeline guide ${cfg.guide} (the section "Project specifics for the agents")`, cfg.map && `its rules map ${cfg.map}`]
+    .filter(p => p !== undefined && p !== '')
+    .join(' and ')
+  return `Project: ${cfg.project} (${CONFIG_PATH}).${pages === '' ? '' : ` Read first: ${pages}.`}`
+}
+
+export const contract = (slug: string, cfg: Config): string =>
   [
     'Pipeline contract (an automated pipeline reads your last message):',
-    `- Work on the branch ${branchOf(slug)}. Run the targeted tests your change needs (tools/cargo.sh test -p <crate> ..., npm test), not tools/check.sh: the full check runs on the pull request.`,
+    `- Work on the branch ${branchOf(slug)}. Run the targeted tests your change needs${cfg.targetedTests === undefined ? '' : ` (${cfg.targetedTests})`}, not the full check of the project: the full check runs on the pull request.`,
     '- Push the branch and open the pull request (or update the existing one), as the dev-workflow skill says. Never merge.',
     '- End your final message with exactly one last line:',
     '  PIPELINE: pr=<number>            the pull request is ready for the full check and review',
@@ -29,28 +38,30 @@ export const contract = (slug: string): string =>
     '- When you are resumed with findings, a failed check or a message, work on it and end the same way.',
   ].join('\n')
 
-export function developerPrompt(t: Task): string {
-  return [t.brief.trim(), '', `Branch: ${branchOf(t.slug)}.`, '', contract(t.slug)].join('\n')
+export function developerPrompt(t: Task, cfg: Config): string {
+  return [t.brief.trim(), '', `Branch: ${branchOf(t.slug)}.`, projectLine(cfg), '', contract(t.slug, cfg)].join('\n')
 }
 
 /** A developer that continues a task whose branch (and pull request) already exist. */
-export function continuePrompt(t: Task, text: string): string {
+export function continuePrompt(t: Task, text: string, cfg: Config): string {
   const pr = t.pr === undefined ? 'The pull request may not exist yet: check the server.' : `The pull request is #${t.pr}.`
   return [
     t.brief.trim(),
     '',
     `The branch ${branchOf(t.slug)} already exists on the server and you continue the task of an earlier developer. ${pr}`,
     `Do not create the branch: get it as the forge skill says (git fetch origin ${branchOf(t.slug)}, then git switch ${branchOf(t.slug)}), read the pull request with its comments, reviews and commits, and continue from the existing commits. Push to the same branch; do not open another pull request.`,
+    projectLine(cfg),
     '',
     text.trim(),
     '',
-    contract(t.slug),
+    contract(t.slug, cfg),
   ].join('\n')
 }
 
-export function reviewerPrompt(t: Task, pr: number, head: string): string {
+export function reviewerPrompt(t: Task, pr: number, head: string, cfg: Config): string {
   return [
     `Review pull request #${pr} (task ${t.slug}, branch ${branchOf(t.slug)}, head ${head}).`,
+    projectLine(cfg),
     'The full check of this head has passed. The brief of the task, with its acceptance criteria and design:',
     '',
     t.brief.trim(),

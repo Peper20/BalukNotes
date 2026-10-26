@@ -1,6 +1,6 @@
 # Sourced by tools/check.sh (the step pipeline-mod, .claude/rules/tools.md,
 # "Pipeline mod"). The types of the engine of the mod,
-# tools/pipeline/.claude-plugin/types, are kept out of the repository: Claude
+# pipeline/.claude-plugin/types, are kept out of the repository: Claude
 # Code lays them beside the mod when it loads the mod from the main checkout, so
 # a linked worktree (agents, .claude/worktrees/check-pr-<n>) has none. There they
 # are copied from the main checkout on every run, so that the mod is checked
@@ -12,7 +12,10 @@
 # never touched. tsc is the client's (app/node_modules): this checkout's, else
 # the main checkout's (a fresh worktree has none until npm ci), else PATH.
 
-PIPELINE_TYPES=tools/pipeline/.claude-plugin/types
+PIPELINE_TYPES=pipeline/.claude-plugin/types
+# Where a main checkout that predates the move of the mod has them; to be dropped
+# once every main checkout is past it.
+PIPELINE_TYPES_OLD=tools/pipeline/.claude-plugin/types
 PIPELINE_TYPES_MARK=.copied-from-main
 
 # pipeline_main_root: the main checkout, also when called from a linked worktree
@@ -33,18 +36,20 @@ pipeline_linked() {
 # the mark, laid by Claude Code in this checkout, are left alone. The main
 # checkout is never touched. Prints a line when it copies; fails when a step fails.
 lay_pipeline_types() {
-  local main
+  local main src
   main=$(pipeline_main_root) || return 1
   pipeline_linked || return 0
   if [[ -e $PIPELINE_TYPES && ! -f $PIPELINE_TYPES/$PIPELINE_TYPES_MARK ]]; then
     return 0
   fi
   rm -rf "$PIPELINE_TYPES" || return 1
-  [[ -f $main/$PIPELINE_TYPES/tsconfig.json ]] || return 0
+  src=$main/$PIPELINE_TYPES
+  [[ -f $src/tsconfig.json ]] || src=$main/$PIPELINE_TYPES_OLD
+  [[ -f $src/tsconfig.json ]] || return 0
   mkdir -p "$(dirname "$PIPELINE_TYPES")" || return 1
-  cp -R "$main/$PIPELINE_TYPES" "$PIPELINE_TYPES" || return 1
+  cp -R "$src" "$PIPELINE_TYPES" || return 1
   : >"$PIPELINE_TYPES/$PIPELINE_TYPES_MARK" || return 1
-  echo "the types of the engine are copied from $main/$PIPELINE_TYPES (ignored by git)"
+  echo "the types of the engine are copied from $src (ignored by git)"
 }
 
 # pipeline_tsc: the path of tsc, empty when there is none.

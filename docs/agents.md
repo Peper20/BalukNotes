@@ -1,77 +1,26 @@
-# The development pipeline
+# The development pipeline of baluk notes
 
-How development of baluk notes runs: who does what, how a task gets from a
-request to `main`, where the settings are. The detailed rules of each role are
-in its definition (`.claude/agents/`); this document is the map.
+The development cycle (roles, the path of a task, rounds, the mod) is the kit in
+`pipeline/`: `pipeline/docs/README.md`. This is this project's side of it: the
+server, the accounts, how it is launched, the limits, and what the agents need
+to know about the project. The project layer of the kit is
+`.claude/pipeline.json` (reference: `pipeline/config.md`); the kit's agents and
+skills are linked into `.claude/agents` and `.claude/skills` by
+`pipeline/setup.sh`.
 
-## Roles
+## Roles here
 
-| Who | Model | Does | Does not |
-|---|---|---|---|
-| `liaison` | Opus, medium | Talks to the user in Russian, owns the architecture and the specification (`docs/architecture.md`), decides on the tech debt, splits requests into tasks, picks the developer of each and starts them through the pipeline mod, answers developers' questions, keeps `docs/roadmap.md`, `docs/questions.md`, `docs/tech-debt.md`, this file and `.claude/rules/`, `.claude/agents/`, `.claude/skills/`, reports | Write code, merge |
-| pipeline mod | code, no model | Starts developers and reviewers, follows the CI status and the review on the server, returns failures and findings to the developer, counts rounds, hands over to `developer-3`, blocks, merges, cleans up, runs `tools/install.sh`, reports to the liaison (`tools/pipeline/`, `.claude/rules/tools.md`, "Pipeline mod") | Decide anything a rule below does not fix |
-| `developer-1` | Haiku, xhigh | Routine, well-described, small tasks along an existing pattern | Merge, design the architecture |
-| `developer-2` | Sonnet, high | Complex tasks: several crates or the core with the client, sync, builds and caches, memory, concurrency, Typst internals | Merge, design the architecture |
-| `developer-3` | Opus, medium | The hardest: elusive bugs, investigations, tasks another developer could not finish, resumed blocked tasks | Merge, design the architecture |
-| `reviewer` | Sonnet, high | Reads the change against its passed CI check (no re-run of its tests), approves or requests changes | Edit files |
-
-The user talks only to the `liaison`. Agents talk to each other in English.
-
-## The path of a task
-
-1. **Request.** The user describes the task to the `liaison`; it makes the goal
-   and acceptance criteria clear (how a feature looks is decided, not asked -
-   `.claude/rules/project.md`, "Essentials").
-2. **Design and tasks.** The `liaison` designs the change, decides which tech
-   debt is done now, works out the change to `docs/architecture.md`, splits
-   the request into tasks (one per coherent change) and picks the developer
-   of each.
-3. **Start.** For each task the `liaison` calls `pipeline_start` with a
-   self-contained brief (the developer has not seen the conversation); tasks
-   that depend on others wait with `after`. Independent tasks run in parallel.
-4. **Development.** The developer starts cold in its own worktree with the
-   design fixed in its brief, works on the branch `task/<slug>`, runs the
-   targeted tests, opens a pull request and ends with a `PIPELINE:` line (the
-   `dev-workflow` skill). A question or a report that needs the `liaison`
-   first (architecture additions, deferred items) goes to it; it answers with
-   `pipeline_send`.
-5. **CI.** The runner checks every push to a pull request
-   (`.forgejo/workflows/check.yml` -> `tools/check-pr.sh`): the full
-   `tools/check.sh` at the head commit, as the commit status `ci / full-check
-   (pull_request)` and a comment with the step table. A failure goes back to
-   the developer as a round.
-6. **Review.** On a `success` status the mod starts a `reviewer`; it reads the
-   pull request in its own worktree, runs targeted tests and gives the verdict
-   on the server. Blocking findings go back to the same developer as a round.
-7. **Merge.** An approval and a `success` status at the same head: the mod
-   squashes the pull request into `main`, deletes the branch, removes the
-   worktrees, runs `tools/install.sh` when the diff touches what it installs,
-   and reports to the `liaison`, which marks the roadmap and reports to the
-   user in Russian.
-
-Rounds and the end of a task:
-
-- A round is one return of the pull request to a developer with a failed
-  check or blocking findings. Each developer gets two; then a new
-  `developer-3` takes the task over on the same branch and pull request.
-  After `developer-3`'s two rounds the task is blocked.
-- A blocked task is still wanted but cannot be finished now: its pull request
-  stays open and its branch stays on the server; the `liaison` brings it to
-  the user, and `pipeline_send` resumes it on a new `developer-3`.
-- A dropped task is discarded for good (its pull request closed, its branch
-  deleted), only on the user's word.
-
-The `liaison` owns the architecture (`docs/architecture.md`); developers apply
-its changes to the document in the same pull request as the code. Tech debt
-(`docs/tech-debt.md`) entries change in the pull requests of the code: a
-developer may defer a large unforeseen problem with an entry, the `liaison`
-decides whether it waits. Requirements to both documents - `.claude/rules/docs.md`.
+The roles and models are in the kit's README. Here: the `liaison` keeps
+`docs/roadmap.md`, `docs/questions.md`, `docs/tech-debt.md`, this file and
+`.claude/rules/`; the mod runs `tools/install.sh` after a merge that touches
+`crates/`, `app/`, `baluk/` or `skills/` (`afterMerge`). A task goes to
+`developer-1` when it follows an existing pattern (a CLI command, an endpoint,
+a client component, a library block, a tool), to `developer-2` when it spans
+several crates or the core and the client, or touches the sync protocol, builds
+and caches, memory, concurrency or Typst internals.
 
 ## Isolation
 
-- Each developer and reviewer works in its own git worktree in
-  `.claude/worktrees/` (not in git), on its own branch. The `liaison` and the
-  pipeline mod work in the main checkout.
 - Worktrees build into the `target/` of the main checkout
   (`tools/lib/worktree-target.sh`): a build from scratch is ~8 min and tens of
   GB, and the dependencies built once serve every worktree. `tools/check.sh`
@@ -116,6 +65,10 @@ commit makes the approval stale; `agent-dev` and `ibaluk` may merge; only
 `ibaluk` pushes to `main` directly. All pushes go as `ibaluk`, so the ban on
 developers pushing to `main` rests on the agents' rules.
 
+CI: the runner checks every push to a pull request
+(`.forgejo/workflows/check.yml` -> `tools/check-pr.sh`): the full
+`tools/check.sh` at the head commit (`.claude/rules/tools.md`, "CI").
+
 GitHub (`github.com/Peper20/BalukNotes`, the remote `github`) is the public
 mirror: Forgejo pushes every change of the repository there (a push mirror
 over SSH with a deploy key). The cloud environment of Claude Code works from
@@ -136,27 +89,95 @@ anything not sent by `cloud-finish.sh`, open pull requests included, is lost.
 ## Launch
 
 ```sh
-claude --plugin-dir tools/pipeline
+claude --plugin-dir pipeline
 ```
 
 From the project root. `"agent": "liaison"` in `.claude/settings.json` makes the
 main session the `liaison`, locally and in a cloud session (the cloud session
 reads the file from the clone; the model of a cloud session is chosen in its
 interface, not by the agent definition). `--plugin-dir` loads the pipeline mod
-(`.claude/rules/tools.md`, "Pipeline mod"); the runner of CI is a user service
-(`tools/ci-runner.sh status`).
+(`pipeline/docs/README.md`, "The mod"); the runner of CI is a user service
+(`tools/ci-runner.sh status`). `tools/pipeline` is a link to `pipeline/`, kept
+for sessions started with the old path.
 
 ## Known limits
 
-- Agents run in the background and cannot ask for a permission: `cargo`,
-  `npm`, `git`, `tea` and `tools/*.sh` must be allowed in advance (or the
-  session runs in auto mode).
-- The mod lives in the liaison's session: with the session closed CI still
-  checks pushes, but no reviewer starts and nothing merges until the session
-  is back (the mod reloads its tasks).
 - The runner is a user service without lingering (the user's decision): it
   stops when the user logs out, and the jobs queued meanwhile run at the next
   login.
-- The mod's API is early access and may change with a Claude Code update.
 - A cloud session has no runner, so the mod would wait for a status that
   never comes: the pipeline does not run in a cloud session now.
+- The limits of the kit (`pipeline/docs/README.md`, "Known limits") apply:
+  `cargo`, `npm`, `git`, `tea` and `tools/*.sh` must be allowed in advance (or
+  the session runs in auto mode).
+
+## Project specifics for the agents
+
+What the kit's agents and skills defer to. Read it first.
+
+**Rules.** `.claude/rules/project.md` (the map and the Essentials), the rule
+file of every directory you touch (`crates.md`, `app.md`, `baluk.md`,
+`skills.md`, `tools.md`, ...), and `.claude/rules/docs.md` for
+`docs/architecture.md` and `docs/tech-debt.md` (the format of an entry).
+
+**Language.** The `liaison` speaks Russian with the user. Code, comments, logs,
+docs, commit messages, pull requests and briefs are English (`.claude/rules/project.md`,
+"Language").
+
+**Tests and the full check.** Run the crate's tests with
+`tools/cargo.sh test -p <crate> [filter]`, `npm test` in `app/`,
+`tools/test-libs.sh` for `tools/`. Run `cargo` by hand only as
+`tools/cargo.sh <arguments>`: it builds into the main checkout's `target/`,
+shared by all worktrees (`tools/lib/worktree-target.sh`), with the settings of
+the checks, and freshens the sources when another checkout built there last. A
+plain `cargo` builds from scratch in the worktree or reuses another checkout's
+artifacts of our crates. Waiting on another checkout's lock is normal. The full
+check is `tools/check.sh`; CI runs it, agents do not. e2e runs only inside it:
+it listens on the ports 8600-8649, so a `playwright` run by hand breaks the
+checks running on this machine.
+
+**Look by eye.** For changes to the library, CSS or client, look as
+`.claude/rules/tools.md` ("Look by eye") says. Start the test server on your own
+port (`PORT=<8500-8599> tools/test-env.sh`), not 8432: other agents may be using
+it. Stop it by its port.
+
+**The liaison's areas.** The liaison owns the architecture: crate boundaries,
+the core/client boundary, the HTTP API, the public library API, the vault
+format and path rules (`NoteId`), the sync protocol, cross-cutting schemes
+(builds and caches, memory, concurrency). The Essentials of
+`.claude/rules/project.md` bind its designs.
+
+**What goes with a change.** A change to the public library API, the
+`note`/`book` templates, `notes` commands or path rules also changes
+`docs/writing.md` and the `/baluk-note` skill, then `tools/install.sh`
+(`.claude/rules/project.md`, "Iteration"). Developers do not touch
+`docs/roadmap.md`, `docs/questions.md`, `docs/agents.md`, `.claude/agents/`,
+`.claude/skills/` or `pipeline/claude/agents/`, `pipeline/claude/skills/`, `pipeline/docs/`
+unless the brief says so.
+
+**Documents the liaison commits itself**, straight to `main`: `docs/roadmap.md`,
+`docs/questions.md` (open questions to the user; the "Look yourself" section
+is what it reminds the user of at the start of a session), `docs/agents.md`,
+the design decisions in `docs/architecture.md` and `docs/tech-debt.md` that no
+code yet follows, `.claude/rules/`, `.claude/pipeline.json`, and the kit's
+agents, skills and documents (`pipeline/claude/agents/`, `pipeline/claude/skills/`,
+`pipeline/docs/`, `pipeline/config.md`). The code of the mod and the scripts
+reach `main` through pull requests. Permission settings
+(`.claude/settings*.json`) are the user's.
+
+**Review.** Besides the kit's checklist, the Essentials of
+`.claude/rules/project.md`: a note in HTML looks like its PDF; the app does not
+change note files silently; the user's notes are never touched. Sensitive
+places: the hub trusting client input, unsafe paths (escaping the vault).
+
+**Cloud session.** The `liaison` runs `tools/cloud-setup.sh` as the very first
+step, before reading or delegating anything, and `tools/cloud-finish.sh` at the
+end, once every pull request is merged or blocked; then it gives the user the
+branch it prints.
+
+**The user's word.** An update of the server on the VPS (`tools/deploy-hub.sh`,
+`docs/server.md`) runs only on the user's word; the `liaison` runs it itself
+from the main checkout. Commands that need root are the user's to run. The
+user's own notes are not touched.
+
+**Pull requests** open at `http://localhost:3000/ibaluk/baluk-notes/pulls/<number>`.

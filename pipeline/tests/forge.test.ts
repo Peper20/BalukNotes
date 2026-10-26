@@ -2,7 +2,8 @@
 // and the safety rules. No server, no git.
 import { describe, expect, test } from 'claude-code/testing'
 
-import { makeForge, needsInstall, type Run, type RunResult } from '../hooks/forge'
+import type { AfterMerge } from '../hooks/config'
+import { makeForge, type Run, type RunResult } from '../hooks/forge'
 
 const ROOT = '/repo'
 const HEAD = 'a'.repeat(40)
@@ -236,10 +237,10 @@ describe('git: main checkout', () => {
     const s = script([
       ['rev-parse --abbrev-ref HEAD', ok('main\n')],
       ['rev-parse HEAD', ok('old\n')],
-      ['diff --name-only old..HEAD', ok('crates/a.rs\ndocs/b.md\n')],
+      ['diff --name-only old..HEAD', ok('src/a.rs\ndocs/b.md\n')],
     ])
     const out = await forgeOf(s.run).pullMain()
-    expect(out).toEqual({ pull: 'ok', note: '', changed: ['crates/a.rs', 'docs/b.md'] })
+    expect(out).toEqual({ pull: 'ok', note: '', changed: ['src/a.rs', 'docs/b.md'] })
     expect(s.log).toContain('git pull --ff-only')
   })
 
@@ -253,9 +254,34 @@ describe('git: main checkout', () => {
     expect(f.log).toContain('git fetch origin')
   })
 
-  test('install is for crates/, app/, baluk/ and skills/', async () => {
-    expect(needsInstall(['docs/a.md', 'tests/vault/x.typ'])).toBe(false)
-    for (const p of ['crates/a/b.rs', 'app/src/x.ts', 'baluk/x.typ', 'skills/baluk-note/SKILL.md']) expect(needsInstall([p])).toBe(true)
-    expect(needsInstall(['.claude/skills/forge/SKILL.md', 'tools/check.sh'])).toBe(false)
+  describe('the after-merge command of the config', () => {
+    const afterMerge: AfterMerge = { paths: ['src/'], command: ['scripts/after.sh', '--quick'], timeoutSeconds: 90 }
+    const withConfig = (run: Run) => makeForge(run, { root: ROOT, sleep: async () => undefined, afterMerge })
+
+    test('it runs in the main checkout with the timeout of the config', async () => {
+      const calls: { argv: readonly string[]; timeoutMs?: number }[] = []
+      const run: Run = async (argv, init) => {
+        calls.push({ argv, timeoutMs: init?.timeoutMs })
+        return ok()
+      }
+      expect(await withConfig(run).install()).toEqual({ ok: true, note: '' })
+      expect(calls).toEqual([{ argv: ['scripts/after.sh', '--quick'], timeoutMs: 90_000 }])
+    })
+
+    test('a failure carries the exit code and the tail of the output; a command that cannot run says how to run it by hand', async () => {
+      const failed = await withConfig(async () => ({ exitCode: 3, stdout: '', stderr: 'a\nb\nc\nd\n' })).install()
+      expect(failed).toEqual({ ok: false, note: 'exit 3: b / c / d' })
+      const thrown = await withConfig(async () => {
+        throw new Error('timeout')
+      }).install()
+      expect(thrown.ok).toBe(false)
+      expect(thrown.note).toContain('run scripts/after.sh --quick by hand')
+    })
+
+    test('no command in the config: nothing runs', async () => {
+      const s = script([])
+      expect((await forgeOf(s.run).install()).ok).toBe(false)
+      expect(s.log).toEqual([])
+    })
   })
 })

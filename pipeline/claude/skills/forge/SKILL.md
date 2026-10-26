@@ -5,14 +5,14 @@ description: Commands for the project's Forgejo server - pull requests, reviews 
 
 # Forge
 
-The project is hosted on a local Forgejo server (`http://localhost:3000`, repository `ibaluk/baluk-notes`; the remote `origin`). The command line client is `tea`. Use `git` for everything git can do and `tea` for the rest. The remote `github` is the public mirror: the server pushes `main` there itself, agents never push to it.
+The project is hosted on a Forgejo server (`forge` in `.claude/pipeline.json`: its URL and the repository; the remote `origin`). The command line client is `tea`. Use `git` for everything git can do and `tea` for the rest. Any other remote is a mirror: agents never push to it.
 
-Two accounts, chosen with `--login`. The login is a `tea` name; the server user is shown in reviews and API output:
+Two `tea` logins, chosen with `--login`:
 
-- `dev` (server user `agent-dev`) opens pull requests: the developers.
-- `reviewer` (server user `agent-reviewer`) reviews: the reviewer only.
+- `dev` opens pull requests and comments: the developers.
+- `reviewer` reviews: the reviewer only. A server does not let an account approve its own pull request, so the reviewer is another account than the developers'.
 
-The accounts are shared with another project on the same server. Pushes go as the repository owner.
+Pushes go as the repository owner.
 
 | Task | Command |
 |---|---|

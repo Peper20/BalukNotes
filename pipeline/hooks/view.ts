@@ -1,16 +1,17 @@
 // What the liaison and the pane see of the tasks.
 import type { PipelineViewTask } from '../types'
-import { DEVELOPERS, PR_URL, type Stage, type State, type Task } from './model'
+import { type Config, pullsUrl } from './config'
+import { DEVELOPERS, type Stage, type State, type Task } from './model'
 
 const STAGES: readonly Stage[] = ['waiting', 'developing', 'liaison', 'checking', 'reviewing', 'merging', 'blocked', 'merged']
 
 const roundsOf = (t: Task): string => DEVELOPERS.map(d => `${d.replace('developer-', 'd')}:${t.rounds[d]}`).join(' ')
 
 /** One task as the `pipeline_status` tool shows it. */
-export function describeTask(t: Task): string {
+export function describeTask(t: Task, cfg: Config): string {
   const parts = [
     `${t.slug}: ${t.stage}`,
-    t.pr === undefined ? 'no PR' : `PR #${t.pr} (${PR_URL}${t.pr})`,
+    t.pr === undefined ? 'no PR' : `PR #${t.pr} (${pullsUrl(cfg)}${t.pr})`,
     `head ${t.head === undefined ? '-' : t.head.slice(0, 7)}`,
     `CI ${t.ci}`,
     `developer ${t.developer}${t.agentId === undefined ? '' : ` (agent ${t.agentId})`}`,
@@ -23,9 +24,9 @@ export function describeTask(t: Task): string {
   return parts.join(' | ')
 }
 
-export function describeAll(s: State): string {
+export function describeAll(s: State, cfg: Config): string {
   if (s.tasks.length === 0) return 'No tasks.'
-  return s.tasks.map(describeTask).join('\n')
+  return s.tasks.map(t => describeTask(t, cfg)).join('\n')
 }
 
 /** The status line: the counts of tasks by stage, merged ones left out. The engine puts the plugin's name before it. */

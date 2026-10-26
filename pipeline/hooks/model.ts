@@ -156,5 +156,3 @@ export type Result = {
   /** The caller's request is refused. */
   error?: string
 }
-
-export const PR_URL = 'http://localhost:3000/ibaluk/baluk-notes/pulls/'

@@ -56,7 +56,7 @@ describe('a task from start to merge', () => {
     ])
     // The reviewer's worktree was also removed at once, after its verdict.
     expect(f.notes).toHaveLength(1)
-    expect(f.notes[0]).toContain('http://localhost:3000/ibaluk/baluk-notes/pulls/7')
+    expect(f.notes[0]).toContain('http://forge.test/acme/widgets/pulls/7')
     expect(f.notes[0]).toContain('install: skipped')
     // The tasks are in the store.
     expect(f.store.value?.tasks[0]?.slug).toBe('feat')
@@ -90,8 +90,8 @@ describe('a task from start to merge', () => {
     expect(f.server.calls.filter(c => c.startsWith('merge'))).toEqual([`merge 7 ${HEAD} task/feat`])
   })
 
-  test('install runs when the merged diff touches crates/, app/, baluk/ or skills/', async () => {
-    for (const path of ['crates/notes-core/src/lib.rs', 'app/src/a.ts', 'baluk/x.typ', 'skills/baluk-note/SKILL.md']) {
+  test('the after-merge command runs when the merged diff touches a path of the config', async () => {
+    for (const path of ['src/core/lib.rs', 'lib/x.txt']) {
       const f = fakes()
       const p = await started(f)
       f.server.pull = { pull: 'ok', note: '', changed: [path, 'docs/a.md'] }
@@ -103,10 +103,22 @@ describe('a task from start to merge', () => {
     }
   })
 
+  test('a config without afterMerge never runs a command', async () => {
+    const f = fakes()
+    f.ports.config = { ...f.ports.config, afterMerge: undefined }
+    const p = await started(f)
+    f.server.pull = { pull: 'ok', note: '', changed: ['src/a.rs'] }
+    const { rev } = await toReview(f, p, 'feat', 7, HEAD)
+    f.server.review(7, HEAD, 'APPROVED')
+    await finish(p, rev)
+    expect(f.server.calls).not.toContain('install')
+    expect(f.notes[0]).toContain('install: skipped')
+  })
+
   test('a failed install and a failed pull are reported', async () => {
     const f = fakes()
     const p = await started(f)
-    f.server.pull = { pull: 'ok', note: '', changed: ['crates/a.rs'] }
+    f.server.pull = { pull: 'ok', note: '', changed: ['src/a.rs'] }
     f.server.installOk = false
     const { rev } = await toReview(f, p, 'feat', 7, HEAD)
     f.server.review(7, HEAD, 'APPROVED')

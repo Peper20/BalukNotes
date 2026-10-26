@@ -1,0 +1,6 @@
+{
+  "name": "pipeline",
+  "version": "0.1.0",
+  "description": "A development pipeline: developers, CI, review, merge and cleanup by code",
+  "types": "./types/index.d.ts"
+}
