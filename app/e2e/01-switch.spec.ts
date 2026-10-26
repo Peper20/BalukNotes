@@ -4,7 +4,7 @@
 // long again.
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { VAULT, ready, vaultUrl } from "./helpers";
 
 /** A note rebuild is not faster than the first build (dozens of figures in a debug build). */

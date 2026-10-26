@@ -4,7 +4,7 @@
 // `document.<name>` for the whole page, so the client must not read those
 // members by name: the note opens, its contents, search and tabs work, and the
 // page logs no error.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { noteUrl, open, ready, title } from "./helpers";
 
 const ID = "Особые случаи/Имена элементов";

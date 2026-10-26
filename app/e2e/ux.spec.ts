@@ -1,4 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { noteUrl, open, ready, resetTheme, title, vaultUrl } from "./helpers";
 
 const palette = (page: Page) => page.locator(".palette");

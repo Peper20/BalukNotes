@@ -1,6 +1,6 @@
 import { rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { VAULT, open, ready, resetTheme, title, vaultUrl } from "./helpers";
 
 test("theme: every click gives a different look at once (\"как в системе\" is in the settings)", async ({ page }) => {

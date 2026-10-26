@@ -58,6 +58,13 @@ export RAYON_NUM_THREADS=$(below 2)
 export TOKIO_WORKER_THREADS=$CHECK_JOBS
 # Vitest: the workers that run test files (the main process is one more).
 export VITEST_MAX_WORKERS=$(below 1)
+# Playwright: the workers of the e2e, each with its own app server and browser
+# (app/playwright.config.ts; unset there means one worker). A quarter of the
+# cap, 1 to 8: at CHECK_JOBS=10 two workers took 72 s, three 78-82 s (the
+# servers and browsers of more workers contend for the same cores).
+pw=$(( CHECK_JOBS / 4 ))
+export PLAYWRIGHT_WORKERS=$(( pw < 1 ? 1 : pw > 8 ? 8 : pw ))
+unset pw
 
 # One lock for all heavy work of all runs on the machine (the check of every
 # worktree, the installation, the test server build): steps of different runs

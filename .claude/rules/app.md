@@ -71,16 +71,26 @@ npm test        # Vitest; also check, e2e
   physics - `graph-physics.ts` (the core layout is the rest state).
   `RETURN = 0.25` and `DAMPING = 0.3` were tuned by the user (neighbors come back
   a quarter of the way): do not change without them.
-- e2e - `e2e/*.spec.ts`: Playwright on the system chromium, a server on a copy
-  of `tests/vault` in `tests/.data/e2e`, warmed up beforehand. A new interface
-  feature - a new scenario; phone - `mobile.spec.ts` (400x800: the page is not
+- e2e - `e2e/*.spec.ts`: Playwright on the system chromium. Every Playwright
+  worker has its own app server on its own copy of `tests/vault`
+  (`<DATA_ROOT>/e2e/w<index>`, in RAM when it can be, `e2e/server.ts`; the `app` fixture of `e2e/fixtures.ts`: specs
+  import `test` and `expect` from it), started on a copy of the template data
+  that `e2e/global-setup.ts` warms once (the binaries are built there, too;
+  `e2e/cache-key.ts` mirrors the cache directory name of
+  `notes-core::cache::DiskCache::new` and must change with it);
+  the files run in parallel, the tests of a file in order, so a file relies only
+  on the fixture vault and on what it does itself. The number of workers is
+  `PLAYWRIGHT_WORKERS` (`.claude/rules/tools.md`, "CPU cap"; unset: one). A new
+  interface feature - a new scenario; phone - `mobile.spec.ts` (400x800: the page is not
   wider than the window, measured after `document.fonts.ready`).
   `e2e/wasm.spec.ts` needs `tests/.data/wasm/` (the module, `fonts.json` with
   `fonts/`, and `files.json`), which the `wasm-module` step of `tools/check.sh` makes
   (`crates/notes-wasm/harness/build.sh` and `node
   crates/notes-wasm/harness/run.mjs --prepare`); `npm run e2e` alone without
   them fails with 404s. `e2e/hub.spec.ts` talks to a second server of
-  `playwright.config.ts`, `notes-hub --web tests/.data/web` on 8463 (ports of
-  the e2e: 8433, 8441, 8461, 8462, 8463), over the bundle that the
-  `web-bundle` step of `tools/check.sh` makes (`tools/web-bundle.sh`); without
-  `tests/.data/web` `npm run e2e` fails at the start of that server.
+  `playwright.config.ts`, `notes-hub --web tests/.data/web`, over the bundle
+  that the `web-bundle` step of `tools/check.sh` makes (`tools/web-bundle.sh`); without
+  `tests/.data/web` `npm run e2e` fails at the start of that server. It sets
+  `core.syncEvery` (1 s, `CoreSource`) in the bundle's `assets/config.js` by a
+  page route, so the sync scenario does not wait for the 30 s round. Ports of
+  the e2e: 8600-8649 (`e2e/ports.ts`), written nowhere else.

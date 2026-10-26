@@ -3,7 +3,7 @@
 // their own caption show titles; a file edit shows without a reload.
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { VAULT, open } from "./helpers";
 
 const ODD = String.raw`@#$@&$*%@#!.:/\ — в названии можно всё`;

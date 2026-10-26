@@ -1,26 +1,33 @@
-// Warms the e2e server before the scenarios: all notes are built in advance
-// so that a scenario does not wait for the first build (a book takes seconds
-// in a debug build) and the waits do not hit the timeout. Scenarios that
-// need exactly the first build (01-switch) change the note file themselves,
+// Before the scenarios: builds the binaries once (the specs and the workers
+// start them directly) and makes the template data of the app servers: a copy of
+// the test vault on a server that builds all notes, so the waits of the scenarios
+// are short. The workers start on copies of it (e2e/server.ts, `prepareData`);
+// scenarios that need the first build (01-switch) change the note file themselves,
 // which makes its cache stale.
-import type { FullConfig } from "@playwright/test";
-import type { NoteListItem } from "../src/lib/api/types/NoteListItem";
+import { join } from "node:path";
 import { VAULT_NAME } from "./helpers";
+import { WARM_PORT } from "./ports";
+import { DATA_ROOT, E2E_DATA, ROOT, TEMPLATE_DATA, buildBinaries, copyTree, exitOf, startApp, stop, waitFor, warm } from "./server";
+import { rmSync } from "node:fs";
 
-export default async function warmUp(config: FullConfig) {
-  const base = config.projects[0]?.use.baseURL;
-  if (!base) throw new Error("no baseURL in playwright.config.ts");
-  const started = Date.now();
-  const api = `${base}/api/vaults/${VAULT_NAME}`;
-  const res = await fetch(`${api}/notes`);
-  if (!res.ok) throw new Error(`warming: the note list - ${res.status}`);
-  const notes = (await res.json()) as NoteListItem[];
-  // One by one: the server builds notes in turn anyway.
-  for (const { id } of notes) {
-    const path = id.split("/").map(encodeURIComponent).join("/");
-    const note = await fetch(`${api}/notes/${path}`);
-    if (!note.ok) throw new Error(`warming: ${id} - ${note.status}`);
-    await note.arrayBuffer();
+export default async function setup() {
+  buildBinaries();
+  console.log(`e2e data: ${DATA_ROOT}`);
+  rmSync(E2E_DATA, { recursive: true, force: true });
+  copyTree(join(ROOT, "tests/vault"), join(TEMPLATE_DATA, "vaults", VAULT_NAME));
+  const base = `http://127.0.0.1:${WARM_PORT}`;
+  const server = startApp(TEMPLATE_DATA, WARM_PORT);
+  try {
+    await waitFor(`${base}/api/vaults`, 120_000, false, exitOf(server));
+    const started = Date.now();
+    const count = await warm(base, VAULT_NAME);
+    console.log(`e2e template warmed: ${count} notes in ${((Date.now() - started) / 1000).toFixed(1)} s`);
+  } finally {
+    // Stopped before the copies are made: the disk cache is complete.
+    await stop(server);
   }
-  console.log(`e2e server warmed: ${notes.length} notes in ${((Date.now() - started) / 1000).toFixed(1)} s`);
+  // The teardown: data in RAM does not outlive the run (on the disk it stays to be looked at).
+  return () => {
+    if (!DATA_ROOT.startsWith(ROOT)) rmSync(DATA_ROOT, { recursive: true, force: true });
+  };
 }

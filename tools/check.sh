@@ -253,8 +253,8 @@ if [[ $app == 1 ]]; then
       # built and the module of wasm-module, in tests/.data/web.
       step_unlocked web-bundle tools/web-bundle.sh tests/.data/web --reuse-dist --reuse-wasm tests/.data/wasm
       if [[ ${results[-1]} == "ok" ]]; then
-        # e2e listens on fixed ports (8433, 8461, 8462, 8463): runs in parallel
-        # worktrees must not overlap - the lock of the step takes care of it.
+        # e2e listens on fixed ports (8600-8649, app/e2e/ports.ts): runs in
+        # parallel worktrees must not overlap - the lock of the step takes care of it.
         step e2e in_app npm run -s e2e
       else
         skip e2e "the browser version did not build"

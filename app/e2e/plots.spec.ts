@@ -1,5 +1,5 @@
 // Interactive baluk figures: sliders, coordinates, rotation, theme.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { open, resetTheme } from "./helpers";
 
 test("plot: live instead of the frame, a slider changes the curve, coordinates under the pointer", async ({ page }) => {
