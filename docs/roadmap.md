@@ -274,11 +274,10 @@ later move to its own repository; it is made less tied to this project, and a
 project adapts it with a thin layer of its own. Order: after `e2e-parallel`
 is merged, one task at a time.
 
-- [~] Test speed: cargo-test binaries at the same time (PR #33), e2e on
-      several Playwright workers with a server each (PR #32, paused: the
-      graph forces scenario fails now and then in the full check; the
-      hypotheses are in the PR comment "Status for the next developer"); heavy steps use
-      about 5/6 of the CPUs (all at 1-2) with a raised nice
+- [x] Test speed: cargo-test binaries at the same time (PR #33), e2e on
+      several Playwright workers with a server each and their data in RAM
+      (PR #32); heavy steps use about 5/6 of the CPUs (all at 1-2) with a
+      raised nice
 - [ ] The kit in `pipeline/`, a Claude Code plugin: the agents, the skills
       (`dev-workflow`, `forge`, `sdd`), the mod, the generic scripts (targeted
       tests by changed paths, the full check runner with its locks, CPU cap,
@@ -313,15 +312,14 @@ is merged, one task at a time.
       days, a dropped one right after its cleanup; a blocked one stays and is
       marked stale after 14 days. A `pipeline_send` that comes just before
       the task reaches the liaison stage is kept, not lost
-- [ ] What makes the shared `target/` reach its 30 GB limit
+- [ ] What makes the shared `target/` reach its 30 GB limit and writes
+      gigabytes per check: test binaries are ~430 MB each (Typst linked in,
+      full debug info); try less debug info for dependencies
 - [ ] The `tools-libs` test "the binaries inherit the priority of the step"
       fails in a shell already above nice 2 (an agent's shell runs at nice
       5): check the priority relative to the step's, not the number 2
 - [ ] A task that measures has a budget (a number of runs, or stop at the
       target); such tasks run one after another, not side by side
-- [ ] After `e2e-parallel`: re-wrap the long lines in `docs/tech-debt.md`
-      ("tools/check.sh is sequential") and `docs/architecture.md`, and drop
-      the history parenthesis from `.claude/rules/tools.md` "CPU cap"
 
 ## Later
 
