@@ -12,7 +12,7 @@ __pycache__/
 /app/playwright-report/
 # Отдельный прогон тестов копии (.claude/rules/vendor.md)
 /vendor/*/Cargo.lock
-# The engine types of the pipeline mod (laid by Claude Code or tools/lib/pipeline-types.sh)
+# The engine types of the pipeline mod (laid by Claude Code or pipeline/scripts/lib/mod-check.sh)
 /pipeline/.claude-plugin/types/
 # Claude Code: личные настройки и рабочие копии (навыки .claude/skills - в git)
 /.claude/settings.local.json

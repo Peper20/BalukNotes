@@ -4,7 +4,7 @@
 // forge.ts.
 import type { EngineInterface, Register } from 'claude-code'
 
-import { type Config, CONFIG_PATH, parseConfig } from './config'
+import { type Config, CONFIG_PATH, checkLogs, parseConfig } from './config'
 import { createPipeline, type Input, type Pipeline, type Ports } from './driver'
 import { makeForge } from './forge'
 import { DEVELOPERS, type Developer, POLL_MS, type State } from './model'
@@ -114,6 +114,7 @@ async function boot($: EngineInterface, rt: Runtime): Promise<void> {
       root: rt.root,
       sleep: ms => $.clock.sleep(ms),
       afterMerge: loaded.config.afterMerge,
+      checkLogs: checkLogs(loaded.config),
     }),
     agents: {
       spawn: async a => {

@@ -13,6 +13,14 @@ export type AfterMerge = {
   timeoutSeconds: number
 }
 
+/** The check of the project, run by the kit's scripts (config.md); the mod reads only `logs`. */
+export type Check = {
+  steps?: string
+  env?: string
+  logs?: string
+  heavyLock?: string
+}
+
 export type Config = {
   /** The project's name, for texts. */
   project: string
@@ -22,6 +30,7 @@ export type Config = {
   map?: string
   forge: { url: string; repo: string }
   afterMerge?: AfterMerge
+  check?: Check
   /** The hint on the targeted tests that the developer contract shows. */
   targetedTests?: string
 }
@@ -30,6 +39,11 @@ export type ConfigResult = { ok: true; config: Config } | { ok: false; error: st
 
 export const DEFAULT_PROJECT = 'the project'
 export const DEFAULT_TIMEOUT_SECONDS = 600
+/** Where the check writes its logs when `check.logs` is not set (the default of pipeline/scripts/check.sh). */
+export const DEFAULT_CHECK_LOGS = '.pipeline/check'
+
+/** The folder of the check logs against the project root. */
+export const checkLogs = (c: Config): string => (c.check?.logs ?? DEFAULT_CHECK_LOGS).replace(/\/+$/, '')
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === 'string' && x !== '')
@@ -89,6 +103,30 @@ export function parseConfig(text: string): ConfigResult {
     }
   }
 
+  let check: Check | undefined
+  if (raw.check !== undefined) {
+    if (!isRecord(raw.check)) {
+      problems.push('"check" must be an object: { "steps": "...", "env": "...", "logs": "...", "heavyLock": "..." }')
+    } else {
+      check = {}
+      for (const key of ['steps', 'env', 'logs', 'heavyLock'] as const) {
+        const v = raw.check[key]
+        if (v === undefined) continue
+        if (typeof v === 'string' && v.trim() !== '') check[key] = v.trim()
+        else problems.push(`"check.${key}" must be a non-empty string`)
+      }
+    }
+  }
+
+  // Read by the kit's test script; checked here so that a mistake shows at session start.
+  if (raw.tests !== undefined) {
+    const ruleOk = (t: unknown): boolean =>
+      isRecord(t) && typeof t.match === 'string' && t.match !== '' && typeof t.run === 'string' && t.run !== ''
+    if (!Array.isArray(raw.tests) || !raw.tests.every(ruleOk)) {
+      problems.push('"tests" must be a list of { "match": "<regex on the path>", "run": "<command>" }')
+    }
+  }
+
   const guide = optionalString('guide')
   const map = optionalString('map')
   const targetedTests = optionalString('targetedTests')
@@ -96,7 +134,7 @@ export function parseConfig(text: string): ConfigResult {
   if (problems.length > 0 || forge === undefined) {
     return { ok: false, error: `${CONFIG_PATH}: ${problems.join('; ')}` }
   }
-  return { ok: true, config: { project, guide, map, forge, afterMerge, targetedTests } }
+  return { ok: true, config: { project, guide, map, forge, afterMerge, check, targetedTests } }
 }
 
 /** The pull request page of the forge, without the number. */

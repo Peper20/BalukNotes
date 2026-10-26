@@ -6,8 +6,10 @@
 # checkout), tools/cargo.sh (its arguments, exit code, settings and record) and
 # tools/check-pr.sh (its arguments, comment text, exit codes, worktree) and
 # tools/ci-runner.sh (its arguments, the generated config and unit, install and
-# uninstall in scratch places) and the copy of the pipeline mod's types into a
-# linked worktree (tools/lib/pipeline-types.sh), and pipeline/setup.sh.
+# uninstall in scratch places), pipeline/setup.sh, and the settings of this
+# project's tools from the CPU cap (tools/lib/cpu-env.sh). The kit's scripts
+# (the runner, the cap and the lock, test.sh, measure.sh, the copy of the mod's
+# types) have their own tests, pipeline/scripts/test-scripts.sh, run at the end.
 # No cargo build: cargo runs for `cargo metadata` and for `cargo clean` of a
 # scratch dir; tools/cargo.sh and tools/check-pr.sh run in scratch checkouts
 # against a cargo, a tea and a check.sh shim; tools/ci-runner.sh against a tea
@@ -143,23 +145,20 @@ expect "the setting is announced on stderr" grep -q "cloud session - line tables
 expect "without WebKitGTK (pkg-config reports nothing) has_webkit fails" \
   test "$(PATH="$root/no-webkit:$PATH"; source tools/lib/build-env.sh 2>/dev/null; has_webkit >/dev/null 2>&1; echo $?)" -ne 0
 
-echo "the CPU cap:"
-# default_cap <cpus>: the default cap of a machine with that many CPUs.
-default_cap() { (source tools/lib/cpu-cap.sh; default_check_jobs "$1"); }
-expect "1 CPU: the cap is 1" test "$(default_cap 1)" = 1
-expect "2 CPUs: all of them" test "$(default_cap 2)" = 2
-expect "3 CPUs: 2" test "$(default_cap 3)" = 2
-expect "4 CPUs: 3" test "$(default_cap 4)" = 3
-expect "6 CPUs: 5" test "$(default_cap 6)" = 5
-expect "8 CPUs: 7" test "$(default_cap 8)" = 7
-expect "9 CPUs: 7 (1.5 rounds up)" test "$(default_cap 9)" = 7
-expect "12 CPUs: 10" test "$(default_cap 12)" = 10
-expect "16 CPUs: 13" test "$(default_cap 16)" = 13
+echo "the CPU cap (the formula and the lock are tested by pipeline/scripts/test-scripts.sh; here the settings of this project's tools, tools/lib/cpu-env.sh):"
 # cap_values <cpus> [CHECK_JOBS]: CHECK_JOBS, the jobs of cargo, the test threads and
-# the rayon threads that cpu-cap.sh sets on a machine with that many CPUs (an nproc shim).
+# the rayon threads that cpu-cap.sh sets on a machine with that many CPUs (an nproc shim),
+# and cap_pw <cpus> <CHECK_JOBS>: the Playwright workers.
 mkdir -p "$root/nproc-bin"
 printf '#!/bin/sh\necho "$NPROC_SHIM"\n' >"$root/nproc-bin/nproc"
 chmod +x "$root/nproc-bin/nproc"
+cap_pw() {
+  (
+    export NPROC_SHIM=$1 PATH="$root/nproc-bin:$PATH" CHECK_JOBS=$2
+    source tools/lib/cpu-cap.sh
+    echo "$PLAYWRIGHT_WORKERS"
+  )
+}
 cap_values() {
   (
     export NPROC_SHIM=$1 PATH="$root/nproc-bin:$PATH"
@@ -176,9 +175,12 @@ expect "1 CPU: everything is 1" test "$(cap_values 1)" = "1 1 1 1"
 expect "2 CPUs: the cap is 2, the rest at least 1" test "$(cap_values 2)" = "2 1 1 1"
 expect "3 CPUs: cap 2" test "$(cap_values 3)" = "2 1 1 1"
 expect "a cap of 1 gives 1 everywhere" test "$(cap_values 12 1)" = "1 1 1 1"
-(export NPROC_SHIM=4 PATH="$root/nproc-bin:$PATH" CHECK_JOBS=lots; source tools/lib/cpu-cap.sh) >"$root/cap-bad.log" 2>&1
-rc=$?
-expect "CHECK_JOBS that is not a number is refused with exit 2" eval '[[ $rc -eq 2 ]] && grep -q "CHECK_JOBS must be a positive integer" "$root/cap-bad.log"'
+expect "Playwright workers: 1 at a cap of 1-7" \
+  eval '[[ $(cap_pw 12 1) == 1 && $(cap_pw 12 4) == 1 && $(cap_pw 12 7) == 1 ]]'
+expect "Playwright workers: 2 at a cap of 8-11" eval '[[ $(cap_pw 12 8) == 2 && $(cap_pw 12 11) == 2 ]]'
+expect "Playwright workers: 3 at a cap of 12" test "$(cap_pw 16 12)" = 3
+expect "Playwright workers: at most 8 from a cap of 32" \
+  eval '[[ $(cap_pw 64 31) == 7 && $(cap_pw 64 32) == 8 && $(cap_pw 64 48) == 8 ]]'
 
 echo "the lock's record of the checkout:"
 (
@@ -197,9 +199,11 @@ expect "the record is the checkout's path" test "$(cat "$root/heavy.lock.last")"
 
 echo "tools/cargo.sh (in a scratch checkout of its own: the sources and the record of this one are not touched):"
 cg=$root/cargo-checkout
-mkdir -p "$cg/tools/lib" "$root/cargo-bin"
+mkdir -p "$cg/tools/lib" "$cg/pipeline/scripts" "$cg/.claude" "$root/cargo-bin"
 cp tools/cargo.sh "$cg/tools/"
-cp tools/lib/worktree-target.sh tools/lib/cpu-cap.sh tools/lib/build-env.sh "$cg/tools/lib/"
+cp tools/lib/worktree-target.sh tools/lib/cpu-cap.sh tools/lib/cpu-env.sh tools/lib/build-env.sh "$cg/tools/lib/"
+cp -r pipeline/scripts/lib "$cg/pipeline/scripts/"
+cp .claude/pipeline.json "$cg/.claude/"
 (cd "$cg" && git init -q && git add -A)
 # The cargo of the tests: writes its arguments, one per line, to $CARGO_SHIM_OUT,
 # CARGO_BUILD_JOBS to $CARGO_SHIM_OUT.jobs, and exits with $CARGO_SHIM_RC.
@@ -283,9 +287,10 @@ expect "a head that did not move adds no line" test "$(grep -c moved "$root/comm
 
 echo "tools/check-pr.sh (in a scratch checkout with its own origin, against tea and check.sh shims):"
 cp_main=$root/pr-main cp_origin=$root/pr-origin.git cp_bin=$root/pr-bin
-mkdir -p "$cp_main/tools/lib" "$cp_bin"
+mkdir -p "$cp_main/tools/lib" "$cp_main/pipeline/scripts" "$cp_bin"
 cp tools/check-pr.sh "$cp_main/tools/"
 cp tools/lib/cpu-cap.sh "$cp_main/tools/lib/"
+cp -r pipeline/scripts/lib "$cp_main/pipeline/scripts/"
 # The check.sh of the pull request: FAKE_CHECK=pass|fail; it prints a table of
 # steps like the real one, writes the log of a failed step and changes a
 # tracked file as a failed api-types step does.
@@ -622,86 +627,6 @@ rc=$?
 expect "web-bundle accepts an earlier bundle, and names a missing tool before it builds" \
   eval '[[ $rc -eq 1 ]] && grep -q "node not found" "$root/wb.out" && [[ -f $wb/bundle/index.html ]]'
 
-# --- tools/lib/pipeline-types.sh: the types of the pipeline mod in a linked worktree ---
-echo "tools/lib/pipeline-types.sh (scratch checkouts: a main checkout with the types, a worktree of it, a checkout without them):"
-pt=$root/pipeline-types pt_types=pipeline/.claude-plugin/types pt_lib=$PWD/tools/lib/pipeline-types.sh
-rm -rf "$pt"
-# pt_repo <dir> <yes|no> [types dir]: a checkout with one commit; with yes, the types are laid as
-# Claude Code lays them: untracked, and ignored by the .gitignore of their folder.
-pt_repo() {
-  local dir=${3:-$pt_types}
-  mkdir -p "$1"
-  if [[ $2 == yes ]]; then
-    mkdir -p "$1/$dir/claude-code"
-    printf '{"compilerOptions":{}}\n' >"$1/$dir/tsconfig.json"
-    printf '*\n' >"$1/$dir/.gitignore"
-    printf 'export {};\n' >"$1/$dir/claude-code/index.d.ts"
-  fi
-  printf 'x\n' >"$1/README"
-  git init -q -b main "$1"
-  git -C "$1" add -A
-  git -C "$1" -c user.name=t -c user.email=t@t commit -q -m first
-}
-pt_repo "$pt/main" yes
-pt_repo "$pt/none" no
-pt_repo "$pt/old" yes tools/pipeline/.claude-plugin/types
-git -C "$pt/main" worktree add -q --detach "$pt/wt"
-git -C "$pt/old" worktree add -q --detach "$pt/wt-old"
-git -C "$pt/none" worktree add -q --detach "$pt/wt-none"
-# pt_lay <checkout>: lay_pipeline_types in it; its output in $pt/lay.out.
-pt_lay() { (cd "$1" && source "$pt_lib" && lay_pipeline_types) >"$pt/lay.out" 2>&1; }
-pt_lay "$pt/wt"
-rc=$?
-expect "a worktree without the types gets a copy of the main checkout's and says so" \
-  eval '[[ $rc -eq 0 && $(cat "$pt/lay.out") == *"copied from"* ]]'
-expect "the copy is a copy, not a link, with the .gitignore of its folder" \
-  eval '[[ -f $pt/wt/$pt_types/.gitignore && ! -L $pt/wt/$pt_types && ! -L $pt/wt/$pt_types/tsconfig.json ]] && cmp -s "$pt/main/$pt_types/tsconfig.json" "$pt/wt/$pt_types/tsconfig.json"'
-expect "the copy is marked, and ignored by git: the worktree has no untracked file" \
-  eval '[[ -f $pt/wt/$pt_types/.copied-from-main && -z $(git -C "$pt/wt" status --porcelain --untracked-files=all) ]] && git -C "$pt/wt" check-ignore -q "$pt_types/tsconfig.json" && git -C "$pt/wt" check-ignore -q "$pt_types/.copied-from-main"'
-# a run replaces a copy that changed: an edited tsconfig.json and a stray file of ours go
-echo changed >>"$pt/wt/$pt_types/tsconfig.json"
-echo stray >"$pt/wt/$pt_types/stray.txt"
-pt_lay "$pt/wt"
-rc=$?
-expect "a second run replaces a changed copy with the main checkout's, and says so" \
-  eval '[[ $rc -eq 0 && ! -e $pt/wt/$pt_types/stray.txt && -f $pt/wt/$pt_types/.copied-from-main && $(cat "$pt/lay.out") == *"copied from"* ]] && cmp -s "$pt/main/$pt_types/tsconfig.json" "$pt/wt/$pt_types/tsconfig.json"'
-# types laid by Claude Code in a linked worktree (no mark) are left alone
-git -C "$pt/main" worktree add -q --detach "$pt/wt-laid"
-mkdir -p "$pt/wt-laid/$pt_types"
-echo laid >"$pt/wt-laid/$pt_types/tsconfig.json"
-pt_lay "$pt/wt-laid"
-rc=$?
-expect "types laid by Claude Code in a linked worktree (no mark) are left alone" \
-  eval '[[ $rc -eq 0 && $(cat "$pt/wt-laid/$pt_types/tsconfig.json") == laid && ! -e $pt/wt-laid/$pt_types/.copied-from-main && ! -s $pt/lay.out ]]'
-pt_lay "$pt/wt-old"
-rc=$?
-expect "a main checkout from before the move of the mod: its types at the old place are copied" \
-  eval '[[ $rc -eq 0 && -f $pt/wt-old/$pt_types/tsconfig.json && -f $pt/wt-old/$pt_types/.copied-from-main ]]'
-pt_lay "$pt/main"
-rc=$?
-expect "the main checkout, which has the types, copies nothing onto itself" \
-  eval '[[ $rc -eq 0 && ! -s $pt/lay.out && ! -e $pt/main/$pt_types/.copied-from-main ]]'
-pt_lay "$pt/wt-none"
-rc=$?
-expect "neither checkout has the types: nothing is laid, no error" \
-  eval '[[ $rc -eq 0 && ! -e $pt/wt-none/$pt_types && ! -s $pt/lay.out ]]'
-mkdir -p "$pt/wt-none/$pt_types"
-echo old >"$pt/wt-none/$pt_types/tsconfig.json"
-: >"$pt/wt-none/$pt_types/.copied-from-main"
-pt_lay "$pt/wt-none"
-rc=$?
-expect "a copy of ours goes when the main checkout has no types any more" \
-  eval '[[ $rc -eq 0 && ! -e $pt/wt-none/$pt_types ]]'
-# pipeline_tsc: the client's tsc of this checkout, else the main checkout's.
-mkdir -p "$pt/main/app/node_modules/.bin" "$pt/wt-none/app/node_modules/.bin"
-printf '#!/bin/sh\n' >"$pt/main/app/node_modules/.bin/tsc"
-printf '#!/bin/sh\n' >"$pt/wt-none/app/node_modules/.bin/tsc"
-chmod +x "$pt/main/app/node_modules/.bin/tsc" "$pt/wt-none/app/node_modules/.bin/tsc"
-pt_tsc() { (cd "$1" && source "$pt_lib" && pipeline_tsc); }
-expect "a worktree without node_modules takes the main checkout's tsc" \
-  eval '[[ $(pt_tsc "$pt/wt") == */pipeline-types/main/app/node_modules/.bin/tsc ]]'
-expect "a checkout with its own tsc takes it first" test "$(pt_tsc "$pt/wt-none")" = "app/node_modules/.bin/tsc"
-
 # --- pipeline/setup.sh: the links of the kit's agents and skills into a project ---
 echo "pipeline/setup.sh (a scratch kit and a scratch project):"
 su=$root/setup
@@ -851,11 +776,12 @@ read -r ct_threads ct_binaries < <(ct_peak)
 expect "the test threads running at once stay within the budget (6)" test "$ct_threads" -le 6
 expect "and binaries ran at the same time" test "$ct_binaries" -ge 2
 
-# The priority of the step reaches the binaries (check.sh lowers its own).
+# The priority of the step reaches the binaries (the runner lowers its own): they
+# have the nice of the step, whatever it is (a shell already above 3 keeps its own).
 rm -f "$ct/nice" "$ct/events"
-(renice -n 3 -p "$BASHPID" >/dev/null; run_ct 4 --workspace)
+(renice -n 3 -p "$BASHPID" >/dev/null 2>&1; ps -o ni= -p "$BASHPID" | tr -d ' ' >"$ct/own-nice"; run_ct 4 --workspace)
 expect "the binaries inherit the priority of the step" \
-  eval '[[ $(wc -l <"$ct/nice") -eq 4 && $(sort -u "$ct/nice") == 3 ]]'
+  eval '[[ $(wc -l <"$ct/nice") -eq 4 && $(sort -u "$ct/nice") == $(cat "$ct/own-nice") ]]'
 # A cap of 1-2 gives a budget of 1: the binaries run in turn.
 rm -f "$ct/events"
 run_ct 1 --workspace
@@ -918,6 +844,11 @@ expect "a times file that cannot be written is no failure" \
   eval 'ct_json_start; fake_test lib gamma gamma_lib 9 0.1 0;
     (PATH="$ct/bin:$PATH"; RUST_TEST_THREADS=4; CARGO_TEST_TIMES=/proc/no-such/times
       source tools/lib/cargo-test.sh; cargo_test "$ct/work" --workspace) >"$ct/out.log" 2>&1'
+
+# --- pipeline/scripts/test-scripts.sh: the kit's scripts ---
+echo "pipeline/scripts/test-scripts.sh (the kit's scripts):"
+pipeline/scripts/test-scripts.sh
+fails=$((fails + $?))
 
 echo
 if (( fails == 0 )); then

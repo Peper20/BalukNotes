@@ -12,7 +12,8 @@ its definition (`claude/agents/`); this document is the map. The project's own s
   client with the logins `dev` (opens pull requests, comments), `reviewer`
   (reviews) and `owner` (pushes, merges).
 - A full check of the project, run by CI on every push to a pull request and
-  published as the combined commit status of the head.
+  published as the combined commit status of the head; with the kit's runner
+  ("Checks") it only supplies its steps.
 - `.claude/pipeline.json` (`config.md`).
 - A pipeline page (`guide`) with the section "Project specifics for the
   agents": the commands for tests, builds and the full check, the places to
@@ -97,6 +98,49 @@ unforeseen problem with an entry, the `liaison` decides whether it waits.
 - An agent never opens a window on the user's display, never touches the
   user's data, and never deploys: the pipeline page lists what is the user's
   to run.
+
+## Checks
+
+`scripts/` is the generic part of the project's checks (bash; the config is
+read with `jq` or `python3`); the project keeps its steps and the settings of
+its tools (`config.md`: `check`, `tests`). `scripts/test-scripts.sh` tests them.
+
+- **The full check**: `scripts/check.sh <arguments>` runs at nice 2 and ionice
+  5 and calls `steps "<arguments>"` of the steps file (`check.steps`), so the
+  project parses its own options and prints its own help. The file runs
+  commands with `step <name> <command...>` (under the lock of heavy work),
+  `step_unlocked` (for a command that takes the lock itself: it is not
+  reentrant), `skip <name> <reason>` and `last_ok`; `$logs` is the log folder.
+  Optional hooks: `before_steps` (once, before the first step, e.g. pruning a
+  shared build dir) and `on_heavy_acquire`. All steps run; the exit code is
+  non-zero if one failed. The output: a table (step, result, seconds) on stdout
+  and in `$logs/table.txt`, and `$logs/summary.md`: the same with the time
+  spent waiting for the lock per step (not in the step's time), a total row,
+  the wall time, and the last 25 lines of each failed step's log in a
+  collapsed block. When `GITHUB_STEP_SUMMARY` is set, as Forgejo Actions does,
+  the summary is appended to it: the job page shows the table.
+- **The CPU cap and the lock** (`scripts/lib/cap.sh`, sourced by the runner and
+  by the project's own scripts): `CHECK_JOBS`, the CPUs the scripts may keep
+  busy (all of a machine with 1-2 CPUs, otherwise n - round(n/6); `CHECK_JOBS`
+  of the environment wins, capped at the CPUs of the machine), and one lock
+  (`check.heavyLock`) for the heavy work of all runs: `heavy <command...>`,
+  or `heavy_acquire` and `heavy_release` (`HEAVY_WAIT` is the seconds waited).
+  The project's `check.env` file turns the number into the settings of its tools.
+- **Targeted tests**: `scripts/test.sh [--dry-run] [paths...]` maps the files
+  changed against `origin/main` (or the paths given) to the commands of `tests`,
+  runs each distinct command once under the cap and at low priority, prints a
+  table and exits non-zero on a failure. It does not hold the lock itself:
+  the project's commands take it where they need it. What needs fixed ports
+  or the whole project (end-to-end tests) is left to the full check.
+- **Measuring**: `scripts/measure.sh <runs> -- <command...>` runs a command N
+  times under the lock, the cap and nice 2 and prints per run the wall seconds,
+  the average and peak busy CPUs of the machine (`/proc/stat`) and the exit
+  code, then min, median and max. A speed claim in a pull request names the
+  command, so that a reviewer can run the same line. A task that measures has a
+  budget (runs, time) in its brief; without one, a single demonstration run.
+- **The mod's own check**: `scripts/lib/mod-check.sh` (`pipeline_mod_check`,
+  for the steps file): validate, the mod's tests and `tsc`, with the engine
+  types copied into a linked worktree.
 
 ## The mod
 

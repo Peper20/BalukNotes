@@ -6,7 +6,7 @@
 // commit it was given (the server refuses a moved head), never pushes to `main`,
 // never force-pushes, never removes a worktree with `--force`, and touches only
 // worktrees under `.claude/worktrees/` of the main checkout.
-import type { AfterMerge } from './config'
+import { type AfterMerge, DEFAULT_CHECK_LOGS } from './config'
 import type { Ci } from './model'
 
 export type RunResult = { exitCode: number; stdout: string; stderr: string }
@@ -57,6 +57,8 @@ export type ForgeOptions = {
   mergeWaitMs?: number
   /** The command run in the main checkout after a merge that changed the paths it names. */
   afterMerge?: AfterMerge
+  /** The folder of the check logs in a checkout (`check.logs` of the config). */
+  checkLogs?: string
 }
 
 const MAIN = 'main'
@@ -95,6 +97,7 @@ const MAX_PAGES = 200
 
 export function makeForge(run: Run, opts: ForgeOptions): Forge {
   const { root, sleep } = opts
+  const checkLogs = opts.checkLogs ?? DEFAULT_CHECK_LOGS
   const worktrees = `${root}/.claude/worktrees`
   const sh = (argv: readonly string[], timeoutMs?: number): Promise<RunResult> => run(argv, { cwd: root, timeoutMs })
   const git = (...args: string[]): Promise<RunResult> => sh(['git', ...args])
@@ -135,7 +138,7 @@ export function makeForge(run: Run, opts: ForgeOptions): Forge {
     } catch {
       // The statuses are enough.
     }
-    const logs = `Step logs: ${worktrees}/check-pr-${n}/tests/.data/check/ (run.log is the whole output).`
+    const logs = `Step logs: ${worktrees}/check-pr-${n}/${checkLogs}/ (run.log is the whole output).`
     const parts = [comment, bad.length > 0 ? `Failed statuses:\n${bad.join('\n')}` : '', logs].filter(p => p !== '')
     return { state, detail: parts.join('\n\n') }
   }

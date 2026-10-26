@@ -2,7 +2,7 @@
 
 The kit knows nothing of the project it runs in. What differs from project to
 project is in this file at the project's `.claude/pipeline.json`, and in the
-pipeline page it names. A shell reads it with `jq`; the mod parses it natively
+pipeline page it names. A shell reads it with `jq` (or `python3`); the mod parses it natively
 (`hooks/config.ts`) at session start. Unknown keys are ignored. A missing or
 invalid file is reported once in the liaison's session, and the mod starts no
 task until it is fixed (the next call of a pipeline tool reads it anew).
@@ -17,6 +17,12 @@ task until it is fixed (the next call of a pipeline tool reads it anew).
 | `afterMerge.paths` | list of strings | `[]` | Path prefixes (`"src/"`): a merge that changes a file under one runs the command. Empty: any change |
 | `afterMerge.command` | list of strings | required with `afterMerge` | The program and its arguments, no shell |
 | `afterMerge.timeoutSeconds` | number | `600` | The command is cut after this long |
+| `check` | object | none | The full check run by `scripts/check.sh`; the keys below |
+| `check.steps` | string | required by the runner | Path of the steps file (against the project root): it defines the function `steps`, which gets the runner's arguments |
+| `check.env` | string | none | Path of a file that `scripts/lib/cap.sh` sources once `CHECK_JOBS` is set: it exports the settings of the project's tools (`below <n>` is `CHECK_JOBS` - n, at least 1) and may define `on_heavy_acquire <changed>`, called under the lock of heavy work (`changed` is 1 for the first holder after another checkout) |
+| `check.logs` | string | `.pipeline/check` | The folder of the step logs, `table.txt` and `summary.md`, against the checkout root (keep it out of git). The mod names it to a developer whose check failed |
+| `check.heavyLock` | string | `~/.cache/<project name as a word>/heavy.lock` | The lock that makes the heavy work of all runs on the machine take turns; `~/` is the home |
+| `tests` | list of objects | none | The rules of `scripts/test.sh`: `{ "match": "<extended regex on a changed path>", "run": "<command>" }`; `$1`..`$9` in the command are the groups of the match |
 | `targetedTests` | string | none | The hint on running the targeted tests that the developer contract shows, `(<hint>)` after "the targeted tests your change needs" |
 
 The pipeline page named by `guide` has a section "Project specifics for the
@@ -39,6 +45,14 @@ Example:
     "command": ["scripts/install.sh"],
     "timeoutSeconds": 600
   },
-  "targetedTests": "make test T=<name>"
+  "check": {
+    "steps": "scripts/check-steps.sh",
+    "env": "scripts/cap-env.sh",
+    "logs": "out/check"
+  },
+  "tests": [
+    { "match": "^src/([^/]+)/", "run": "make test T=$1" }
+  ],
+  "targetedTests": "pipeline/scripts/test.sh"
 }
 ```

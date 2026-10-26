@@ -51,7 +51,10 @@ describe('reading the server', () => {
     expect(st.detail).toContain('Full check failed at aaaa')
     expect(st.detail).not.toContain('at old')
     expect(st.detail).toContain('ci: clippy failed http://x/1')
-    expect(st.detail).toContain('/repo/.claude/worktrees/check-pr-7/tests/.data/check/')
+    expect(st.detail).toContain('/repo/.claude/worktrees/check-pr-7/.pipeline/check/')
+    const custom = script([['/status', ok(JSON.stringify({ state: 'failure', statuses: [] }))], ['/comments', ok('[]')]])
+    const withLogs = makeForge(custom.run, { root: ROOT, sleep: async () => undefined, checkLogs: 'out/check' })
+    expect((await withLogs.status(HEAD, 7)).detail).toContain('/repo/.claude/worktrees/check-pr-7/out/check/')
     for (const [state, want] of [['success', 'success'], ['pending', 'pending'], ['', 'pending'], ['unknown', 'pending'], ['error', 'error'], ['warning', 'error']] as const) {
       const t = script([['/status', ok(JSON.stringify({ state, statuses: [] }))], ['/comments', ok('[]')]])
       expect((await forgeOf(t.run).status(HEAD, 7)).state).toBe(want)

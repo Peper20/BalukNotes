@@ -8,5 +8,17 @@
     "command": ["tools/install.sh"],
     "timeoutSeconds": 600
   },
-  "targetedTests": "tools/cargo.sh test -p <crate> ..., npm test"
+  "check": {
+    "steps": "tools/steps.sh",
+    "env": "tools/lib/cpu-env.sh",
+    "logs": "tests/.data/check",
+    "heavyLock": "~/.cache/baluk-notes/heavy.lock"
+  },
+  "tests": [
+    { "match": "^crates/([^/]+)/", "run": "tools/cargo.sh test -p $1" },
+    { "match": "^app/", "run": "cd app && npm test && npm run -s check" },
+    { "match": "^(tools|pipeline/scripts)/", "run": "tools/test-libs.sh" },
+    { "match": "^pipeline/(hooks|tests)/", "run": "claude plugin test pipeline" }
+  ],
+  "targetedTests": "pipeline/scripts/test.sh"
 }

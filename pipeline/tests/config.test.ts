@@ -1,7 +1,7 @@
 // config.ts: the project layer, `.claude/pipeline.json`, and the texts that use it.
 import { describe, expect, test } from 'claude-code/testing'
 
-import { type Config, DEFAULT_PROJECT, DEFAULT_TIMEOUT_SECONDS, needsAfterMerge, parseConfig, pullsUrl } from '../hooks/config'
+import { type Config, DEFAULT_CHECK_LOGS, DEFAULT_PROJECT, DEFAULT_TIMEOUT_SECONDS, checkLogs, needsAfterMerge, parseConfig, pullsUrl } from '../hooks/config'
 import { continuePrompt, contract, developerPrompt, projectLine, reviewerPrompt } from '../hooks/prompts'
 import { emptyState, step } from '../hooks/machine'
 import { TEST_CONFIG } from './helpers'
@@ -28,6 +28,8 @@ describe('parsing', () => {
       map: 'docs/rules.md',
       forge: FORGE,
       afterMerge: { paths: ['src/'], command: ['scripts/after.sh', '-q'], timeoutSeconds: 30 },
+      check: { steps: 'ci/steps.sh', env: 'ci/env.sh', logs: 'out/check', heavyLock: '~/.cache/widgets/heavy.lock' },
+      tests: [{ match: '^src/', run: 'make test' }],
       targetedTests: 'make test-one',
     })
     expect(c).toEqual({
@@ -36,6 +38,7 @@ describe('parsing', () => {
       map: 'docs/rules.md',
       forge: FORGE,
       afterMerge: { paths: ['src/'], command: ['scripts/after.sh', '-q'], timeoutSeconds: 30 },
+      check: { steps: 'ci/steps.sh', env: 'ci/env.sh', logs: 'out/check', heavyLock: '~/.cache/widgets/heavy.lock' },
       targetedTests: 'make test-one',
     })
   })
@@ -47,6 +50,18 @@ describe('parsing', () => {
     expect(c.map).toBeUndefined()
     expect(c.afterMerge).toBeUndefined()
     expect(c.targetedTests).toBeUndefined()
+  })
+
+  test('check: the logs folder has a default, a trailing slash is dropped; the shape of check and tests is checked', async () => {
+    expect(checkLogs(parsed({ forge: FORGE }))).toBe(DEFAULT_CHECK_LOGS)
+    expect(checkLogs(parsed({ forge: FORGE, check: { steps: 'ci/steps.sh' } }))).toBe(DEFAULT_CHECK_LOGS)
+    expect(checkLogs(parsed({ forge: FORGE, check: { logs: 'out/check//' } }))).toBe('out/check')
+    expect(error({ forge: FORGE, check: 'run' })).toContain('"check" must be an object')
+    const bad = error({ forge: FORGE, check: { logs: 3, steps: '' } })
+    expect(bad).toContain('"check.steps"')
+    expect(bad).toContain('"check.logs"')
+    expect(error({ forge: FORGE, tests: 'make' })).toContain('"tests" must be a list')
+    expect(error({ forge: FORGE, tests: [{ match: '^a/' }] })).toContain('"tests" must be a list')
   })
 
   test('afterMerge: the timeout and the paths have defaults, the command does not', async () => {

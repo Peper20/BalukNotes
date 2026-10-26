@@ -32,8 +32,8 @@ and caches, memory, concurrency or Typst internals.
   `tools/install.sh` and `tools/test-env.sh`) take turns on one lock,
   `~/.cache/baluk-notes/heavy.lock`, and each run is capped at `CHECK_JOBS`
   CPUs (default n - round(n/6) of n CPUs, all of 1-2;
-  `tools/lib/cpu-cap.sh`). Measurements are run the same
-  way: `nice -n 2`, within the cap. The test server of an agent takes its own
+  `pipeline/scripts/lib/cap.sh`). Measurements are run the same way, by
+  `pipeline/scripts/measure.sh`. The test server of an agent takes its own
   port (`PORT=... tools/test-env.sh`).
 - An agent never opens a window on the user's display: anything that needs a
   window (the `notes-app` window, WebKitGTK) runs inside a headless gamescope
@@ -124,9 +124,12 @@ file of every directory you touch (`crates.md`, `app.md`, `baluk.md`,
 docs, commit messages, pull requests and briefs are English (`.claude/rules/project.md`,
 "Language").
 
-**Tests and the full check.** Run the crate's tests with
-`tools/cargo.sh test -p <crate> [filter]`, `npm test` in `app/`,
-`tools/test-libs.sh` for `tools/`. Run `cargo` by hand only as
+**Tests and the full check.** Run the targeted tests with
+`pipeline/scripts/test.sh` (the files changed against `origin/main` to
+commands, `tests` of `.claude/pipeline.json`: `tools/cargo.sh test -p <crate>`,
+`npm test` and `npm run -s check` in `app/`, `tools/test-libs.sh`,
+`claude plugin test pipeline`), or one by hand, e.g.
+`tools/cargo.sh test -p <crate> [filter]`. Run `cargo` by hand only as
 `tools/cargo.sh <arguments>`: it builds into the main checkout's `target/`,
 shared by all worktrees (`tools/lib/worktree-target.sh`), with the settings of
 the checks, and freshens the sources when another checkout built there last. A

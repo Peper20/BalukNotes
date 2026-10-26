@@ -17,7 +17,7 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 2
 root=$(git rev-parse --show-toplevel 2>/dev/null)
-if [[ -z $root || ! -f $root/tools/lib/worktree-target.sh || ! -f $root/tools/lib/cpu-cap.sh || ! -f $root/tools/lib/build-env.sh ]]; then
+if [[ -z $root || ! -f $root/tools/lib/worktree-target.sh || ! -f $root/tools/lib/cpu-cap.sh || ! -f $root/pipeline/scripts/lib/cap.sh || ! -f $root/tools/lib/build-env.sh ]]; then
   echo "tools/cargo.sh: not in a checkout of baluk notes" >&2
   exit 2
 fi

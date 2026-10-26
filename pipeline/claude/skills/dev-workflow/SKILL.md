@@ -32,7 +32,7 @@ The project is named in `.claude/pipeline.json`; its keys `guide` and `map` poin
 
 ## 3. Verify
 
-Run the tests your change needs while you work; the guide gives the commands. Do not run the full check of the project: CI runs it on every push to your pull request, and its failure comes back to you as a round, like review findings. Build and test only the way the guide says (shared build directories, locks, ports): runs by hand that bypass it can break the checks running on the same machine.
+Run the tests your change needs while you work with the kit's script `pipeline/scripts/test.sh [paths]` (without paths: the files you changed against `origin/main`; `--dry-run` shows the commands; the project maps paths to commands in `.claude/pipeline.json`), or the commands the guide gives. A claim about speed is measured with `pipeline/scripts/measure.sh <runs> -- <command>`, within the budget your brief gives, so that a reviewer can repeat it. Do not run the full check of the project: CI runs it on every push to your pull request, and its failure comes back to you as a round, like review findings. Build and test only the way the guide says (shared build directories, locks, ports): runs by hand that bypass it can break the checks running on the same machine.
 
 For changes the guide says need a look by eye, look as it describes, on a port or a place of your own, and stop what you started.
 

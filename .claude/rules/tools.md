@@ -8,7 +8,8 @@ paths:
 
 | File | What |
 |---|---|
-| `check.sh` | the full check |
+| `check.sh` | the full check: the entry point of the kit's runner `pipeline/scripts/check.sh` with the steps of `steps.sh` |
+| `steps.sh` | the steps of this project's full check and its options `--fast/--rust/--app` (`check.steps` of `.claude/pipeline.json`) |
 | `cargo.sh` | `cargo` by hand with the settings of the checks: the shared build dir, the CPU cap, the lock of heavy work and `freshen_sources` |
 | `check-pr.sh` | the full check of a pull request: `check.sh` in the worktree `.claude/worktrees/check-pr-<number>` at its head commit, the result as a pull request comment `Full check passed at <sha>.` or `Full check failed at <sha>: <steps>.` (run by CI on every pull request push, `.forgejo/workflows/check.yml`, "CI") |
 | `ci-runner.sh` | `install`, `uninstall`, `status` of the Forgejo Runner that runs `check-pr.sh` on every pull request push ("CI") |
@@ -18,12 +19,12 @@ paths:
 | `web-bundle.sh` | builds the browser version for the hub into a folder (`web-bundle.sh <dir> [--reuse-dist] [--reuse-wasm <dir>]`: the client or the module that a build already made): the client, the core module, the packages, the stylesheets and font parts from a temporary `notes-typst serve`; `notes hub serve --web <dir>` serves it (architecture §9, `docs/server.md`); `deploy-hub.sh --web` sends it |
 | `test-env.sh` | a server on `tests/vault` (data `tests/.data`, port 8432, another - `PORT=...`) |
 | `lib/worktree-target.sh` | in a linked worktree (agents) - the build dir of the main checkout, `<root>/target` |
-| `lib/target-limit.sh` | pruning and the size limit of that dir, sourced by `check.sh` (the crate list by python3, no `jq`) |
-| `lib/cpu-cap.sh` | the CPU cap `CHECK_JOBS` and the lock of heavy work and `freshen_sources`, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh`, `check-pr.sh` |
-| `lib/build-env.sh` | the build settings of a small disk and a cloud session (`CARGO_PROFILE_DEV_DEBUG`) and the WebKitGTK check, sourced by `check.sh`, `install.sh`, `test-env.sh`, `cargo.sh` |
-| `lib/cargo-test.sh` | the step `cargo-test` of `check.sh`: the test binaries run at the same time within `RUST_TEST_THREADS` (below, "CPU cap") |
-| `lib/pipeline-types.sh` | the types of the pipeline mod in a linked worktree: a copy of the main checkout's on every run (marked, ignored by git; a main checkout from before the move of the mod has them at `tools/pipeline/.claude-plugin/types`), `tsc` from this checkout or else the main one; sourced by `check.sh` (step `pipeline-mod`, "Pipeline mod") |
-| `test-libs.sh` | tests of the libraries above (the scheme of `lib/cargo-test.sh` with fake test binaries), of `cargo.sh`, `check-pr.sh` and `ci-runner.sh`, the refusals of `web-bundle.sh`, the copy of the mod's types and `pipeline/setup.sh`, without a cargo build - the first step of `check.sh` |
+| `lib/target-limit.sh` | pruning and the size limit of that dir, sourced by `steps.sh` (the crate list by python3, no `jq`) |
+| `lib/cpu-cap.sh` | a shim: sources the kit's `pipeline/scripts/lib/cap.sh` (the CPU cap `CHECK_JOBS` and the lock of heavy work) for `install.sh`, `test-env.sh`, `cargo.sh`, `web-bundle.sh`, `check-pr.sh` |
+| `lib/cpu-env.sh` | the project's part of the cap (`check.env`): the settings of its tools from `CHECK_JOBS` ("CPU cap") and `freshen_sources` |
+| `lib/build-env.sh` | the build settings of a small disk and a cloud session (`CARGO_PROFILE_DEV_DEBUG`) and the WebKitGTK check, sourced by `steps.sh`, `install.sh`, `test-env.sh`, `cargo.sh` |
+| `lib/cargo-test.sh` | the step `cargo-test` of `steps.sh`: the test binaries run at the same time within `RUST_TEST_THREADS` (below, "CPU cap") |
+| `test-libs.sh` | tests of the libraries above (the scheme of `lib/cargo-test.sh` with fake test binaries, the settings of `lib/cpu-env.sh`), of `cargo.sh`, `check-pr.sh` and `ci-runner.sh`, the refusals of `web-bundle.sh` and `pipeline/setup.sh`, without a cargo build - the first step of the full check; it runs the kit's `pipeline/scripts/test-scripts.sh` at the end |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 | `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; runs itself inside a headless gamescope |
 | `app-smoke.sh` | a smoke launch of the `notes-app` window inside a headless gamescope: it opens, loads the fixture vault, quits cleanly (~6 s); not in `check.sh` (needs gamescope and an installed or built `notes-app`) |
@@ -39,10 +40,15 @@ git, can be deleted).
 tools/check.sh --fast   # no client build and e2e
                         # also --rust, --app
 tools/check.sh          # full (~3 min warm); CI runs it on every pull request push
+pipeline/scripts/test.sh   # the targeted tests of what you changed (`tests` of .claude/pipeline.json)
 ```
 
-`check.sh` and `install.sh` run with lower than normal priority (`nice` 2 and
-1, `ionice` 5): the computer does not lag. Steps: cargo test, clippy
+`check.sh` is the kit's runner (`pipeline/docs/README.md`, "Checks"): it calls
+`steps` of `tools/steps.sh` (the steps and the options below are this
+project's), runs every step under the lock of heavy work and writes the table,
+`summary.md` and the logs to `tests/.data/check/`. `check.sh` and `install.sh`
+run with lower than normal priority (`nice` 2 and 1, `ionice` 5): the computer
+does not lag. Steps: cargo test, clippy
 (`-D warnings`), fmt; clippy of `notes-wasm` for `wasm32-unknown-unknown`
 (the step `wasm`: fails with the install command when the target is missing,
 `rustup target add wasm32-unknown-unknown`; the step `wasm-module`, in the
@@ -76,15 +82,15 @@ judges them fresh by file times, so a build of another checkout, newer than
 your files, would be taken for yours. The lock of heavy work (below) records
 the checkout that held it last: the first holder after a run of another
 checkout (`check.sh` steps, `install.sh`, `test-env.sh`) sets the times of the
-tracked sources to now (`freshen_sources` in `lib/cpu-cap.sh`), and cargo
+tracked sources to now (`freshen_sources` in `lib/cpu-env.sh`, called by the hook `on_heavy_acquire`), and cargo
 recompiles our crates against this tree. A repeated run of the same checkout
 does not, so our crates are not rebuilt. Dependencies and the foreign copies
 in `vendor/` stay built (after an edit under `vendor/`, `touch` the file or
 `cargo clean -p` that crate). `tools/cargo.sh` takes the same lock. A plain
 `cargo` by hand is exposed to this and leaves the record stale, so the next run
 of the recorded checkout reuses its artifacts.
-Before the steps, under the lock of heavy work, `lib/target-limit.sh` keeps
-the dir bounded (cargo removes nothing itself): units of our own crates that
+Before the first step (`before_steps` of `steps.sh`), under the lock of heavy
+work, `lib/target-limit.sh` keeps the dir bounded (cargo removes nothing itself): units of our own crates that
 cargo has not rebuilt for `TARGET_PRUNE_DAYS` (3) are removed
 (`TARGET_PRUNE_DRY=1` - only list them), dependencies stay. The list of the
 crates comes from `cargo metadata`, read by python3 (no `jq` needed); without
@@ -96,7 +102,7 @@ a line `target limit:` says so. A limit that cannot be measured or cleaned is
 a `WARNING` on stderr. Both skip someone else's `CARGO_TARGET_DIR`; the
 pruning skips a profile while cargo holds its build lock. The vendored
 `comemo` tests build into `vendor/` of the same dir.
-`lib/build-env.sh` (sourced after `cpu-cap.sh`) sets
+`lib/build-env.sh` (sourced after the cap) sets
 `CARGO_PROFILE_DEV_DEBUG=line-tables-only` (not in `Cargo.toml`) when the file
 system of the build dir is under `SMALL_DISK_GB` (100) in total, or in a cloud
 session (`CLAUDE_CODE_REMOTE=true` or `BALUK_CLOUD=1`); a value set by hand is
@@ -104,7 +110,7 @@ kept. It also answers whether WebKitGTK is installed (`has_webkit`).
 `tools/test-libs.sh`, the first step of `check.sh`, tests these libraries and
 `tools/cargo.sh`, `tools/check-pr.sh` and `tools/ci-runner.sh` without a cargo
 build, with shims for `jq`, `df`, `python3`, `pkg-config`, `cargo`, `tea` and
-`systemctl`.
+`systemctl`; then it runs the kit's `pipeline/scripts/test-scripts.sh`.
 `tools/check-pr.sh <number>` (CI; by hand from any checkout) fetches
 `pull/<number>/head`, checks it out detached in the worktree of the main
 checkout `.claude/worktrees/check-pr-<number>` (a later run reuses it: ignored
@@ -168,9 +174,11 @@ removes it, `status` shows the unit and the runner as Forgejo sees it.
 otherwise about five sixths: n - round(n/6), so 12 -> 10, 6 -> 5; never more
 than the machine has),
 also when several runs go at once (agents in worktrees). Priority stays as
-above (`nice` 2 and 1); the cap is on top of it.
+above (`nice` 2 and 1); the cap is on top of it. The formula, the lock and the
+hook files are the kit's (`pipeline/docs/README.md`, "Checks"); the lock is
+`check.heavyLock` of `.claude/pipeline.json`.
 
-- `lib/cpu-cap.sh` turns the number into the setting of each tool:
+- `lib/cpu-env.sh` turns the number into the setting of each tool:
   `CARGO_BUILD_JOBS` (one below `CHECK_JOBS`; overrides `jobs` of
   `~/.cargo/config.toml`), `RUST_TEST_THREADS` (one below: the test threads
   of all the binaries running at once, see below), `RAYON_NUM_THREADS`
@@ -198,8 +206,9 @@ above (`nice` 2 and 1); the cap is on top of it.
   static entry, not `RUSTFLAGS` of the script: a flag change rebuilds
   everything, and a build by hand must share artifacts with a check.
 - One lock `~/.cache/baluk-notes/heavy.lock` (`HEAVY_LOCK`): `check.sh` holds
-  it for the duration of each step (the wait is not in the step time, a line
-  "waiting for another run" is printed), `install.sh` and `test-env.sh` for
+  it for the duration of each step (the wait is not in the step time but in the
+  lock wait column of `summary.md`, a line "waiting for another run" is
+  printed), `install.sh` and `test-env.sh` for
   their builds, `tools/cargo.sh` for its command. Steps of different runs take
   turns, so together they stay within the cap, and one run does not rewrite
   artifacts under the tests of another. The kernel releases the lock when its
@@ -374,8 +383,9 @@ started with the old path.
   by Claude Code when it loads the mod from the main checkout. A linked
   worktree (agents, `check-pr-<n>`) has none: the step copies them from the
   main checkout into its own ignored folder on every run
-  (`lib/pipeline-types.sh`; the copy is marked `.copied-from-main`, a folder
-  without the mark is laid by Claude Code and is left alone). `tsc` is
+  (the kit's `pipeline/scripts/lib/mod-check.sh`; the copy is marked
+  `.copied-from-main`, a folder without the mark is laid by Claude Code and is
+  left alone). `tsc` is
   `app/node_modules/.bin/tsc` of this checkout, else the main checkout's. The
   `tsc` part is left out with a line in the log only when neither checkout has
   the types or a `tsc`. Without a `claude` that has plugin tests (a cloud
