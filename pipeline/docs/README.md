@@ -2,7 +2,8 @@
 
 How development runs with the kit: who does what, how a task gets from a
 request to `main`, what the mod does. The detailed rules of each role are in
-its definition (`claude/agents/`); this document is the map. The project's own side
+its definition (`claude/agents/`); this document is the map. The project's own
+side
 - its server, accounts, commands, limits - is its pipeline page, named in
 `.claude/pipeline.json` (`config.md`).
 
@@ -119,13 +120,14 @@ its tools (`config.md`: `check`, `tests`). `scripts/test-scripts.sh` tests them.
   the wall time, and the last 25 lines of each failed step's log in a
   collapsed block. When `GITHUB_STEP_SUMMARY` is set, as Forgejo Actions does,
   the summary is appended to it: the job page shows the table.
-- **The CPU cap and the lock** (`scripts/lib/cap.sh`, sourced by the runner and
-  by the project's own scripts): `CHECK_JOBS`, the CPUs the scripts may keep
-  busy (all of a machine with 1-2 CPUs, otherwise n - round(n/6); `CHECK_JOBS`
-  of the environment wins, capped at the CPUs of the machine), and one lock
-  (`check.heavyLock`) for the heavy work of all runs: `heavy <command...>`,
-  or `heavy_acquire` and `heavy_release` (`HEAVY_WAIT` is the seconds waited).
-  The project's `check.env` file turns the number into the settings of its tools.
+- **The CPU cap and the lock** (`scripts/lib/cap.sh`, sourced by the runner
+  and by the project's own scripts): `CHECK_JOBS`, the CPUs the scripts may
+  keep busy (all of a machine with 1-2 CPUs, otherwise n - round(n/6);
+  `CHECK_JOBS` of the environment wins, capped at the CPUs of the machine),
+  and one lock (`check.heavyLock`) for the heavy work of all runs: `heavy
+  <command...>`, or `heavy_acquire` and `heavy_release` (`HEAVY_WAIT` is the
+  seconds waited). The project's `check.env` file turns the number into the
+  settings of its tools.
 - **Targeted tests**: `scripts/test.sh [--dry-run] [paths...]` maps the files
   changed against `origin/main` (or the paths given) to the commands of `tests`,
   runs each distinct command once under the cap and at low priority, prints a
@@ -178,8 +180,9 @@ on the server, counts rounds, merges, cleans up and reports to the liaison.
   check worktree) and the `afterMerge` command. The mod never pushes to `main`,
   never forces a push, never deploys.
 - **View**: the pane `/pipeline` (a row per task: stage, pull request, status,
-  developer, rounds, last event) and the status line under the prompt, the counts
-  by stage (`1 developing · 2 checking`; the engine puts the plugin's name before it).
+  developer, rounds, last event) and the status line under the prompt, the
+  counts by stage (`1 developing · 2 checking`; the engine puts the plugin's
+  name before it).
 - **Code**: `hooks/machine.ts` decides (state, event and config in, state and
   actions out; no clock, no server), `hooks/driver.ts` carries the actions out
   and feeds results back as events, `hooks/forge.ts` holds every `tea` and

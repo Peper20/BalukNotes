@@ -48,61 +48,61 @@ pipeline/scripts/test.sh   # the targeted tests of what you changed (`tests` of 
 project's), runs every step under the lock of heavy work and writes the table,
 `summary.md` and the logs to `tests/.data/check/`. `check.sh` and `install.sh`
 run with lower than normal priority (`nice` 2 and 1, `ionice` 5): the computer
-does not lag. Steps: cargo test, clippy
-(`-D warnings`), fmt; clippy of `notes-wasm` for `wasm32-unknown-unknown`
-(the step `wasm`: fails with the install command when the target is missing,
-`rustup target add wasm32-unknown-unknown`; the step `wasm-module`, in the
-full run before e2e, builds the release module with its fonts (`fonts.json`,
-`fonts/`) and `files.json` into `tests/.data/wasm` for `app/e2e/wasm.spec.ts`; the step `web-bundle`, after the
-client build and before e2e, runs `tools/web-bundle.sh tests/.data/web
---reuse-dist --reuse-wasm tests/.data/wasm` for `app/e2e/hub.spec.ts`: it
-takes the lock of heavy work itself where it needs it, not as a locked step);
-`notes check` on `tests/vault` (the total is compared
-with the "Total" line in `.claude/rules/tests-vault.md`); `notes new`
+does not lag. Steps: cargo test, clippy (`-D warnings`), fmt; clippy of
+`notes-wasm` for `wasm32-unknown-unknown` (the step `wasm`: fails with the
+install command when the target is missing, `rustup target add
+wasm32-unknown-unknown`; the step `wasm-module`, in the full run before e2e,
+builds the release module with its fonts (`fonts.json`, `fonts/`) and
+`files.json` into `tests/.data/wasm` for `app/e2e/wasm.spec.ts`; the step
+`web-bundle`, after the client build and before e2e, runs `tools/web-bundle.sh
+tests/.data/web --reuse-dist --reuse-wasm tests/.data/wasm` for
+`app/e2e/hub.spec.ts`: it takes the lock of heavy work itself where it needs
+it, not as a locked step); `notes check` on `tests/vault` (the total is
+compared with the "Total" line in `.claude/rules/tests-vault.md`); `notes new`
 templates and the skill (`.claude/rules/skills.md`); exported API types match
-the committed ones (uncommitted ones also count as "failed"); the pipeline mod (validate, tests, `tsc`, "Pipeline mod"); the client -
-check, Vitest, build, e2e. At the end - a table of steps with times, a
-non-zero exit code on any failure, logs in `tests/.data/check/`. e2e needs a
-system Chromium (`/usr/bin/chromium`, another one - `CHROMIUM=...`). The
-`notes-app` window is built if WebKitGTK is present (`pkg-config
-webkit2gtk-4.1`), otherwise it is excluded from the cargo steps (cloud).
-In a linked worktree `check.sh` and `test-env.sh` build into the `target/` of
-the main checkout (`lib/worktree-target.sh`, an absolute `CARGO_TARGET_DIR`;
-your own value is kept), so the dependencies built once serve every worktree;
-only our own crates are rebuilt in a new worktree. Run `cargo` by hand as
-`tools/cargo.sh <arguments>`: a plain `cargo` in a worktree builds from
-scratch into the worktree's own `target/`. A worktree is inside the main
-checkout, so cargo reads `.cargo/config.toml` twice there and the `rustflags`
-differ from a build in the main checkout: that build makes its own copy of the
-dependencies. A plain `cargo` in the main checkout takes no lock of ours;
-cargo's own build-dir lock keeps it from overlapping a check (they wait for
-each other).
+the committed ones (uncommitted ones also count as "failed"); the pipeline mod
+(validate, tests, `tsc`, "Pipeline mod"); the client - check, Vitest, build,
+e2e. At the end - a table of steps with times, a non-zero exit code on any
+failure, logs in `tests/.data/check/`. e2e needs a system Chromium
+(`/usr/bin/chromium`, another one - `CHROMIUM=...`). The `notes-app` window is
+built if WebKitGTK is present (`pkg-config webkit2gtk-4.1`), otherwise it is
+excluded from the cargo steps (cloud). In a linked worktree `check.sh` and
+`test-env.sh` build into the `target/` of the main checkout
+(`lib/worktree-target.sh`, an absolute `CARGO_TARGET_DIR`; your own value is
+kept), so the dependencies built once serve every worktree; only our own
+crates are rebuilt in a new worktree. Run `cargo` by hand as `tools/cargo.sh
+<arguments>`: a plain `cargo` in a worktree builds from scratch into the
+worktree's own `target/`. A worktree is inside the main checkout, so cargo
+reads `.cargo/config.toml` twice there and the `rustflags` differ from a build
+in the main checkout: that build makes its own copy of the dependencies. A
+plain `cargo` in the main checkout takes no lock of ours; cargo's own
+build-dir lock keeps it from overlapping a check (they wait for each other).
 The unit hash of our crates does not contain the checkout path and cargo
 judges them fresh by file times, so a build of another checkout, newer than
 your files, would be taken for yours. The lock of heavy work (below) records
 the checkout that held it last: the first holder after a run of another
 checkout (`check.sh` steps, `install.sh`, `test-env.sh`) sets the times of the
-tracked sources to now (`freshen_sources` in `lib/cpu-env.sh`, called by the hook `on_heavy_acquire`), and cargo
-recompiles our crates against this tree. A repeated run of the same checkout
-does not, so our crates are not rebuilt. Dependencies and the foreign copies
-in `vendor/` stay built (after an edit under `vendor/`, `touch` the file or
-`cargo clean -p` that crate). `tools/cargo.sh` takes the same lock. A plain
-`cargo` by hand is exposed to this and leaves the record stale, so the next run
-of the recorded checkout reuses its artifacts.
-Before the first step (`before_steps` of `steps.sh`), under the lock of heavy
-work, `lib/target-limit.sh` keeps the dir bounded (cargo removes nothing itself): units of our own crates that
-cargo has not rebuilt for `TARGET_PRUNE_DAYS` (3) are removed
-(`TARGET_PRUNE_DRY=1` - only list them), dependencies stay. The list of the
-crates comes from `cargo metadata`, read by python3 (no `jq` needed); without
-python3 the pruning is skipped with a `WARNING` and the size limit still
-applies. Then over the limit - `cargo clean`. The limit is `TARGET_LIMIT_GB`
-or, by default, half of what the dir could hold (its size plus the free space
-of its disk), at most 30 GB: on a disk with little free space it is lower, and
-a line `target limit:` says so. A limit that cannot be measured or cleaned is
-a `WARNING` on stderr. Both skip someone else's `CARGO_TARGET_DIR`; the
-pruning skips a profile while cargo holds its build lock. The vendored
-`comemo` tests build into `vendor/` of the same dir.
-`lib/build-env.sh` (sourced after the cap) sets
+tracked sources to now (`freshen_sources` in `lib/cpu-env.sh`, called by the
+hook `on_heavy_acquire`), and cargo recompiles our crates against this tree. A
+repeated run of the same checkout does not, so our crates are not rebuilt.
+Dependencies and the foreign copies in `vendor/` stay built (after an edit
+under `vendor/`, `touch` the file or `cargo clean -p` that crate).
+`tools/cargo.sh` takes the same lock. A plain `cargo` by hand is exposed to
+this and leaves the record stale, so the next run of the recorded checkout
+reuses its artifacts. Before the first step (`before_steps` of `steps.sh`),
+under the lock of heavy work, `lib/target-limit.sh` keeps the dir bounded
+(cargo removes nothing itself): units of our own crates that cargo has not
+rebuilt for `TARGET_PRUNE_DAYS` (3) are removed (`TARGET_PRUNE_DRY=1` - only
+list them), dependencies stay. The list of the crates comes from `cargo
+metadata`, read by python3 (no `jq` needed); without python3 the pruning is
+skipped with a `WARNING` and the size limit still applies. Then over the limit
+- `cargo clean`. The limit is `TARGET_LIMIT_GB` or, by default, half of what
+the dir could hold (its size plus the free space of its disk), at most 30 GB:
+on a disk with little free space it is lower, and a line `target limit:` says
+so. A limit that cannot be measured or cleaned is a `WARNING` on stderr. Both
+skip someone else's `CARGO_TARGET_DIR`; the pruning skips a profile while
+cargo holds its build lock. The vendored `comemo` tests build into `vendor/`
+of the same dir. `lib/build-env.sh` (sourced after the cap) sets
 `CARGO_PROFILE_DEV_DEBUG=line-tables-only` (not in `Cargo.toml`) when the file
 system of the build dir is under `SMALL_DISK_GB` (100) in total, or in a cloud
 session (`CLAUDE_CODE_REMOTE=true` or `BALUK_CLOUD=1`); a value set by hand is
@@ -117,16 +117,15 @@ checkout `.claude/worktrees/check-pr-<number>` (a later run reuses it: ignored
 output such as `app/node_modules` stays, `app/dist` of an older head is
 removed, tracked files the check changed are restored) and runs the full
 `check.sh` there. The result is the comment on the pull request; the whole
-output is in `tests/.data/check/run.log` of the worktree (`check.sh` clears the
-rest of that folder at the start). Exit 0 passed, 1 failed, 2 could not run;
-the last line of its output is `check-pr: exit <code>` (the end to wait for).
-A second run for the same pull request while one is going exits 2 (a lock
-`check-pr-<number>.lock` next to the lock of heavy work, which `check.sh` takes
-step by step).
-Without `app/dist` (a fresh checkout) the client is built before the Rust
-steps - server tests serve it. e2e listens on fixed ports (8600-8649,
-`app/e2e/ports.ts`): the lock of heavy work (below) keeps runs from
-overlapping. The e2e servers keep their data in RAM (`XDG_RUNTIME_DIR` or
+output is in `tests/.data/check/run.log` of the worktree (`check.sh` clears
+the rest of that folder at the start). Exit 0 passed, 1 failed, 2 could not
+run; the last line of its output is `check-pr: exit <code>` (the end to wait
+for). A second run for the same pull request while one is going exits 2 (a
+lock `check-pr-<number>.lock` next to the lock of heavy work, which `check.sh`
+takes step by step). Without `app/dist` (a fresh checkout) the client is built
+before the Rust steps - server tests serve it. e2e listens on fixed ports
+(8600-8649, `app/e2e/ports.ts`): the lock of heavy work (below) keeps runs
+from overlapping. The e2e servers keep their data in RAM (`XDG_RUNTIME_DIR` or
 `/dev/shm`, else `tests/.data`; `DATA_ROOT` of `app/e2e/server.ts`, ~25 MB):
 on this ext4 any small write (a settings PUT) waits up to ~12 s while the
 gigabytes of the build steps are written out, past the 10 s of an `expect`.
@@ -195,12 +194,12 @@ hook files are the kit's (`pipeline/docs/README.md`, "Checks"); the lock is
   `~/.cache/baluk-notes/cargo-test-times`). The longest gets half of
   `RUST_TEST_THREADS`, the others a quarter, and a binary starts when that
   many are free, so the threads running at once never exceed it (measured
-  against two thirds and a third, and thirds for all); `cargo test --doc` is one more
-  job. The log of each binary is `tests/.data/check/cargo-test/<n>.log`; the
-  step log holds them in the order of the names, a table (tests, threads,
-  seconds), and at the end the failed binaries with their failed tests. A
-  plain `cargo test` (`tools/cargo.sh test -p <crate>`) runs the binaries in
-  turn, each with all the threads.
+  against two thirds and a third, and thirds for all); `cargo test --doc` is
+  one more job. The log of each binary is
+  `tests/.data/check/cargo-test/<n>.log`; the step log holds them in the order
+  of the names, a table (tests, threads, seconds), and at the end the failed
+  binaries with their failed tests. A plain `cargo test` (`tools/cargo.sh test
+  -p <crate>`) runs the binaries in turn, each with all the threads.
 - The linker (lld) takes a thread per CPU and cargo links the test binaries
   all at once: `.cargo/config.toml` limits it to one thread per link. It is a
   static entry, not `RUSTFLAGS` of the script: a flag change rebuilds
@@ -294,12 +293,12 @@ gamescope --backend headless -W <width> -H <height> -- <command>
 ## Cloud environment
 
 A Claude Code cloud session clones the GitHub mirror, runs as root, has a
-small disk and no Forgejo. The server side works there as it does locally
-(the pipeline mod does not: there is no CI runner, `docs/agents.md`, "Known
-limits"): `tools/cloud-setup.sh` starts a throwaway Forgejo inside the session with the
-same accounts, `tea` logins and protection of `main` (`docs/agents.md`,
-"Server"), so the rules, skills and agent definitions stay as they are;
-`tools/cloud-finish.sh` sends the result to GitHub.
+small disk and no Forgejo. The server side works there as it does locally (the
+pipeline mod does not: there is no CI runner, `docs/agents.md`, "Known
+limits"): `tools/cloud-setup.sh` starts a throwaway Forgejo inside the session
+with the same accounts, `tea` logins and protection of `main`
+(`docs/agents.md`, "Server"), so the rules, skills and agent definitions stay
+as they are; `tools/cloud-finish.sh` sends the result to GitHub.
 
 **Session start** (the liaison, before anything else): `tools/cloud-setup.sh`.
 It prints a summary; from then on `origin` is the cloud Forgejo and `github`

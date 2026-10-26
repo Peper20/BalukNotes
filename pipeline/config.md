@@ -2,10 +2,11 @@
 
 The kit knows nothing of the project it runs in. What differs from project to
 project is in this file at the project's `.claude/pipeline.json`, and in the
-pipeline page it names. A shell reads it with `jq` (or `python3`); the mod parses it natively
-(`hooks/config.ts`) at session start. Unknown keys are ignored. A missing or
-invalid file is reported once in the liaison's session, and the mod starts no
-task until it is fixed (the next call of a pipeline tool reads it anew).
+pipeline page it names. A shell reads it with `jq` (or `python3`); the mod
+parses it natively (`hooks/config.ts`) at session start. Unknown keys are
+ignored. A missing or invalid file is reported once in the liaison's session,
+and the mod starts no task until it is fixed (the next call of a pipeline tool
+reads it anew).
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|

@@ -37,10 +37,11 @@ and caches, memory, concurrency or Typst internals.
   port (`PORT=... tools/test-env.sh`).
 - An agent never opens a window on the user's display: anything that needs a
   window (the `notes-app` window, WebKitGTK) runs inside a headless gamescope
-  (`tools/shot-webkit.py`, `tools/app-smoke.sh`; rules - `.claude/rules/tools.md`,
-  "No windows on the user's display"). gamescope exits 0 even when the command
-  fails: check the command's own result; if gamescope fails or is missing,
-  report it, never fall back to a visible window.
+  (`tools/shot-webkit.py`, `tools/app-smoke.sh`; rules -
+  `.claude/rules/tools.md`, "No windows on the user's display"). gamescope
+  exits 0 even when the command fails: check the command's own result; if
+  gamescope fails or is missing, report it, never fall back to a visible
+  window.
 - Agents do not touch the user's notes, the installed `notes` service beyond
   `tools/install.sh`, or the VPS: `tools/deploy-hub.sh` runs only on the
   user's word.
@@ -120,9 +121,9 @@ file of every directory you touch (`crates.md`, `app.md`, `baluk.md`,
 `skills.md`, `tools.md`, ...), and `.claude/rules/docs.md` for
 `docs/architecture.md` and `docs/tech-debt.md` (the format of an entry).
 
-**Language.** The `liaison` speaks Russian with the user. Code, comments, logs,
-docs, commit messages, pull requests and briefs are English (`.claude/rules/project.md`,
-"Language").
+**Language.** The `liaison` speaks Russian with the user. Code, comments,
+logs, docs, commit messages, pull requests and briefs are English
+(`.claude/rules/project.md`, "Language").
 
 **Tests and the full check.** Run the targeted tests with
 `pipeline/scripts/test.sh` (the files changed against `origin/main` to
@@ -155,18 +156,19 @@ format and path rules (`NoteId`), the sync protocol, cross-cutting schemes
 `docs/writing.md` and the `/baluk-note` skill, then `tools/install.sh`
 (`.claude/rules/project.md`, "Iteration"). Developers do not touch
 `docs/roadmap.md`, `docs/questions.md`, `docs/agents.md`, `.claude/agents/`,
-`.claude/skills/` or `pipeline/claude/agents/`, `pipeline/claude/skills/`, `pipeline/docs/`
-unless the brief says so.
+`.claude/skills/` or `pipeline/claude/agents/`, `pipeline/claude/skills/`,
+`pipeline/docs/` unless the brief says so.
 
-**Documents the liaison commits itself**, straight to `main`: `docs/roadmap.md`,
-`docs/questions.md` (open questions to the user; the "Look yourself" section
-is what it reminds the user of at the start of a session), `docs/agents.md`,
-the design decisions in `docs/architecture.md` and `docs/tech-debt.md` that no
-code yet follows, `.claude/rules/`, `.claude/pipeline.json`, and the kit's
-agents, skills and documents (`pipeline/claude/agents/`, `pipeline/claude/skills/`,
-`pipeline/docs/`, `pipeline/config.md`). The code of the mod and the scripts
-reach `main` through pull requests. Permission settings
-(`.claude/settings*.json`) are the user's.
+**Documents the liaison commits itself**, straight to `main`:
+`docs/roadmap.md`, `docs/questions.md` (open questions to the user; the "Look
+yourself" section is what it reminds the user of at the start of a session),
+`docs/agents.md`, the design decisions in `docs/architecture.md` and
+`docs/tech-debt.md` that no code yet follows, `.claude/rules/`,
+`.claude/pipeline.json`, and the kit's agents, skills and documents
+(`pipeline/claude/agents/`, `pipeline/claude/skills/`, `pipeline/docs/`,
+`pipeline/config.md`). The code of the mod and the scripts reach `main`
+through pull requests. Permission settings (`.claude/settings*.json`) are the
+user's.
 
 **Review.** Besides the kit's checklist, the Essentials of
 `.claude/rules/project.md`: a note in HTML looks like its PDF; the app does not
@@ -183,4 +185,5 @@ branch it prints.
 from the main checkout. Commands that need root are the user's to run. The
 user's own notes are not touched.
 
-**Pull requests** open at `http://localhost:3000/ibaluk/baluk-notes/pulls/<number>`.
+**Pull requests** open at
+`http://localhost:3000/ibaluk/baluk-notes/pulls/<number>`.
