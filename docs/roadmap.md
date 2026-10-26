@@ -278,7 +278,9 @@ is merged, one task at a time.
       several Playwright workers with a server each and their data in RAM
       (PR #32); heavy steps use about 5/6 of the CPUs (all at 1-2) with a
       raised nice
-- [ ] The kit in `pipeline/`, a Claude Code plugin: the agents, the skills
+- [~] The kit in `pipeline/`, a Claude Code plugin (the mod, agents, skills,
+      docs and the project layer - PR #35; the check scripts next, then
+      Forgejo): the agents, the skills
       (`dev-workflow`, `forge`, `sdd`), the mod, the generic scripts (targeted
       tests by changed paths, the full check runner with its locks, CPU cap,
       nice, step table and CI summary, a speed measurement script), the
