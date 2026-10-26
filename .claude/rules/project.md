@@ -12,7 +12,7 @@ PDF, a Svelte client shows the notes.
 | the plan and the user's decisions on it | `docs/roadmap.md` |
 | tech debt: what is simplified, the risk, how to close it | `docs/tech-debt.md` |
 | open questions to the user | `docs/questions.md` |
-| the development pipeline: the kit `pipeline/` (agents, skills, the mod, `pipeline/docs/README.md`), this project's side `docs/agents.md`, `.claude/pipeline.json` |
+| the development pipeline: agents, the mod, CI, review | the kit `pipeline/` (`pipeline/docs/README.md`); this project's side - `docs/agents.md`, `.claude/pipeline.json` |
 | how to write notes | `docs/writing.md` (= `notes docs writing`) |
 | the storage server on a VPS: service, nginx | `docs/server.md` |
 | research measurements | `docs/research/` |
@@ -60,15 +60,15 @@ directory - read the file.
 
 `liaison` (the main session) -> the pipeline mod (`pipeline/`, code) ->
 `developer-1`, `developer-2`, `developer-3` -> CI -> `reviewer`;
-definitions - `pipeline/claude/agents/` (linked into `.claude/agents/`), how it works -
-`pipeline/docs/README.md` and `docs/agents.md`. The repository is on a local Forgejo server (`origin`, the `forge` skill), GitHub
-is its mirror. Code and the documents that change with it reach `main` only
+definitions - `pipeline/claude/agents/` (linked into `.claude/agents/`), how
+it works - `pipeline/docs/README.md` and `docs/agents.md`. The repository is
+on a local Forgejo server (`origin`, the `forge` skill), GitHub is its mirror. Code and the documents that change with it reach `main` only
 through a reviewed pull request; the `liaison` owns the architecture.
 The liaison commits `docs/roadmap.md`, `docs/questions.md`, `docs/agents.md`,
 the design decisions in `docs/architecture.md` and `docs/tech-debt.md` that no
-code yet follows, and `.claude/rules/`, `.claude/pipeline.json`, the kit's agents,
-skills and documents (`pipeline/claude/agents/`, `pipeline/claude/skills/`, `pipeline/docs/`)
-straight to `main`.
+code yet follows, and `.claude/rules/`, `.claude/pipeline.json`, the kit's
+agents, skills and documents (`pipeline/claude/`, `pipeline/docs/`,
+`pipeline/config.md`) straight to `main`.
 Permission settings (`.claude/settings*.json`) are changed only by the user.
 
 ## Language
