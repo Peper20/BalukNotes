@@ -279,8 +279,8 @@ is merged, one task at a time.
       (PR #32); heavy steps use about 5/6 of the CPUs (all at 1-2) with a
       raised nice
 - [~] The kit in `pipeline/`, a Claude Code plugin (the mod, agents, skills,
-      docs and the project layer - PR #35; the check scripts next, then
-      Forgejo): the agents, the skills
+      docs and the project layer - PR #35; the check runner, targeted tests,
+      the CI summary and measure.sh - PR #36; Forgejo next): the agents, the skills
       (`dev-workflow`, `forge`, `sdd`), the mod, the generic scripts (targeted
       tests by changed paths, the full check runner with its locks, CPU cap,
       nice, step table and CI summary, a speed measurement script), the
@@ -317,9 +317,8 @@ is merged, one task at a time.
 - [ ] What makes the shared `target/` reach its 30 GB limit and writes
       gigabytes per check: test binaries are ~430 MB each (Typst linked in,
       full debug info); try less debug info for dependencies
-- [ ] The `tools-libs` test "the binaries inherit the priority of the step"
-      fails in a shell already above nice 2 (an agent's shell runs at nice
-      5): check the priority relative to the step's, not the number 2
+- [ ] `pipeline/scripts/measure.sh` reads wall time wrong under a
+      comma-decimal locale (`LC_NUMERIC=C`); with the next kit task
 - [ ] A task that measures has a budget (a number of runs, or stop at the
       target); such tasks run one after another, not side by side
 
