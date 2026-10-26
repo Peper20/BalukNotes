@@ -411,15 +411,15 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
 - **Warm-up** (`notes-core::warm`): all notes are built ahead of time into the
   disk cache (not kept in memory, figures are processed on opening) - first
   those hinted by the client (`POST /api/vaults/<vault>/warm`: tabs, recent),
-  then never built ones (small first), then the rest by the time of the last build, new
-  books last; what is built (also with an error) is skipped; a user request
-  goes out of turn. The mode is a device setting (all, only hinted, off).
-  After a large pass Typst memory is freed; also, after a series of builds and
-  5 s of idle memory is released after ordinary rebuilds too, so idle RSS
-  returns to the level with a ready cache. The idle release fires once per
-  idle period, only if there were new builds since the last release. A pass
-  runs at startup, on a hint, on file changes and every 10 minutes (without a
-  watcher - every minute).
+  then never built ones (small first), then the rest by the time of the last
+  build, new books last; what is built (also with an error) is skipped; a user
+  request goes out of turn. The mode is a device setting (all, only hinted,
+  off). After a large pass Typst memory is freed; also, after a series of
+  builds and 5 s of idle memory is released after ordinary rebuilds too, so
+  idle RSS returns to the level with a ready cache. The idle release fires
+  once per idle period, only if there were new builds since the last release.
+  A pass runs at startup, on a hint, on file changes and every 10 minutes
+  (without a watcher - every minute).
 
 ### 9. The server online: storage, sync, sign-in
 
@@ -435,11 +435,11 @@ How to put it on a VPS - `docs/server.md`.
   replaced or removed: nothing is lost on the server).
 - **The browser version** (`notes hub serve --web <dir>`): the hub serves a
   folder built on the computer (`tools/web-bundle.sh`): the client with
-  `assets/config.js` turning the core in WASM on, the module, its fonts
-  and the whitelisted packages (`wasm/`), and the theme stylesheets and font parts that
-  `notes serve` would answer (`api/fonts.css`, `api/themes.css`, `fonts/`),
-  since the hub has no Typst. Other GETs outside the API answer the client
-  page; the CSP is the one of `notes serve`.
+  `assets/config.js` turning the core in WASM on, the module, its fonts and
+  the whitelisted packages (`wasm/`), and the theme stylesheets and font parts
+  that `notes serve` would answer (`api/fonts.css`, `api/themes.css`,
+  `fonts/`), since the hub has no Typst. Other GETs outside the API answer the
+  client page; the CSP is the one of `notes serve`.
 - **Sign-in** (user's decision: login + password from the start;
   `notes_hub::auth`, the same module for the hub and for `notes serve
   --auth`): accounts are created on the machine (`notes users add <login>`,
@@ -472,24 +472,24 @@ How to put it on a VPS - `docs/server.md`.
   on a computer, the server wins on a phone). A local file that sync replaces
   or removes is moved to `<data>/sync/removed/` (kept 30 days), never just
   deleted.
-- **The guard against mass deletion** (`notes_store::sync::guard`): a
-  deletion is a change like any other, so a slip (`rm -rf` in the wrong
-  folder, an unmounted disk) would wipe a vault everywhere. A round plans
-  everything before it executes anything; if the plan deletes more than 10
-  files and more than 20 % of the vault - or the whole vault, when it has at
-  least two files - it stops with `DeletionsHeld` having uploaded, downloaded
-  and deleted nothing. Both directions are checked: files gone from the
-  device (would be deleted on the server) and files gone from the server
-  (would be removed from the device, into `sync/removed/`). The device keeps
-  the held set (side, count, a fingerprint of the paths) in
-  `status/<vault>.json`. `confirm` runs a round that lets exactly that set
-  through: if more or other files are gone by then, the round is held again. `restore` turns the device's deletions into downloads;
-  for the other direction the way back is to unlink and link the vault again,
-  which uploads the device's files. The worker shows the state `held`, looks
-  again every 30 s (a `confirm` from the console shows up then) and has no
-  backoff; while it waits, the server's changes are not applied. `notes sync
-  confirm | restore --vault`; the app settings show the count and have the
-  buttons.
+- **The guard against mass deletion** (`notes_store::sync::guard`): a deletion
+  is a change like any other, so a slip (`rm -rf` in the wrong folder, an
+  unmounted disk) would wipe a vault everywhere. A round plans everything
+  before it executes anything; if the plan deletes more than 10 files and more
+  than 20 % of the vault - or the whole vault, when it has at least two files
+  - it stops with `DeletionsHeld` having uploaded, downloaded and deleted
+  nothing. Both directions are checked: files gone from the device (would be
+  deleted on the server) and files gone from the server (would be removed from
+  the device, into `sync/removed/`). The device keeps the held set (side,
+  count, a fingerprint of the paths) in `status/<vault>.json`. `confirm` runs
+  a round that lets exactly that set through: if more or other files are gone
+  by then, the round is held again. `restore` turns the device's deletions
+  into downloads; for the other direction the way back is to unlink and link
+  the vault again, which uploads the device's files. The worker shows the
+  state `held`, looks again every 30 s (a `confirm` from the console shows up
+  then) and has no backoff; while it waits, the server's changes are not
+  applied. `notes sync confirm | restore --vault`; the app settings show the
+  count and have the buttons.
 - **The device side** (`crates/notes-device`, without Typst: `notes-store` and
   the hub client; the core stays free of HTTP for WASM): `<data>/sync/` holds
   the account (server, login, session token), the state of every linked
@@ -512,21 +512,21 @@ machine. The browser core (WASM) embeds none: the same set is built as files
 (`wasm/fonts/font-<hash>.bin` and their list `fonts.json`,
 `crates/notes-wasm/harness/build.sh`), and the worker fetches them before
 opening the vault (`WasmCore.addFont`); the hub serves them as immutable, so
-the browser downloads them once. The browser gets WOFF2 in parts with `unicode-range`
-(`notes-core::webfonts`: subsetting - `fontcull`, WOFF2 - `ttf2woff2` with the
-`glyf` transform for TrueType, for CFF - our own encoder): a Russian page needs
-Latin and Cyrillic, ~35 KB per style instead of ~0.9 MB. The math font (CFF +
-`MATH`) is not subset, only WOFF2 (1.3 -> 0.66 MB). The server compresses the
-parts in the background at startup (ready ones in `<data>/cache/fonts`). The
-browser needs all theme fonts, main and fallback (a glyph missing from the
-main one looks as in the PDF): `baluk/css.typ` exports them together with the
-colors (formula fonts as a separate list). The browser downloads a part of a
-fallback font only if the page has a glyph of it missing from the main font.
-The CFF text font (New Computer Modern) is first converted to TrueType
-(`webfonts::cff_to_truetype`: quadratic outlines, no hints and no `MATH`, ~30
-ms per style): Chrome rejects its CFF entirely (OTS: hints), and TrueType can
-also be subset. The formula font is whole, but also with `unicode-range` by its
-own glyphs.
+the browser downloads them once. The browser gets WOFF2 in parts with
+`unicode-range` (`notes-core::webfonts`: subsetting - `fontcull`, WOFF2 -
+`ttf2woff2` with the `glyf` transform for TrueType, for CFF - our own
+encoder): a Russian page needs Latin and Cyrillic, ~35 KB per style instead of
+~0.9 MB. The math font (CFF + `MATH`) is not subset, only WOFF2 (1.3 -> 0.66
+MB). The server compresses the parts in the background at startup (ready ones
+in `<data>/cache/fonts`). The browser needs all theme fonts, main and fallback
+(a glyph missing from the main one looks as in the PDF): `baluk/css.typ`
+exports them together with the colors (formula fonts as a separate list). The
+browser downloads a part of a fallback font only if the page has a glyph of it
+missing from the main font. The CFF text font (New Computer Modern) is first
+converted to TrueType (`webfonts::cff_to_truetype`: quadratic outlines, no
+hints and no `MATH`, ~30 ms per style): Chrome rejects its CFF entirely (OTS:
+hints), and TrueType can also be subset. The formula font is whole, but also
+with `unicode-range` by its own glyphs.
 
 ### Typst packages
 
@@ -568,8 +568,8 @@ hands over (`Packages::Files`, `Compiler::with_package_files`): the browser
   attributes and dangerous URLs were removed in this note. Note files do not
   change.
 - The client (`notes serve`) is served with a CSP: `default-src 'self'`,
-  `script-src 'self' 'wasm-unsafe-eval'` (compiling the WebAssembly core; without
-  `unsafe-inline` and `unsafe-eval`; `worker-src` falls back to it),
+  `script-src 'self' 'wasm-unsafe-eval'` (compiling the WebAssembly core;
+  without `unsafe-inline` and `unsafe-eval`; `worker-src` falls back to it),
   `object-src 'none'`, `base-uri 'none'`, `img-src 'self' data: blob:`,
   `style-src 'self' 'unsafe-inline'`, `font-src 'self'`, `connect-src 'self'`,
   `frame-ancestors 'self'`. In dev mode (Vite) the CSP is not applied, since

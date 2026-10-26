@@ -231,6 +231,14 @@ it. The format and rules - `.claude/rules/docs.md`.
   WASM (an error); restoring is only from the Dolphin trash; the folder of the
   last deleted note stays (empty - in the tree). How to close: a vault trash
   `.trash/`.
+- **A settings save waits for the disk** (`PUT /api/settings` writes
+  `settings.json` before it answers): while gigabytes are being written out
+  (a build), any small write on an encrypted ext4 waits; measured up to 12 s
+  instead of 1 ms (PR #32). The client sends settings changes one at a time,
+  so a slow or hanging save also holds back every later change. Risk: a
+  setting looks stuck for seconds during heavy disk work. How to close: if it
+  shows in use - answer from memory and write in the background with the
+  order kept, or a timeout on the client's queue.
 
 ## Sign-in and sync
 
@@ -399,17 +407,18 @@ it. The format and rules - `.claude/rules/docs.md`.
   checks a repeated long build, not the first.
 - **`tools/check.sh` is sequential** (~3 min warm with e2e, ~16 min from an
   empty target dir): e2e is ~75 s of it (`PLAYWRIGHT_WORKERS`, each worker
-  with its own server; ~9 s of it the template warm-up), `cargo test` ~35 s (the test binaries run at the
-  same time, the floor is the longest, `notes-core` `tests/it`), the other steps are seconds each. The run uses ~2.5 CPUs
-  on average of the CPUs it may (`.claude/rules/tools.md`, "CPU cap"), but steps
-  do not overlap even inside one run: the lock of heavy work is per step. A
-  new dependency or feature changes the feature set of shared crates - the
-  Typst stack is rebuilt in all profiles (minutes, once); `cargo run -p
-  notes-typst` (`notes check`), the e2e build (`-p notes -p notes-typst -p
-  notes-hub`) and `cargo test --workspace` unify features
-  differently and build the web stack twice (~20 s from scratch). How to close:
-  run the client steps (Vitest, build, e2e) next to the Rust ones, replacing
-  the one lock by a budget of `CHECK_JOBS` slots shared by all runs.
+  with its own server; ~9 s of it the template warm-up), `cargo test` ~35 s
+  (the test binaries run at the same time, the floor is the longest,
+  `notes-core` `tests/it`), the other steps are seconds each. The run uses
+  ~2.5 CPUs on average of the CPUs it may (`.claude/rules/tools.md`, "CPU
+  cap"), but steps do not overlap even inside one run: the lock of heavy work
+  is per step. A new dependency or feature changes the feature set of shared
+  crates - the Typst stack is rebuilt in all profiles (minutes, once); `cargo
+  run -p notes-typst` (`notes check`), the e2e build (`-p notes -p notes-typst
+  -p notes-hub`) and `cargo test --workspace` unify features differently and
+  build the web stack twice (~20 s from scratch). How to close: run the client
+  steps (Vitest, build, e2e) next to the Rust ones, replacing the one lock by
+  a budget of `CHECK_JOBS` slots shared by all runs.
 - **The installed `notes` and skill are a snapshot at `tools/install.sh`
   time**: without reinstalling they lag behind the repository; an open window
   (its core) and a `notes serve` started by hand run the old version until a
@@ -441,20 +450,20 @@ it. The format and rules - `.claude/rules/docs.md`.
 - **WebKitGTK in the window: memory and a crash on exit.** The window
   processes once reached 1.7 GB in 11 minutes of the user's work; walking all
   "Демо" notes (WebKit ~550 MB) and dragging a graph node 40 times did not
-  reproduce growth. `WebKitWebProcess`, exiting by itself, crashed in `exit()`: the
-  destructor of `libEGL.so.1` (libglvnd; both Mesa and NVIDIA are loaded)
-  tears down EGL while the WebKit render thread is still in `libEGL_mesa`
-  (WebKitGTK 2.52.6) - the system writes the dump for about a minute, the
-  machine lags. Workaround: the window kills its WebKit process before exit
-  (`notes-app` `quit`, SIGKILL from WebKit) - so `exit()` never runs there
-  (the user closed the window - no crash report). A test run of the window
-  goes only into a headless gamescope (`.claude/rules/tools.md`, "No windows
-  on the user's display"; `tools/app-smoke.sh`): there the window quits by the
-  workaround, so the crash path is not exercised, and whether a WebKit process
-  that exits by itself crashes in gamescope is not checked. A nested
-  `kwin_wayland --virtual` is not used: it did not reproduce the crash, and
-  on the user's bus it turns off KWin global shortcuts (Alt+Tab) after exit.
-  The WebKit bug remains: a report to WebKit if it can be reproduced.
+  reproduce growth. `WebKitWebProcess`, exiting by itself, crashed in
+  `exit()`: the destructor of `libEGL.so.1` (libglvnd; both Mesa and NVIDIA
+  are loaded) tears down EGL while the WebKit render thread is still in
+  `libEGL_mesa` (WebKitGTK 2.52.6) - the system writes the dump for about a
+  minute, the machine lags. Workaround: the window kills its WebKit process
+  before exit (`notes-app` `quit`, SIGKILL from WebKit) - so `exit()` never
+  runs there (the user closed the window - no crash report). A test run of the
+  window goes only into a headless gamescope (`.claude/rules/tools.md`, "No
+  windows on the user's display"; `tools/app-smoke.sh`): there the window
+  quits by the workaround, so the crash path is not exercised, and whether a
+  WebKit process that exits by itself crashes in gamescope is not checked. A
+  nested `kwin_wayland --virtual` is not used: it did not reproduce the crash,
+  and on the user's bus it turns off KWin global shortcuts (Alt+Tab) after
+  exit. The WebKit bug remains: a report to WebKit if it can be reproduced.
 - **`glib 0.18` with a vulnerability (Dependabot #1)**: it comes via the
   window (`tauri` -> `wry`/`tao` -> `gtk 0.18`); the fix is in `glib 0.20`,
   and `gtk 0.18` is the last GTK3 binding, Tauri 2 on Linux uses it. No
@@ -472,12 +481,12 @@ it. The format and rules - `.claude/rules/docs.md`.
   error).
 - **The hint "the path starts with the vault directory name"** in `notes new`
   is a heuristic on the first segment; it does not catch other path mistakes.
-- **Dependency variants in `target/` do not shrink** (`tools/lib/target-limit.sh`):
-  only the stale units of our own crates are pruned; over the limit
-  (`TARGET_LIMIT_GB`: 30 GB, less when the disk has little free space)
-  `check.sh` cleans `target/` whole and the next check builds everything again
-  (~8 min). How to close: remove old dependency variants (`cargo-sweep`) if full
-  rebuilds get in the way.
+- **Dependency variants in `target/` do not shrink**
+  (`tools/lib/target-limit.sh`): only the stale units of our own crates are
+  pruned; over the limit (`TARGET_LIMIT_GB`: 30 GB, less when the disk has
+  little free space) `check.sh` cleans `target/` whole and the next check
+  builds everything again (~8 min). How to close: remove old dependency
+  variants (`cargo-sweep`) if full rebuilds get in the way.
 
 ## The `/baluk-note` skill
 
