@@ -285,7 +285,8 @@ is merged, one task at a time.
       nice, step table and CI summary, a speed measurement script), the
       Forgejo part (workflow template, runner setup, agent accounts),
       templates and the cycle's docs. No project details in it
-- [ ] The project layer: `.claude/pipeline.toml` (full check steps, the map
+- [ ] The project layer: `.claude/pipeline.json` (JSON: the mod reads it
+      natively, shell with `jq`; full check steps, the map
       of paths to targeted tests, the forge address, what runs after a merge,
       where the documents are); the project's own steps stay in `tools/`, its
       code rules in `.claude/rules/`
@@ -301,7 +302,7 @@ is merged, one task at a time.
       prove they are needed; up to 1000-1500 tokens) preloaded in every
       developer and the reviewer; the Rust skill rewritten for agents,
       portable, no emoji (done, PR #34). Then one mechanism in the mod: an edit of a file
-      whose language has a skill in `.claude/pipeline.toml` needs that skill
+      whose language has a skill in `.claude/pipeline.json` needs that skill
       loaded (replaces `.claude/hooks/require-rust-skill.py`)
 - [ ] The main agent is renamed from `liaison` to `lead`
 - [ ] The mod: a cancelled check (a machine shutdown) is re-run and costs no
