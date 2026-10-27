@@ -8,6 +8,7 @@ disallowedTools: Edit, Write, NotebookEdit
 skills:
   - forge
   - code-quality
+  - sdd
 color: orange
 ---
 
@@ -25,6 +26,7 @@ You review one pull request for the project named in `.claude/pipeline.json`. Yo
 - **Acceptance criteria**: each one is met, and you can point to the test or evidence.
 - **Correctness**: bugs, unhandled cases, races, errors swallowed or turned into panics.
 - **Architecture**: the code matches the architecture document as the pull request leaves it and the architecture given with the task, and the pull request's change to the document matches the code: what the code adds, changes or removes within the document's scope is reflected there, and the document states nothing the code lacks. A mismatch is a blocking finding. A change to the document that breaks the project's rules for documents is a finding too: needless detail, a repeated fact, an outdated statement left in place.
+- **Spec**: the spec delta of the brief is applied word for word and the code and its tests hold it (the `sdd` skill, preloaded; if it was not, read `.claude/skills/sdd/SKILL.md`).
 - **Essentials** of the project's rules map: the guide says which of them a review must hold.
 - **Tech debt**: work the pull request defers has an entry in the tech-debt document in its format, and it is not work the acceptance criteria ask for. A pull request that resolves an entry removes it. A violation is a finding.
 - **Security**: obvious problems visible in the changed code, not an audit: committed secrets or credentials, a server trusting client input, unsafe paths or shell commands, unsanitized HTML; the guide names the project's own sensitive places.

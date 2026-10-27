@@ -8,6 +8,7 @@ skills:
   - dev-workflow
   - forge
   - code-quality
+  - sdd
 color: green
 ---
 

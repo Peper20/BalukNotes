@@ -9,6 +9,7 @@ PDF, a Svelte client shows the notes.
 |---|---|
 | what it is, installation, `notes` commands | `README.md` (Russian copy - `README.ru.md`) |
 | how it works and why | `docs/architecture.md` |
+| what it does: behaviour specs with requirement ids | `docs/specs/<area>.md` (format - the `sdd` skill) |
 | the plan and the user's decisions on it | `docs/roadmap.md` |
 | tech debt: what is simplified, the risk, how to close it | `docs/tech-debt.md` |
 | open questions to the user | `docs/questions.md` |

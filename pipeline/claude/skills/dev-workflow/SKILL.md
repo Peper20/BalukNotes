@@ -13,6 +13,7 @@ The project is named in `.claude/pipeline.json`; its keys `guide` and `map` poin
 
 - Read the map and the guide, and the rule file of every directory you will touch. In a worktree they may not load on their own.
 - Read the parts of the architecture document the brief names and the architecture part of the brief.
+- Read the spec delta of the brief and the spec files it names (the `sdd` skill, preloaded).
 - Name your branch as the brief says: `git switch -c task/<short-slug>`.
 - If the brief says the branch and its pull request already exist, do not create the branch: get it as the `forge` skill describes, read the pull request's comments and commits, and continue from the existing commits.
 - Before the first edit of a `.rs` file, load the `rust` skill (the project may enforce it with a hook that denies the edit otherwise; load it again after a context compaction).
@@ -46,7 +47,7 @@ Commands, for every agent that runs them (the reviewer too):
 
 - Commit in small steps with messages in English.
 - Push the branch and open a pull request into `main`; the commands are in the `forge` skill. On an existing pull request, run `git push` (the branch already tracks the server) and do not open another.
-- The description states what changed and why, how each acceptance criterion was verified, what was not verified, the decisions you took on open details, and the architecture additions and the deferred items, or that there are none.
+- The description states what changed and why, how each acceptance criterion was verified, what was not verified, the decisions you took on open details, and the architecture additions and the deferred items, or that there are none, and each requirement of the spec delta with its test (the `sdd` skill).
 - Delete the description file once the pull request is created or updated, so the worktree is left clean.
 - Never merge, never push to `main`.
 

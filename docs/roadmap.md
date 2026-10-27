@@ -291,7 +291,9 @@ is merged, one task at a time.
       of paths to targeted tests, the forge address, what runs after a merge,
       where the documents are); the project's own steps stay in `tools/`, its
       code rules in `.claude/rules/`
-- [ ] Spec-driven development, the spec-anchored level: living behaviour
+- [~] Spec-driven development, the spec-anchored level (the `sdd` skill
+      with the format, preloaded in the developers and the reviewer; the
+      first specs next): living behaviour
       specs `docs/specs/<area>.md` with stable requirement ids; a task's brief
       carries the spec delta, the developer applies it in the same pull
       request as the code, the reviewer checks against the ids; specs grow
