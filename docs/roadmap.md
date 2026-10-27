@@ -323,6 +323,18 @@ is merged, one task at a time.
       comma-decimal locale (`LC_NUMERIC=C`); with the next kit task
 - [ ] A task that measures has a budget (a number of runs, or stop at the
       target); such tasks run one after another, not side by side
+- [ ] In flight (2026-10-27): PR #37 `kit-forge`, PR #38 `mod-robust`,
+      PR #39 `specs-seed` in CI and review; `skill-guard` starts after #38.
+      After #37: the user allows `pipeline/scripts/ci-runner.sh install`,
+      then the transitional workflow block goes (tech debt). After
+      `skill-guard`: the user removes the rust hook from
+      `.claude/settings.json`, then `.claude/hooks/require-rust-skill.py`
+      is deleted. After #37 and #39: record in `docs/tech-debt.md` the gaps
+      found by `specs-seed` (vault rename by case skips "name taken";
+      `NoteId` accepts names `file_name` refuses; framework errors are not
+      JSON; a 500 of the local server carries the raw error; the login
+      throttle counts unverified attempts; the hub does not see edits made
+      on its disk). Kit: the check log says when the heavy lock is taken
 
 ## Later
 
