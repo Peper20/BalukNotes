@@ -66,10 +66,10 @@ for ((run = 1; run <= runs; run++)); do
   : >"$samples"
   sample_cpu "$samples" {HEAVY_FD}>&- &
   sampler=$!
-  start=${EPOCHREALTIME/./}
+  start=${EPOCHREALTIME//[.,]/}
   "$@" >/dev/null 2>&1 {HEAVY_FD}>&-
   rc=$?
-  wall=$((${EPOCHREALTIME/./} - start))
+  wall=$((${EPOCHREALTIME//[.,]/} - start))
   kill "$sampler" 2>/dev/null
   wait "$sampler" 2>/dev/null
   heavy_release

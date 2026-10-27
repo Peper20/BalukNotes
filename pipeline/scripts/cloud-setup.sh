@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Start a throwaway Forgejo inside a cloud session and make the clone work
 # against it exactly as the local checkout works against the user's server
-# (docs/agents.md, "Server"; the `forge` skill): the same accounts, the same
-# `tea` logins, the same protection of `main`. Run it as the first step of a
-# cloud session; at the end `tools/cloud-finish.sh` sends the result to GitHub.
+# (pipeline/docs/README.md, "Forgejo"; the `forge` skill): the same accounts,
+# the same `tea` logins, the same protection of `main`. Run it as the first step
+# of a cloud session; at the end `pipeline/scripts/cloud-finish.sh` sends the
+# result to GitHub. The repository is `forge.repo` of .claude/pipeline.json
+# (pipeline/config.md); its owner is the administrator account.
 #
-#   tools/cloud-setup.sh            # install, initialise, push main, summary
-#   tools/cloud-setup.sh --install  # only download and verify the binaries
-#   tools/cloud-setup.sh --stop     # stop the server (the data stays)
+#   pipeline/scripts/cloud-setup.sh            # install, initialise, push main, summary
+#   pipeline/scripts/cloud-setup.sh --install  # only download and verify the binaries
+#   pipeline/scripts/cloud-setup.sh --stop     # stop the server (the data stays)
 #
 # Idempotent: a second run reuses what exists (and starts the server again if
 # it is down). It never touches the user's own Forgejo: it listens on its own
@@ -19,12 +21,16 @@
 # Settings (environment):
 #   FORGEJO_PORT     port on 127.0.0.1 (default 3000: nothing runs there in a
 #                    cloud session; a local test uses another)
-#   FORGEJO_HOME     data dir (default ~/.cache/baluk-notes/forgejo)
+#   FORGEJO_HOME     data dir (default ~/.cache/<project name as a word>/forgejo)
 #   FORGEJO_BIN_DIR  where `tea` goes if it is not installed (default
 #                    /usr/local/bin for root, else ~/.local/bin)
 #   FORGEJO_BIN      a Forgejo binary to use instead of the pinned download
 set -euo pipefail
-cd "$(dirname "$0")/.."
+# The project this script belongs to gives the settings, whatever the current
+# directory is.
+kit=$(cd "$(dirname "$0")" && pwd -P)
+cd "$kit/../.."
+source "$kit/lib/config.sh"
 
 # Pinned releases and their sha256 (the files published next to them).
 FORGEJO_VERSION=16.0.6
@@ -45,18 +51,21 @@ case "$(uname -m)" in
   *) echo "cloud-setup: unsupported CPU $(uname -m) (amd64 and arm64 only)" >&2; exit 1 ;;
 esac
 
+project=$(config_get project)
 port=${FORGEJO_PORT:-3000}
-fhome=${FORGEJO_HOME:-$HOME/.cache/baluk-notes/forgejo}
+fhome=${FORGEJO_HOME:-$(project_cache_dir)/forgejo}
 if [[ $EUID -eq 0 ]]; then bindir=${FORGEJO_BIN_DIR:-/usr/local/bin}; else bindir=${FORGEJO_BIN_DIR:-$HOME/.local/bin}; fi
 host=localhost
 url=http://$host:$port
-repo_owner=ibaluk
-repo_name=baluk-notes
+forge_repo=$(config_get forge.repo)
+repo_owner=${forge_repo%%/*}
+repo_name=${forge_repo#*/}
 repo_url=$url/$repo_owner/$repo_name.git
-marker=$fhome/.baluk-cloud-forgejo
+marker=$fhome/.pipeline-cloud-forgejo
 fbin=${FORGEJO_BIN:-$fhome/bin/forgejo}
-# user -> tea login (as the `forge` skill and docs/agents.md expect)
-users=(ibaluk agent-dev agent-reviewer)
+# user -> tea login (as the `forge` skill expects): the repository's owner is
+# the administrator
+users=("$repo_owner" agent-dev agent-reviewer)
 logins=(owner dev reviewer)
 
 die() { echo "cloud-setup: $*" >&2; exit 1; }
@@ -101,6 +110,7 @@ mode=full
 [[ ${1:-} == --install ]] && mode=install
 
 if [[ $mode == full ]]; then
+  [[ $forge_repo =~ ^[^/]+/[^/]+$ ]] || die "\"forge.repo\" (owner/name) is not set in $PROJECT_ROOT/.claude/pipeline.json (or neither jq nor python3 can read it)"
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || die "not inside a git checkout"
   origin_url=$(git remote get-url origin 2>/dev/null || true)
   if [[ $origin_url == "$repo_url" ]]; then
@@ -111,7 +121,9 @@ if [[ $mode == full ]]; then
     fi
   else
     [[ -n $origin_url ]] || die "the checkout has no remote 'origin' (the GitHub clone is expected)"
-    if [[ $origin_url =~ /$repo_owner/$repo_name(\.git)?/?$ ]]; then
+    forge_url=$(config_get forge.url)
+    forge_origin=${origin_url%/}
+    if [[ -n $forge_url && ${forge_origin%.git} == "${forge_url%/}/$forge_repo" ]]; then
       die "origin ($origin_url) is already the repository of a Forgejo, not a GitHub clone; refusing to touch it"
     fi
     if git remote get-url github >/dev/null 2>&1; then
@@ -157,7 +169,7 @@ if [[ $mode == full ]]; then
 fi
 
 mkdir -p "$fhome"
-[[ -e $marker ]] || echo "data of the throwaway Forgejo of tools/cloud-setup.sh" > "$marker"
+[[ -e $marker ]] || echo "data of the throwaway Forgejo of pipeline/scripts/cloud-setup.sh" > "$marker"
 chmod 0700 "$fhome"
 
 forgejo_ok() { [[ -x $fbin ]] && "$fbin" --version 2>/dev/null | grep -qF "version $FORGEJO_VERSION"; }
@@ -186,7 +198,7 @@ if [[ ! -f $ini ]]; then
   (
     umask 077
     cat > "$ini" <<EOF
-APP_NAME = baluk notes (cloud session)
+APP_NAME = ${project:-the project} (cloud session)
 RUN_MODE = prod
 WORK_PATH = $fhome/work
 
@@ -332,7 +344,7 @@ if [[ $origin_url != "$repo_url" ]]; then
 fi
 # the proof, for the next run, that this data dir arranged the remotes
 echo "$repo_url" > "$fhome/remotes-done"
-# git authenticates as the owner (a push goes as ibaluk, like locally) through
+# git authenticates as the owner (a push goes as the owner, like locally) through
 # a helper that only reads the password file: `store` would also remember the
 # agent accounts given in a URL and then use them for origin. A proxy of the
 # environment must not catch the loopback address.
@@ -344,7 +356,7 @@ git config --local --add "credential.$url.helper" "$helper"
 git config --local "http.$url/.proxy" ""
 git config --local checkout.defaultRemote origin
 
-# the branch the session started on, for tools/cloud-finish.sh
+# the branch the session started on, for cloud-finish.sh
 if [[ ! -f $fhome/session-branch ]]; then
   cur=$(git symbolic-ref --short -q HEAD || true)
   [[ $cur == claude/* ]] && echo "$cur" > "$fhome/session-branch"
@@ -373,7 +385,8 @@ fi
 # --- (e) protection of main (the local server's settings) --------------------
 
 say "protection of main"
-protection='{"branch_name":"main","rule_name":"main","enable_push":true,"enable_push_whitelist":true,"push_whitelist_usernames":["ibaluk"],"enable_merge_whitelist":true,"merge_whitelist_usernames":["agent-dev","ibaluk"],"enable_status_check":false,"required_approvals":1,"enable_approvals_whitelist":true,"approvals_whitelist_username":["agent-reviewer"],"block_on_rejected_reviews":true,"block_on_official_review_requests":false,"block_on_outdated_branch":false,"dismiss_stale_approvals":true,"ignore_stale_approvals":false,"require_signed_commits":false,"apply_to_admins":false}'
+protection='{"branch_name":"main","rule_name":"main","enable_push":true,"enable_push_whitelist":true,"push_whitelist_usernames":["@OWNER@"],"enable_merge_whitelist":true,"merge_whitelist_usernames":["agent-dev","@OWNER@"],"enable_status_check":false,"required_approvals":1,"enable_approvals_whitelist":true,"approvals_whitelist_username":["agent-reviewer"],"block_on_rejected_reviews":true,"block_on_official_review_requests":false,"block_on_outdated_branch":false,"dismiss_stale_approvals":true,"ignore_stale_approvals":false,"require_signed_commits":false,"apply_to_admins":false}'
+protection=${protection//@OWNER@/$repo_owner}
 if [[ $(api_status GET "/repos/$repo_owner/$repo_name/branch_protections/main") == 200 ]]; then
   api PATCH "/repos/$repo_owner/$repo_name/branch_protections/main" "$protection" >/dev/null
 else
@@ -387,14 +400,8 @@ echo
 echo "Throwaway Forgejo is ready (nothing is mirrored to GitHub)"
 echo "  server    $url  (127.0.0.1 only, pid $(server_pid), log $fhome/server.log)"
 echo "  repo      $repo_owner/$repo_name   origin = $repo_url   github = $(git remote get-url github)"
-echo "  accounts  ibaluk=owner (admin, pushes), agent-dev=dev (PRs, merge), agent-reviewer=reviewer (reviews)"
-echo "  main      merge needs an approval of agent-reviewer; a new commit makes it stale; only ibaluk pushes"
+echo "  accounts  $repo_owner=owner (admin, pushes), agent-dev=dev (PRs, merge), agent-reviewer=reviewer (reviews)"
+echo "  main      merge needs an approval of agent-reviewer; a new commit makes it stale; only $repo_owner pushes"
 echo "  secrets   $creds (0600)"
-echo "  session   branch for GitHub: $(cat "$fhome/session-branch" 2>/dev/null || echo "none (cloud-finish uses cloud/<date>)")"
-if [[ ${CLAUDE_CODE_REMOTE:-} == true || ${BALUK_CLOUD:-} == 1 ]]; then
-  echo "  builds    cloud settings active (CARGO_PROFILE_DEV_DEBUG=line-tables-only via tools/lib/build-env.sh)"
-else
-  echo "  builds    no cloud marker seen (CLAUDE_CODE_REMOTE, BALUK_CLOUD): if this is a cloud session, run 'export BALUK_CLOUD=1'"
-  echo "            in the shell that builds, else full debug info fills the small disk"
-fi
-echo "  finish    tools/cloud-finish.sh"
+echo "  session   branch for GitHub: $(cat "$fhome/session-branch" 2>/dev/null || echo "none (cloud-finish.sh uses cloud/<date>)")"
+echo "  finish    pipeline/scripts/cloud-finish.sh"

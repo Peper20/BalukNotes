@@ -144,6 +144,114 @@ its tools (`config.md`: `check`, `tests`). `scripts/test-scripts.sh` tests them.
   for the steps file): validate, the mod's tests and `tsc`, with the engine
   types copied into a linked worktree.
 
+## Forgejo
+
+The server side of the cycle: the check of every pull request run by CI, the
+runner, and a throwaway server for a cloud session. The scripts are in
+`scripts/`, the workflow template in `forgejo/`; the project's values are in
+`.claude/pipeline.json` (`config.md`: `forge`, `ci`, `check`).
+
+### CI
+
+Every push to a pull request into `main` (opened, synchronize, reopened) runs
+the full check as a commit status. The project copies `forgejo/check.yml` to
+`.forgejo/workflows/check.yml` and sets `runs-on` to its runner (`ci.runner`).
+The one job `full-check` runs `$PIPELINE_MAIN/pipeline/scripts/check-pr.sh
+<number>` of the main checkout, so the check builds into the shared build
+dirs and takes the shared locks. The job result is the exit code of the
+script: 0 success, anything else failure. A readable status of a head is the
+combined status of its commit, `tea api --login dev
+'/repos/{owner}/{repo}/commits/<sha>/status'`: `state` is `pending`,
+`success`, `failure` or `error`.
+
+`scripts/check-pr.sh <number>` (CI; by hand from any checkout) fetches
+`pull/<number>/head`, checks it out detached in the worktree of the main
+checkout `.claude/worktrees/check-pr-<number>` and runs the worktree's own
+`scripts/check.sh` there. A later run reuses the worktree: ignored output
+such as `node_modules` stays, the paths of `ci.staleOutput` are removed when
+the head changed, tracked files the check changed are restored. The result is
+the comment as `dev` on the pull request, which starts with exactly `Full
+check passed at <sha>.` or `Full check failed at <sha>: <steps>.` (the mod
+reads these lines), then the step table. The whole output is `run.log` in the
+worktree's folder of the logs (`check.logs`). Exit 0 passed, 1 failed, 2 could
+not run; the last line of its output is `check-pr: exit <code>` (the end to
+wait for). A second run for the same pull request while one is going exits 2
+(a lock `check-pr-<number>.lock` next to the lock of heavy work, which
+`check.sh` takes step by step). It prints the failed steps and the absolute
+paths of their logs.
+
+The runner is a Forgejo Runner (version and sha256 pinned in
+`scripts/ci-runner.sh`) on the project's machine: a repository runner
+`ci.runner`, label `<runner>:host` (the job runs on the host, no Docker),
+capacity 1, so the jobs queue and the check of a newer head starts when the
+older one ends. It runs as the user service `forgejo-runner.service` (while
+the user is logged in), `Nice=2`. `ci-runner.sh install` sets it up
+(idempotent; no root), `uninstall` removes it, `status` shows the unit and the
+runner as Forgejo sees it. The server is `forge.url`, the registration goes
+through the `owner` login of `tea`, the job finds the main checkout in
+`PIPELINE_MAIN` of the runner's environment (the checkout the script belongs
+to). `ci.tools` lists the programs the project's check calls; `install` warns
+about those missing from the runner's PATH.
+
+- Config and the token of the runner: `~/.config/forgejo-runner/config.yml`
+  (0600); the unit: `~/.config/systemd/user/forgejo-runner.service`; the
+  working dirs of jobs: `~/.local/share/forgejo-runner/`; the binary:
+  `~/.local/bin/forgejo-runner`. `install` writes the first two: edit the
+  script, not them.
+- Logs: the runner's - `journalctl --user -u forgejo-runner`; a job's - in
+  Forgejo, on the run of the pull request (the list through the API: `tea api
+  --login dev '/repos/{owner}/{repo}/actions/runs'`).
+- The job runs code of the pull request with the rights of the user (host
+  execution, no sandbox), as the agents do by hand. A change of the workflow
+  in a pull request takes effect in that pull request's own run, but the
+  script it runs is the main checkout's.
+
+### Cloud session
+
+A Claude Code cloud session clones a GitHub mirror, runs as root, has a small
+disk and no Forgejo, and has no CI runner, so the mod does not run there. The
+rest of the cycle works with a throwaway Forgejo started inside the session.
+
+- **`scripts/cloud-setup.sh`**, the first step of the session (idempotent;
+  needs `git`, `curl`, `sha256sum`, `awk` and `jq` or `python3` for the
+  config; `--install` only downloads, `--stop` stops the server). It installs
+  the pinned releases of Forgejo and `tea` (versions and sha256 in the script;
+  a mismatch stops it), initialises Forgejo on `127.0.0.1:$FORGEJO_PORT`
+  (default 3000) with SQLite, no registration, no email, no SSH, data in
+  `$FORGEJO_HOME` (default `~/.cache/<project name as a word>/forgejo`; random
+  passwords in its `credentials`, 0600). It creates the account of the owner
+  of `forge.repo` (admin) and `agent-dev`, `agent-reviewer`, the `tea` logins
+  `owner`, `dev`, `reviewer`, the repository `forge.repo` (squash merges
+  only), pushes the clone's `main` into it (a shallow clone is completed
+  first) and protects `main` as the project's server does: a merge needs an
+  approval of `agent-reviewer`, a new commit makes it stale, only the owner
+  pushes. `origin` becomes the cloud Forgejo and `github` the clone's former
+  `origin`; git signs in as the owner through a helper that reads
+  `credentials`. From then on `git`, `tea` and the `forge` skill work as
+  locally.
+- It refuses, changing nothing, when the port is taken by another program,
+  when `$FORGEJO_HOME` is not its own (no `.pipeline-cloud-forgejo`), when
+  `origin` is already the project's Forgejo repository or `github` exists, or
+  when the `tea` config has `owner`, `dev` or `reviewer` that the script did
+  not make for this server: it never touches the user's own Forgejo. On the
+  user's machine `origin` and the logins have exactly the URL of the default
+  port, so a rerun is accepted only with the proof in `$FORGEJO_HOME`
+  (`remotes-done`, `tea-logins`) that the script itself arranged them.
+  Nothing is mirrored to GitHub, and nothing writes to GitHub `main`.
+- An environment setup script of the cloud session (root, cached in a
+  snapshot) may run `scripts/cloud-setup.sh --install` to cache the two
+  downloads (~150 MB); the network policy must allow `codeberg.org` (Forgejo)
+  and `dl.gitea.com` (`tea`), both without redirects.
+- **`scripts/cloud-finish.sh [--branch NAME]`**, the last step, once every pull
+  request is merged or blocked: fetches `main` of the cloud Forgejo and pushes
+  it to a GitHub branch: `--branch`, else `$CLOUD_BRANCH`, else the `claude/...`
+  branch the session started on (recorded by the setup), else `cloud/<date>`.
+  It refuses `main`, never forces, reports a rejected push (the branch has
+  commits the session lacks) with the ways out, warns about pull requests
+  still open on the server (they are not sent) and prints the link for the
+  user to open a pull request from. The server dies with the session: what is
+  not sent is lost.
+
 ## The mod
 
 `hooks/` is a Claude Code plugin (a "mod") that the liaison's session loads. No

@@ -1,0 +1,30 @@
+# The kit's workflow template: the full check of a pull request on every push to
+# it (pipeline/docs/README.md, "Forgejo"). The project copies it to
+# `.forgejo/workflows/check.yml` and sets `runs-on` to the runner it installed
+# (`ci.runner` of .claude/pipeline.json, pipeline/scripts/ci-runner.sh). The
+# runner is on the project's machine with host execution, so the check runs the
+# script of the main checkout: it builds into the shared build dirs and takes
+# the shared locks. The result of the job is the exit code of the check: 0
+# success, anything else failure; the commit status of the head is the combined
+# status of the commit.
+name: ci
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+jobs:
+  full-check:
+    runs-on: <set to ci.runner>
+    # A cold run takes tens of minutes; a runner takes one job at a time, so the
+    # time in the queue is not counted.
+    timeout-minutes: 180
+    steps:
+      - name: check-pr.sh
+        shell: bash
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          : "${PIPELINE_MAIN:?PIPELINE_MAIN is not set: run pipeline/scripts/ci-runner.sh install}"
+          exec "$PIPELINE_MAIN/pipeline/scripts/check-pr.sh" "$PR"

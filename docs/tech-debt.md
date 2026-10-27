@@ -488,6 +488,10 @@ it. The format and rules - `.claude/rules/docs.md`.
   builds everything again (~8 min). How to close: remove old dependency
   variants (`cargo-sweep`) if full rebuilds get in the way.
 
+## Pipeline
+
+- **The CI workflow has a transitional run block.** `.forgejo/workflows/check.yml` falls back to `BALUK_MAIN` and to `tools/check-pr.sh`, so that the runner installed before the kit had `PIPELINE_MAIN` keeps working. Risk: none while it is there; the shim `tools/check-pr.sh` stays with it. How to close: run `pipeline/scripts/ci-runner.sh install` (the user's machine), then replace the run block with the kit template's and remove `tools/check-pr.sh`.
+
 ## The `/baluk-note` skill
 
 - **The skill looks at the page through a browser tool** on its own temporary

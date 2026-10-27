@@ -3,6 +3,11 @@
   "guide": "docs/agents.md",
   "map": ".claude/rules/project.md",
   "forge": { "url": "http://localhost:3000", "repo": "ibaluk/baluk-notes" },
+  "ci": {
+    "runner": "baluk-host",
+    "tools": "cargo node npm chromium",
+    "staleOutput": "app/dist"
+  },
   "afterMerge": {
     "paths": ["crates/", "app/", "baluk/", "skills/"],
     "command": ["tools/install.sh"],

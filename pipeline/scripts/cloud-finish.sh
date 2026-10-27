@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # End of a cloud session: send `main` of the throwaway Forgejo
-# (tools/cloud-setup.sh) to GitHub as a branch, for the user to review and
-# open a pull request from. It never writes to `main` of GitHub and never
-# forces a push.
+# (pipeline/scripts/cloud-setup.sh) to GitHub as a branch, for the user to
+# review and open a pull request from. It never writes to `main` of GitHub and
+# never forces a push.
 #
-#   tools/cloud-finish.sh [--branch NAME]
+#   pipeline/scripts/cloud-finish.sh [--branch NAME]
 #
 # The branch: --branch, else $CLOUD_BRANCH, else the `claude/...` branch the
 # session started on (recorded by cloud-setup.sh), else cloud/<date>. A push
@@ -13,19 +13,25 @@
 #
 # Settings: FORGEJO_PORT and FORGEJO_HOME as in cloud-setup.sh.
 set -euo pipefail
-cd "$(dirname "$0")/.."
-
-port=${FORGEJO_PORT:-3000}
-fhome=${FORGEJO_HOME:-$HOME/.cache/baluk-notes/forgejo}
-repo_url=http://localhost:$port/ibaluk/baluk-notes.git
+# The project this script belongs to gives the settings, whatever the current
+# directory is.
+kit=$(cd "$(dirname "$0")" && pwd -P)
+cd "$kit/../.."
+source "$kit/lib/config.sh"
 
 die() { echo "cloud-finish: $*" >&2; exit 1; }
+
+port=${FORGEJO_PORT:-3000}
+fhome=${FORGEJO_HOME:-$(project_cache_dir)/forgejo}
+forge_repo=$(config_get forge.repo)
+[[ $forge_repo =~ ^[^/]+/[^/]+$ ]] || die "\"forge.repo\" (owner/name) is not set in $PROJECT_ROOT/.claude/pipeline.json (or neither jq nor python3 can read it)"
+repo_url=http://localhost:$port/$forge_repo.git
 
 branch=${CLOUD_BRANCH:-}
 while [[ $# -gt 0 ]]; do
   case $1 in
     --branch) [[ $# -ge 2 ]] || die "--branch needs a name"; branch=$2; shift 2 ;;
-    *) die "unknown argument '$1' (usage: tools/cloud-finish.sh [--branch NAME])" ;;
+    *) die "unknown argument '$1' (usage: pipeline/scripts/cloud-finish.sh [--branch NAME])" ;;
   esac
 done
 [[ -n $branch || ! -f $fhome/session-branch ]] || branch=$(cat "$fhome/session-branch")
@@ -38,11 +44,11 @@ esac
 git check-ref-format --branch "$branch" >/dev/null 2>&1 || die "'$branch' is not a valid branch name"
 
 [[ $(git remote get-url origin 2>/dev/null || true) == "$repo_url" ]] \
-  || die "origin is not the cloud Forgejo ($repo_url): was tools/cloud-setup.sh run here?"
+  || die "origin is not the cloud Forgejo ($repo_url): was pipeline/scripts/cloud-setup.sh run here?"
 git remote get-url github >/dev/null 2>&1 || die "no remote 'github' to send to"
 
 echo "▶ fetching main of the cloud Forgejo"
-git fetch origin main >/dev/null 2>&1 || die "cannot fetch from $repo_url (is the server running? tools/cloud-setup.sh)"
+git fetch origin main >/dev/null 2>&1 || die "cannot fetch from $repo_url (is the server running? pipeline/scripts/cloud-setup.sh)"
 new=$(git rev-parse origin/main)
 
 if git fetch github main >/dev/null 2>&1; then
@@ -65,7 +71,7 @@ if ! out=$(git push github "refs/remotes/origin/main:refs/heads/$branch" 2>&1); 
   echo "cloud-finish: the push of '$branch' was rejected; nothing was forced." >&2
   echo "  If the branch has commits we do not have: fetch it (git fetch github $branch)," >&2
   echo "  merge it into main of the cloud Forgejo through a pull request, and run this again," >&2
-  echo "  or send the result to another branch: tools/cloud-finish.sh --branch <name>." >&2
+  echo "  or send the result to another branch: pipeline/scripts/cloud-finish.sh --branch <name>." >&2
   exit 1
 fi
 echo "$out"

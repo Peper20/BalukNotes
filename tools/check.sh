@@ -2,7 +2,7 @@
 # The full check of this project: the kit's runner (pipeline/scripts/check.sh)
 # with the steps of tools/steps.sh (`check.steps` of .claude/pipeline.json).
 # Before a pull request run the targeted tests (pipeline/scripts/test.sh); the
-# full check runs on the head of every pull request (tools/check-pr.sh).
+# full check runs on the head of every pull request (pipeline/scripts/check-pr.sh).
 #
 #   tools/check.sh           # everything: Rust, the fixture vault, API types, client, e2e
 #   tools/check.sh --fast    # without the client build and e2e (a minute or two)

@@ -48,9 +48,7 @@ if [[ -z ${HEAVY_LOCK:-} ]]; then
   if [[ -n $HEAVY_LOCK ]]; then
     HEAVY_LOCK=$(project_path "$HEAVY_LOCK")
   else
-    slug=$(config_get project | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9]\{1,\}/-/g; s/^-//; s/-$//')
-    HEAVY_LOCK=${XDG_CACHE_HOME:-$HOME/.cache}/${slug:-pipeline}/heavy.lock
-    unset slug
+    HEAVY_LOCK=$(project_cache_dir)/heavy.lock
   fi
 fi
 

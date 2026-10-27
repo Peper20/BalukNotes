@@ -13,7 +13,7 @@ reads it anew).
 | `project` | string | `the project` | The project's name in the texts the mod sends to agents |
 | `guide` | string | none | Path of the project's pipeline page. The agents read its section "Project specifics for the agents" first |
 | `map` | string | none | Path of the project's map of rules, read first with the guide |
-| `forge` | object | required | `{ "url": "http://...", "repo": "owner/name" }`: the Forgejo server; the mod builds the pull request address `<url>/<repo>/pulls/<n>` from it |
+| `forge` | object | required | `{ "url": "http://...", "repo": "owner/name" }`: the Forgejo server; the mod builds the pull request address `<url>/<repo>/pulls/<n>` from it; `ci-runner.sh` registers the runner at `url`, and the cloud Forgejo (`cloud-setup.sh`) is a repository `repo` whose owner account is the owner of `repo` |
 | `afterMerge` | object | none (nothing runs) | The command run in the main checkout after a merge that changed the project's files |
 | `afterMerge.paths` | list of strings | `[]` | Path prefixes (`"src/"`): a merge that changes a file under one runs the command. Empty: any change |
 | `afterMerge.command` | list of strings | required with `afterMerge` | The program and its arguments, no shell |
@@ -23,6 +23,10 @@ reads it anew).
 | `check.env` | string | none | Path of a file that `scripts/lib/cap.sh` sources once `CHECK_JOBS` is set: it exports the settings of the project's tools (`below <n>` is `CHECK_JOBS` - n, at least 1) and may define `on_heavy_acquire <changed>`, called under the lock of heavy work (`changed` is 1 for the first holder after another checkout) |
 | `check.logs` | string | `.pipeline/check` | The folder of the step logs, `table.txt` and `summary.md`, against the checkout root (keep it out of git). The mod names it to a developer whose check failed |
 | `check.heavyLock` | string | `~/.cache/<project name as a word>/heavy.lock` | The lock that makes the heavy work of all runs on the machine take turns; `~/` is the home |
+| `ci` | object | none | The CI runner and the check of a pull request (`scripts/ci-runner.sh`, `scripts/check-pr.sh`); the keys below |
+| `ci.runner` | string | required by `ci-runner.sh` | The name of the repository runner; its label is `<runner>:host`. The workflow's `runs-on` is this label's name |
+| `ci.tools` | string | none | Programs, space-separated, that the project's check calls: `ci-runner.sh install` warns about those missing from the PATH of the runner (it always checks `git`, `tea`, `python3`, `flock`) |
+| `ci.staleOutput` | string | none | Paths (against the checkout root), space-separated, that `check-pr.sh` removes from the check worktree when it moves to another head: build output that would be taken for the new head's |
 | `tests` | list of objects | none | The rules of `scripts/test.sh`: `{ "match": "<extended regex on a changed path>", "run": "<command>" }`; `$1`..`$9` in the command are the groups of the match |
 | `targetedTests` | string | none | The hint on running the targeted tests that the developer contract shows, `(<hint>)` after "the targeted tests your change needs" |
 
@@ -51,6 +55,7 @@ Example:
     "env": "scripts/cap-env.sh",
     "logs": "out/check"
   },
+  "ci": { "runner": "widgets-host", "tools": "make node", "staleOutput": "web/dist" },
   "tests": [
     { "match": "^src/([^/]+)/", "run": "make test T=$1" }
   ],

@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
-# The CI runner of the local Forgejo: runs the full check of a pull request on
-# every push to it (`.forgejo/workflows/check.yml`, `.claude/rules/tools.md`,
-# "CI"). A Forgejo Runner on this machine as a user systemd service, no root.
+# The CI runner of the project's Forgejo: runs the full check of a pull request
+# on every push to it (pipeline/forgejo/check.yml, pipeline/docs/README.md,
+# "Forgejo"). A Forgejo Runner on this machine as a user systemd service, no
+# root. The server is `forge.url` and the runner's name `ci.runner` of
+# .claude/pipeline.json (pipeline/config.md).
 #
-#   tools/ci-runner.sh install     # download, register, write the unit, start
-#   tools/ci-runner.sh uninstall   # stop, remove the unit, the registration and the files
-#   tools/ci-runner.sh status      # the unit and the runner as Forgejo sees it
+#   pipeline/scripts/ci-runner.sh install     # download, register, write the unit, start
+#   pipeline/scripts/ci-runner.sh uninstall   # stop, remove the unit, the registration and the files
+#   pipeline/scripts/ci-runner.sh status      # the unit and the runner as Forgejo sees it
 #
 # install: puts the pinned `forgejo-runner` (version and sha256 below; a
 # mismatch stops it) into ~/.local/bin, registers a repository runner
-# `baluk-host` with the label `baluk-host:host` (the job runs on this machine,
+# `<ci.runner>` with the label `<ci.runner>:host` (the job runs on this machine,
 # no Docker; the registration is made through the API as `owner`, with `tea`),
 # capacity 1, and writes
 #   ~/.config/forgejo-runner/config.yml              the settings and the token (0600)
 #   ~/.config/systemd/user/forgejo-runner.service    the unit (enabled, started)
 #   ~/.local/share/forgejo-runner/                   the working dirs of the jobs
-# The jobs find the main checkout in $BALUK_MAIN (the runner's environment, set
-# here: the checkout this script belongs to, also when it is started from a
+# The jobs find the main checkout in $PIPELINE_MAIN (the runner's environment,
+# set here: the checkout this script belongs to, also when it is started from a
 # worktree). Idempotent: a second run changes nothing (a file is rewritten and
 # the service restarted only when its text differs).
 # uninstall: also removes the runner in Forgejo, the config, the data and the
@@ -29,6 +31,13 @@
 #
 # Needs: curl, sha256sum, systemctl (--user), tea (the login `owner`), python3.
 set -uo pipefail
+
+# The project this script belongs to (not the current directory) gives the
+# settings.
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+PIPELINE_PROJECT_ROOT=${PIPELINE_PROJECT_ROOT:-$here}
+source "$(dirname "${BASH_SOURCE[0]}")/lib/config.sh"
+unset here
 
 # Pinned release and its sha256 (the files published next to the binaries).
 RUNNER_VERSION=13.2.0
@@ -48,10 +57,11 @@ case "$(uname -m)" in
     ;;
 esac
 
-RUNNER_NAME=baluk-host
-RUNNER_LABEL=baluk-host:host
+RUNNER_NAME=$(config_get ci.runner)
+RUNNER_LABEL=$RUNNER_NAME:host
+FORGEJO_URL=$(config_get forge.url)
+PROJECT=$(config_get project)
 SERVICE=forgejo-runner.service
-FORGEJO_URL=http://localhost:3000
 # Seconds to wait for the runner to show online after the start.
 ONLINE_WAIT=${CI_RUNNER_ONLINE_WAIT:-60}
 
@@ -78,7 +88,7 @@ usage() {
 # cache action.
 config_text() {
   cat <<EOF
-# Written by tools/ci-runner.sh install; do not edit (it is rewritten).
+# Written by pipeline/scripts/ci-runner.sh install; do not edit (it is rewritten).
 # Holds the token of the runner.
 log:
   level: info
@@ -89,7 +99,7 @@ runner:
   timeout: 4h
   shutdown_timeout: 30s
   envs:
-    BALUK_MAIN: "$1"
+    PIPELINE_MAIN: "$1"
   labels: ["$RUNNER_LABEL"]
 
 host:
@@ -112,9 +122,9 @@ EOF
 # computer responsive.
 unit_text() {
   cat <<EOF
-# Written by tools/ci-runner.sh install; do not edit (it is rewritten).
+# Written by pipeline/scripts/ci-runner.sh install; do not edit (it is rewritten).
 [Unit]
-Description=Forgejo Runner of baluk notes (full check of pull requests, host execution)
+Description=Forgejo Runner of ${PROJECT:-the project} (full check of pull requests, host execution)
 StartLimitIntervalSec=0
 
 [Service]
@@ -198,11 +208,11 @@ runner_list() {
 
 main_root() {
   local here common
-  if [[ -n ${BALUK_MAIN:-} ]]; then
-    echo "$BALUK_MAIN"
+  if [[ -n ${PIPELINE_MAIN:-} ]]; then
+    echo "$PIPELINE_MAIN"
     return
   fi
-  here=$(cd "$(dirname "$0")/.." && pwd) || return 1
+  here=$PIPELINE_PROJECT_ROOT
   common=$(git -C "$here" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
   dirname "$common"
 }
@@ -231,19 +241,21 @@ ensure_binary() {
   mv -f "$tmp" "$BIN"
 }
 
-# warn_tools: the tools the jobs (check.sh) call; a missing one is only a warning.
+# warn_tools: the tools the jobs call (the kit's, and `ci.tools` of the config,
+# space-separated); a missing one is only a warning.
 warn_tools() {
-  local t missing=()
-  for t in git cargo node npm tea python3 flock; do
+  local t missing=() project_tools
+  read -ra project_tools <<<"$(config_get ci.tools)"
+  for t in git tea python3 flock "${project_tools[@]}"; do
     PATH=$(jobs_path) command -v "$t" >/dev/null 2>&1 || missing+=("$t")
   done
-  [[ -x /usr/bin/chromium || -n ${CHROMIUM:-} ]] || missing+=(chromium)
   if (( ${#missing[@]} > 0 )); then
     echo "ci-runner: WARNING: not found for the jobs: ${missing[*]} (PATH of the unit: $(jobs_path))" >&2
   fi
 }
 
 cmd_install() {
+  require_settings
   local c
   for c in curl sha256sum python3 tea systemctl; do
     command -v "$c" >/dev/null || die "$c is missing"
@@ -252,7 +264,7 @@ cmd_install() {
 
   local main
   main=$(main_root) || die "git: not in a checkout of the project"
-  [[ -x $main/tools/check-pr.sh ]] || die "$main/tools/check-pr.sh is missing: not the main checkout of the project?"
+  [[ -x $main/pipeline/scripts/check-pr.sh ]] || die "$main/pipeline/scripts/check-pr.sh is missing: not the main checkout of the project?"
 
   local changed=0
   ensure_binary && changed=1
@@ -274,7 +286,7 @@ cmd_install() {
       api -X DELETE "/repos/{owner}/{repo}/actions/runners/$id" >/dev/null || die "cannot remove the runner $id"
     done <<<"$list"
     say "registering the runner $RUNNER_NAME ($RUNNER_LABEL)"
-    answer=$(api -X POST -d "{\"name\":\"$RUNNER_NAME\",\"description\":\"baluk notes CI, host execution (tools/ci-runner.sh)\"}" \
+    answer=$(api -X POST -d "{\"name\":\"$RUNNER_NAME\",\"description\":\"${PROJECT:-the project} CI, host execution (pipeline/scripts/ci-runner.sh)\"}" \
       '/repos/{owner}/{repo}/actions/runners') || die "the server did not register the runner"
     read -r id uuid token < <(parse_registration <<<"$answer" 2>/dev/null) || die "the answer of the server is not a registration"
     [[ -n $uuid && -n $token ]] || die "the answer of the server has no uuid and token"
@@ -317,6 +329,7 @@ cmd_install() {
 }
 
 cmd_uninstall() {
+  require_settings
   command -v systemctl >/dev/null || die "systemctl is missing"
   local uuid list id
   uuid=$(conn_field uuid)
@@ -352,6 +365,7 @@ cmd_uninstall() {
 }
 
 cmd_status() {
+  require_settings
   command -v systemctl >/dev/null || die "systemctl is missing"
   local active enabled ok=0 list
   active=$(sc is-active "$SERVICE" 2>/dev/null)
@@ -378,6 +392,12 @@ cmd_status() {
   (( ok ))
 }
 
+# require_settings: the keys of the config that every command needs.
+require_settings() {
+  [[ -n $RUNNER_NAME ]] || die "\"ci.runner\" (the name of the runner) is not set in $PROJECT_ROOT/.claude/pipeline.json"
+  [[ -n $FORGEJO_URL ]] || die "\"forge.url\" is not set in $PROJECT_ROOT/.claude/pipeline.json"
+}
+
 main() {
   case "${1:-}" in
     -h | --help)
@@ -386,12 +406,12 @@ main() {
       ;;
     install | uninstall | status)
       if [[ $# -ne 1 ]]; then
-        echo "usage: tools/ci-runner.sh install|uninstall|status" >&2
+        echo "usage: pipeline/scripts/ci-runner.sh install|uninstall|status" >&2
         exit 2
       fi
       ;;
     *)
-      echo "usage: tools/ci-runner.sh install|uninstall|status" >&2
+      echo "usage: pipeline/scripts/ci-runner.sh install|uninstall|status" >&2
       exit 2
       ;;
   esac

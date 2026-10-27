@@ -49,3 +49,18 @@ project_path() {
     *) echo "$PROJECT_ROOT/$1" ;;
   esac
 }
+
+# project_slug: the project's name as a word ("My Project!" -> my-project);
+# empty when the config has no name.
+project_slug() {
+  config_get project | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9]\{1,\}/-/g; s/^-//; s/-$//'
+}
+
+# project_cache_dir: the project's folder under the user's cache,
+# ~/.cache/<project name as a word> ($XDG_CACHE_HOME moves it; pipeline when the
+# config has no name).
+project_cache_dir() {
+  local slug
+  slug=$(project_slug)
+  echo "${XDG_CACHE_HOME:-$HOME/.cache}/${slug:-pipeline}"
+}

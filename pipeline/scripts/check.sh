@@ -138,7 +138,7 @@ summary() {
   echo "| step | result | time, s | lock wait, s |"
   echo "|---|---|--:|--:|"
   for i in "${!names[@]}"; do
-    echo "| ${names[$i]} | ${results[$i]//|/\\|} | ${times[$i]} | ${waits[$i]} |"
+    echo "| ${names[$i]//|/\\|} | ${results[$i]//|/\\|} | ${times[$i]} | ${waits[$i]} |"
     [[ ${times[$i]} =~ ^[0-9]+$ ]] && total=$((total + times[i]))
     [[ ${waits[$i]} =~ ^[0-9]+$ ]] && waited=$((waited + waits[i]))
   done

@@ -11,24 +11,22 @@ paths:
 | `check.sh` | the full check: the entry point of the kit's runner `pipeline/scripts/check.sh` with the steps of `steps.sh` |
 | `steps.sh` | the steps of this project's full check and its options `--fast/--rust/--app` (`check.steps` of `.claude/pipeline.json`) |
 | `cargo.sh` | `cargo` by hand with the settings of the checks: the shared build dir, the CPU cap, the lock of heavy work and `freshen_sources` |
-| `check-pr.sh` | the full check of a pull request: `check.sh` in the worktree `.claude/worktrees/check-pr-<number>` at its head commit, the result as a pull request comment `Full check passed at <sha>.` or `Full check failed at <sha>: <steps>.` (run by CI on every pull request push, `.forgejo/workflows/check.yml`, "CI") |
-| `ci-runner.sh` | `install`, `uninstall`, `status` of the Forgejo Runner that runs `check-pr.sh` on every pull request push ("CI") |
+| `check-pr.sh` | a shim: `exec` of the kit's `pipeline/scripts/check-pr.sh` (the full check of a pull request, "CI"), kept for the runner installed before the kit (`docs/tech-debt.md`, "Pipeline") |
 | `install.sh` | `notes` and its parts (`notes-typst`, `notes-hub`, the `notes-app` window with a menu entry and icon) into `~/.local/bin` and the skill into `~/.claude/skills` in one version (the autostart service is not installed; one still active is restarted); run again after changes |
-| `cloud-setup.sh`, `cloud-finish.sh` | a throwaway Forgejo in a cloud session and sending its `main` to a GitHub branch ("Cloud environment") |
 | `deploy-hub.sh` | updates `notes-hub` on the VPS in one command (`--web`: also the browser version): sends the sources of a commit over SSH, the VPS builds, a root helper (`server/baluk-notes-hub-install`, installed by hand) installs and restarts (`docs/server.md`, "Updating") |
 | `web-bundle.sh` | builds the browser version for the hub into a folder (`web-bundle.sh <dir> [--reuse-dist] [--reuse-wasm <dir>]`: the client or the module that a build already made): the client, the core module, the packages, the stylesheets and font parts from a temporary `notes-typst serve`; `notes hub serve --web <dir>` serves it (architecture §9, `docs/server.md`); `deploy-hub.sh --web` sends it |
 | `test-env.sh` | a server on `tests/vault` (data `tests/.data`, port 8432, another - `PORT=...`) |
 | `lib/worktree-target.sh` | in a linked worktree (agents) - the build dir of the main checkout, `<root>/target` |
 | `lib/target-limit.sh` | pruning and the size limit of that dir, sourced by `steps.sh` (the crate list by python3, no `jq`) |
-| `lib/cpu-cap.sh` | a shim: sources the kit's `pipeline/scripts/lib/cap.sh` (the CPU cap `CHECK_JOBS` and the lock of heavy work) for `install.sh`, `test-env.sh`, `cargo.sh`, `web-bundle.sh`, `check-pr.sh` |
+| `lib/cpu-cap.sh` | a shim: sources the kit's `pipeline/scripts/lib/cap.sh` (the CPU cap `CHECK_JOBS` and the lock of heavy work) for `install.sh`, `test-env.sh`, `cargo.sh`, `web-bundle.sh` |
 | `lib/cpu-env.sh` | the project's part of the cap (`check.env`): the settings of its tools from `CHECK_JOBS` ("CPU cap") and `freshen_sources` |
 | `lib/build-env.sh` | the build settings of a small disk and a cloud session (`CARGO_PROFILE_DEV_DEBUG`) and the WebKitGTK check, sourced by `steps.sh`, `install.sh`, `test-env.sh`, `cargo.sh` |
 | `lib/cargo-test.sh` | the step `cargo-test` of `steps.sh`: the test binaries run at the same time within `RUST_TEST_THREADS` (below, "CPU cap") |
-| `test-libs.sh` | tests of the libraries above (the scheme of `lib/cargo-test.sh` with fake test binaries, the settings of `lib/cpu-env.sh`), of `cargo.sh`, `check-pr.sh` and `ci-runner.sh`, the refusals of `web-bundle.sh` and `pipeline/setup.sh`, without a cargo build - the first step of the full check; it runs the kit's `pipeline/scripts/test-scripts.sh` at the end |
+| `test-libs.sh` | tests of the libraries above (the scheme of `lib/cargo-test.sh` with fake test binaries, the settings of `lib/cpu-env.sh`), of `cargo.sh` and the `check-pr.sh` shim, the refusals of `web-bundle.sh` and `pipeline/setup.sh`, without a cargo build - the first step of the full check; it runs the kit's `pipeline/scripts/test-scripts.sh` at the end |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 | `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; runs itself inside a headless gamescope |
 | `app-smoke.sh` | a smoke launch of the `notes-app` window inside a headless gamescope: it opens, loads the fixture vault, quits cleanly (~6 s); not in `check.sh` (needs gamescope and an installed or built `notes-app`) |
-| `../pipeline/` | the development cycle kit (the mod, the agents, the skills, its documents), in the repository root; `tools/pipeline` is a link to it ("Pipeline mod") |
+| `../pipeline/` | the development cycle kit (the mod, the agents, the skills, the scripts of the checks, of CI and of the cloud Forgejo, its documents), in the repository root; `tools/pipeline` is a link to it ("Pipeline mod") |
 
 ## Checks
 
@@ -108,22 +106,15 @@ system of the build dir is under `SMALL_DISK_GB` (100) in total, or in a cloud
 session (`CLAUDE_CODE_REMOTE=true` or `BALUK_CLOUD=1`); a value set by hand is
 kept. It also answers whether WebKitGTK is installed (`has_webkit`).
 `tools/test-libs.sh`, the first step of `check.sh`, tests these libraries and
-`tools/cargo.sh`, `tools/check-pr.sh` and `tools/ci-runner.sh` without a cargo
-build, with shims for `jq`, `df`, `python3`, `pkg-config`, `cargo`, `tea` and
-`systemctl`; then it runs the kit's `pipeline/scripts/test-scripts.sh`.
-`tools/check-pr.sh <number>` (CI; by hand from any checkout) fetches
-`pull/<number>/head`, checks it out detached in the worktree of the main
-checkout `.claude/worktrees/check-pr-<number>` (a later run reuses it: ignored
-output such as `app/node_modules` stays, `app/dist` of an older head is
-removed, tracked files the check changed are restored) and runs the full
-`check.sh` there. The result is the comment on the pull request; the whole
-output is in `tests/.data/check/run.log` of the worktree (`check.sh` clears
-the rest of that folder at the start). Exit 0 passed, 1 failed, 2 could not
-run; the last line of its output is `check-pr: exit <code>` (the end to wait
-for). A second run for the same pull request while one is going exits 2 (a
-lock `check-pr-<number>.lock` next to the lock of heavy work, which `check.sh`
-takes step by step). Without `app/dist` (a fresh checkout) the client is built
-before the Rust steps - server tests serve it. e2e listens on fixed ports
+`tools/cargo.sh` without a cargo build, with shims for `jq`, `df`, `python3`,
+`pkg-config` and `cargo`; then it runs the kit's
+`pipeline/scripts/test-scripts.sh`. The full check of a pull request is the
+kit's `pipeline/scripts/check-pr.sh <number>` (run by CI, "CI" below; by hand
+from any checkout): `app/dist` of an older head is removed from its worktree
+(`ci.staleOutput` of `.claude/pipeline.json`), the logs are in
+`tests/.data/check/` of the worktree (`check.sh` clears that folder at the
+start; the whole output is `run.log` there). Without `app/dist` (a fresh
+checkout) the client is built before the Rust steps - server tests serve it. e2e listens on fixed ports
 (8600-8649, `app/e2e/ports.ts`): the lock of heavy work (below) keeps runs
 from overlapping. The e2e servers keep their data in RAM (`XDG_RUNTIME_DIR` or
 `/dev/shm`, else `tests/.data`; `DATA_ROOT` of `app/e2e/server.ts`, ~25 MB):
@@ -132,39 +123,19 @@ gigabytes of the build steps are written out, past the 10 s of an `expect`.
 
 ## CI
 
-Every push to a pull request into `main` (opened, synchronize, reopened) runs
-the full check as a commit status: `.forgejo/workflows/check.yml`, one job
-`full-check` on the runner label `baluk-host`, which runs
-`$BALUK_MAIN/tools/check-pr.sh <number>` of the main checkout (so the check
-builds into the shared `target/` and takes the shared locks). The job result is
-the exit code of the script: 0 success, anything else failure. A readable
-status of a head is the combined status of its commit, `tea api --login dev
-'/repos/{owner}/{repo}/commits/<sha>/status'`: `state` is `pending`,
-`success`, `failure` or `error`. The comment of `check-pr.sh` on the pull
-request stays as it is.
+The mechanism (the workflow, the runner, `PIPELINE_MAIN`, the statuses, the
+logs, host execution) is the kit's: `pipeline/docs/README.md`, "Forgejo". This
+project's side:
 
-The runner is a Forgejo Runner (pinned in `tools/ci-runner.sh`) on this
-machine: a repository runner `baluk-host`, label `baluk-host:host` (the job
-runs on the host, no Docker), capacity 1, so the jobs queue and the check of a
-newer head of a pull request starts when the older one ends. It runs as the
-user service `forgejo-runner.service` (while the user is logged in), `Nice=2`.
-`tools/ci-runner.sh install` sets it up (idempotent; no root), `uninstall`
-removes it, `status` shows the unit and the runner as Forgejo sees it.
-
-- Config and the token of the runner: `~/.config/forgejo-runner/config.yml`
-  (0600; `BALUK_MAIN`, the main checkout, is in its `runner.envs`); the unit:
-  `~/.config/systemd/user/forgejo-runner.service`; the working dirs of jobs:
-  `~/.local/share/forgejo-runner/`; the binary: `~/.local/bin/forgejo-runner`.
-  Both files are written by `install`: edit the script, not them.
-- Logs: the runner's - `journalctl --user -u forgejo-runner`; a job's - in
-  Forgejo, on the run of the pull request (`/ibaluk/baluk-notes/actions`; the
-  list through the API: `tea api --login dev
-  '/repos/{owner}/{repo}/actions/runs'`). `check-pr.sh` prints the failed
-  steps and the paths of their logs there.
-- The job runs code of the pull request with the rights of the user (host
-  execution, no sandbox), as the agents do by hand. A change of
-  `.forgejo/workflows/check.yml` in a pull request takes effect in that pull
-  request's own run.
+- The runner is `baluk-host` (`ci.runner` of `.claude/pipeline.json`) on this
+  machine, installed by `pipeline/scripts/ci-runner.sh install`. `ci.tools`
+  names what the check needs (`cargo node npm chromium`; the e2e step needs a
+  system Chromium, another one - `CHROMIUM=...`).
+- `.forgejo/workflows/check.yml` is the kit's template
+  (`pipeline/forgejo/check.yml`) with `runs-on: baluk-host` and a transitional
+  run block: it falls back to `BALUK_MAIN` of the runner installed before the
+  kit and to the shim `tools/check-pr.sh` (`docs/tech-debt.md`, "Pipeline").
+- The job logs of a run: `/ibaluk/baluk-notes/actions` on the server.
 
 ## CPU cap
 
@@ -292,65 +263,25 @@ gamescope --backend headless -W <width> -H <height> -- <command>
 
 ## Cloud environment
 
-A Claude Code cloud session clones the GitHub mirror, runs as root, has a
-small disk and no Forgejo. The server side works there as it does locally (the
-pipeline mod does not: there is no CI runner, `docs/agents.md`, "Known
-limits"): `tools/cloud-setup.sh` starts a throwaway Forgejo inside the session
-with the same accounts, `tea` logins and protection of `main`
-(`docs/agents.md`, "Server"), so the rules, skills and agent definitions stay
-as they are; `tools/cloud-finish.sh` sends the result to GitHub.
+A Claude Code cloud session clones the GitHub mirror, runs as root, has a small
+disk and no Forgejo. The kit's `pipeline/scripts/cloud-setup.sh` starts a
+throwaway Forgejo inside it and `pipeline/scripts/cloud-finish.sh` sends the
+result to GitHub (`pipeline/docs/README.md`, "Forgejo"); the pipeline mod does
+not run there (no CI runner, `docs/agents.md`, "Known limits").
 
-**Session start** (the liaison, before anything else): `tools/cloud-setup.sh`.
-It prints a summary; from then on `origin` is the cloud Forgejo and `github`
-is the clone's own remote, and `git`, `tea` and the `forge` skill work as
-locally. The session may be resumed or restarted with the server gone:
-run the script again. At the end: `tools/cloud-finish.sh`, and give the user
-the branch it prints.
+**Session start** (the liaison, before anything else):
+`pipeline/scripts/cloud-setup.sh`. The session may be resumed or restarted with
+the server gone: run it again. At the end: `pipeline/scripts/cloud-finish.sh`,
+and give the user the branch it prints.
 
 **Environment setup script** (Bash, root, before Claude Code starts, cached in
 a snapshot): only what needs root or gains from the cache. Today it installs
 the wrapper `/usr/local/bin/chromium` with `--no-sandbox` (from
 `/opt/pw-browsers`). The network policy allows `packages.typst.org` (CeTZ)
-and, for `tools/cloud-setup.sh`, `codeberg.org` (Forgejo) and `dl.gitea.com`
+and, for `cloud-setup.sh`, `codeberg.org` (Forgejo) and `dl.gitea.com`
 (`tea`), both without redirects. If the script sees the checkout,
-`tools/cloud-setup.sh --install` there caches the two downloads (~150 MB) in
-the snapshot; otherwise the first run downloads them.
-
-**`tools/cloud-setup.sh`** (idempotent; needs `git`, `curl`, `sha256sum`,
-`awk`; no `jq`, here or in the checks; `--install` only downloads):
-
-- Installs the pinned releases (versions and sha256 in the script; a mismatch
-  stops it): Forgejo into `$FORGEJO_HOME/bin`, `tea` into `/usr/local/bin`
-  (root) or `~/.local/bin` (`FORGEJO_BIN_DIR`) unless a `tea` is present.
-- Initialises Forgejo on `127.0.0.1:$FORGEJO_PORT` (default 3000) with SQLite,
-  registration disabled, no email, no SSH, data in `$FORGEJO_HOME` (default
-  `~/.cache/baluk-notes/forgejo`; random passwords in its `credentials`, 0600).
-  Forgejo refuses to run as root; the script sets its override for this
-  throwaway server.
-- Creates `ibaluk` (admin), `agent-dev`, `agent-reviewer`, the `tea` logins
-  `owner`, `dev`, `reviewer`, the repository `ibaluk/baluk-notes` (squash
-  merges only), pushes the clone's `main` into it (a shallow clone is
-  completed first) and protects `main` as the local server does.
-- Remotes: `origin` is the cloud Forgejo, `github` is the clone's former
-  `origin`. git signs in as `ibaluk` through a helper that reads `credentials`,
-  and does not use an environment proxy for the loopback address.
-- Refuses, changing nothing, when the port is taken by another program, when
-  `$FORGEJO_HOME` is not its own, when `origin` is already a Forgejo
-  repository or `github` exists, or when the `tea` config has `owner`, `dev`
-  or `reviewer` that the script did not make for this server: it never
-  touches the user's own Forgejo. On the user's machine `origin` and the
-  logins have exactly the URL of the default port, so a rerun is accepted
-  only with the proof in `$FORGEJO_HOME` (`remotes-done`, `tea-logins`)
-  that the script itself arranged them. `--stop` stops its server.
-- Nothing is mirrored to GitHub, and nothing writes to GitHub `main`.
-
-**`tools/cloud-finish.sh [--branch NAME]`**: fetches `main` of the cloud
-Forgejo and pushes it to a GitHub branch: `--branch`, else `$CLOUD_BRANCH`,
-else the `claude/...` branch the session started on (recorded by the setup),
-else `cloud/<date>`. It refuses `main`, never forces, reports a rejected push
-(the branch has commits the session lacks) with the ways out, warns about
-pull requests still open on the server (they are not sent) and prints the
-link for the user to open a pull request from.
+`pipeline/scripts/cloud-setup.sh --install` there caches the two downloads
+(~150 MB) in the snapshot; otherwise the first run downloads them.
 
 Working in the session:
 
@@ -359,10 +290,9 @@ Working in the session:
   `CARGO_PROFILE_DEV_DEBUG=line-tables-only` themselves (`lib/build-env.sh`,
   see "Checks"). That a session counts as a cloud one rests on
   `CLAUDE_CODE_REMOTE=true`, which is an unconfirmed assumption; the explicit
-  switch is `BALUK_CLOUD=1`, and `tools/cloud-setup.sh` prints in its summary
-  which of them it sees and, if neither, the line to export. `tools/cargo.sh`
-  sets it as the scripts do; a plain `cargo` needs the variable itself; out of
-  space - `cargo clean`.
+  switch is `BALUK_CLOUD=1` (export it in the shell that builds if
+  `CLAUDE_CODE_REMOTE` is not set). `tools/cargo.sh` sets it as the scripts do;
+  a plain `cargo` needs the variable itself; out of space - `cargo clean`.
 - Time: a Rust build from scratch ~8 min, `cargo test` ~1 min, e2e ~1.5 min.
 - Not for the cloud (needs the user or their machine): the Tauri and Android
   apps, authorization, replacing font files, updating Typst.

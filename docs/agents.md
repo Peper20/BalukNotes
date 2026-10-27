@@ -56,7 +56,7 @@ the accounts with the `nexus` project:
 | Account | `tea` login | Used by | For |
 |---|---|---|---|
 | `ibaluk` | `owner` | the user, every `git push`, the mod's merge | owner, administrator |
-| `agent-dev` | `dev` | developers, `tools/check-pr.sh` | opens pull requests, comments the check |
+| `agent-dev` | `dev` | developers, `pipeline/scripts/check-pr.sh` | opens pull requests, comments the check |
 | `agent-reviewer` | `reviewer` | `reviewer` | approves or requests changes |
 
 Separate accounts make the review formal: the server does not let an account
@@ -67,8 +67,9 @@ commit makes the approval stale; `agent-dev` and `ibaluk` may merge; only
 developers pushing to `main` rests on the agents' rules.
 
 CI: the runner checks every push to a pull request
-(`.forgejo/workflows/check.yml` -> `tools/check-pr.sh`): the full
-`tools/check.sh` at the head commit (`.claude/rules/tools.md`, "CI").
+(`.forgejo/workflows/check.yml` -> `pipeline/scripts/check-pr.sh`): the full
+`tools/check.sh` at the head commit (`pipeline/docs/README.md`, "Forgejo";
+this project's side - `.claude/rules/tools.md`, "CI").
 
 GitHub (`github.com/Peper20/BalukNotes`, the remote `github`) is the public
 mirror: Forgejo pushes every change of the repository there (a push mirror
@@ -76,16 +77,17 @@ over SSH with a deploy key). The cloud environment of Claude Code works from
 it.
 
 In a Claude Code cloud session there is no such server. The first step of the
-session, `tools/cloud-setup.sh` (`.claude/rules/tools.md`, "Cloud
-environment"), starts a throwaway Forgejo on `127.0.0.1:3000` inside the
+session, `pipeline/scripts/cloud-setup.sh` (`pipeline/docs/README.md`,
+"Forgejo"; `.claude/rules/tools.md`, "Cloud environment"), starts a throwaway Forgejo on `127.0.0.1:3000` inside the
 session with the same accounts, `tea` logins and protection of `main`, and
 pushes the clone's `main` into it; `origin` is then the cloud Forgejo and
 `github` the clone's own remote, so the rules, the `forge` skill and the agent
 definitions work unchanged. Nothing in the session writes to GitHub `main`: at
-the end `tools/cloud-finish.sh` pushes the cloud `main` to a GitHub branch (by
-default the `claude/...` branch the session started on) and prints the link;
-the user opens the pull request there. The server dies with the session:
-anything not sent by `cloud-finish.sh`, open pull requests included, is lost.
+the end `pipeline/scripts/cloud-finish.sh` pushes the cloud `main` to a GitHub
+branch (by default the `claude/...` branch the session started on) and prints
+the link; the user opens the pull request there. The server dies with the
+session: anything not sent by `cloud-finish.sh`, open pull requests included,
+is lost.
 
 ## Launch
 
@@ -98,8 +100,8 @@ main session the `liaison`, locally and in a cloud session (the cloud session
 reads the file from the clone; the model of a cloud session is chosen in its
 interface, not by the agent definition). `--plugin-dir` loads the pipeline mod
 (`pipeline/docs/README.md`, "The mod"); the runner of CI is a user service
-(`tools/ci-runner.sh status`). `tools/pipeline` is a link to `pipeline/`, kept
-for sessions started with the old path.
+(`pipeline/scripts/ci-runner.sh status`). `tools/pipeline` is a link to
+`pipeline/`, kept for sessions started with the old path.
 
 ## Known limits
 
@@ -175,10 +177,10 @@ user's.
 change note files silently; the user's notes are never touched. Sensitive
 places: the hub trusting client input, unsafe paths (escaping the vault).
 
-**Cloud session.** The `liaison` runs `tools/cloud-setup.sh` as the very first
-step, before reading or delegating anything, and `tools/cloud-finish.sh` at the
-end, once every pull request is merged or blocked; then it gives the user the
-branch it prints.
+**Cloud session.** The `liaison` runs `pipeline/scripts/cloud-setup.sh` as the
+very first step, before reading or delegating anything, and
+`pipeline/scripts/cloud-finish.sh` at the end, once every pull request is
+merged or blocked; then it gives the user the branch it prints.
 
 **The user's word.** An update of the server on the VPS (`tools/deploy-hub.sh`,
 `docs/server.md`) runs only on the user's word; the `liaison` runs it itself
