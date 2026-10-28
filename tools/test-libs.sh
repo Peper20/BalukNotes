@@ -4,12 +4,11 @@
 # settings of a small disk and a cloud session, the WebKit check, and the lock's
 # record of the checkout (the sources are freshened only after another
 # checkout), tools/cargo.sh (its arguments, exit code, settings, record and the
-# client build copied into a linked worktree), the shim tools/check-pr.sh,
-# pipeline/setup.sh, and the settings of this project's tools from the CPU cap
-# (tools/lib/cpu-env.sh). The kit's scripts
-# (the runner, the cap and the lock, test.sh, measure.sh, check-pr.sh,
-# ci-runner.sh, the cloud scripts, the copy of the mod's types) have their own
-# tests, pipeline/scripts/test-scripts.sh, run at the end.
+# client build copied into a linked worktree), pipeline/setup.sh, and the
+# settings of this project's tools from the CPU cap (tools/lib/cpu-env.sh). The
+# kit's scripts (the runner, the cap and the lock, test.sh, measure.sh,
+# check-pr.sh, ci-runner.sh, the cloud scripts, the copy of the mod's types)
+# have their own tests, pipeline/scripts/test-scripts.sh, run at the end.
 # No cargo build: cargo runs for `cargo metadata` and for `cargo clean` of a
 # scratch dir; tools/cargo.sh runs in a scratch checkout against a cargo shim.
 # Run by check.sh as a step. The scratch dirs are in tests/.data/libs; the real
@@ -307,10 +306,6 @@ echo new >"$lk/added/app/new.ts"
 run_client "$lk/added" test -p notes-server >"$root/client-added.log" 2>&1
 expect "a new file in app/ counts as a difference too" \
   eval 'absent "$lk/added/app/dist" && grep -qF "app/ differs from the main checkout" "$root/client-added.log"'
-
-echo "tools/check-pr.sh (the shim for the runner installed before the kit):"
-expect "it hands its arguments to the kit's pipeline/scripts/check-pr.sh" \
-  eval '[[ $(tools/check-pr.sh --help 2>&1 | head -n 2) == *"The full check of a pull request"* ]]'
 
 # --- tools/web-bundle.sh: what it refuses before it builds anything ---
 wb=$root/web-bundle

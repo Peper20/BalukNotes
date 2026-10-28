@@ -25,6 +25,12 @@
 # step failed.
 set -uo pipefail
 
+# The job summary is the runner's alone. The steps run without it, so a tool
+# that writes its own section there (Vitest's GitHub Actions reporter) cannot
+# put it on the job page.
+job_summary=${GITHUB_STEP_SUMMARY:-}
+unset GITHUB_STEP_SUMMARY
+
 # Lower than normal priority (the steps inherit it): a build on all cores
 # yields to work at the computer (nice 2; ionice - scale 0-7, normal 4) and
 # takes idle CPU just the same.
@@ -162,11 +168,11 @@ echo
 if (( began )); then
   table | tee "$logs/table.txt"
   summary >"$logs/summary.md"
-  if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
-    if cat "$logs/summary.md" >>"$GITHUB_STEP_SUMMARY"; then
-      appended="summary: appended to $GITHUB_STEP_SUMMARY"
+  if [[ -n $job_summary ]]; then
+    if cat "$logs/summary.md" >>"$job_summary"; then
+      appended="summary: appended to $job_summary"
     else
-      appended="check.sh: cannot write $GITHUB_STEP_SUMMARY"
+      appended="check.sh: cannot write $job_summary"
     fi
   fi
 else

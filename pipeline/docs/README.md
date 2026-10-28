@@ -125,7 +125,9 @@ its tools (`config.md`: `check`, `tests`). `scripts/test-scripts.sh` tests them.
   spent waiting for the lock per step (not in the step's time), a total row,
   the wall time, and the last 25 lines of each failed step's log in a
   collapsed block. When `GITHUB_STEP_SUMMARY` is set, as Forgejo Actions does,
-  the summary is appended to it: the job page shows the table.
+  the summary is appended to it: the job page shows the table. The runner keeps
+  the variable for itself and runs every step without it, so a tool of a step
+  (Vitest's GitHub Actions reporter, for one) writes nothing there.
 - **The CPU cap and the lock** (`scripts/lib/cap.sh`, sourced by the runner
   and by the project's own scripts): `CHECK_JOBS`, the CPUs the scripts may
   keep busy (all of a machine with 1-2 CPUs, otherwise n - round(n/6);
@@ -170,7 +172,8 @@ dirs and takes the shared locks. The job result is the exit code of the
 script: 0 success, anything else failure. A readable status of a head is the
 combined status of its commit, `tea api --login dev
 '/repos/{owner}/{repo}/commits/<sha>/status'`: `state` is `pending`,
-`success`, `failure` or `error`.
+`success`, `failure` or `error`. The job page shows the table of the check and
+nothing else (`scripts/check.sh`, "Checks").
 
 `scripts/check-pr.sh <number>` (CI; by hand from any checkout) fetches
 `pull/<number>/head`, checks it out detached in the worktree of the main

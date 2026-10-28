@@ -322,6 +322,18 @@ expect "the run says it appended the summary, after the table" \
 expect "GITHUB_STEP_SUMMARY gets the summary after what it had" \
   eval '[[ $(head -n 1 "$root/job-summary.md") == "earlier job text" ]] && grep -q "^| step | result | time, s | lock wait, s |$" "$root/job-summary.md"'
 
+echo "check.sh, a step that writes to GITHUB_STEP_SUMMARY:"
+cat >"$r/ci/steps.sh" <<'STEPS'
+steps() {
+  step writer sh -c 'echo "stray section" >>"${GITHUB_STEP_SUMMARY:-/dev/null}"; echo "${GITHUB_STEP_SUMMARY-unset}" >"$1"' _ "$STEP_SEEN"
+}
+STEPS
+(cd "$r" && STEP_SEEN=$root/step-seen GITHUB_STEP_SUMMARY=$root/writer-summary.md "$kit/check.sh") >"$root/writer.out" 2>&1
+rc=$?
+expect "the run passes" test "$rc" -eq 0
+expect "the step runs with GITHUB_STEP_SUMMARY unset" test "$(cat "$root/step-seen")" = unset
+expect "the job summary is the runner's table and nothing the step wrote" cmp -s "$root/writer-summary.md" "$r/out/check/summary.md"
+
 echo "check.sh, a project without steps:"
 cp "$r/.claude/pipeline.json" "$root/pipeline.json.keep"
 sed -i 's#"steps": "ci/steps.sh", ##' "$r/.claude/pipeline.json"

@@ -11,7 +11,6 @@ paths:
 | `check.sh` | the full check: the entry point of the kit's runner `pipeline/scripts/check.sh` with the steps of `steps.sh` |
 | `steps.sh` | the steps of this project's full check and its options `--fast/--rust/--app` (`check.steps` of `.claude/pipeline.json`) |
 | `cargo.sh` | `cargo` by hand with the settings of the checks: the shared build dir, the CPU cap, the lock of heavy work and `freshen_sources`; a `test` in a linked worktree without `app/dist` copies in the main checkout's client build when the worktree's `app/` is the same as the main HEAD's (not recopied after later changes; else it says the client must be built) |
-| `check-pr.sh` | a shim: `exec` of the kit's `pipeline/scripts/check-pr.sh` (the full check of a pull request, "CI"), kept for the runner installed before the kit (`docs/tech-debt.md`, "Pipeline") |
 | `install.sh` | `notes` and its parts (`notes-typst`, `notes-hub`, the `notes-app` window with a menu entry and icon) into `~/.local/bin` and the skill into `~/.claude/skills` in one version (the autostart service is not installed; one still active is restarted); run again after changes |
 | `deploy-hub.sh` | updates `notes-hub` on the VPS in one command (`--web`: also the browser version): sends the sources of a commit over SSH, the VPS builds, a root helper (`server/baluk-notes-hub-install`, installed by hand) installs and restarts (`docs/server.md`, "Updating") |
 | `web-bundle.sh` | builds the browser version for the hub into a folder (`web-bundle.sh <dir> [--reuse-dist] [--reuse-wasm <dir>]`: the client or the module that a build already made): the client, the core module, the packages, the stylesheets and font parts from a temporary `notes-typst serve`; `notes hub serve --web <dir>` serves it (architecture §9, `docs/server.md`); `deploy-hub.sh --web` sends it |
@@ -22,7 +21,7 @@ paths:
 | `lib/cpu-env.sh` | the project's part of the cap (`check.env`): the settings of its tools from `CHECK_JOBS` ("CPU cap") and `freshen_sources` |
 | `lib/build-env.sh` | the build settings of a small disk and a cloud session (`CARGO_PROFILE_DEV_DEBUG`) and the WebKitGTK check, sourced by `steps.sh`, `install.sh`, `test-env.sh`, `cargo.sh` |
 | `lib/cargo-test.sh` | the step `cargo-test` of `steps.sh`: the test binaries run at the same time within `RUST_TEST_THREADS` (below, "CPU cap") |
-| `test-libs.sh` | tests of the libraries above (the scheme of `lib/cargo-test.sh` with fake test binaries, the settings of `lib/cpu-env.sh`), of `cargo.sh` and the `check-pr.sh` shim, the refusals of `web-bundle.sh` and `pipeline/setup.sh`, without a cargo build - the first step of the full check; it runs the kit's `pipeline/scripts/test-scripts.sh` at the end |
+| `test-libs.sh` | tests of the libraries above (the scheme of `lib/cargo-test.sh` with fake test binaries, the settings of `lib/cpu-env.sh`), of `cargo.sh`, the refusals of `web-bundle.sh` and `pipeline/setup.sh`, without a cargo build - the first step of the full check; it runs the kit's `pipeline/scripts/test-scripts.sh` at the end |
 | `visual.mjs`, `shot.mjs` | screenshots of fixtures and pages (browser - `lib/browser.mjs`) |
 | `shot-webkit.py` | the same page in WebKitGTK (the engine of the app window): a screenshot or a measurement, `--dark`/`--light`, `--print 'JS'`; runs itself inside a headless gamescope |
 | `app-smoke.sh` | a smoke launch of the `notes-app` window inside a headless gamescope: it opens, loads the fixture vault, quits cleanly (~6 s); not in `check.sh` (needs gamescope and an installed or built `notes-app`) |
@@ -136,9 +135,8 @@ project's side:
   names what the check needs (`cargo node npm chromium`; the e2e step needs a
   system Chromium, another one - `CHROMIUM=...`).
 - `.forgejo/workflows/check.yml` is the kit's template
-  (`pipeline/forgejo/check.yml`) with `runs-on: baluk-host` and a transitional
-  run block: it falls back to `BALUK_MAIN` of the runner installed before the
-  kit and to the shim `tools/check-pr.sh` (`docs/tech-debt.md`, "Pipeline").
+  (`pipeline/forgejo/check.yml`) with `runs-on: baluk-host`.
+- The job page shows the check's table and nothing else (the kit's "Checks").
 - The job logs of a run: `/ibaluk/baluk-notes/actions` on the server.
 
 ## CPU cap

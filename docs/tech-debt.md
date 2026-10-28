@@ -508,13 +508,6 @@ it. The format and rules - `.claude/rules/docs.md`.
 
 ## Pipeline
 
-- **The CI workflow has a transitional run block.**
-  `.forgejo/workflows/check.yml` falls back to `BALUK_MAIN` and to
-  `tools/check-pr.sh`, so that the runner installed before the kit had
-  `PIPELINE_MAIN` keeps working. Risk: none while it is there; the shim
-  `tools/check-pr.sh` stays with it. How to close: run
-  `pipeline/scripts/ci-runner.sh install` (the user's machine), then replace
-  the run block with the kit template's and remove `tools/check-pr.sh`.
 - **`registerGuard` (`pipeline/hooks/register.tsx`) must be registered after
   the other `tool.call` hooks.** Registered before them, a pass-through
   `tool.call` hook made `$.agent.spawn` lose the agent id in
