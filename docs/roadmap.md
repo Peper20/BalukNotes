@@ -306,7 +306,7 @@ is merged, one task at a time.
       portable, no emoji (done, PR #34). Then one mechanism in the mod: an edit of a file
       whose language has a skill in `.claude/pipeline.json` needs that skill
       loaded (replaced the former Python hook)
-- [ ] The main agent is renamed from `liaison` to `lead`
+- [x] The main agent is renamed from `liaison` to `lead` (PR #50)
 - [x] The mod (PR #38, #43): a cancelled check (a machine shutdown) is re-run and costs no
       round; at start it reconciles dead agents, their unsaved work and their
       worktrees. It does not pile up tasks: `pipeline_status` shows the live
@@ -334,11 +334,6 @@ is merged, one task at a time.
       config; the real timeout text of the install (PR #49)
 
 ## Later
-
-- Spec-driven development (user's plan): every task is written to a file in
-  the repository (spec, acceptance criteria, files) that the developer reads;
-  the liaison writes the specs, the briefs point to them. How the files are
-  laid out and when they are removed - to decide when it starts
 
 - Public notes (to think through): a note opens by a link for everyone, in the
   full client (not a static site); it is visible which ones are public. Who
