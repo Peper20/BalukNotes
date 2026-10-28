@@ -335,6 +335,11 @@ is merged, one task at a time.
       always fail `client_and_fonts_are_served` (503): the developers read a
       false failure each time. Give the worktree the client build or make the
       test say why it cannot run
+- [ ] The mod nudges an agent whose turn ended while it waits for its own
+      background work ("ended without the PIPELINE line: asked to finish"):
+      Claude Code suspends such an agent and wakes it when the work ends, so
+      the nudge disturbs a measurement. Tell such a pause from a forgotten
+      PIPELINE line before nudging
 
 ## Later
 
