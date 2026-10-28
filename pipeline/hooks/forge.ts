@@ -413,8 +413,8 @@ export function makeForge(run: Run, opts: ForgeOptions): Forge {
       const tail = (r.stderr || r.stdout).trim().split('\n').slice(-3).join(' / ')
       return { ok: false, note: `exit ${r.exitCode}: ${tail}` }
     } catch (err) {
-      // `$.process.run` rejects both when the command cannot start and when the time limit cut it.
-      if (/time(d)?[ -]?out/i.test(String(err))) return { ok: false, note: 'timed out', timedOut: true }
+      // `$.process.run` rejects both when the command cannot start and when the time limit cut it ("still running after <ms>ms").
+      if (/still running after|time(d)?[ -]?out/i.test(String(err))) return { ok: false, note: 'timed out', timedOut: true }
       return { ok: false, note: `${String(err)} (run ${afterMerge.command.join(' ')} by hand)` }
     }
   }

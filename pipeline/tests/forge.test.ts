@@ -290,6 +290,22 @@ describe('git: main checkout', () => {
       expect(cut).toEqual({ ok: false, note: 'timed out', timedOut: true })
     })
 
+    test('a command still running after its time limit is a timeout, as $.process.run rejects it', async () => {
+      const cut = await withConfig(async () => {
+        throw new Error('HooksError: pipeline: $.process.run(tools/install.sh) aborted: still running after 600000ms')
+      }).install()
+      expect(cut).toEqual({ ok: false, note: 'timed out', timedOut: true })
+    })
+
+    test('a command that cannot start stays a failure, even when the rejection names a process', async () => {
+      const refused = await withConfig(async () => {
+        throw new Error('HooksError: pipeline: $.process.run(scripts/after.sh --quick) cannot start')
+      }).install()
+      expect(refused.ok).toBe(false)
+      expect(refused.timedOut).toBeUndefined()
+      expect(refused.note).toContain('run scripts/after.sh --quick by hand')
+    })
+
     test('no command in the config: nothing runs', async () => {
       const s = script([])
       expect((await forgeOf(s.run).install()).ok).toBe(false)
