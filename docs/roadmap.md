@@ -331,6 +331,11 @@ is merged, one task at a time.
 - [~] In flight: `mod-fixes` (the open mod items below, the guard after
       `/clear`, its rules re-read) and `worktree-dist` (the server's
       targeted tests in a worktree)
+      Both stopped at the usage limit (blocked). `mod-fixes`: all six items
+      coded on `task/mod-fixes` (WIP, no PR), tests not run, README and
+      register tests left. `worktree-dist`: PR #46, the libs tests not run
+      to the end; decision for it: copy main's `app/dist` instead of a link
+      (a build in the worktree would empty main's build through the link)
 - [x] Kit: the check log says who holds the heavy lock and when it is
       taken (PR #40); its tests' wait loops have no timeout yet
 - [ ] The targeted tests of `notes-server` in a worktree without `app/dist`
