@@ -331,6 +331,10 @@ is merged, one task at a time.
       `.claude/hooks/require-rust-skill.py` is deleted
 - [ ] Kit: the check log says when the heavy lock is taken (a wait looked
       like a hang)
+- [ ] The targeted tests of `notes-server` in a worktree without `app/dist`
+      always fail `client_and_fonts_are_served` (503): the developers read a
+      false failure each time. Give the worktree the client build or make the
+      test say why it cannot run
 
 ## Later
 
