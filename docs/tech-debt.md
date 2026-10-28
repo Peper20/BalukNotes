@@ -306,10 +306,11 @@ it. The format and rules - `.claude/rules/docs.md`.
   `notes-device`; the hub binary alone builds without it
   (`--no-default-features`).
 
-- **The login throttle counts an attempt before it is verified**: a double
-  submit of the right password gets a 429, and anyone who knows a login can
-  keep it slowed down for up to 60 s (the throttle is per login). How to
-  close: count only failed verifications, and throttle by address as well.
+- **The login throttle is per login only** (`notes_store::sessions::Throttle`):
+  anyone who knows a login can keep it slowed down for up to 60 s. An attempt
+  counts as wrong until it is verified (against parallel guessing), so a
+  client that submits twice gets a 429; both of our sign-in forms block a
+  second submit. How to close: throttle by login and address together.
 - **The hub's `changes` never looks at the disk** (SYNC-14): a file edited by
   hand on the VPS is noticed only after a restart or when its path is read,
   written or deleted through the API. How to close: a rescan on start of a
