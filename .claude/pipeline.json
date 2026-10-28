@@ -23,7 +23,7 @@
     { "match": "^crates/([^/]+)/", "run": "tools/cargo.sh test -p $1" },
     { "match": "^app/", "run": "cd app && npm test && npm run -s check" },
     { "match": "^(tools|pipeline/scripts)/", "run": "tools/test-libs.sh" },
-    { "match": "^pipeline/(hooks|tests)/", "run": "claude plugin test pipeline" }
+    { "match": "^pipeline/(hooks|tests|types)/", "run": "source pipeline/scripts/lib/mod-check.sh && pipeline_mod_check app/node_modules/.bin/tsc" }
   ],
   "skills": [{ "match": "\\.rs$", "skill": "rust", "rules": ".claude/rules/crates.md" }],
   "targetedTests": "pipeline/scripts/test.sh"
