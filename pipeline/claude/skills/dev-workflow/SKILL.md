@@ -64,7 +64,7 @@ If you stopped on a contradiction or an expensive open point, return the questio
 The pipeline reads the last line of your final message, exactly one of:
 
 - `PIPELINE: pr=<number>` - the pull request is ready for CI and review;
-- `PIPELINE: pr=<number> liaison` - the report holds architecture additions, deferred items or a question the liaison must see first;
+- `PIPELINE: pr=<number> liaison` - the report holds architecture additions, deferred items or a question the liaison must see first and has not decided yet (what the brief or the liaison's answer already asked for does not count);
 - `PIPELINE: question` - no pull request: you stopped on a question or a contradiction.
 
 The answer comes back to you in the same conversation; go on and end the same way.
