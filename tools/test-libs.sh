@@ -3,9 +3,10 @@
 # build dir: the target limit (pruning, the size limit, the warnings), the build
 # settings of a small disk and a cloud session, the WebKit check, and the lock's
 # record of the checkout (the sources are freshened only after another
-# checkout), tools/cargo.sh (its arguments, exit code, settings and record) and
-# the shim tools/check-pr.sh, pipeline/setup.sh, and the settings of this
-# project's tools from the CPU cap (tools/lib/cpu-env.sh). The kit's scripts
+# checkout), tools/cargo.sh (its arguments, exit code, settings, record and the
+# client build copied into a linked worktree), the shim tools/check-pr.sh,
+# pipeline/setup.sh, and the settings of this project's tools from the CPU cap
+# (tools/lib/cpu-env.sh). The kit's scripts
 # (the runner, the cap and the lock, test.sh, measure.sh, check-pr.sh,
 # ci-runner.sh, the cloud scripts, the copy of the mod's types) have their own
 # tests, pipeline/scripts/test-scripts.sh, run at the end.
@@ -241,6 +242,71 @@ rm -rf "$d"
 expect "outside a checkout of this repository it exits 2" test "$rc" -eq 2
 expect "and says so" grep -q "not in a checkout of baluk notes" "$root/outside.log"
 
+
+# absent <path>: nothing at the path, not even a dangling link.
+absent() { [[ ! -e $1 && ! -L $1 ]]; }
+
+echo "tools/cargo.sh test in a linked worktree: a copy of the main checkout's client build (scratch checkouts with git worktree):"
+lk=$root/client-copy
+rm -rf "$lk"
+mkdir -p "$lk/main/tools/lib" "$lk/main/pipeline/scripts" "$lk/main/.claude" "$lk/main/app"
+cp tools/cargo.sh "$lk/main/tools/"
+cp tools/lib/worktree-target.sh tools/lib/cpu-cap.sh tools/lib/cpu-env.sh tools/lib/build-env.sh "$lk/main/tools/lib/"
+cp -r pipeline/scripts/lib "$lk/main/pipeline/scripts/"
+cp .claude/pipeline.json "$lk/main/.claude/"
+cp .gitignore "$lk/main/"
+echo '<!doctype html>' >"$lk/main/app/index.html"
+(cd "$lk/main" && git init -q -b main && git add -A && git -c user.name=t -c user.email=t@t commit -q -m first)
+# add_wt <dir>: a linked worktree of the main checkout, at its HEAD.
+add_wt() { (cd "$lk/main" && git worktree add -q --detach "$1"); }
+# run_client <checkout> <cargo arguments...>: tools/cargo.sh there, with the cargo
+# shim (its arguments go to $root/client.out).
+run_client() {
+  local dir=$1
+  shift
+  (cd "$dir" && CHECK_JOBS=3 PATH="$root/cargo-bin:$PATH" HEAVY_LOCK="$root/client.lock" \
+    CARGO_SHIM_OUT="$root/client.out" tools/cargo.sh "$@")
+}
+
+run_client "$lk/main" test -p notes-server >"$root/client-main.log" 2>&1
+expect "the main checkout without a build: a test copies nothing and says nothing about the client" \
+  eval 'absent "$lk/main/app/dist" && ! grep -q "^tools/cargo.sh: " "$root/client-main.log"'
+add_wt "$lk/no-build"
+run_client "$lk/no-build" test -p notes-server >"$root/client-no-build.log" 2>&1
+expect "a linked worktree and no build in the main checkout: nothing is copied, and the build command is said" \
+  eval 'absent "$lk/no-build/app/dist" && grep -qF "has no client build" "$root/client-no-build.log" && grep -qF "cd app && npm run build" "$root/client-no-build.log"'
+
+mkdir -p "$lk/main/app/dist"
+echo '<!doctype html>' >"$lk/main/app/dist/index.html"
+add_wt "$lk/copied"
+run_client "$lk/copied" version >"$root/client-version.log" 2>&1
+expect "a command other than test copies nothing" absent "$lk/copied/app/dist"
+run_client "$lk/copied" test -p notes-server >"$root/client-copied.log" 2>&1
+expect "a test without app/dist copies the main checkout's build in: a directory of its own" \
+  eval '[[ -d $lk/copied/app/dist && ! -L $lk/copied/app/dist ]] && cmp -s "$lk/copied/app/dist/index.html" "$lk/main/app/dist/index.html"'
+expect "the copy is said in one line" \
+  grep -qFx "tools/cargo.sh: app/dist is a copy of the main checkout's client build; a later change in app/ does not recopy it" "$root/client-copied.log"
+expect "cargo still runs with the arguments" eval 'printf "%s\n" test -p notes-server | cmp -s - "$root/client.out"'
+expect "git does not see the copy: the worktree is clean" eval '[[ -z $(cd "$lk/copied" && git status --porcelain) ]]'
+# a client build empties app/dist first (vite)
+rm -rf "$lk/copied/app/dist/"*
+expect "a build in the worktree does not touch the main checkout's build" test -f "$lk/main/app/dist/index.html"
+add_wt "$lk/own"
+mkdir -p "$lk/own/app/dist"
+echo own >"$lk/own/app/dist/index.html"
+run_client "$lk/own" test -p notes-server >"$root/client-own.log" 2>&1
+expect "its own app/dist is kept, and nothing is said" \
+  eval '[[ ! -L $lk/own/app/dist && $(cat "$lk/own/app/dist/index.html") == own ]] && ! grep -q "^tools/cargo.sh: " "$root/client-own.log"'
+add_wt "$lk/changed"
+echo changed >>"$lk/changed/app/index.html"
+run_client "$lk/changed" test -p notes-server >"$root/client-changed.log" 2>&1
+expect "app/ differs from the main HEAD: nothing is copied, and the build command is said" \
+  eval 'absent "$lk/changed/app/dist" && grep -qF "app/ differs from the main checkout" "$root/client-changed.log" && grep -qF "cd app && npm run build" "$root/client-changed.log"'
+add_wt "$lk/added"
+echo new >"$lk/added/app/new.ts"
+run_client "$lk/added" test -p notes-server >"$root/client-added.log" 2>&1
+expect "a new file in app/ counts as a difference too" \
+  eval 'absent "$lk/added/app/dist" && grep -qF "app/ differs from the main checkout" "$root/client-added.log"'
 
 echo "tools/check-pr.sh (the shim for the runner installed before the kit):"
 expect "it hands its arguments to the kit's pipeline/scripts/check-pr.sh" \

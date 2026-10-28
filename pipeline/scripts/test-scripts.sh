@@ -28,6 +28,21 @@ expect() {   # expect <description> <command...>: the command must succeed
     fails=$((fails + 1))
   fi
 }
+# wait_for <seconds> <description> <command...>: polls the command every 0.1 s
+# until it succeeds; after <seconds> the test fails with a message, so a wait for
+# a process that never comes does not hang the run.
+wait_for() {
+  local limit=$1 desc=$2 end=$((SECONDS + $1))
+  shift 2
+  until "$@"; do
+    if (( SECONDS >= end )); then
+      echo "  FAIL  $desc: not within $limit s"
+      fails=$((fails + 1))
+      return 1
+    fi
+    sleep 0.1
+  done
+}
 
 # new_project <dir> [name]: a scratch project with one commit on main, origin/main
 # at that commit, and the config of the tests below.
@@ -52,6 +67,15 @@ JSON
   git -C "$1" -c user.name=t -c user.email=t@t commit -q -m first
   git -C "$1" update-ref refs/remotes/origin/main HEAD
 }
+
+# --- the waits of the tests ---
+echo "the waits of the tests (wait_for):"
+expect "a condition that comes within its limit: the wait succeeds" wait_for 5 "a directory" test -d "$root"
+# In a subshell: the failure it counts must not count as a failure of this test.
+(wait_for 1 "a condition that never comes" false) >"$root/wait.out" 2>&1
+wait_rc=$?
+expect "a condition that does not come within its limit fails with a message, and returns" \
+  eval '[[ $wait_rc -eq 1 ]] && grep -qx "  FAIL  a condition that never comes: not within 1 s" "$root/wait.out"'
 
 # --- the cap and the lock ---
 echo "the CPU cap (lib/cap.sh):"
@@ -144,7 +168,7 @@ new_project "$hp"
   heavy_release
 ) &
 first_pid=$!
-until [[ -s $hp/heavy.lock.holder ]]; do sleep 0.1; done
+wait_for 30 "the holder file of the lock is written" test -s "$hp/heavy.lock.holder"
 expect "the holder file names the holder: its pid, the time it took the lock, its checkout and its label" \
   eval '[[ $(cat "$hp/heavy.lock.holder") == "$first_pid "[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" $(cd "$hp" && git rev-parse --show-toplevel) first run" ]]'
 (
@@ -163,7 +187,7 @@ uk=$root/unknown-holder
 new_project "$uk"
 (exec 9>"$uk/heavy.lock"; flock 9; touch "$uk/ready"; sleep 2) &
 unknown_pid=$!
-until [[ -e $uk/ready ]]; do sleep 0.1; done
+wait_for 30 "the lock holder is ready" test -e "$uk/ready"
 (cd "$uk" && source "$kit/lib/cap.sh" && heavy true) 2>"$root/unknown-wait.log"
 wait "$unknown_pid"
 expect "a lock held without a holder file is named as held by an unknown process" \
@@ -277,7 +301,9 @@ printf 'earlier job text\n' >"$root/job-summary.md"
 # Another run holds the lock for 3 s.
 (exec 9>"$r/heavy.lock"; flock 9; sleep 3) &
 holder=$!
-until ! flock -n 8 8>"$r/heavy.lock"; do sleep 0.1; done
+# lock_held <file>: another process holds the flock on <file>.
+lock_held() { ! flock -n 8 8>"$1"; }
+wait_for 30 "the other run holds the lock" lock_held "$r/heavy.lock"
 (cd "$r" && HOLDER_SEEN=$root/holder-seen GITHUB_STEP_SUMMARY=$root/job-summary.md "$kit/check.sh") >"$root/pass.out" 2>&1
 rc=$?
 wait "$holder"

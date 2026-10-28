@@ -10,7 +10,7 @@ paths:
 |---|---|
 | `check.sh` | the full check: the entry point of the kit's runner `pipeline/scripts/check.sh` with the steps of `steps.sh` |
 | `steps.sh` | the steps of this project's full check and its options `--fast/--rust/--app` (`check.steps` of `.claude/pipeline.json`) |
-| `cargo.sh` | `cargo` by hand with the settings of the checks: the shared build dir, the CPU cap, the lock of heavy work and `freshen_sources` |
+| `cargo.sh` | `cargo` by hand with the settings of the checks: the shared build dir, the CPU cap, the lock of heavy work and `freshen_sources`; a `test` in a linked worktree without `app/dist` copies in the main checkout's client build when the worktree's `app/` is the same as the main HEAD's (not recopied after later changes; else it says the client must be built) |
 | `check-pr.sh` | a shim: `exec` of the kit's `pipeline/scripts/check-pr.sh` (the full check of a pull request, "CI"), kept for the runner installed before the kit (`docs/tech-debt.md`, "Pipeline") |
 | `install.sh` | `notes` and its parts (`notes-typst`, `notes-hub`, the `notes-app` window with a menu entry and icon) into `~/.local/bin` and the skill into `~/.claude/skills` in one version (the autostart service is not installed; one still active is restarted); run again after changes |
 | `deploy-hub.sh` | updates `notes-hub` on the VPS in one command (`--web`: also the browser version): sends the sources of a commit over SSH, the VPS builds, a root helper (`server/baluk-notes-hub-install`, installed by hand) installs and restarts (`docs/server.md`, "Updating") |
