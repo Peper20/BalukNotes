@@ -340,6 +340,14 @@ is merged, one task at a time.
       Claude Code suspends such an agent and wakes it when the work ends, so
       the nudge disturbs a measurement. Tell such a pause from a forgotten
       PIPELINE line before nudging
+- [ ] The reviewer does not see the liaison's messages to the developer
+      (`pipeline_send` after the start): decisions and added work look out of
+      scope to it. The reviewer's prompt gets the brief with every later
+      message of the liaison
+- [ ] The marker of a started session (`pipeline.started`) is written before
+      the boot succeeds: a new session with a broken config that hot-reloads
+      wakes live tasks without the user's word. Write it after a successful
+      start
 
 ## Later
 
