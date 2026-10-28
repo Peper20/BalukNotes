@@ -29,6 +29,7 @@ ionice -c 2 -n 5 -p $$ >/dev/null 2>&1 || true
 kit=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 source "$kit/lib/config.sh"
 cd "$PROJECT_ROOT" || exit 2
+HEAVY_LABEL=measure
 source "$kit/lib/cap.sh"
 
 interval=${MEASURE_INTERVAL:-0.5}

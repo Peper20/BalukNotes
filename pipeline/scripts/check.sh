@@ -77,7 +77,7 @@ run_step() {
   begin
   echo "▶ $name: $*"
   if [[ $locked == 1 ]]; then
-    heavy_acquire
+    HEAVY_LABEL="check $name" heavy_acquire
     lockwait=$HEAVY_WAIT
     start=$SECONDS
     "$@" >"$log" 2>&1 {HEAVY_FD}>&-

@@ -59,24 +59,32 @@ if [[ -n $CHECK_ENV ]]; then
   source "$(project_path "$CHECK_ENV")"
 fi
 
-# heavy_acquire: wait for the lock (say so, if it is taken; HEAVY_WAIT is the
-# seconds spent waiting); heavy_release. The record in $HEAVY_LOCK.last is the
-# checkout that held the lock last; `on_heavy_acquire <changed>` of the project
-# is called under the lock, with `changed` = 1 for the first holder after a run
-# of another checkout (that run may have built its own tree into a shared
-# place) and 0 for a repeated run of the same checkout.
+# heavy_acquire: wait for the lock, saying who holds it (the holder file below)
+# and how long the wait took (HEAVY_WAIT, in seconds); heavy_release. The record
+# in $HEAVY_LOCK.last is the checkout that held the lock last;
+# `on_heavy_acquire <changed>` of the project is called under the lock, with
+# `changed` = 1 for the first holder after a run of another checkout (that run
+# may have built its own tree into a shared place) and 0 for a repeated run of
+# the same checkout.
+# $HEAVY_LOCK.holder names the holder since it took the lock: its pid, the time,
+# its checkout and HEAVY_LABEL (else the name of the script). It is written
+# after the lock is taken, so a line left by a killed holder is only a hint
+# until the next holder overwrites it.
 heavy_acquire() {
-  local here changed=0
+  local here holder changed=0
   HEAVY_WAIT=0
   mkdir -p "$(dirname "$HEAVY_LOCK")"
   exec {HEAVY_FD}>"$HEAVY_LOCK"
   if ! flock -n "$HEAVY_FD"; then
-    echo "  waiting for another run (lock $HEAVY_LOCK)" >&2
+    holder=$(cat "$HEAVY_LOCK.holder" 2>/dev/null)
+    echo "  waiting for another run (lock $HEAVY_LOCK): held by ${holder:-an unknown process}" >&2
     local since=$SECONDS
     flock "$HEAVY_FD"
     HEAVY_WAIT=$((SECONDS - since))
+    echo "  got the lock after $HEAVY_WAIT s" >&2
   fi
   here=$(git rev-parse --show-toplevel 2>/dev/null) || here=$PWD
+  echo "$BASHPID $(date +%T) $here ${HEAVY_LABEL:-${0##*/}}" >"$HEAVY_LOCK.holder"
   if [[ $(cat "$HEAVY_LOCK.last" 2>/dev/null) != "$here" ]]; then
     echo "$here" >"$HEAVY_LOCK.last"
     changed=1
@@ -86,6 +94,11 @@ heavy_acquire() {
   fi
 }
 heavy_release() {
+  local holder
+  holder=$(cat "$HEAVY_LOCK.holder" 2>/dev/null)
+  if [[ ${holder%% *} == "$BASHPID" ]]; then
+    : >"$HEAVY_LOCK.holder"
+  fi
   exec {HEAVY_FD}>&-
 }
 

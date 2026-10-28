@@ -13,7 +13,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 kit=$PWD/scripts
 # Outside the project: a run inside a CI job must not write into its summary.
-unset GITHUB_STEP_SUMMARY PIPELINE_PROJECT_ROOT HEAVY_LOCK CHECK_JOBS
+unset GITHUB_STEP_SUMMARY PIPELINE_PROJECT_ROOT HEAVY_LOCK HEAVY_LABEL CHECK_JOBS
 
 root=$(mktemp -d)
 trap 'rm -rf "$root"' EXIT
@@ -132,6 +132,61 @@ mkdir -p "$p3"
 git init -q -b main "$p3"
 expect "without a config: ~/.cache/pipeline/heavy.lock" test "$(lock_path "$p3" HOME=/h)" = "/h/.cache/pipeline/heavy.lock"
 
+echo "the holder of the lock and the waiter's message:"
+hp=$root/holder
+new_project "$hp"
+(
+  cd "$hp" || exit 2
+  HEAVY_LABEL="first run"
+  source "$kit/lib/cap.sh"
+  heavy_acquire
+  sleep 2
+  heavy_release
+) &
+first_pid=$!
+until [[ -s $hp/heavy.lock.holder ]]; do sleep 0.1; done
+expect "the holder file names the holder: its pid, the time it took the lock, its checkout and its label" \
+  eval '[[ $(cat "$hp/heavy.lock.holder") == "$first_pid "[0-9][0-9]:[0-9][0-9]:[0-9][0-9]" $(cd "$hp" && git rev-parse --show-toplevel) first run" ]]'
+(
+  cd "$hp" || exit 2
+  HEAVY_LABEL="second run"
+  source "$kit/lib/cap.sh"
+  heavy_acquire
+  heavy_release
+) 2>"$root/holder-wait.log"
+wait "$first_pid"
+expect "a waiter names the holder it waits for" \
+  grep -Eq "^  waiting for another run \(lock $hp/heavy\.lock\): held by $first_pid [0-9:]{8} .* first run\$" "$root/holder-wait.log"
+expect "a waiter that gets the lock says after how many seconds" grep -Eq '^  got the lock after [0-9]+ s$' "$root/holder-wait.log"
+expect "the holder file is emptied when the holder releases" eval '[[ -z $(cat "$hp/heavy.lock.holder") ]]'
+uk=$root/unknown-holder
+new_project "$uk"
+(exec 9>"$uk/heavy.lock"; flock 9; touch "$uk/ready"; sleep 2) &
+unknown_pid=$!
+until [[ -e $uk/ready ]]; do sleep 0.1; done
+(cd "$uk" && source "$kit/lib/cap.sh" && heavy true) 2>"$root/unknown-wait.log"
+wait "$unknown_pid"
+expect "a lock held without a holder file is named as held by an unknown process" \
+  grep -qx "  waiting for another run (lock $uk/heavy.lock): held by an unknown process" "$root/unknown-wait.log"
+dl=$root/default-label
+new_project "$dl"
+printf '%s\n' 'source "$1"' 'heavy_acquire' 'cat "$HEAVY_LOCK.holder"' 'heavy_release' >"$root/label-caller.sh"
+label_line=$(cd "$dl" && bash "$root/label-caller.sh" "$kit/lib/cap.sh")
+expect "without HEAVY_LABEL the holder is named by the calling script" eval '[[ $label_line == *" label-caller.sh" ]]'
+hn=$root/not-holder
+new_project "$hn"
+(cd "$hn" && source "$kit/lib/cap.sh" && heavy true)
+expect "a command run under heavy empties the holder file" eval '[[ -z $(cat "$hn/heavy.lock.holder" 2>/dev/null) ]]'
+(
+  cd "$hn" || exit 2
+  source "$kit/lib/cap.sh"
+  heavy_acquire
+  echo "4242 10:00:00 /elsewhere other" >"$HEAVY_LOCK.holder"
+  heavy_release
+)
+expect "a release by a process that the file does not name leaves the file alone" \
+  eval '[[ $(cat "$hn/heavy.lock.holder") == "4242 10:00:00 /elsewhere other" ]]'
+
 echo "the config without jq:"
 mkdir -p "$root/nojq"
 printf '#!/bin/sh\nexit 9\n' >"$root/nojq/jq"
@@ -215,7 +270,7 @@ echo "check.sh, a passing run, the lock held by another run, GITHUB_STEP_SUMMARY
 cat >"$r/ci/steps.sh" <<'STEPS'
 steps() {
   step waited true
-  step quick true
+  step quick sh -c 'cat heavy.lock.holder >"$1"' _ "$HOLDER_SEEN"
 }
 STEPS
 printf 'earlier job text\n' >"$root/job-summary.md"
@@ -223,11 +278,12 @@ printf 'earlier job text\n' >"$root/job-summary.md"
 (exec 9>"$r/heavy.lock"; flock 9; sleep 3) &
 holder=$!
 until ! flock -n 8 8>"$r/heavy.lock"; do sleep 0.1; done
-(cd "$r" && GITHUB_STEP_SUMMARY=$root/job-summary.md "$kit/check.sh") >"$root/pass.out" 2>&1
+(cd "$r" && HOLDER_SEEN=$root/holder-seen GITHUB_STEP_SUMMARY=$root/job-summary.md "$kit/check.sh") >"$root/pass.out" 2>&1
 rc=$?
 wait "$holder"
 expect "a passing run exits 0" test "$rc" -eq 0
 expect "the wait for the lock is announced" grep -q "waiting for another run" "$root/pass.out"
+expect "a locked step is the holder while it runs, named by its step" grep -Eq ' check quick$' "$root/holder-seen"
 s=$r/out/check/summary.md
 expect "the verdict is passed, no block of a failure" eval 'head -n 1 "$s" | grep -Eq "passed in [0-9]+ s$" && ! grep -q "<details>" "$s"'
 expect "the wait of the first step is in the lock wait column, not in its time" \
@@ -334,11 +390,17 @@ cat >"$root/nice-of.sh" <<'SCRIPT'
 #!/bin/sh
 ps -o ni= -p $$ | tr -d ' ' >"$1"
 SCRIPT
-chmod +x "$root/lock-held.sh" "$root/nice-of.sh"
+cat >"$root/holder-of.sh" <<'SCRIPT'
+#!/bin/sh
+cat "$1" >"$2"
+SCRIPT
+chmod +x "$root/lock-held.sh" "$root/nice-of.sh" "$root/holder-of.sh"
 expect "the command runs under the lock of heavy work" \
   eval '(cd "$m" && "$kit/measure.sh" 1 -- "$root/lock-held.sh" "$m/heavy.lock" >/dev/null 2>&1)'
 expect "the command runs at nice 2 or a lower priority" \
   eval '(cd "$m" && "$kit/measure.sh" 1 -- "$root/nice-of.sh" "$root/measure.nice" >/dev/null 2>&1); [[ $(cat "$root/measure.nice") -ge 2 ]]'
+expect "measure names itself as the holder of the lock" \
+  eval '(cd "$m" && "$kit/measure.sh" 1 -- "$root/holder-of.sh" "$m/heavy.lock.holder" "$root/measure.holder" >/dev/null 2>&1); grep -Eq " measure$" "$root/measure.holder"'
 expect "a missing command part, runs that are not a number, a missing -- : exit 2" \
   eval '(cd "$m"; "$kit/measure.sh" 2 >/dev/null 2>&1; a=$?; "$kit/measure.sh" x -- true >/dev/null 2>&1; b=$?; "$kit/measure.sh" 0 -- true >/dev/null 2>&1; c=$?; "$kit/measure.sh" 2 true >/dev/null 2>&1; d=$?; [[ $a$b$c$d == 2222 ]])'
 

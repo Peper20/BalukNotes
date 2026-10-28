@@ -132,8 +132,10 @@ its tools (`config.md`: `check`, `tests`). `scripts/test-scripts.sh` tests them.
   `CHECK_JOBS` of the environment wins, capped at the CPUs of the machine),
   and one lock (`check.heavyLock`) for the heavy work of all runs: `heavy
   <command...>`, or `heavy_acquire` and `heavy_release` (`HEAVY_WAIT` is the
-  seconds waited). The project's `check.env` file turns the number into the
-  settings of its tools.
+  seconds waited). The holder of the lock is written to `<lock>.holder` (pid,
+  start time, checkout, `HEAVY_LABEL` or else the script's name): a waiter
+  prints it, and the line "got the lock after N s" when it gets the lock. The
+  project's `check.env` file turns the number into the settings of its tools.
 - **Targeted tests**: `scripts/test.sh [--dry-run] [paths...]` maps the files
   changed against `origin/main` (or the paths given) to the commands of `tests`,
   runs each distinct command once under the cap and at low priority, prints a
