@@ -324,9 +324,9 @@ is merged, one task at a time.
       comma-decimal locale (`LC_NUMERIC=C`); with the next kit task
 - [x] A task that measures has a budget (a number of runs, or stop at the
       target); such tasks run one after another, not side by side
-- [x] The runner has `PIPELINE_MAIN` (the transitional workflow block goes
-      in `ci-tidy`); the rust hook is gone, the mod's guard replaces it
-      (PR #44)
+- [x] The runner has `PIPELINE_MAIN`, the workflow is the kit's template
+      and the job summary holds only the check's table (PR #48); the rust
+      hook is gone, the mod's guard replaces it (PR #44)
 - [~] In flight: `mod-fixes` (the open mod items below, the guard after
       `/clear`, its rules re-read)
 - [x] Kit: the check log says who holds the heavy lock and when it is
