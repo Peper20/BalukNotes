@@ -4,9 +4,9 @@ The kit knows nothing of the project it runs in. What differs from project to
 project is in this file at the project's `.claude/pipeline.json`, and in the
 pipeline page it names. A shell reads it with `jq` (or `python3`); the mod
 parses it natively (`hooks/config.ts`) at session start. Unknown keys are
-ignored. A missing or invalid file is reported once in the liaison's session,
-and the mod starts no task until it is fixed (the next call of a pipeline tool
-reads it anew).
+ignored. A missing or invalid file is reported once in the lead's session, and
+the mod starts no task until it is fixed (the next call of a pipeline tool reads
+it anew).
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -32,11 +32,11 @@ reads it anew).
 | `targetedTests` | string | none | The hint on running the targeted tests that the developer contract shows, `(<hint>)` after "the targeted tests your change needs" |
 
 The pipeline page named by `guide` has a section "Project specifics for the
-agents". The kit's agents and skills defer to it for everything that is not
-the same in every project: the commands for tests, builds and the full check,
-the places to look by eye, the user's language, the documents the liaison owns
-and commits itself, the areas of the architecture, the project's rules for
-new features and questions, deployments and what no agent touches.
+agents". The kit's agents and skills defer to it for everything that is not the
+same in every project: the commands for tests, builds and the full check, the
+places to look by eye, the user's language, the documents the lead owns and
+commits itself, the areas of the architecture, the project's rules for new
+features and questions, deployments and what no agent touches.
 
 Example:
 

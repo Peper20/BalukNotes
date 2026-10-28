@@ -63,14 +63,14 @@ describe('a task from start to merge', () => {
     expect(f.store.value?.tasks[0]?.slug).toBe('feat')
   })
 
-  test('a merge whose server call throws ends in the liaison stage with a notification', async () => {
+  test('a merge whose server call throws ends in the lead stage with a notification', async () => {
     const f = fakes()
     const p = await started(f)
     const { rev } = await toReview(f, p, 'feat', 7, HEAD)
     f.server.review(7, HEAD, 'APPROVED')
     f.server.mergeThrows = 'pull request 7: connection refused'
     await finish(p, rev)
-    expect(p.state().tasks[0]?.stage).toBe('liaison')
+    expect(p.state().tasks[0]?.stage).toBe('lead')
     expect(f.notes).toHaveLength(1)
     expect(f.notes[0]).toContain('the merge failed: pull request 7: connection refused')
   })
@@ -104,7 +104,7 @@ describe('a task from start to merge', () => {
     }
   })
 
-  test('an install that timed out is tried again every 15 minutes; the liaison hears of a success, or of the last failure', async () => {
+  test('an install that timed out is tried again every 15 minutes; the lead hears of a success, or of the last failure', async () => {
     const merged = async (f: Fakes) => {
       const p = await started(f)
       f.server.pull = { pull: 'ok', note: '', changed: ['src/a.rs'] }
@@ -198,7 +198,7 @@ describe('what the machine is never allowed to do', () => {
     const { rev } = await toReview(f, p, 'feat', 7, HEAD)
     await finish(p, rev)
     expect(f.server.calls.filter(c => c.startsWith('merge'))).toHaveLength(0)
-    expect(p.state().tasks[0]?.stage).toBe('liaison')
+    expect(p.state().tasks[0]?.stage).toBe('lead')
     expect(f.notes.some(n => n.includes('without a verdict'))).toBe(true)
   })
 
@@ -398,6 +398,18 @@ describe('the session restarts', () => {
     expect(q.state().tasks[0]?.agentId).toBe(f.spawned[1]?.agentId)
   })
 
+  test('a task stored in the old stage name `liaison` loads in the stage `lead`', async () => {
+    const f = fakes()
+    const p = await started(f)
+    await p.dispatch({ type: 'start', slug: 'feat', developer: 'developer-1', brief: 'B', after: [] })
+    await p.settle()
+    const stored = JSON.parse(JSON.stringify(f.store.value))
+    stored.tasks[0].stage = 'liaison'
+    f.store.value = stored
+    const q = await started(f)
+    expect(q.state().tasks[0]?.stage).toBe('lead')
+  })
+
   test('a reachable agent is woken with send', async () => {
     const f = fakes()
     const p = await started(f)
@@ -415,13 +427,13 @@ describe('the session restarts', () => {
 })
 
 describe('refusals and stop', () => {
-  test('a spawn the engine refuses goes to the liaison', async () => {
+  test('a spawn the engine refuses goes to the lead', async () => {
     const f = fakes()
     f.denySpawn.reason = 'no such agent'
     const p = await started(f)
     await p.dispatch({ type: 'start', slug: 'feat', developer: 'developer-1', brief: 'B', after: [] })
     await p.settle()
-    expect(p.state().tasks[0]?.stage).toBe('liaison')
+    expect(p.state().tasks[0]?.stage).toBe('lead')
     expect(f.notes[0]).toContain('no such agent')
   })
 

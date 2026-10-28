@@ -1,6 +1,6 @@
 ---
 name: sdd
-description: The behaviour specs of the project - their format, how a brief changes them and how a pull request and its review follow them. Preloaded into the developers and the reviewer; the liaison reads it before writing a brief that changes behaviour.
+description: The behaviour specs of the project - their format, how a brief changes them and how a pull request and its review follow them. Preloaded into the developers and the reviewer; the lead reads it before writing a brief that changes behaviour.
 ---
 
 # Behaviour specs
@@ -41,15 +41,15 @@ Spec delta, docs/specs/sync.md:
 - remove SYNC-5
 ```
 
-The liaison writes it; a brief whose behaviour is not in a spec yet may create the file with the requirements the task touches. A brief that changes no behaviour says "Spec delta: none".
+The lead writes it; a brief whose behaviour is not in a spec yet may create the file with the requirements the task touches. A brief that changes no behaviour says "Spec delta: none".
 
 ## Developer
 
 - Apply the delta word for word in the pull request with the code. Do not change other requirements.
 - Each added or changed requirement has a test that would fail without it. The pull request description lists them: `SYNC-8 - <test name>`, or why a requirement has no automatic test.
-- If the code contradicts a requirement outside the delta, or the delta cannot hold as written, do not fix the spec on your own: report it to the liaison (the `[liaison]` ending of the developer workflow).
+- If the code contradicts a requirement outside the delta, or the delta cannot hold as written, do not fix the spec on your own: report it to the lead (the `lead` ending of the developer workflow).
 
 ## Reviewer
 
 - The spec after the pull request says what the code does: every requirement of the delta holds in the code and has its test; no behaviour changed that the delta does not name.
-- A mismatch between the code and a requirement of the delta, or a missing test for one, is a blocking finding. A contradiction with a requirement outside the delta is a finding for the liaison: name the id.
+- A mismatch between the code and a requirement of the delta, or a missing test for one, is a blocking finding. A contradiction with a requirement outside the delta is a finding for the lead: name the id.

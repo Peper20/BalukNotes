@@ -271,7 +271,7 @@ throwaway Forgejo inside it and `pipeline/scripts/cloud-finish.sh` sends the
 result to GitHub (`pipeline/docs/README.md`, "Forgejo"); the pipeline mod does
 not run there (no CI runner, `docs/agents.md`, "Known limits").
 
-**Session start** (the liaison, before anything else):
+**Session start** (the lead, before anything else):
 `pipeline/scripts/cloud-setup.sh`. The session may be resumed or restarted with
 the server gone: run it again. At the end: `pipeline/scripts/cloud-finish.sh`,
 and give the user the branch it prints.

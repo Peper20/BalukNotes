@@ -517,6 +517,14 @@ it. The format and rules - `.claude/rules/docs.md`.
   cause with a minimal mod and report it to the engine, or pin the order with a
   test that names it.
 
+- **The PIPELINE ending `liaison` is still accepted** (`parseEnding` in
+  `pipeline/hooks/prompts.ts`) as the ending `lead`, and a stored task in the
+  stage `liaison` loads as `lead` (`migrateStored` in
+  `pipeline/hooks/machine.ts`): a developer running with the old wording of
+  the contract may send it, and a store written before the rename holds it.
+  Risk: none beyond the extra word. How to close: remove both after the next
+  release of the kit, with their tests.
+
 ## The `/baluk-note` skill
 
 - **The skill looks at the page through a browser tool** on its own temporary

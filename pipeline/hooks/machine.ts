@@ -27,6 +27,12 @@ import * as P from './prompts'
 
 export const emptyState = (): State => ({ tasks: [] })
 
+/** A stored state as this version reads it. Transitional: tasks stored in the stage `liaison` (the old name of `lead`) move to `lead`; remove with the ending in `parseEnding` (docs/tech-debt.md, "Pipeline"). */
+export function migrateStored(stored: State): State {
+  for (const t of stored.tasks) if ((t.stage as string) === 'liaison') t.stage = 'lead'
+  return stored
+}
+
 const short = (sha?: string): string => (sha ?? '').slice(0, 7)
 const find = (s: State, slug: string): Task | undefined => s.tasks.find(t => t.slug === slug)
 const owner = (s: State, agentId: string): Task | undefined => s.tasks.find(t => t.agents.some(a => a.id === agentId))
@@ -111,7 +117,7 @@ export function step(prev: State, ev: Event, cfg: Config): Result {
 // --- helpers that add actions ------------------------------------------------
 
 function notify(t: Task, why: string, out: Result): void {
-  out.actions.push({ type: 'notify', text: P.liaisonEvent(t, why) })
+  out.actions.push({ type: 'notify', text: P.leadEvent(t, why) })
 }
 
 /** A message to the current developer; a running one is appended to, an ended one resumed. */
@@ -123,12 +129,12 @@ function tell(t: Task, agentId: string, text: string, out: Result, how?: 'send' 
   if (a) a.running = true
 }
 
-/** The liaison's text reached the developer after the start: the reviewer reads it with the brief. */
+/** The lead's text reached the developer after the start: the reviewer reads it with the brief. */
 const addendum = (t: Task, text: string): void => {
   ;(t.addenda ??= []).push(text.trim())
 }
 
-/** `text` with the message of the liaison that may have been lost; the message is taken off the task. */
+/** `text` with the message of the lead that may have been lost; the message is taken off the task. */
 function withPending(t: Task, text: string): string {
   const pending = t.pendingSend
   t.pendingSend = undefined
@@ -316,7 +322,7 @@ function onSend(s: State, ev: Event_<'send'>, out: Result, cfg: Config): void {
   }
   if (t.stage !== 'merged' && t.stage !== 'waiting' && isHeld(s, t)) {
     t.heldSend = [t.heldSend, ev.text.trim()].filter(x => x !== undefined && x !== '').join('\n\n')
-    note(t, ev.now, 'the liaison sent a message while the pipeline is paused')
+    note(t, ev.now, 'the lead sent a message while the pipeline is paused')
     out.reply = `${t.slug}: the pipeline is paused; the message is kept and delivered by pipeline_resume`
     return
   }
@@ -325,12 +331,12 @@ function onSend(s: State, ev: Event_<'send'>, out: Result, cfg: Config): void {
       out.error = `${t.slug} is merged`
       return
     case 'waiting':
-      t.brief = `${t.brief.trim()}\n\nAddendum from the liaison:\n${ev.text.trim()}`
-      note(t, ev.now, 'the liaison added to the brief')
+      t.brief = `${t.brief.trim()}\n\nAddendum from the lead:\n${ev.text.trim()}`
+      note(t, ev.now, 'the lead added to the brief')
       out.reply = `${t.slug}: added to the brief; the task has not started`
       return
     case 'blocked':
-      // The liaison resumes a blocked task: a new developer-3 on the branch and the pull request, rounds counted afresh.
+      // The lead resumes a blocked task: a new developer-3 on the branch and the pull request, rounds counted afresh.
       t.developer = 'developer-3'
       t.rounds = { 'developer-1': 0, 'developer-2': 0, 'developer-3': 0 }
       t.stage = 'developing'
@@ -340,7 +346,7 @@ function onSend(s: State, ev: Event_<'send'>, out: Result, cfg: Config): void {
       t.nudged = false
       t.retryAt = undefined
       addendum(t, ev.text)
-      note(t, ev.now, 'resumed by the liaison on developer-3')
+      note(t, ev.now, 'resumed by the lead on developer-3')
       spawnDeveloper(t, P.continuePrompt(t, `The task was blocked and is resumed.\n\n${ev.text.trim()}\n\nOpen findings:\n${t.findings ?? '(none recorded)'}`, cfg), out)
       out.reply = `${t.slug}: resumed on a new developer-3`
       return
@@ -354,12 +360,12 @@ function onSend(s: State, ev: Event_<'send'>, out: Result, cfg: Config): void {
       addendum(t, ev.text)
       tell(t, t.agentId, ev.text, out)
       if (midTurn) t.pendingSend = [t.pendingSend, ev.text.trim()].filter(x => x !== undefined && x !== '').join('\n\n')
-      note(t, ev.now, 'the liaison sent a message')
+      note(t, ev.now, 'the lead sent a message')
       out.reply = `${t.slug}: sent to ${t.developer}`
       return
     default:
-      // liaison, checking, reviewing, merging: the pull request goes back to the developer.
-      if (t.stage === 'liaison') {
+      // lead, checking, reviewing, merging: the pull request goes back to the developer.
+      if (t.stage === 'lead') {
         t.reruns = 0
         t.rerunAt = undefined
       }
@@ -367,7 +373,7 @@ function onSend(s: State, ev: Event_<'send'>, out: Result, cfg: Config): void {
       t.nudged = false
       t.retryAt = undefined
       addendum(t, ev.text)
-      note(t, ev.now, 'the liaison sent a message')
+      note(t, ev.now, 'the lead sent a message')
       toDeveloper(t, ev.text, out, cfg)
       out.reply = `${t.slug}: sent to ${t.developer}; the task is developing`
   }
@@ -422,7 +428,7 @@ function onSpawned(s: State, ev: Event_<'spawned'>, out: Result): void {
 function onSpawnFailed(s: State, ev: Event_<'spawn-failed'>, out: Result): void {
   const t = find(s, ev.slug)
   if (!t || !isLive(t)) return
-  t.stage = 'liaison'
+  t.stage = 'lead'
   note(t, ev.now, `${ev.role} could not start: ${ev.reason}`)
   notify(t, `the ${ev.role} could not be started: ${ev.reason}. Answer with pipeline_send to try again.`, out)
 }
@@ -494,8 +500,8 @@ function onTurnEnd(s: State, ev: Event_<'turn-end'>, out: Result): void {
   t.retryAt = undefined
   t.apiNotified = false
   if (t.pendingSend !== undefined) {
-    // The liaison wrote while this turn was ending, so the turn may not have read it: the ending does not count.
-    note(t, ev.now, 'a message of the liaison came while the turn was ending: sent again')
+    // The lead wrote while this turn was ending, so the turn may not have read it: the ending does not count.
+    note(t, ev.now, 'a message of the lead came while the turn was ending: sent again')
     tell(t, ev.agentId, P.lateSendMessage(t.pendingSend), out, 'send')
     return
   }
@@ -506,7 +512,7 @@ function onTurnEnd(s: State, ev: Event_<'turn-end'>, out: Result): void {
       note(t, ev.now, `ended (${ev.reason}) without the PIPELINE line: asked to finish`)
       tell(t, ev.agentId, P.nudgeMessage(), out, 'send')
     } else {
-      t.stage = 'liaison'
+      t.stage = 'lead'
       note(t, ev.now, 'ended twice without the PIPELINE line')
       notify(t, `the ${t.developer} ended twice without the PIPELINE line (${ev.reason}); see its report`, out)
     }
@@ -514,15 +520,15 @@ function onTurnEnd(s: State, ev: Event_<'turn-end'>, out: Result): void {
   }
   t.nudged = false
   if (ending.kind === 'question') {
-    t.stage = 'liaison'
-    note(t, ev.now, 'question for the liaison')
+    t.stage = 'lead'
+    note(t, ev.now, 'question for the lead')
     notify(t, 'the developer has a question and no pull request; see the developer\'s report', out)
     return
   }
   t.pr = ending.pr
-  if (ending.liaison) {
-    t.stage = 'liaison'
-    note(t, ev.now, `PR #${ending.pr} waits for the liaison`)
+  if (ending.lead) {
+    t.stage = 'lead'
+    note(t, ev.now, `PR #${ending.pr} waits for the lead`)
     notify(t, 'the developer\'s report needs you before the review (architecture additions, deferred items or a question); see the developer\'s report', out)
     return
   }
@@ -593,7 +599,7 @@ function onPolled(s: State, ev: Event_<'polled'>, out: Result, cfg: Config): voi
   }
 }
 
-/** The check was cancelled or could not run: not a round of the developer. Re-run it, or tell the liaison. */
+/** The check was cancelled or could not run: not a round of the developer. Re-run it, or tell the lead. */
 function rerunCheck(t: Task, ev: Event_<'polled'>, out: Result): void {
   if (t.rerunAt !== undefined && ev.now - t.rerunAt < RERUN_GRACE_MS) {
     // The status of the cancelled run may still be the one the server shows: wait for the re-run's own.
@@ -603,7 +609,7 @@ function rerunCheck(t: Task, ev: Event_<'polled'>, out: Result): void {
   }
   const used = t.reruns ?? 0
   if (used >= MAX_RERUNS) {
-    t.stage = 'liaison'
+    t.stage = 'lead'
     note(t, ev.now, `the check of ${short(ev.head)} did not finish ${used + 1} times`)
     notify(t, `the check of ${short(ev.head)} did not finish ${used + 1} times: ${ev.detail.trim()}`, out)
     return
@@ -657,7 +663,7 @@ function onReviewed(s: State, ev: Event_<'reviewed'>, out: Result, cfg: Config):
       giveBack(t, ev.now, 'review', ev.text, out, cfg)
       return
     case 'none':
-      t.stage = 'liaison'
+      t.stage = 'lead'
       note(t, ev.now, 'the reviewer ended without a verdict')
       notify(t, 'the reviewer ended without a verdict on the server; look at the pull request', out)
   }
@@ -698,7 +704,7 @@ function onMergeResult(s: State, ev: Event_<'merge-result'>, out: Result, cfg: C
       if (t.pr !== undefined) out.actions.push({ type: 'poll', slug: t.slug, pr: t.pr })
       return
     default:
-      t.stage = 'liaison'
+      t.stage = 'lead'
       note(t, ev.now, `merge failed: ${ev.message}`)
       notify(t, `the merge failed: ${ev.message}`, out)
   }
@@ -732,7 +738,7 @@ function onPostMerge(s: State, ev: Event_<'post-merge'>, out: Result, cfg: Confi
   out.actions.push({ type: 'notify', text: lines.join('\n') })
 }
 
-/** A retry of the install ended: the liaison is told when it succeeded or when the last try failed. */
+/** A retry of the install ended: the lead is told when it succeeded or when the last try failed. */
 function onInstallRetried(s: State, ev: Event_<'install-retried'>, out: Result): void {
   const r = s.installRetry
   if (!r || r.slug !== ev.slug || r.tries !== ev.n) return
@@ -821,7 +827,7 @@ function resumeWould(s: State, t: Task): string {
     case 'developing':
       if (lost(t.agentId) || t.agentId === undefined) return `a new ${t.developer} continues`
       return `${t.developer} is told to continue`
-    case 'liaison':
+    case 'lead':
       return 'waits for you'
     case 'checking':
       return 'CI is polled'
@@ -837,7 +843,7 @@ function resumeWould(s: State, t: Task): string {
 }
 
 /**
- * The module started. A new session pauses the pipeline when anything is unfinished and only tells the liaison;
+ * The module started. A new session pauses the pipeline when anything is unfinished and only tells the lead;
  * a reload of the module in the same session wakes what is not held, as `pipeline_resume` does.
  */
 function onRestore(s: State, ev: Event_<'restore'>, out: Result, cfg: Config): void {
@@ -868,7 +874,7 @@ function onRestore(s: State, ev: Event_<'restore'>, out: Result, cfg: Config): v
   }
 }
 
-/** The liaison continues the pipeline: all tasks, or one while the others stay held. */
+/** The lead continues the pipeline: all tasks, or one while the others stay held. */
 function onResume(s: State, ev: Event_<'resume'>, out: Result, cfg: Config): void {
   if (ev.slug === undefined) {
     if (!s.paused && !s.tasks.some(t => t.held)) {

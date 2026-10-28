@@ -1,9 +1,9 @@
-// What the liaison and the pane see of the tasks.
+// What the lead and the pane see of the tasks.
 import type { PipelineViewTask } from '../types'
 import { type Config, pullsUrl } from './config'
 import { DEVELOPERS, needsResume, SHOW_MERGED, STALE_MS, type Stage, type State, type Task } from './model'
 
-const STAGES: readonly Stage[] = ['waiting', 'developing', 'liaison', 'checking', 'reviewing', 'merging', 'blocked', 'merged']
+const STAGES: readonly Stage[] = ['waiting', 'developing', 'lead', 'checking', 'reviewing', 'merging', 'blocked', 'merged']
 
 const roundsOf = (t: Task): string => DEVELOPERS.map(d => `${d.replace('developer-', 'd')}:${t.rounds[d]}`).join(' ')
 

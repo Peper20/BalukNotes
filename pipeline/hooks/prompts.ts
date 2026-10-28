@@ -1,10 +1,11 @@
-// The texts the pipeline sends: to developers, reviewers and the liaison.
+// The texts the pipeline sends: to developers, reviewers and the lead.
 import { CONFIG_PATH, type Config } from './config'
 import { type Ending, MAX_ROUNDS, type Task } from './model'
 
 export const branchOf = (slug: string): string => `task/${slug}`
 
-const ENDING_LINE = /^PIPELINE:\s*(?:pr=(\d+)(?:\s+(liaison))?|(question))\s*$/
+// Transitional: `liaison` was the old name of `lead`; a running agent of the old wording may still end with it (docs/tech-debt.md, "Pipeline").
+const ENDING_LINE = /^PIPELINE:\s*(?:pr=(\d+)(?:\s+(lead|liaison))?|(question))\s*$/
 
 /** The `PIPELINE:` line a developer ends its final message with (the last one wins). */
 export function parseEnding(text: string): Ending | undefined {
@@ -13,7 +14,7 @@ export function parseEnding(text: string): Ending | undefined {
     const m = ENDING_LINE.exec(lines[i] ?? '')
     if (!m) continue
     if (m[3] !== undefined) return { kind: 'question' }
-    return { kind: 'pr', pr: Number(m[1]), liaison: m[2] !== undefined }
+    return { kind: 'pr', pr: Number(m[1]), lead: m[2] !== undefined }
   }
   return undefined
 }
@@ -32,9 +33,9 @@ export const contract = (slug: string, cfg: Config): string =>
     `- Work on the branch ${branchOf(slug)}. Run the targeted tests your change needs${cfg.targetedTests === undefined ? '' : ` (${cfg.targetedTests})`}, not the full check of the project: the full check runs on the pull request.`,
     '- Push the branch and open the pull request (or update the existing one), as the dev-workflow skill says. Never merge.',
     '- End your final message with exactly one last line:',
-    '  PIPELINE: pr=<number>            the pull request is ready for the full check and review',
-    '  PIPELINE: pr=<number> liaison    your report holds architecture additions, deferred items or a question that the liaison must see before the review',
-    '  PIPELINE: question               no pull request: you stopped on a question or a contradiction',
+    '  PIPELINE: pr=<number>         the pull request is ready for the full check and review',
+    '  PIPELINE: pr=<number> lead    your report holds architecture additions, deferred items or a question that the lead must see before the review',
+    '  PIPELINE: question            no pull request: you stopped on a question or a contradiction',
     '- When you are resumed with findings, a failed check or a message, work on it and end the same way.',
   ].join('\n')
 
@@ -69,13 +70,13 @@ export function reviewerPrompt(t: Task, pr: number, head: string, cfg: Config): 
   ].join('\n')
 }
 
-/** What the liaison sent the developer after the start: decisions and added work, part of the task. */
+/** What the lead sent the developer after the start: decisions and added work, part of the task. */
 function addendaText(t: Task): string[] {
   const texts = t.addenda ?? []
   if (texts.length === 0) return []
   return [
     '',
-    'Messages of the liaison to the developer after the start (decisions and added work; they are part of the task):',
+    'Messages of the lead to the developer after the start (decisions and added work; they are part of the task):',
     ...texts.flatMap((text, i) => ['', `Message ${i + 1}:`, text]),
   ]
 }
@@ -105,7 +106,7 @@ export function rebaseMessage(t: Task): string {
 }
 
 export const nudgeMessage = (): string =>
-  'Your turn ended without the PIPELINE line. Finish: end your final message with exactly one last line, PIPELINE: pr=<number>, PIPELINE: pr=<number> liaison or PIPELINE: question.'
+  'Your turn ended without the PIPELINE line. Finish: end your final message with exactly one last line, PIPELINE: pr=<number>, PIPELINE: pr=<number> lead or PIPELINE: question.'
 
 export const retryMessage = (): string =>
   'Your previous turn was cut by an API error (a usage limit). Continue where you stopped and end your final message with the PIPELINE line.'
@@ -116,7 +117,7 @@ export const restartMessage = (): string =>
 export const stopMessage = (reason: string): string =>
   `The user stopped this task: ${reason}. Commit and push to the task branch what is worth keeping (open a pull request only if there is something worth keeping and none exists), then stop. Do not start anything new.`
 
-export function liaisonEvent(t: Task, why: string): string {
+export function leadEvent(t: Task, why: string): string {
   const pr = t.pr === undefined ? 'no pull request' : `pull request #${t.pr}`
   return `[pipeline] ${t.slug} (${pr}): ${why}`
 }
@@ -128,11 +129,11 @@ export function blockedComment(t: Task, reason: string, findings: string): strin
 }
 
 export const lateSendMessage = (text: string): string =>
-  `A message from the liaison that came while your last turn was ending (ignore it if you already acted on it):\n\n${text.trim()}`
+  `A message from the lead that came while your last turn was ending (ignore it if you already acted on it):\n\n${text.trim()}`
 
-/** A message of the liaison that a developer which is gone may not have read. */
+/** A message of the lead that a developer which is gone may not have read. */
 export const lostMessage = (text: string): string =>
-  `A message from the liaison that the previous developer may not have read:\n\n${text.trim()}`
+  `A message from the lead that the previous developer may not have read:\n\n${text.trim()}`
 
 export const salvagedPatch = (path: string): string =>
   `The previous developer's unsaved changes are in ${path}: apply what is worth keeping.`
@@ -143,7 +144,7 @@ export const orphanWorktrees = (paths: readonly string[]): string =>
   `[pipeline] worktrees that no task of the pipeline references (not removed; look at them and remove by hand what is not needed):\n- ${paths.join('\n- ')}`
 
 export const heldMessage = (text: string): string =>
-  `A message from the liaison, sent while the pipeline was paused:\n\n${text.trim()}`
+  `A message from the lead, sent while the pipeline was paused:\n\n${text.trim()}`
 
 export function sessionPaused(unfinished: readonly string[], orphans: readonly string[]): string {
   return [

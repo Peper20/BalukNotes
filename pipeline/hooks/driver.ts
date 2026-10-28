@@ -4,7 +4,7 @@
 import { type Config, needsAfterMerge } from './config'
 import type { Forge } from './forge'
 import { type Action, type Event, type Result, type State } from './model'
-import { emptyState, step } from './machine'
+import { emptyState, migrateStored, step } from './machine'
 
 export type Ports = {
   /** The project layer, read at session start. */
@@ -24,7 +24,7 @@ export type Ports = {
     /** To a running agent. */
     append(agentId: string, text: string): Promise<boolean>
   }
-  /** A message to the liaison: it starts a turn of the liaison once idle. Not awaited. */
+  /** A message to the lead: it starts a turn of the lead once idle. Not awaited. */
   notify(text: string): void
   sleep(ms: number): Promise<void>
   log(text: string): void
@@ -38,7 +38,7 @@ export type Reply = { reply?: string; error?: string }
 export type Pipeline = {
   /**
    * Loads the store. A new session (`fresh`, the default) pauses the pipeline when anything is unfinished and
-   * tells the liaison; a reload of the module in the same session wakes what was going.
+   * tells the lead; a reload of the module in the same session wakes what was going.
    */
   start(opts?: { fresh?: boolean }): Promise<void>
   dispatch(ev: Input): Promise<Reply>
@@ -226,7 +226,7 @@ export function createPipeline(ports: Ports): Pipeline {
     try {
       outcome = await ports.forge.merge(pr, head, `task/${slug}`)
     } catch (err) {
-      // The server could not be read: the liaison decides, there is no automatic retry.
+      // The server could not be read: the lead decides, there is no automatic retry.
       outcome = { ok: false, kind: 'other', message: err instanceof Error ? err.message : String(err) }
     }
     if (!outcome.ok) {
@@ -271,7 +271,7 @@ export function createPipeline(ports: Ports): Pipeline {
     return { type: 'post-merge', slug, pull: pulled.pull, install, note, leftovers, conflicted }
   }
 
-  /** Worktrees of the pipeline that no task references: told to the liaison, not removed. */
+  /** Worktrees of the pipeline that no task references: told to the lead, not removed. */
   async function unreferenced(): Promise<string[]> {
     try {
       return await ports.forge.unreferenced({
@@ -298,7 +298,7 @@ export function createPipeline(ports: Ports): Pipeline {
   return {
     async start(opts) {
       const stored = await ports.load()
-      if (stored) state = stored
+      if (stored) state = migrateStored(stored)
       ports.show(state)
       await dispatch({ type: 'restore', agents: await ports.agentIds(), orphans: await unreferenced(), fresh: opts?.fresh ?? true })
     },

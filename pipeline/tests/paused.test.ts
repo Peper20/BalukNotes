@@ -1,4 +1,4 @@
-// A session start pauses the pipeline: it tells the liaison what is unfinished and
+// A session start pauses the pipeline: it tells the lead what is unfinished and
 // continues only on pipeline_resume (the register-level part is in register.test.ts).
 import { describe, expect, test } from 'claude-code/testing'
 
@@ -46,7 +46,7 @@ const restore = (r: Run, agents: string[], extra: { orphans?: string[]; fresh?: 
   r.feed({ type: 'restore', agents, orphans: extra.orphans ?? [], fresh: extra.fresh ?? true })
 
 describe('a session start', () => {
-  test('with live tasks pauses and does nothing but tell the liaison', () => {
+  test('with live tasks pauses and does nothing but tell the lead', () => {
     const r = twoTasks()
     const res = restore(r, ['y-d1'], { orphans: ['/repo/.claude/worktrees/agent-zzz'] })
     expect(r.state.paused).toBe(true)
@@ -107,7 +107,7 @@ describe('a session start', () => {
     const res = r.poll('c', HEAD, 'success')
     const spawn = res.actions.find(a => a.type === 'spawn')
     expect(spawn?.type === 'spawn' && spawn.prompt).toContain('Brief of c.')
-    expect(spawn?.type === 'spawn' && spawn.prompt).not.toContain('Messages of the liaison')
+    expect(spawn?.type === 'spawn' && spawn.prompt).not.toContain('Messages of the lead')
   })
 
   test('a reload of the module in the same session does not pause: it polls and tells nobody who is alive', () => {
@@ -190,13 +190,13 @@ describe('while the pipeline is paused', () => {
     expect(r.task('w').brief).toContain('More.')
   })
 
-  test('a send to a task that waits for the liaison goes back to the developer on resume', () => {
+  test('a send to a task that waits for the lead goes back to the developer on resume', () => {
     const r = new Run()
     r.begin('x')
     r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Which way?\nPIPELINE: question' })
     restore(r, ['x-d1'])
     r.feed({ type: 'send', slug: 'x', text: 'The first.' })
-    expect(r.task('x').stage).toBe('liaison')
+    expect(r.task('x').stage).toBe('lead')
     const resumed = r.feed({ type: 'resume' })
     expect(r.task('x').stage).toBe('developing')
     expect(resumed.actions.find(a => a.type === 'tell')).toMatchObject({ agentId: 'x-d1', text: 'The first.' })

@@ -59,18 +59,19 @@ directory - read the file.
 
 ## Pipeline
 
-`liaison` (the main session) -> the pipeline mod (`pipeline/`, code) ->
-`developer-1`, `developer-2`, `developer-3` -> CI -> `reviewer`;
-definitions - `pipeline/claude/agents/` (linked into `.claude/agents/`), how
-it works - `pipeline/docs/README.md` and `docs/agents.md`. The repository is
-on a local Forgejo server (`origin`, the `forge` skill), GitHub is its mirror. Code and the documents that change with it reach `main` only
-through a reviewed pull request; the `liaison` owns the architecture.
-The liaison commits `docs/roadmap.md`, `docs/questions.md`, `docs/agents.md`,
-the design decisions in `docs/architecture.md` and `docs/tech-debt.md` that no
-code yet follows, and `.claude/rules/`, `.claude/pipeline.json`, the kit's
-agents, skills and documents (`pipeline/claude/`, `pipeline/docs/`,
-`pipeline/config.md`) straight to `main`.
-Permission settings (`.claude/settings*.json`) are changed only by the user.
+`lead` (the main session) -> the pipeline mod (`pipeline/`, code) ->
+`developer-1`, `developer-2`, `developer-3` -> CI -> `reviewer`; definitions -
+`pipeline/claude/agents/` (linked into `.claude/agents/`), how it works -
+`pipeline/docs/README.md` and `docs/agents.md`. The repository is on a local
+Forgejo server (`origin`, the `forge` skill), GitHub is its mirror. Code and the
+documents that change with it reach `main` only through a reviewed pull request;
+the `lead` owns the architecture. The lead commits `docs/roadmap.md`,
+`docs/questions.md`, `docs/agents.md`, the design decisions in
+`docs/architecture.md` and `docs/tech-debt.md` that no code yet follows, and
+`.claude/rules/`, `.claude/pipeline.json`, the kit's agents, skills and
+documents (`pipeline/claude/`, `pipeline/docs/`, `pipeline/config.md`) straight
+to `main`. Permission settings (`.claude/settings*.json`) are changed only by
+the user.
 
 ## Language
 

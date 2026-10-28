@@ -18,15 +18,16 @@ function reviewing(r: Run, slug = 'x', pr = 7, head = HEAD, developer: 'develope
 
 describe('the ending line', () => {
   test('the three endings and a missing one', async () => {
-    expect(parseEnding('Done.\nPIPELINE: pr=12')).toEqual({ kind: 'pr', pr: 12, liaison: false })
-    expect(parseEnding('Report\n\nPIPELINE: pr=12 liaison\n')).toEqual({ kind: 'pr', pr: 12, liaison: true })
+    expect(parseEnding('Done.\nPIPELINE: pr=12')).toEqual({ kind: 'pr', pr: 12, lead: false })
+    expect(parseEnding('Report\n\nPIPELINE: pr=12 lead\n')).toEqual({ kind: 'pr', pr: 12, lead: true })
+    expect(parseEnding('Report\nPIPELINE: pr=12 liaison')).toEqual({ kind: 'pr', pr: 12, lead: true }) // transitional: the old wording
     expect(parseEnding('I stopped.\nPIPELINE: question  ')).toEqual({ kind: 'question' })
     expect(parseEnding('All done, PR 12.')).toBeUndefined()
     // Not exactly the line: quoted in prose, or with extra words.
     expect(parseEnding('End with PIPELINE: pr=<number>\nok')).toBeUndefined()
     expect(parseEnding('PIPELINE: pr=3 please')).toBeUndefined()
     // The last line wins.
-    expect(parseEnding('PIPELINE: pr=1\nmore\nPIPELINE: pr=2')).toEqual({ kind: 'pr', pr: 2, liaison: false })
+    expect(parseEnding('PIPELINE: pr=1\nmore\nPIPELINE: pr=2')).toEqual({ kind: 'pr', pr: 2, lead: false })
   })
 })
 
@@ -44,26 +45,26 @@ describe('developing', () => {
     expect(r.task('x').stage).toBe('checking')
   })
 
-  test('pr=N liaison: the liaison is told, the task waits', async () => {
+  test('pr=N lead: the lead is told, the task waits', async () => {
     const r = new Run()
     r.begin('x')
-    r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Additions.\nPIPELINE: pr=7 liaison' })
-    expect(r.task('x').stage).toBe('liaison')
+    r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Additions.\nPIPELINE: pr=7 lead' })
+    expect(r.task('x').stage).toBe('lead')
     expect(r.task('x').pr).toBe(7)
     expect(r.actions('notify')).toHaveLength(1)
     expect(r.actions('poll')).toHaveLength(0)
   })
 
-  test('question: no pull request, the liaison is told', async () => {
+  test('question: no pull request, the lead is told', async () => {
     const r = new Run()
     r.begin('x')
     r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Which way?\nPIPELINE: question' })
-    expect(r.task('x').stage).toBe('liaison')
+    expect(r.task('x').stage).toBe('lead')
     expect(r.task('x').pr).toBeUndefined()
     expect(r.actions('notify')[0]?.text).toContain('x')
   })
 
-  test('no line: asked once to finish, then the liaison', async () => {
+  test('no line: asked once to finish, then the lead', async () => {
     const r = new Run()
     r.begin('x')
     r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'I think I am done.' })
@@ -72,7 +73,7 @@ describe('developing', () => {
     expect(r.actions('tell')[0]?.how).toBe('send')
     expect(r.actions('tell')[0]?.text).toContain('PIPELINE')
     r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Still no line.' })
-    expect(r.task('x').stage).toBe('liaison')
+    expect(r.task('x').stage).toBe('lead')
     expect(r.actions('notify')).toHaveLength(1)
     // No round was counted.
     expect(r.task('x').rounds['developer-1']).toBe(0)
@@ -108,7 +109,7 @@ describe('developing', () => {
     expect(r.actions('tell')[0]?.how).toBe('send')
     expect(r.task('x').retryAt).toBeUndefined()
     expect(r.task('x').rounds['developer-1']).toBe(0)
-    // A second error does not tell the liaison again.
+    // A second error does not tell the lead again.
     r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'error', text: '' })
     expect(r.actions('notify')).toHaveLength(0)
     expect(r.task('x').retryAt).toBeDefined()
@@ -260,11 +261,11 @@ describe('reviewing and merging', () => {
     expect(r.actions('tell')[0]?.agentId).toBe('x-dev')
   })
 
-  test('no verdict: the liaison is told', async () => {
+  test('no verdict: the lead is told', async () => {
     const r = new Run()
     reviewing(r)
     r.review('x', HEAD, 'none')
-    expect(r.task('x').stage).toBe('liaison')
+    expect(r.task('x').stage).toBe('lead')
     expect(r.actions('notify')).toHaveLength(1)
     expect(r.actions('merge')).toHaveLength(0)
   })
@@ -344,12 +345,12 @@ describe('reviewing and merging', () => {
     expect(r.actions('tell')[0]?.text).toContain('Rebase')
   })
 
-  test('a merge that fails otherwise goes to the liaison', async () => {
+  test('a merge that fails otherwise goes to the lead', async () => {
     const r = new Run()
     reviewing(r)
     r.review('x', HEAD, 'APPROVED')
     r.feed({ type: 'merge-result', slug: 'x', ok: false, kind: 'other', message: 'server said no' })
-    expect(r.task('x').stage).toBe('liaison')
+    expect(r.task('x').stage).toBe('lead')
     expect(r.actions('notify')[0]?.text).toContain('server said no')
   })
 })
@@ -539,8 +540,8 @@ describe('after a merge', () => {
   })
 })
 
-describe('the liaison', () => {
-  test('pipeline_send resumes a task that waits for the liaison', async () => {
+describe('the lead', () => {
+  test('pipeline_send resumes a task that waits for the lead', async () => {
     const r = new Run()
     r.begin('x')
     r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Which way?\nPIPELINE: question' })
@@ -598,7 +599,7 @@ describe('the liaison', () => {
     expect(r.feed({ type: 'stop', slug: 'nope', reason: 'r' }).error).toContain('nope')
   })
 
-  test('a blocked task resumed by the liaison continues on a new developer-3 with fresh rounds', async () => {
+  test('a blocked task resumed by the lead continues on a new developer-3 with fresh rounds', async () => {
     const r = new Run()
     r.begin('x', 'developer-3', 'x-d3')
     r.feed({ type: 'stop', reason: 'r' })
@@ -637,7 +638,7 @@ describe('restart', () => {
   })
 })
 
-describe('what the liaison sent after the start', () => {
+describe('what the lead sent after the start', () => {
   test('every send that reaches the developer is kept in order and the reviewer reads it after the brief', async () => {
     const r = new Run()
     r.begin('x')
@@ -646,14 +647,14 @@ describe('what the liaison sent after the start', () => {
     r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Done.\nPIPELINE: pr=7' })
     r.ready('x', 7, HEAD)
     expect(r.task('x').stage).toBe('checking')
-    // The liaison sends again while the pull request waits for the check.
+    // The lead sends again while the pull request waits for the check.
     r.feed({ type: 'send', slug: 'x', text: 'Rename the helper.' })
     r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Renamed.\nPIPELINE: pr=7' })
     expect(r.task('x').addenda).toEqual(['Also cover the empty case.', 'Rename the helper.'])
     const res = r.poll('x', HEAD, 'success')
     const spawn = res.actions.find(a => a.type === 'spawn')
     const prompt = spawn?.type === 'spawn' ? spawn.prompt : ''
-    expect(prompt).toContain('Messages of the liaison to the developer after the start (decisions and added work; they are part of the task):')
+    expect(prompt).toContain('Messages of the lead to the developer after the start (decisions and added work; they are part of the task):')
     expect(prompt.indexOf('Brief of x.')).toBeLessThan(prompt.indexOf('Message 1:\nAlso cover the empty case.'))
     expect(prompt.indexOf('Message 1:')).toBeLessThan(prompt.indexOf('Message 2:\nRename the helper.'))
   })
@@ -667,14 +668,14 @@ describe('what the liaison sent after the start', () => {
     expect(r.task('later').addenda).toBeUndefined()
     expect(r.task('later').brief).toContain('A note.')
     const spawn = r.all.find(a => a.type === 'spawn' && a.role === 'reviewer')
-    expect(spawn?.type === 'spawn' && spawn.prompt).not.toContain('Messages of the liaison')
+    expect(spawn?.type === 'spawn' && spawn.prompt).not.toContain('Messages of the lead')
   })
 
-  test('a message that resumes a blocked task or returns a pull request from the liaison stage is kept too', async () => {
+  test('a message that resumes a blocked task or returns a pull request from the lead stage is kept too', async () => {
     const r = new Run()
     r.begin('x')
     r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Which way?\nPIPELINE: question' })
-    expect(r.task('x').stage).toBe('liaison')
+    expect(r.task('x').stage).toBe('lead')
     r.feed({ type: 'send', slug: 'x', text: 'Take the first.' })
     expect(r.task('x').addenda).toEqual(['Take the first.'])
     r.feed({ type: 'stop', slug: 'x', reason: 'test' })

@@ -10,12 +10,12 @@ skills are linked into `.claude/agents` and `.claude/skills` by
 
 ## Roles here
 
-The roles and models are in the kit's README. Here: the `liaison` keeps
+The roles and models are in the kit's README. Here: the `lead` keeps
 `docs/roadmap.md`, `docs/questions.md`, `docs/tech-debt.md`, this file and
 `.claude/rules/`; the mod runs `tools/install.sh` after a merge that touches
 `crates/`, `app/`, `baluk/` or `skills/` (`afterMerge`). A task goes to
-`developer-1` when it follows an existing pattern (a CLI command, an endpoint,
-a client component, a library block, a tool), to `developer-2` when it spans
+`developer-1` when it follows an existing pattern (a CLI command, an endpoint, a
+client component, a library block, a tool), to `developer-2` when it spans
 several crates or the core and the client, or touches the sync protocol, builds
 and caches, memory, concurrency or Typst internals.
 
@@ -95,9 +95,9 @@ is lost.
 claude --plugin-dir pipeline
 ```
 
-From the project root. `"agent": "liaison"` in `.claude/settings.json` makes the
-main session the `liaison`, locally and in a cloud session (the cloud session
-reads the file from the clone; the model of a cloud session is chosen in its
+From the project root. `"agent": "lead"` in `.claude/settings.json` makes the
+main session the `lead`, locally and in a cloud session (the cloud session reads
+the file from the clone; the model of a cloud session is chosen in its
 interface, not by the agent definition). `--plugin-dir` loads the pipeline mod
 (`pipeline/docs/README.md`, "The mod"); the runner of CI is a user service
 (`pipeline/scripts/ci-runner.sh status`). `tools/pipeline` is a link to
@@ -123,8 +123,8 @@ file of every directory you touch (`crates.md`, `app.md`, `baluk.md`,
 `skills.md`, `tools.md`, ...), and `.claude/rules/docs.md` for
 `docs/architecture.md` and `docs/tech-debt.md` (the format of an entry).
 
-**Language.** The `liaison` speaks Russian with the user. Code, comments,
-logs, docs, commit messages, pull requests and briefs are English
+**Language.** The `lead` speaks Russian with the user. Code, comments, logs,
+docs, commit messages, pull requests and briefs are English
 (`.claude/rules/project.md`, "Language").
 
 **Tests and the full check.** Run the targeted tests with
@@ -147,11 +147,11 @@ checks running on this machine.
 port (`PORT=<8500-8599> tools/test-env.sh`), not 8432: other agents may be using
 it. Stop it by its port.
 
-**The liaison's areas.** The liaison owns the architecture: crate boundaries,
-the core/client boundary, the HTTP API, the public library API, the vault
-format and path rules (`NoteId`), the sync protocol, cross-cutting schemes
-(builds and caches, memory, concurrency). The Essentials of
-`.claude/rules/project.md` bind its designs.
+**The lead's areas.** The lead owns the architecture: crate boundaries, the
+core/client boundary, the HTTP API, the public library API, the vault format and
+path rules (`NoteId`), the sync protocol, cross-cutting schemes (builds and
+caches, memory, concurrency). The Essentials of `.claude/rules/project.md` bind
+its designs.
 
 **What goes with a change.** A change to the public library API, the
 `note`/`book` templates, `notes` commands or path rules also changes
@@ -161,31 +161,30 @@ format and path rules (`NoteId`), the sync protocol, cross-cutting schemes
 `.claude/skills/` or `pipeline/claude/agents/`, `pipeline/claude/skills/`,
 `pipeline/docs/` unless the brief says so.
 
-**Documents the liaison commits itself**, straight to `main`:
-`docs/roadmap.md`, `docs/questions.md` (open questions to the user; the "Look
-yourself" section is what it reminds the user of at the start of a session),
-`docs/agents.md`, the design decisions in `docs/architecture.md` and
-`docs/tech-debt.md` that no code yet follows, `.claude/rules/`,
-`.claude/pipeline.json`, and the kit's agents, skills and documents
-(`pipeline/claude/agents/`, `pipeline/claude/skills/`, `pipeline/docs/`,
-`pipeline/config.md`). The code of the mod and the scripts reach `main`
-through pull requests. Permission settings (`.claude/settings*.json`) are the
-user's.
+**Documents the lead commits itself**, straight to `main`: `docs/roadmap.md`,
+`docs/questions.md` (open questions to the user; the "Look yourself" section is
+what it reminds the user of at the start of a session), `docs/agents.md`, the
+design decisions in `docs/architecture.md` and `docs/tech-debt.md` that no code
+yet follows, `.claude/rules/`, `.claude/pipeline.json`, and the kit's agents,
+skills and documents (`pipeline/claude/agents/`, `pipeline/claude/skills/`,
+`pipeline/docs/`, `pipeline/config.md`). The code of the mod and the scripts
+reach `main` through pull requests. Permission settings
+(`.claude/settings*.json`) are the user's.
 
 **Review.** Besides the kit's checklist, the Essentials of
 `.claude/rules/project.md`: a note in HTML looks like its PDF; the app does not
 change note files silently; the user's notes are never touched. Sensitive
 places: the hub trusting client input, unsafe paths (escaping the vault).
 
-**Cloud session.** The `liaison` runs `pipeline/scripts/cloud-setup.sh` as the
-very first step, before reading or delegating anything, and
-`pipeline/scripts/cloud-finish.sh` at the end, once every pull request is
-merged or blocked; then it gives the user the branch it prints.
+**Cloud session.** The `lead` runs `pipeline/scripts/cloud-setup.sh` as the very
+first step, before reading or delegating anything, and
+`pipeline/scripts/cloud-finish.sh` at the end, once every pull request is merged
+or blocked; then it gives the user the branch it prints.
 
 **The user's word.** An update of the server on the VPS (`tools/deploy-hub.sh`,
-`docs/server.md`) runs only on the user's word; the `liaison` runs it itself
-from the main checkout. Commands that need root are the user's to run. The
-user's own notes are not touched.
+`docs/server.md`) runs only on the user's word; the `lead` runs it itself from
+the main checkout. Commands that need root are the user's to run. The user's own
+notes are not touched.
 
 **Pull requests** open at
 `http://localhost:3000/ibaluk/baluk-notes/pulls/<number>`.

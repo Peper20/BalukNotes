@@ -123,7 +123,7 @@ test('a task from the store waits for pipeline_resume, then is woken; its turn e
   on('ui.log', async () => ({ value: undefined }))
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  // A new session: nothing is woken, the liaison is told what is unfinished.
+  // A new session: nothing is woken, the lead is told what is unfinished.
   expect(sent).toHaveLength(0)
   const status = String((await $.tool.call({ tool: 'mcp__pipeline__pipeline_status' } as never)).result)
   expect(status.startsWith('PAUSED - pipeline_resume continues.')).toBe(true)
@@ -138,7 +138,7 @@ test('a task from the store waits for pipeline_resume, then is woken; its turn e
   expect(sent[0]).toContain('restarted')
   expect(statuses[statuses.length - 1]).toBe('1 developing')
 
-  // Its turn ends with a question: the liaison is told, the task waits for it.
+  // Its turn ends with a question: the lead is told, the task waits for it.
   await $.turn.complete({ answer: 'Which way?\nPIPELINE: question', durationMs: 1, isAborted: false, turnId: 't1', agentId: 'agent-1', reason: 'answer' })
   // pipeline_send goes through the same queue, so its answer comes after the turn end was handled.
   const reply = await $.tool.call({ tool: 'mcp__pipeline__pipeline_send', slug: 'feat', text: 'Take the first.' } as never)

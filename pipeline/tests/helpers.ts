@@ -205,7 +205,7 @@ export class Run {
     return this.last
   }
 
-  /** A new session starts and the liaison resumes the pipeline at once: what `restore` did before the pause. */
+  /** A new session starts and the lead resumes the pipeline at once: what `restore` did before the pause. */
   restart(agents: string[]): Result {
     this.feed({ type: 'restore', agents, orphans: [], fresh: true })
     return this.feed({ type: 'resume' })

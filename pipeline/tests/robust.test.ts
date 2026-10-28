@@ -59,7 +59,7 @@ describe('a check that did not finish', () => {
     expect(r.task('x').rounds['developer-1']).toBe(0)
   })
 
-  test('the third time goes to the liaison: no round, no block', async () => {
+  test('the third time goes to the lead: no round, no block', async () => {
     const r = new Run()
     r.begin('x')
     r.ready('x', 7, HEAD)
@@ -68,14 +68,14 @@ describe('a check that did not finish', () => {
     r.poll('x', HEAD, 'failure', 'job cancelled', false)
     r.now += RERUN_GRACE_MS
     const res = r.poll('x', HEAD, 'failure', 'job cancelled', false)
-    expect(r.task('x').stage).toBe('liaison')
+    expect(r.task('x').stage).toBe('lead')
     expect(r.task('x').rounds['developer-1']).toBe(0)
     expect(res.actions.filter(a => a.type === 'rerun')).toHaveLength(0)
     const notice = res.actions.find(a => a.type === 'notify')
     expect(notice?.type === 'notify' && notice.text).toContain(`the check of ${HEAD.slice(0, 7)} did not finish 3 times: job cancelled`)
   })
 
-  test('the liaison resuming the task from the liaison stage starts the count again', async () => {
+  test('the lead resuming the task from the lead stage starts the count again', async () => {
     const r = new Run()
     r.begin('x')
     r.ready('x', 7, HEAD)
@@ -83,7 +83,7 @@ describe('a check that did not finish', () => {
       r.poll('x', HEAD, 'failure', 'job cancelled', false)
       r.now += RERUN_GRACE_MS
     }
-    expect(r.task('x').stage).toBe('liaison')
+    expect(r.task('x').stage).toBe('lead')
     expect(r.task('x').reruns).toBe(2)
     r.feed({ type: 'send', slug: 'x', text: 'Push an empty commit.' })
     expect(r.task('x').reruns).toBe(0)
@@ -208,7 +208,7 @@ describe('a dead developer', () => {
     expect(res.actions.find(a => a.type === 'tell')).toMatchObject({ agentId: 'x-d1', how: 'send' })
   })
 
-  test('the driver: the patch path reaches the replacement, an unreferenced worktree is listed to the liaison', async () => {
+  test('the driver: the patch path reaches the replacement, an unreferenced worktree is listed to the lead', async () => {
     const f = fakes()
     const p = createPipeline(f.ports)
     await p.start()
@@ -357,7 +357,7 @@ describe('a send that comes while a turn is ending', () => {
     expect(end.actions).toHaveLength(1)
     const tell = end.actions[0]
     expect(tell).toMatchObject({ type: 'tell', agentId: 'x-d1', how: 'send' })
-    expect(tell?.type === 'tell' && tell.text).toContain('A message from the liaison that came while your last turn was ending (ignore it if you already acted on it):')
+    expect(tell?.type === 'tell' && tell.text).toContain('A message from the lead that came while your last turn was ending (ignore it if you already acted on it):')
     expect(tell?.type === 'tell' && tell.text).toContain('Use the second way.\n\nAnd rename it.')
 
     // The next ending counts.

@@ -7,7 +7,7 @@ description: How a developer agent of the pipeline takes a task from a brief to 
 
 You work alone in your own git worktree. Work in English.
 
-The project is named in `.claude/pipeline.json`; its keys `guide` and `map` point to the project's pipeline guide and rules map. "The guide" and "the map" below are those pages. The section "Project specifics for the agents" of the guide holds what differs from project to project: the commands for tests, builds and the full check, the places to look by eye, the documents the liaison owns, the architecture areas.
+The project is named in `.claude/pipeline.json`; its keys `guide` and `map` point to the project's pipeline guide and rules map. "The guide" and "the map" below are those pages. The section "Project specifics for the agents" of the guide holds what differs from project to project: the commands for tests, builds and the full check, the places to look by eye, the documents the lead owns, the architecture areas.
 
 ## 1. Start
 
@@ -23,12 +23,12 @@ The project is named in `.claude/pipeline.json`; its keys `guide` and `map` poin
 - Do what the brief asks and nothing else. New features come only from the user.
 - How a detail looks or behaves (names, layout, messages) is yours to decide when the brief leaves it open: decide and name the decision in the pull request. Stop and return the question only when the open point is expensive to redo or cannot be undone: architecture, security, data loss, actions on the user's machine or server.
 - Cover new behaviour with tests.
-- If your change makes a rule or a document outdated, update it in the same pull request, including what the map says goes with such a change. Do not touch the documents the guide marks as the liaison's, or the pipeline's own agents, skills and rules, unless the brief says so.
-- The liaison owns the architecture (the brief carries its design); the guide lists its areas. Follow the architecture given in the brief and in the architecture document. Do not design or change it on your own.
+- If your change makes a rule or a document outdated, update it in the same pull request, including what the map says goes with such a change. Do not touch the documents the guide marks as the lead's, or the pipeline's own agents, skills and rules, unless the brief says so.
+- The lead owns the architecture (the brief carries its design); the guide lists its areas. Follow the architecture given in the brief and in the architecture document. Do not design or change it on your own.
 - Edit the architecture document only as the brief says, in the same pull request as the code.
-- If the task needs something the given architecture does not cover, build it within the task and describe the addition in the pull request and in your report. Do not write it into the architecture document yourself: the liaison accepts it and gives you the change to the document, or tells you what to build instead.
-- If the task cannot be done without contradicting the given architecture, stop before writing that code and return the question to the liaison (section 5). Do not deviate on your own.
-- If you meet a blocking problem the brief did not foresee and its fix is a large task of its own, you may defer it instead of doing it: add an entry to the tech-debt document in your pull request, in the format the project's rules for documents give, and state it in your report. The liaison decides whether it waits. A small fix the task needs is done within the task, and deferring is never a way to skip work the brief asks for.
+- If the task needs something the given architecture does not cover, build it within the task and describe the addition in the pull request and in your report. Do not write it into the architecture document yourself: the lead accepts it and gives you the change to the document, or tells you what to build instead.
+- If the task cannot be done without contradicting the given architecture, stop before writing that code and return the question to the lead (section 5). Do not deviate on your own.
+- If you meet a blocking problem the brief did not foresee and its fix is a large task of its own, you may defer it instead of doing it: add an entry to the tech-debt document in your pull request, in the format the project's rules for documents give, and state it in your report. The lead decides whether it waits. A small fix the task needs is done within the task, and deferring is never a way to skip work the brief asks for.
 - A pull request that resolves an entry of the tech-debt document removes that entry.
 
 ## 3. Verify
@@ -64,7 +64,7 @@ If you stopped on a contradiction or an expensive open point, return the questio
 The pipeline reads the last line of your final message, exactly one of:
 
 - `PIPELINE: pr=<number>` - the pull request is ready for CI and review;
-- `PIPELINE: pr=<number> liaison` - the report holds architecture additions, deferred items or a question the liaison must see first and has not decided yet (what the brief or the liaison's answer already asked for does not count);
+- `PIPELINE: pr=<number> lead` - the report holds architecture additions, deferred items or a question the lead must see first and has not decided yet (what the brief or the lead's answer already asked for does not count);
 - `PIPELINE: question` - no pull request: you stopped on a question or a contradiction.
 
 The answer comes back to you in the same conversation; go on and end the same way.

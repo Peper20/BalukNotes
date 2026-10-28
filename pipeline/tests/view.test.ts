@@ -40,7 +40,7 @@ describe('the status line', () => {
   })
 
   test('a blocked task is counted', async () => {
-    expect(summary({ tasks: [task('a', 'blocked'), task('b', 'liaison')] })).toBe('1 liaison · 1 blocked')
+    expect(summary({ tasks: [task('a', 'blocked'), task('b', 'lead')] })).toBe('1 lead · 1 blocked')
   })
 })
 

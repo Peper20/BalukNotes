@@ -16,10 +16,10 @@ side
   published as the combined commit status of the head; with the kit's runner
   ("Checks") it only supplies its steps.
 - `.claude/pipeline.json` (`config.md`).
-- A pipeline page (`guide`) with the section "Project specifics for the
-  agents": the commands for tests, builds and the full check, the places to
-  look by eye, the documents the liaison owns, the areas of the architecture,
-  what no agent touches. The agents read it first; the mod's prompts name it.
+- A pipeline page (`guide`) with the section "Project specifics for the agents":
+  the commands for tests, builds and the full check, the places to look by eye,
+  the documents the lead owns, the areas of the architecture, what no agent
+  touches. The agents read it first; the mod's prompts name it.
 - Optionally a rules map (`map`) and rule files per directory.
 - `setup.sh` links the kit's agents and skills (`claude/agents`,
   `claude/skills`, outside the folders a plugin loads by itself, so each is
@@ -32,51 +32,50 @@ side
 
 | Who | Model | Does | Does not |
 |---|---|---|---|
-| `liaison` | Opus, medium | Talks to the user, owns the architecture and the specification, decides on the tech debt, splits requests into tasks, picks the developer of each and starts them through the pipeline mod, answers developers' questions, keeps the roadmap, the questions, the pipeline's own documents, reports | Write code, merge |
-| pipeline mod | code, no model | Starts developers and reviewers, follows the CI status and the review on the server, returns failures and findings to the developer, counts rounds, hands over to `developer-3`, blocks, merges, cleans up, runs the command after a merge, reports to the liaison | Decide anything a rule below does not fix |
+| `lead` | Opus, medium | Talks to the user, owns the architecture and the specification, decides on the tech debt, splits requests into tasks, picks the developer of each and starts them through the pipeline mod, answers developers' questions, keeps the roadmap, the questions, the pipeline's own documents, reports | Write code, merge |
+| pipeline mod | code, no model | Starts developers and reviewers, follows the CI status and the review on the server, returns failures and findings to the developer, counts rounds, hands over to `developer-3`, blocks, merges, cleans up, runs the command after a merge, reports to the lead | Decide anything a rule below does not fix |
 | `developer-1` | Haiku, xhigh | Routine, well-described, small tasks along an existing pattern | Merge, design the architecture |
 | `developer-2` | Sonnet, high | Complex tasks across modules or layers, protocols, builds and caches, memory, concurrency | Merge, design the architecture |
 | `developer-3` | Opus, medium | The hardest: elusive bugs, investigations, tasks another developer could not finish, resumed blocked tasks | Merge, design the architecture |
 | `reviewer` | Sonnet, high | Reads the change against its passed CI check (no re-run of its tests), approves or requests changes | Edit files |
 
-The user talks only to the `liaison`. Agents talk to each other in English.
+The user talks only to the `lead`. Agents talk to each other in English.
 
 ## The path of a task
 
-1. **Request.** The user describes the task to the `liaison`; it makes the goal
-   and acceptance criteria clear.
-2. **Design and tasks.** The `liaison` designs the change, decides which tech
-   debt is done now, works out the change to the architecture document, splits
-   the request into tasks (one per coherent change) and picks the developer of
-   each.
-3. **Start.** For each task the `liaison` calls `pipeline_start` with a
+1. **Request.** The user describes the task to the `lead`; it makes the goal and
+   acceptance criteria clear.
+2. **Design and tasks.** The `lead` designs the change, decides which tech debt
+   is done now, works out the change to the architecture document, splits the
+   request into tasks (one per coherent change) and picks the developer of each.
+3. **Start.** For each task the `lead` calls `pipeline_start` with a
    self-contained brief (the developer has not seen the conversation); tasks
    that depend on others wait with `after`. Independent tasks run in parallel.
 4. **Development.** The developer starts cold in its own worktree with the
    design fixed in its brief, works on the branch `task/<slug>`, runs the
    targeted tests, opens a pull request and ends with a `PIPELINE:` line (the
-   `dev-workflow` skill). A question or a report that needs the `liaison`
-   first (architecture additions, deferred items) goes to it; it answers with
+   `dev-workflow` skill). A question or a report that needs the `lead` first
+   (architecture additions, deferred items) goes to it; it answers with
    `pipeline_send`.
 5. **CI.** The project's CI checks every push to a pull request: the full check
-   at the head commit, as the commit status and a comment with the step table.
-   A failure goes back to the developer as a round, but only a failure the
-   check itself reported: it comments `Full check failed at <sha>: <steps>.`
-   on every real failure. A job that was cancelled or killed (a machine
-   shutdown) or could not run leaves no such comment; the mod re-runs it
-   (twice per head) and, when the third try does not finish either, tells
-   the `liaison`. No round is spent.
+   at the head commit, as the commit status and a comment with the step table. A
+   failure goes back to the developer as a round, but only a failure the check
+   itself reported: it comments `Full check failed at <sha>: <steps>.` on every
+   real failure. A job that was cancelled or killed (a machine shutdown) or
+   could not run leaves no such comment; the mod re-runs it (twice per head)
+   and, when the third try does not finish either, tells the `lead`. No round is
+   spent.
 6. **Review.** On a `success` status the mod starts a `reviewer`; it reads the
    pull request in its own worktree against the brief and the messages the
-   `liaison` sent the developer after the start (`pipeline_send`, kept in order
-   in `addenda`: decisions and added work are part of the task), runs only
-   what CI cannot show and gives the verdict on the server. Blocking findings go back to the same developer
-   as a round.
+   `lead` sent the developer after the start (`pipeline_send`, kept in order in
+   `addenda`: decisions and added work are part of the task), runs only what CI
+   cannot show and gives the verdict on the server. Blocking findings go back to
+   the same developer as a round.
 7. **Merge.** An approval and a `success` status at the same head: the mod
    squashes the pull request into `main`, deletes the branch, removes the
-   worktrees, runs the `afterMerge` command of the project when the diff
-   touches its paths, and reports to the `liaison`, which marks the roadmap and
-   reports to the user.
+   worktrees, runs the `afterMerge` command of the project when the diff touches
+   its paths, and reports to the `lead`, which marks the roadmap and reports to
+   the user.
 
 Rounds and the end of a task:
 
@@ -85,21 +84,21 @@ Rounds and the end of a task:
   `developer-3` takes the task over on the same branch and pull request.
   After `developer-3`'s two rounds the task is blocked.
 - A blocked task is still wanted but cannot be finished now: its pull request
-  stays open and its branch stays on the server; the `liaison` brings it to
-  the user, and `pipeline_send` resumes it on a new `developer-3`. If its pull
+  stays open and its branch stays on the server; the `lead` brings it to the
+  user, and `pipeline_send` resumes it on a new `developer-3`. If its pull
   request is found closed without a merge, the task is removed from the mod.
 - A dropped task is discarded for good (its pull request closed, its branch
   deleted), only on the user's word.
 
-The `liaison` owns the architecture; developers apply its changes to the
+The `lead` owns the architecture; developers apply its changes to the
 architecture document in the same pull request as the code. Tech debt entries
 change in the pull requests of the code: a developer may defer a large
-unforeseen problem with an entry, the `liaison` decides whether it waits.
+unforeseen problem with an entry, the `lead` decides whether it waits.
 
 ## Isolation
 
 - Each developer and reviewer works in its own git worktree in
-  `.claude/worktrees/` (not in git), on its own branch. The `liaison` and the
+  `.claude/worktrees/` (not in git), on its own branch. The `lead` and the
   pipeline mod work in the main checkout.
 - What worktrees share (build directories, caches, locks, ports, CPU) and how
   a run keeps from breaking another is the project's to say, on its pipeline
@@ -267,109 +266,107 @@ rest of the cycle works with a throwaway Forgejo started inside the session.
 
 ## The mod
 
-`hooks/` is a Claude Code plugin (a "mod") that the liaison's session loads. No
+`hooks/` is a Claude Code plugin (a "mod") that the lead's session loads. No
 model decides a routine step. It starts developers and reviewers as subagents
-(they show in the session window), reacts to the commit status and the review
-on the server, counts rounds, merges, cleans up and reports to the liaison.
+(they show in the session window), reacts to the commit status and the review on
+the server, counts rounds, merges, cleans up and reports to the lead.
 
 - **Load**, with no edit of `.claude/settings*.json`: from the project root
-  `claude --agent liaison --plugin-dir <kit>` (an absolute path from
-  elsewhere), or `CLAUDE_CODE_PLUGIN_DIRS=<absolute path>` where no flag can
-  be given. The mod keeps working over a restart: its tasks are in `$.store`
-  (key `tasks`, so in the user's Claude Code state, not in the repository).
+  `claude --agent lead --plugin-dir <kit>` (an absolute path from elsewhere), or
+  `CLAUDE_CODE_PLUGIN_DIRS=<absolute path>` where no flag can be given. The mod
+  keeps working over a restart: its tasks are in `$.store` (key `tasks`, so in
+  the user's Claude Code state, not in the repository).
 - **The project layer**: `.claude/pipeline.json`, read at session start
-  (`config.md`). A missing or invalid file is reported once to the liaison, and
-  the mod starts no task: the tools refuse with the reason, and a call after
-  the file is fixed reads it anew.
-- **The code-skill guard**: the `skills` key of the project layer
-  (`config.md`) names, per path pattern, a skill that a loop loads before it
-  edits such a file. On every `Edit`, `Write`, `MultiEdit`, `NotebookEdit` and
-  `Bash` call (of the liaison, developers and reviewers alike) the mod finds the
-  files the call writes: the file of an edit tool, or what a shell command
-  writes (a part of the command, between `;`, `&&`, `||`, `|` and a new line,
-  that both writes - `sed -i`, `perl -i`, `tee`, a write from python - and
-  names the file, or a redirect into it); a file outside the project is not
-  guarded. If a rule matches and the loop has not loaded its skill, the call is
-  denied with the skill to load and the project's rules to read. A loop has
-  loaded a skill after a successful `Skill` call, or a `/<skill>` the person
-  typed (main loop; seen at `command.run`), until its next compaction
-  (`session.compact`, the loop's own for a subagent) or, for the main loop, a
-  `/clear` (`session.end` with the reason `clear`: the process and the mod go
-  on with a fresh conversation). The sets are in `$.state`
-  (`pipeline.skills`, per agent id or `main`) and survive a reload of the mod;
-  a load by a subagent does not count for the main loop, nor the reverse. The
-  guard reads the key itself, on the first call and again whenever the
-  modification time of the file changes (`$.fs.stat`): it works with no task
-  running and when the pipeline failed to start, and does nothing without the
-  key. A file that cannot be read or parsed keeps the last good rules (none at
-  first), and each distinct error is logged once (`$.ui.log`); a failure of
-  its own never blocks an edit.
-- **Tools of the liaison** (`mcp__pipeline__<name>`): `pipeline_start { slug,
+  (`config.md`). A missing or invalid file is reported once to the lead, and the
+  mod starts no task: the tools refuse with the reason, and a call after the
+  file is fixed reads it anew.
+- **The code-skill guard**: the `skills` key of the project layer (`config.md`)
+  names, per path pattern, a skill that a loop loads before it edits such a
+  file. On every `Edit`, `Write`, `MultiEdit`, `NotebookEdit` and `Bash` call
+  (of the lead, developers and reviewers alike) the mod finds the files the call
+  writes: the file of an edit tool, or what a shell command writes (a part of
+  the command, between `;`, `&&`, `||`, `|` and a new line, that both writes -
+  `sed -i`, `perl -i`, `tee`, a write from python - and names the file, or a
+  redirect into it); a file outside the project is not guarded. If a rule
+  matches and the loop has not loaded its skill, the call is denied with the
+  skill to load and the project's rules to read. A loop has loaded a skill after
+  a successful `Skill` call, or a `/<skill>` the person typed (main loop; seen
+  at `command.run`), until its next compaction (`session.compact`, the loop's
+  own for a subagent) or, for the main loop, a `/clear` (`session.end` with the
+  reason `clear`: the process and the mod go on with a fresh conversation). The
+  sets are in `$.state` (`pipeline.skills`, per agent id or `main`) and survive
+  a reload of the mod; a load by a subagent does not count for the main loop,
+  nor the reverse. The guard reads the key itself, on the first call and again
+  whenever the modification time of the file changes (`$.fs.stat`): it works
+  with no task running and when the pipeline failed to start, and does nothing
+  without the key. A file that cannot be read or parsed keeps the last good
+  rules (none at first), and each distinct error is logged once (`$.ui.log`); a
+  failure of its own never blocks an edit.
+- **Tools of the lead** (`mcp__pipeline__<name>`): `pipeline_start { slug,
   developer, brief, after? }` (the developer gets the brief, the branch
   `task/<slug>`, the project and its pages to read first, and the contract:
   targeted tests only, push, open the pull request, end with `PIPELINE: pr=<n>`,
-  `PIPELINE: pr=<n> liaison` or `PIPELINE: question`), `pipeline_status {
-  all? }` (every task that is not merged, then the last 3 merged and the count
-  of the older ones; `all: true` shows them too; a blocked task untouched for
-  14 days is marked `stale`), `pipeline_send { slug, text }` (an answer to a
-  developer; resumes the task), `pipeline_stop { slug?, reason }`,
+  `PIPELINE: pr=<n> lead` or `PIPELINE: question`), `pipeline_status { all? }`
+  (every task that is not merged, then the last 3 merged and the count of the
+  older ones; `all: true` shows them too; a blocked task untouched for 14 days
+  is marked `stale`), `pipeline_send { slug, text }` (an answer to a developer;
+  resumes the task), `pipeline_stop { slug?, reason }`,
   `pipeline_resume { slug? }` (continues a paused pipeline, "The start of a
   session").
-- **Stages** of a task: waiting (for `after`), developing, liaison (waits for
+- **Stages** of a task: waiting (for `after`), developing, lead (waits for
   `pipeline_send`), checking (the status of the head, polled every 60 s),
   reviewing, merging, merged, blocked. Rounds, hand-over to `developer-3` and
   the block follow "The path of a task"; the merge only with an approval of
   `reviewer` and a `success` status at the same head commit (a head approved
   while its status was still pending is merged when the status passes, with no
   second review; a new head clears the approval), squash as `owner`; a merge
-  that fails for any reason but a conflict or a moved head goes to the
-  liaison, never retried by the mod. Then cleanup (the worktrees and branches
-  of its agents, the local `task/<slug>` when it equals the merged head, the
-  check worktree) and the `afterMerge` command. That command runs with its time
-  limit (`timeoutSeconds`) and may wait for the lock of heavy work while a
-  check holds it: when the limit cuts it, the merge notice says `install:
-  retrying (timed out)` and the mod runs it again from the tick every 15
-  minutes, at most 3 times (`installRetry` in the state). The liaison hears of
-  a retry only when one succeeds (`install: ok on retry <n>`), fails for
-  another reason, or is the last and times out too. The mod never pushes to
-  `main`, never forces a push, never deploys.
+  that fails for any reason but a conflict or a moved head goes to the lead,
+  never retried by the mod. Then cleanup (the worktrees and branches of its
+  agents, the local `task/<slug>` when it equals the merged head, the check
+  worktree) and the `afterMerge` command. That command runs with its time limit
+  (`timeoutSeconds`) and may wait for the lock of heavy work while a check holds
+  it: when the limit cuts it, the merge notice says `install: retrying (timed
+  out)` and the mod runs it again from the tick every 15 minutes, at most 3
+  times (`installRetry` in the state). The lead hears of a retry only when one
+  succeeds (`install: ok on retry <n>`), fails for another reason, or is the
+  last and times out too. The mod never pushes to `main`, never forces a push,
+  never deploys.
 - **A check that did not finish.** `forge.status()` tells a failure the check
   commented (`Full check failed at <full head sha>` as the first line of a
   comment) from one it did not: a `failure` or `error` without that comment
-  costs no round. The mod re-runs the check: it finds the newest actions run
-  of the head (`GET /repos/{owner}/{repo}/actions/runs?head_sha=<sha>`) and
-  re-runs it (`POST .../actions/runs/{run}/rerun`, `204`; works as `dev`; only
-  for a finished run, otherwise the server answers with a JSON message, as
-  `tea api` exits 0 on it too, so the answer is read, not the exit code).
-  At most 2 re-runs per head (`reruns`, cleared by a new head or when the
-  liaison resumes the task from `liaison` with `pipeline_send`); the third
-  unfinished status moves the task to `liaison` with a notice. A re-run that
-  fails is noted in the task and uses up the try. The time of the re-run is
-  kept (`rerunAt`): a poll within 3 minutes after it that still sees the
-  unfinished failure is taken for the old status of the cancelled run, the
-  check counts as pending and no try is used.
+  costs no round. The mod re-runs the check: it finds the newest actions run of
+  the head (`GET /repos/{owner}/{repo}/actions/runs?head_sha=<sha>`) and re-runs
+  it (`POST .../actions/runs/{run}/rerun`, `204`; works as `dev`; only for a
+  finished run, otherwise the server answers with a JSON message, as `tea api`
+  exits 0 on it too, so the answer is read, not the exit code). At most 2
+  re-runs per head (`reruns`, cleared by a new head or when the lead resumes the
+  task from `lead` with `pipeline_send`); the third unfinished status moves the
+  task to `lead` with a notice. A re-run that fails is noted in the task and
+  uses up the try. The time of the re-run is kept (`rerunAt`): a poll within 3
+  minutes after it that still sees the unfinished failure is taken for the old
+  status of the cancelled run, the check counts as pending and no try is used.
 - **The start of a session.** A new session does not continue the work of the
   earlier one by itself: the user decides. `register.tsx` tells a session start
   from a reload of the module (both fire `session.start`) by a value of the
   engine: `$.state.get` of `pipeline.started`, which the engine keeps for the
   session and over a hot reload; absent means a new session. The mod sets it
-  only after its start succeeded: a start that fails on the project layer
-  leaves it absent, so the start after the fix, in that load or a reloaded one,
-  is still that of a new session and pauses. (The session id is not used: a resumed session keeps its id.) At a
-  new session the mod sets `paused` in its state, whatever the store holds, and
-  only reconciles, without an agent: it asks the engine for its agents
-  (`$.agent.list()`) and marks every agent the store called running as not
-  running; one the engine does not know is dead (`lost`). Nothing is spawned,
-  told, salvaged, polled or merged. When a task is unfinished (a live one, a
-  cleanup or a post-merge step left undone), it sends one notice to the
-  liaison: for each task its stage, pull request and what resuming would do,
-  the worktrees that no task references (`agent-*` and `check-pr-*`; listed,
-  not removed), and "Call pipeline_resume after the user agrees." With no
-  unfinished task there is no notice and the mod is not paused. A reload in
-  the same session does not pause and does not disturb the agents the engine
-  lists: they keep their state and get no message. Only the dead are handled,
-  as the resume below does, and `checking` tasks are polled and waiting tasks
-  started.
+  only after its start succeeded: a start that fails on the project layer leaves
+  it absent, so the start after the fix, in that load or a reloaded one, is
+  still that of a new session and pauses. (The session id is not used: a resumed
+  session keeps its id.) At a new session the mod sets `paused` in its state,
+  whatever the store holds, and only reconciles, without an agent: it asks the
+  engine for its agents (`$.agent.list()`) and marks every agent the store
+  called running as not running; one the engine does not know is dead (`lost`).
+  Nothing is spawned, told, salvaged, polled or merged. When a task is
+  unfinished (a live one, a cleanup or a post-merge step left undone), it sends
+  one notice to the lead: for each task its stage, pull request and what
+  resuming would do, the worktrees that no task references (`agent-*` and
+  `check-pr-*`; listed, not removed), and "Call pipeline_resume after the user
+  agrees." With no unfinished task there is no notice and the mod is not paused.
+  A reload in the same session does not pause and does not disturb the agents
+  the engine lists: they keep their state and get no message. Only the dead are
+  handled, as the resume below does, and `checking` tasks are polled and waiting
+  tasks started.
 - **While paused.** `tick` does nothing; `pipeline_start` records the task as
   `waiting` and starts nothing; `pipeline_send` keeps the text (`heldSend`, a
   `waiting` task still takes it into its brief) and answers that the pipeline
@@ -396,9 +393,9 @@ on the server, counts rounds, merges, cleans up and reports to the liaison.
 - **Retention.** A merged task leaves the store 14 days after its merge
   (`mergedAt`); the last 200 removed slugs are kept (`mergedSlugs`) and still
   count as merged for `after`. A blocked task with a pull request is looked at
-  once an hour (from the 60 s tick); one found closed without a merge, after
-  its cleanup, is removed with a one-line notice to the liaison. A store
-  written by an older mod, without these fields, is read with their defaults.
+  once an hour (from the 60 s tick); one found closed without a merge, after its
+  cleanup, is removed with a one-line notice to the lead. A store written by an
+  older mod, without these fields, is read with their defaults.
 - **A late send.** A `pipeline_send` to a developer whose turn is running is
   appended to it and kept (`pendingSend`). If that turn ends before the
   developer read it, the end does not count (no stage change, no notice): the
@@ -440,7 +437,7 @@ on the server, counts rounds, merges, cleans up and reports to the liaison.
 
 - Agents run in the background and cannot ask for a permission: the commands
   of the project must be allowed in advance (or the session runs in auto mode).
-- The mod lives in the liaison's session: with the session closed CI still
-  checks pushes, but no reviewer starts and nothing merges until the session
-  is back and the liaison resumes the pipeline (the mod reloads its tasks).
+- The mod lives in the lead's session: with the session closed CI still checks
+  pushes, but no reviewer starts and nothing merges until the session is back
+  and the lead resumes the pipeline (the mod reloads its tasks).
 - The mod's API is early access and may change with a Claude Code update.

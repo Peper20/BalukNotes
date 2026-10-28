@@ -13,7 +13,7 @@ export const INSTALL_RETRY_MS = 15 * 60 * 1000
 export const MAX_INSTALL_RETRIES = 3
 /** The poll of the commit status of the pull requests in `checking`. */
 export const POLL_MS = 60 * 1000
-/** A check that did not finish is re-run this many times for one head; the next time the liaison is told. */
+/** A check that did not finish is re-run this many times for one head; the next time the lead is told. */
 export const MAX_RERUNS = 2
 /** A status that still shows the same unfinished failure this soon after a re-run is the old one: it costs no try. */
 export const RERUN_GRACE_MS = 3 * 60 * 1000
@@ -32,7 +32,7 @@ export const SHOW_MERGED = 3
 export type Stage =
   | 'waiting' // `after` is not merged yet
   | 'developing' // a developer works, or its turn is being awaited
-  | 'liaison' // waits for the liaison (`pipeline_send`)
+  | 'lead' // waits for the lead (`pipeline_send`)
   | 'checking' // the pull request waits for the commit status
   | 'reviewing' // a reviewer works
   | 'merging' // approved at a head with a passed status: the merge runs
@@ -78,7 +78,7 @@ export type Task = {
   /** An API error ended the last turn: resume the agent at this time (epoch ms). */
   retryAt?: number
   retryAgent?: string
-  /** The liaison was told about the current API error streak. */
+  /** The lead was told about the current API error streak. */
   apiNotified?: boolean
   /** Consecutive polls that saw the pull request not mergeable. */
   unmergeable: number
@@ -94,13 +94,13 @@ export type Task = {
   held?: boolean
   /** Agents the session start found dead (the store said running, the engine does not know them). */
   lost?: string[]
-  /** Messages of the liaison sent while the task was held: delivered by `pipeline_resume`. */
+  /** Messages of the lead sent while the task was held: delivered by `pipeline_resume`. */
   heldSend?: string
   /** Turn ends of agents that came while the task was held: handled by `pipeline_resume`. */
   deferred?: DeferredTurn[]
   /** The texts of `pipeline_send` that reached the developer after the start, in order: the reviewer reads them as part of the task. */
   addenda?: string[]
-  /** A message of the liaison appended to a running developer: sent again if the turn ends before it is read. */
+  /** A message of the lead appended to a running developer: sent again if the turn ends before it is read. */
   pendingSend?: string
   /** When the pull request was merged (epoch ms); `lastAt` for a task stored without it. */
   mergedAt?: number
@@ -130,7 +130,7 @@ export type InstallRetry = {
 export type State = {
   tasks: Task[]
   installRetry?: InstallRetry
-  /** Every task is held: the session started and the liaison has not resumed the pipeline. */
+  /** Every task is held: the session started and the lead has not resumed the pipeline. */
   paused?: boolean
   /** The slugs of merged tasks removed from `tasks` (the last `KEEP_SLUGS`): they still count as merged in `after`. */
   mergedSlugs?: string[]
@@ -145,7 +145,7 @@ export const needsResume = (t: Task): boolean =>
   (t.stage === 'merged' && t.lastEvent === 'merged; cleaning up' && t.pr !== undefined && t.head !== undefined)
 
 export type Ending =
-  | { kind: 'pr'; pr: number; liaison: boolean }
+  | { kind: 'pr'; pr: number; lead: boolean }
   | { kind: 'question' }
 
 export type MergeFailure = 'conflict' | 'moved' | 'other'
@@ -213,7 +213,7 @@ export type Event = Timed<
    * references. `fresh`: a new session (the pipeline pauses); false: a reload of the module in the same one.
    */
   | { type: 'restore'; agents: string[]; orphans: string[]; fresh: boolean }
-  /** The liaison continues the held tasks: one, or all (and the pause ends). */
+  /** The lead continues the held tasks: one, or all (and the pause ends). */
   | { type: 'resume'; slug?: string }
 >
 

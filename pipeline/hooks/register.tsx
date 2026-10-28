@@ -1,4 +1,4 @@
-// Wires the pipeline to Claude Code: the tools of the liaison, the events of the
+// Wires the pipeline to Claude Code: the tools of the lead, the events of the
 // subagents, the timer, the pane and the status line. Decisions are in
 // machine.ts, the carrying out of them in driver.ts, the server and git in
 // forge.ts.
@@ -361,7 +361,7 @@ export const register: Register = on => {
     handle: (p: Pipeline, c: Config, args: Record<string, unknown>, now: number) => Promise<string>,
   ): void => {
     on('tool.call', { tool: new RegExp(`^${TOOL(name)}$`) }, async ($, e) => {
-      if (e.agentId !== undefined) return { deny: 'the pipeline tools are for the liaison, not for subagents' }
+      if (e.agentId !== undefined) return { deny: 'the pipeline tools are for the lead, not for subagents' }
       if (rt.booting !== undefined || rt.configError !== undefined) await boot($, rt)
       const { pipeline, config } = rt
       if (!pipeline || !config) {
