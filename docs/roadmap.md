@@ -291,9 +291,8 @@ is merged, one task at a time.
       of paths to targeted tests, the forge address, what runs after a merge,
       where the documents are); the project's own steps stay in `tools/`, its
       code rules in `.claude/rules/`
-- [~] Spec-driven development, the spec-anchored level (the `sdd` skill
-      with the format, preloaded in the developers and the reviewer; the
-      first specs next): living behaviour
+- [x] Spec-driven development, the spec-anchored level (the `sdd` skill,
+      the first specs - PR #39): living behaviour
       specs `docs/specs/<area>.md` with stable requirement ids; a task's brief
       carries the spec delta, the developer applies it in the same pull
       request as the code, the reviewer checks against the ids; specs grow
@@ -319,22 +318,19 @@ is merged, one task at a time.
 - [ ] What makes the shared `target/` reach its 30 GB limit and writes
       gigabytes per check: test binaries are ~430 MB each (Typst linked in,
       full debug info); try less debug info for dependencies
-- [ ] `pipeline/scripts/measure.sh` reads wall time wrong under a
+- [x] `pipeline/scripts/measure.sh` reads wall time wrong under a
       comma-decimal locale (`LC_NUMERIC=C`); with the next kit task
-- [ ] A task that measures has a budget (a number of runs, or stop at the
+- [x] A task that measures has a budget (a number of runs, or stop at the
       target); such tasks run one after another, not side by side
-- [ ] In flight (2026-10-27): PR #37 `kit-forge`, PR #38 `mod-robust`,
-      PR #39 `specs-seed` in CI and review; `skill-guard` starts after #38.
-      After #37: the user allows `pipeline/scripts/ci-runner.sh install`,
-      then the transitional workflow block goes (tech debt). After
-      `skill-guard`: the user removes the rust hook from
-      `.claude/settings.json`, then `.claude/hooks/require-rust-skill.py`
-      is deleted. After #37 and #39: record in `docs/tech-debt.md` the gaps
-      found by `specs-seed` (vault rename by case skips "name taken";
-      `NoteId` accepts names `file_name` refuses; framework errors are not
-      JSON; a 500 of the local server carries the raw error; the login
-      throttle counts unverified attempts; the hub does not see edits made
-      on its disk). Kit: the check log says when the heavy lock is taken
+- [ ] In flight (2026-10-28): PR #38 `mod-robust`; after it `skill-guard`
+      and `paused-start` (user's decision: at a session start the mod is
+      paused and resumes only on the user's word, `pipeline_resume`).
+      Waits for the user: `pipeline/scripts/ci-runner.sh install` (then the
+      transitional workflow block goes, tech debt); after `skill-guard` the
+      rust hook leaves `.claude/settings.json`, then
+      `.claude/hooks/require-rust-skill.py` is deleted
+- [ ] Kit: the check log says when the heavy lock is taken (a wait looked
+      like a hang)
 
 ## Later
 

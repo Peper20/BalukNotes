@@ -39,6 +39,8 @@ One brief per `pipeline_start`, for its developer and, later, its reviewer:
 
 A brief must be self-contained: the developers and the reviewer have not seen your conversation.
 
+- A task that measures speed gets a budget in its brief: a number of runs, or stop at the target. Two such tasks never run at the same time: their measurements disturb each other.
+
 - The developers trust the brief. Check every path, name and command it cites against the repository. A task that moves or renames something lists its callers outside the module, found with `grep`, and says how moved code reports its errors.
 
 - A blocked task resumes with `pipeline_send { slug, text }` carrying the user's clarification: the mod starts a new `developer-3` on its branch and pull request.
