@@ -346,6 +346,10 @@ is merged, one task at a time.
       (`pipeline_send` after the start): decisions and added work look out of
       scope to it. The reviewer's prompt gets the brief with every later
       message of the liaison
+- [ ] The install after a merge (`afterMerge`, 600 s) fails while a CI
+      check holds the lock of heavy work (after #42 it waited for the check of
+      #44): count the timeout from taking the lock, or retry it after the
+      check
 - [ ] The marker of a started session (`pipeline.started`) is written before
       the boot succeeds: a new session with a broken config that hot-reloads
       wakes live tasks without the user's word. Write it after a successful
