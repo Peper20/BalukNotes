@@ -305,7 +305,7 @@ is merged, one task at a time.
       developer and the reviewer; the Rust skill rewritten for agents,
       portable, no emoji (done, PR #34). Then one mechanism in the mod: an edit of a file
       whose language has a skill in `.claude/pipeline.json` needs that skill
-      loaded (replaces `.claude/hooks/require-rust-skill.py`)
+      loaded (replaced the former Python hook)
 - [ ] The main agent is renamed from `liaison` to `lead`
 - [x] The mod (PR #38, #43): a cancelled check (a machine shutdown) is re-run and costs no
       round; at start it reconciles dead agents, their unsaved work and their
@@ -324,10 +324,9 @@ is merged, one task at a time.
       comma-decimal locale (`LC_NUMERIC=C`); with the next kit task
 - [x] A task that measures has a budget (a number of runs, or stop at the
       target); such tasks run one after another, not side by side
-- [ ] Waits for the user: `pipeline/scripts/ci-runner.sh install` (then the
-      transitional workflow block goes, tech debt); the rust hook leaves
-      `.claude/settings.json`, then `.claude/hooks/require-rust-skill.py`
-      is deleted (the mod's guard replaces it, PR #44)
+- [x] The runner has `PIPELINE_MAIN` (the transitional workflow block goes
+      in `ci-tidy`); the rust hook is gone, the mod's guard replaces it
+      (PR #44)
 - [~] In flight: `mod-fixes` (the open mod items below, the guard after
       `/clear`, its rules re-read)
 - [x] Kit: the check log says who holds the heavy lock and when it is

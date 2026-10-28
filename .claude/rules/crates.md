@@ -40,7 +40,7 @@ General Rust rules - the Claude Code skill `rust` (`.claude/skills/`, generic,
 it knows nothing about the project); language-neutral rules (comments, naming,
 abstraction) - the skill `code-quality`. The rules of this file override them.
 Without the `rust` skill loaded (after a context compaction - loaded again) the
-hook `.claude/hooks/require-rust-skill.py` (`.claude/settings.json`) blocks
+pipeline mod's skill guard (`skills` of `.claude/pipeline.json`) blocks
 editing `.rs` (Edit, Write and writes from Bash).
 
 Where the project differs from the skill:
