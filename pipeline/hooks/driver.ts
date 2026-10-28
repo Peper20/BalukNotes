@@ -171,6 +171,11 @@ export function createPipeline(ports: Ports): Pipeline {
       case 'post-merge':
         await locked(async () => emit(await postMerge(a.slug, a.pr, a.head)))
         return
+      case 'install-retry': {
+        const r = await ports.forge.install().catch(err => ({ ok: false, note: String(err), timedOut: false }))
+        emit({ type: 'install-retried', slug: a.slug, n: a.n, ok: r.ok, timedOut: r.timedOut === true, note: r.note })
+        return
+      }
       case 'handover': {
         const left = a.previous === undefined ? [] : await ports.forge.removeAgents([a.previous])
         if (left.length > 0) {
@@ -239,11 +244,11 @@ export function createPipeline(ports: Ports): Pipeline {
       ...(await ports.forge.cleanupMerged({ slug, pr, head })),
     ]
     const pulled = await ports.forge.pullMain()
-    let install: 'ok' | 'failed' | 'skipped' = 'skipped'
+    let install: 'ok' | 'failed' | 'skipped' | 'timeout' = 'skipped'
     let note = pulled.note
     if (pulled.pull === 'ok' && needsAfterMerge(pulled.changed, ports.config.afterMerge)) {
       const r = await ports.forge.install()
-      install = r.ok ? 'ok' : 'failed'
+      install = r.ok ? 'ok' : r.timedOut ? 'timeout' : 'failed'
       note = r.note
     }
     const others = state.tasks.filter(

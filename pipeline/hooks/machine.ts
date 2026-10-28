@@ -11,8 +11,10 @@ import {
   isLive,
   needsResume,
   CLOSED_POLL_MS,
+  INSTALL_RETRY_MS,
   KEEP_MERGED_MS,
   KEEP_SLUGS,
+  MAX_INSTALL_RETRIES,
   MAX_RERUNS,
   RERUN_GRACE_MS,
   MAX_ROUNDS,
@@ -78,6 +80,9 @@ export function step(prev: State, ev: Event, cfg: Config): Result {
     case 'rerun-failed':
       onRerunFailed(state, ev)
       break
+    case 'install-retried':
+      onInstallRetried(state, ev, out)
+      break
     case 'salvaged':
       onSalvaged(state, ev, out, cfg)
       break
@@ -116,6 +121,11 @@ function tell(t: Task, agentId: string, text: string, out: Result, how?: 'send' 
   out.actions.push({ type: 'tell', slug: t.slug, agentId, text, how: resolved })
   if (resolved === 'send') t.pendingSend = undefined
   if (a) a.running = true
+}
+
+/** The liaison's text reached the developer after the start: the reviewer reads it with the brief. */
+const addendum = (t: Task, text: string): void => {
+  ;(t.addenda ??= []).push(text.trim())
 }
 
 /** `text` with the message of the liaison that may have been lost; the message is taken off the task. */
@@ -329,6 +339,7 @@ function onSend(s: State, ev: Event_<'send'>, out: Result, cfg: Config): void {
       t.cleanupPending = false
       t.nudged = false
       t.retryAt = undefined
+      addendum(t, ev.text)
       note(t, ev.now, 'resumed by the liaison on developer-3')
       spawnDeveloper(t, P.continuePrompt(t, `The task was blocked and is resumed.\n\n${ev.text.trim()}\n\nOpen findings:\n${t.findings ?? '(none recorded)'}`, cfg), out)
       out.reply = `${t.slug}: resumed on a new developer-3`
@@ -340,6 +351,7 @@ function onSend(s: State, ev: Event_<'send'>, out: Result, cfg: Config): void {
       }
       // A turn that is ending may not read it: kept to be sent again (onTurnEnd).
       const midTurn = agentOf(t, t.agentId)?.running === true
+      addendum(t, ev.text)
       tell(t, t.agentId, ev.text, out)
       if (midTurn) t.pendingSend = [t.pendingSend, ev.text.trim()].filter(x => x !== undefined && x !== '').join('\n\n')
       note(t, ev.now, 'the liaison sent a message')
@@ -354,6 +366,7 @@ function onSend(s: State, ev: Event_<'send'>, out: Result, cfg: Config): void {
       t.stage = 'developing'
       t.nudged = false
       t.retryAt = undefined
+      addendum(t, ev.text)
       note(t, ev.now, 'the liaison sent a message')
       toDeveloper(t, ev.text, out, cfg)
       out.reply = `${t.slug}: sent to ${t.developer}; the task is developing`
@@ -436,10 +449,17 @@ function onTurnEnd(s: State, ev: Event_<'turn-end'>, out: Result): void {
   const t = owner(s, ev.agentId)
   const a = t && agentOf(t, ev.agentId)
   if (!t || !a) return
-  a.running = false
+  // A developer that waits for its own background work wakes by itself: it is still running, and this end is no
+  // ending. A text with an ending has finished whatever it waits for; a reviewer's verdict is on the server.
+  const waits = ev.waiting === true && a.role === 'developer' && P.parseEnding(ev.text) === undefined
+  a.running = waits
 
   if (t.stage === 'blocked') {
     maybeCleanup(t, out)
+    return
+  }
+  if (waits) {
+    note(t, ev.now, `${a.tier} waits for its background work`)
     return
   }
   if (isHeld(s, t)) {
@@ -698,15 +718,36 @@ function onPostMerge(s: State, ev: Event_<'post-merge'>, out: Result, cfg: Confi
     }
   }
   const started = startWaiting(s, ev.now, out, cfg)
+  if (ev.install === 'timeout') s.installRetry = { slug: t.slug, tries: 0, at: ev.now + INSTALL_RETRY_MS }
+  else if (ev.install === 'ok') s.installRetry = undefined
+  const install = ev.install === 'timeout' ? 'retrying' : ev.install
   const lines = [
     `[pipeline] ${t.slug} merged: ${pullsUrl(cfg)}${t.pr}`,
     `rounds: ${roundsText(t)}`,
-    `main: pull ${ev.pull}; install: ${ev.install}${ev.note === '' ? '' : ` (${ev.note})`}`,
+    `main: pull ${ev.pull}; install: ${install}${ev.note === '' ? '' : ` (${ev.note})`}`,
     ev.leftovers.length === 0 ? 'cleanup: nothing left' : `cleanup left:\n- ${ev.leftovers.join('\n- ')}`,
   ]
   if (told.length > 0) lines.push(`conflicts: ${told.join(', ')} told to rebase`)
   if (started.length > 0) lines.push(`started: ${started.join(', ')}`)
   out.actions.push({ type: 'notify', text: lines.join('\n') })
+}
+
+/** A retry of the install ended: the liaison is told when it succeeded or when the last try failed. */
+function onInstallRetried(s: State, ev: Event_<'install-retried'>, out: Result): void {
+  const r = s.installRetry
+  if (!r || r.slug !== ev.slug || r.tries !== ev.n) return
+  const after = `after the merge of ${ev.slug}`
+  const finish = (text: string): void => {
+    s.installRetry = undefined
+    out.actions.push({ type: 'notify', text: `[pipeline] ${text}` })
+  }
+  if (ev.ok) finish(`install: ok on retry ${ev.n} (${after})`)
+  else if (!ev.timedOut) finish(`install: failed on retry ${ev.n} (${after}): ${ev.note}`)
+  else if (ev.n >= MAX_INSTALL_RETRIES) finish(`install: timed out ${MAX_INSTALL_RETRIES + 1} times (${after}); run it by hand`)
+  else {
+    r.running = undefined
+    r.at = ev.now + INSTALL_RETRY_MS
+  }
 }
 
 function onHandoverFailed(s: State, ev: Event_<'handover-failed'>, out: Result): void {
@@ -742,6 +783,12 @@ function onClosedPolled(s: State, ev: Event_<'closed-polled'>, out: Result): voi
 function onTick(s: State, ev: Event_<'tick'>, out: Result, cfg: Config): void {
   if (s.paused) return
   pruneMerged(s, ev.now)
+  const retry = s.installRetry
+  if (retry && !retry.running && ev.now >= retry.at) {
+    retry.running = true
+    retry.tries += 1
+    out.actions.push({ type: 'install-retry', slug: retry.slug, n: retry.tries })
+  }
   for (const t of s.tasks) {
     if (t.held) continue
     if (
@@ -794,6 +841,7 @@ function resumeWould(s: State, t: Task): string {
  * a reload of the module in the same session wakes what is not held, as `pipeline_resume` does.
  */
 function onRestore(s: State, ev: Event_<'restore'>, out: Result, cfg: Config): void {
+  if (s.installRetry) s.installRetry.running = undefined
   for (const t of s.tasks) {
     const lost = new Set(t.lost)
     for (const a of t.agents) {
@@ -883,6 +931,7 @@ function wakeTask(s: State, t: Task, now: number, out: Result, cfg: Config, relo
     case 'developing': {
       if (reload && !developerDead && t.agentId !== undefined) break
       note(t, now, 'the pipeline restarted')
+      if (kept !== undefined) addendum(t, kept)
       const text = kept === undefined ? P.restartMessage() : `${P.restartMessage()}\n\n${P.heldMessage(kept)}`
       if (developerDead && t.agentId !== undefined) replaceDeveloper(t, t.agentId, text, out)
       else toDeveloper(t, withPending(t, text), out, cfg)

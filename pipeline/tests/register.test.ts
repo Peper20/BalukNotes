@@ -1,7 +1,7 @@
 // register.tsx through the engine: the tools, the events of the subagents and
 // the pane. The server and git are not reached: process.run is answered here.
 import type { On } from 'claude-code'
-import { type Engine, expect, mock, test } from 'claude-code/testing'
+import { type Engine, describe, expect, mock, test } from 'claude-code/testing'
 
 const TOOL = 'mcp__pipeline__pipeline_start'
 const CONFIG = JSON.stringify({
@@ -276,8 +276,11 @@ test('pipeline_status: without all the merged tasks are cut to three, with all t
   expect(all).not.toContain('older merged')
 })
 
-/** A session over a stored task; `reload`: the engine already holds what an earlier load of the module wrote. */
-async function storedSession($: Engine, on: On, stage: 'developing' | 'merged', reload: boolean) {
+/**
+ * A session over a stored task; `reload`: the engine already holds what an earlier load of the module wrote.
+ * `config.file` is the project layer, read on every try of the start; `config.status`, the agent's in `$.agent.list()`.
+ */
+async function storedSession($: Engine, on: On, stage: 'developing' | 'merged', reload: boolean, config: { file: string; status?: string } = { file: CONFIG }) {
   mock.clock(on)
   const rounds = { 'developer-1': 0, 'developer-2': 0, 'developer-3': 0 }
   mock.store(on, {
@@ -307,13 +310,15 @@ async function storedSession($: Engine, on: On, stage: 'developing' | 'merged', 
   const submitted: string[] = []
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   on('session.root', async () => ({ value: '/repo' }))
-  on('fs.read', async () => ({ value: CONFIG }))
+  on('fs.read', async () => ({ value: config.file }))
   on('tool.register', async (_$, e) => ({ value: { tool: `mcp__pipeline__${e.name}` } }))
   on('command.register', async () => ({ value: { command: 'pipeline' } }))
   on('ui.status', async () => ({ value: undefined }))
   on('ui.log', async () => ({ value: undefined }))
-  on('agent.list', async () => ({ value: [{ id: 'agent-1', description: 'feat', type: 'developer-2', status: 'running' }] }))
+  on('agent.list', async () => ({ value: [{ id: 'agent-1', description: 'feat', type: 'developer-2', status: (config.status ?? 'running') as never }] }))
   on('process.run', async () => ({ value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  on('turn.complete', async (_$, e) => ({ text: e.answer }))
+  on('classic.SubagentStop', async () => ({}))
   on('session.send', async (_$, e) => {
     sent.push(e.text)
     return { isDelivered: true }
@@ -354,4 +359,65 @@ test('a new session with no unfinished task is not paused and tells nothing', as
   expect(submitted).toEqual([])
   const status = String((await $.tool.call({ tool: 'mcp__pipeline__pipeline_status' } as never)).result)
   expect(status).not.toContain('PAUSED')
+})
+
+test('a new session whose config is broken writes no session marker: a later load still finds the session new and pauses', async ($, on) => {
+  const config = { file: '{ "forge": { "url": "nope" } }' }
+  const { sent, submitted, marked } = await storedSession($, on, 'developing', false, config)
+  // A load of the module after the fix reads the marker: absent, so its start is that of a new session.
+  expect(marked).not.toContain('started')
+  expect(submitted.join('|')).not.toContain('the pipeline is paused')
+
+  config.file = CONFIG
+  const status = String((await $.tool.call({ tool: 'mcp__pipeline__pipeline_status' } as never)).result)
+  expect(status.startsWith('PAUSED')).toBe(true)
+  await flush($)
+  expect(sent).toEqual([])
+  expect(marked).toContain('started')
+})
+
+describe('an agent that waits for its own background work is not asked to finish', () => {
+  const end = ($: Engine) => $.turn.complete({ answer: 'Measuring; waiting for the run.', durationMs: 1, isAborted: false, turnId: 't1', agentId: 'agent-1', reason: 'answer' })
+  const stop = ($: Engine, background: { id: string; type: string; status: string; description: string }[]) =>
+    $.classic.SubagentStop({ stop_hook_active: false, agent_id: 'agent-1', agent_transcript_path: '/t', agent_type: 'developer-2', background_tasks: background })
+  const NUDGE = /PIPELINE/
+
+  test('SubagentStop lists background work in flight: no nudge', async ($, on) => {
+    const { sent } = await storedSession($, on, 'developing', true)
+    await stop($, [{ id: 'b1', type: 'shell', status: 'running', description: 'a measurement' }])
+    await end($)
+    await flush($)
+    expect(sent.filter(t => NUDGE.test(t))).toEqual([])
+  })
+
+  test('the agent is waiting in the agent list: no nudge', async ($, on) => {
+    const { sent } = await storedSession($, on, 'developing', true, { file: CONFIG, status: 'waiting' })
+    await end($)
+    await flush($)
+    expect(sent.filter(t => NUDGE.test(t))).toEqual([])
+  })
+
+  test('an agent the list calls idle is not waiting, whatever SubagentStop listed', async ($, on) => {
+    const idle = await storedSession($, on, 'developing', true, { file: CONFIG, status: 'idle' })
+    await stop($, [{ id: 'b1', type: 'shell', status: 'running', description: 'another agent\'s build' }])
+    await end($)
+    await flush($)
+    expect(idle.sent.filter(t => NUDGE.test(t))).toHaveLength(1)
+  })
+
+  test('background work that is only subagents says nothing about this agent', async ($, on) => {
+    const { sent } = await storedSession($, on, 'developing', true)
+    await stop($, [{ id: 'a2', type: 'subagent', status: 'running', description: 'another developer' }])
+    await end($)
+    await flush($)
+    expect(sent.filter(t => NUDGE.test(t))).toHaveLength(1)
+  })
+
+  test('neither sign: the missing line is asked for', async ($, on) => {
+    const { sent } = await storedSession($, on, 'developing', true)
+    await stop($, [])
+    await end($)
+    await flush($)
+    expect(sent.filter(t => NUDGE.test(t))).toHaveLength(1)
+  })
 })

@@ -15,7 +15,7 @@ const PANE = 'pipeline'
 const TOOL = (name: string): string => `mcp__pipeline__${name}`
 const STORE_KEY = 'tasks'
 const rows = { plugin: 'pipeline', key: 'tasks' } as const
-/** Held by the engine for the session and kept over a reload of the module: absent at a new session. */
+/** Held by the engine for the session and kept over a reload of the module: absent at a new session. Written after a successful start. */
 const started = { plugin: 'pipeline', key: 'started' } as const
 
 const TOOLS = [
@@ -105,8 +105,8 @@ type Runtime = {
 /** One start at a time: every caller gets the same promise. */
 function boot($: EngineInterface, rt: Runtime): Promise<void> {
   rt.booting ??= bootOnce($, rt).then(
-    started => {
-      if (!started) rt.booting = undefined
+    ok => {
+      if (!ok) rt.booting = undefined
     },
     err => {
       rt.booting = undefined
@@ -182,6 +182,8 @@ async function bootOnce($: EngineInterface, rt: Runtime): Promise<boolean> {
   const p = createPipeline(ports)
   rt.pipeline = p
   await p.start({ fresh: rt.fresh ?? true })
+  // Only a start that succeeded marks the session: a module that failed to start and is loaded again still finds the session new.
+  await $.state.set(started, true).catch(err => $.ui.log(`pipeline: the session marker was not written: ${String(err)}`))
   $.clock.every(POLL_MS, () => {
     p.tick().catch(err => $.ui.log(`pipeline: tick failed: ${String(err)}`))
   })
@@ -206,10 +208,12 @@ async function remember($: EngineInterface, agentId: string | undefined, skill: 
   }
 }
 
-/** What the guard keeps in memory: the rules once read, the last problem logged. */
+/** What the guard keeps in memory: the rules last read, the file they came from, the last problem logged. */
 type GuardState = {
-  /** A file that cannot be read means no rules; a file with a bad key is read again on the next call. */
-  rules?: SkillRule[]
+  /** The last good rules: a file that cannot be read or parsed leaves them as they were (none at first). */
+  rules: SkillRule[]
+  /** The modification time of the file `rules` were read from (or tried to be); the file is read again when it changes. */
+  mtime?: number
   reported?: string
 }
 
@@ -221,18 +225,30 @@ function reportGuard($: EngineInterface, g: GuardState, what: string): void {
 }
 
 async function readRules($: EngineInterface, g: GuardState): Promise<SkillRule[]> {
-  if (g.rules !== undefined) return g.rules
+  const path = `${await $.session.root()}/${CONFIG_PATH}`
+  const kept = g.rules.length === 0 ? 'edits are not guarded' : 'the rules read before stay'
+  let mtime: number
+  try {
+    mtime = (await $.fs.stat(path)).mtimeMs
+  } catch (err) {
+    reportGuard($, g, `${CONFIG_PATH} could not be read: ${err instanceof Error ? err.message : String(err)}; ${kept} until it can be`)
+    return g.rules
+  }
+  if (mtime === g.mtime) return g.rules
   let text: string
   try {
-    text = await $.fs.read(`${await $.session.root()}/${CONFIG_PATH}`)
-  } catch {
-    return (g.rules = [])
+    text = await $.fs.read(path)
+  } catch (err) {
+    reportGuard($, g, `${CONFIG_PATH} could not be read: ${err instanceof Error ? err.message : String(err)}; ${kept} until it can be`)
+    return g.rules
   }
+  g.mtime = mtime
   const parsed = parseSkills(text)
   if (!parsed.ok) {
-    reportGuard($, g, `${parsed.error}; edits are not guarded until the file is fixed`)
-    return []
+    reportGuard($, g, `${parsed.error}; ${kept} until the file is fixed`)
+    return g.rules
   }
+  g.reported = undefined
   return (g.rules = parsed.skills)
 }
 
@@ -264,7 +280,7 @@ async function guarded<T>($: EngineInterface, g: GuardState, what: string, work:
  * when the pipeline failed to start; a failure of its own never blocks an edit.
  */
 function registerGuard(on: On): void {
-  const g: GuardState = {}
+  const g: GuardState = { rules: [] }
 
   on('tool.call', { tool: /^(Edit|Write|MultiEdit|NotebookEdit|Bash)$/ }, async ($, e, next) => {
     const missing = await guarded($, g, 'the check of an edit', () => missingSkill($, g, e as unknown as Record<string, unknown>))
@@ -290,6 +306,14 @@ function registerGuard(on: On): void {
     return done
   })
 
+  // `/clear` ends the session while the process and the mod go on: the main loop starts with no skill loaded.
+  on('session.end', async ($, e, next) => {
+    if (e.reason === 'clear') {
+      await guarded($, g, 'forgetting the skills at /clear', () => $.state.set({ plugin: 'pipeline', key: 'skills', id: MAIN_LOOP }, []))
+    }
+    return next(e)
+  })
+
   // A compaction summarizes the skill text away: the loop loads it again. A `precompute` installs nothing.
   on('session.compact', async ($, e, next) => {
     const done = await next(e)
@@ -300,6 +324,23 @@ function registerGuard(on: On): void {
   })
 }
 
+/**
+ * Whether the agent ended its turn to wait for its own background work. The status of the agent decides when
+ * it says `waiting` (work it owns) or that the agent is idle or ended; otherwise the background work SubagentStop
+ * listed for it (see `register`) does.
+ */
+async function waitsForBackgroundWork($: EngineInterface, known: ReadonlySet<string>, agentId: string): Promise<boolean> {
+  let status: string | undefined
+  try {
+    status = (await $.agent.list()).find(a => a.id === agentId)?.status
+  } catch (err) {
+    $.ui.log(`pipeline: the agent list could not be read: ${String(err)}`)
+  }
+  if (status === 'waiting') return true
+  if (status !== undefined && status !== 'running' && status !== 'pending') return false
+  return known.has(agentId)
+}
+
 export const register: Register = on => {
   const rt: Runtime = { root: '' }
 
@@ -308,7 +349,6 @@ export const register: Register = on => {
     if (rt.fresh === undefined) {
       // `register` runs again and `session.start` fires again at a reload; the state of the engine survives it, a new session has none.
       rt.fresh = (await $.state.get(started)).value === undefined
-      await $.state.set(started, true)
     }
     for (const t of TOOLS) await $.tool.register({ ...t, isDeferred: false })
     await $.command.register({ name: 'pipeline', description: 'Show the tasks of the development pipeline' })
@@ -358,11 +398,29 @@ export const register: Register = on => {
 
   served('pipeline_resume', (p, _c, a) => reply(p, { type: 'resume', slug: str(a.slug) || undefined }))
 
+  // Claude Code ends the turn of a subagent that waits for its background commands and wakes it when they end:
+  // such an end is no ending. The signs are the status `waiting` of the agent in `$.agent.list()` and the
+  // background work in flight that the settings event SubagentStop lists. That list is the session's, so the
+  // subagents in it (the other agents of the pipeline, this one too) say nothing about this agent.
+  const backgroundWork = new Set<string>()
+
+  on('classic.SubagentStop', async ($, e, next) => {
+    if ((e.background_tasks ?? []).some(b => b.type !== 'subagent')) backgroundWork.add(e.agent_id)
+    else backgroundWork.delete(e.agent_id)
+    return next(e)
+  })
+
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId !== undefined) backgroundWork.delete(e.agentId)
+    return next(e)
+  })
+
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
     if (rt.pipeline && e.agentId !== undefined) {
+      const waiting = await waitsForBackgroundWork($, backgroundWork, e.agentId)
       rt.pipeline
-        .dispatch({ type: 'turn-end', agentId: e.agentId, reason: e.reason, text: done.text })
+        .dispatch({ type: 'turn-end', agentId: e.agentId, reason: e.reason, text: done.text, waiting })
         .catch(err => $.ui.log(`pipeline: turn end failed: ${String(err)}`))
     }
     return done

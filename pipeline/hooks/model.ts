@@ -8,6 +8,9 @@ export type Developer = (typeof DEVELOPERS)[number]
 export const MAX_ROUNDS = 2
 /** The delay before a turn that ended with an API error (usage limit) is resumed. */
 export const RETRY_MS = 15 * 60 * 1000
+/** The install after a merge that timed out is tried again this often, at most `MAX_INSTALL_RETRIES` times. */
+export const INSTALL_RETRY_MS = 15 * 60 * 1000
+export const MAX_INSTALL_RETRIES = 3
 /** The poll of the commit status of the pull requests in `checking`. */
 export const POLL_MS = 60 * 1000
 /** A check that did not finish is re-run this many times for one head; the next time the liaison is told. */
@@ -48,6 +51,9 @@ export type AgentRef = {
 }
 
 export type DeferredTurn = { agentId: string; reason: 'answer' | 'aborted' | 'refusal' | 'error'; text: string }
+
+/** A turn end: `waiting` when the agent ended the turn to wait for its own background work (it wakes by itself). */
+export type TurnEnd = DeferredTurn & { waiting?: boolean }
 
 export type Task = {
   slug: string
@@ -92,6 +98,8 @@ export type Task = {
   heldSend?: string
   /** Turn ends of agents that came while the task was held: handled by `pipeline_resume`. */
   deferred?: DeferredTurn[]
+  /** The texts of `pipeline_send` that reached the developer after the start, in order: the reviewer reads them as part of the task. */
+  addenda?: string[]
   /** A message of the liaison appended to a running developer: sent again if the turn ends before it is read. */
   pendingSend?: string
   /** When the pull request was merged (epoch ms); `lastAt` for a task stored without it. */
@@ -107,8 +115,21 @@ export type Task = {
   lastAt: number
 }
 
+/** The install after a merge timed out (the lock of heavy work was held): it is tried again from `tick`. */
+export type InstallRetry = {
+  /** The task whose merge the install belongs to. */
+  slug: string
+  /** Tries made so far. */
+  tries: number
+  /** When the next try is due (epoch ms). */
+  at: number
+  /** A try is running; not kept over a restart of the module. */
+  running?: boolean
+}
+
 export type State = {
   tasks: Task[]
+  installRetry?: InstallRetry
   /** Every task is held: the session started and the liaison has not resumed the pipeline. */
   paused?: boolean
   /** The slugs of merged tasks removed from `tasks` (the last `KEEP_SLUGS`): they still count as merged in `after`. */
@@ -138,7 +159,7 @@ export type Event = Timed<
   | { type: 'spawned'; slug: string; agentId: string; role: 'developer' | 'reviewer'; tier: string }
   | { type: 'spawn-failed'; slug: string; role: 'developer' | 'reviewer'; reason: string }
   | { type: 'undelivered'; slug: string; agentId: string; text: string }
-  | ({ type: 'turn-end' } & DeferredTurn)
+  | ({ type: 'turn-end' } & TurnEnd)
   | {
       type: 'polled'
       slug: string
@@ -172,12 +193,15 @@ export type Event = Timed<
       type: 'post-merge'
       slug: string
       pull: 'ok' | 'failed' | 'skipped'
-      install: 'ok' | 'failed' | 'skipped'
+      /** `timeout`: the command was cut by its time limit and is tried again later. */
+      install: 'ok' | 'failed' | 'skipped' | 'timeout'
       note: string
       leftovers: string[]
       conflicted: string[]
     }
   | { type: 'rerun-failed'; slug: string; head: string; reason: string }
+  /** A retry of the install that timed out ended. */
+  | { type: 'install-retried'; slug: string; n: number; ok: boolean; timedOut: boolean; note: string }
   /** The dead developer's worktree is dealt with: `patch` holds its unsaved changes, `note` what went wrong. */
   | { type: 'salvaged'; slug: string; agentId: string; text: string; patch?: string; note?: string }
   | { type: 'closed-polled'; slug: string; pr: number; prState: 'open' | 'closed' | 'merged' }
@@ -210,6 +234,8 @@ export type Action =
   | { type: 'post-merge'; slug: string; pr: number; head: string }
   | { type: 'handover'; slug: string; previous?: string; prompt: string }
   | { type: 'cleanup'; slug: string; mode: 'blocked' | 'reviewer'; agents: string[]; pr?: number }
+  /** Run the `afterMerge` command again: try `n` of `MAX_INSTALL_RETRIES`. */
+  | { type: 'install-retry'; slug: string; n: number }
   | { type: 'comment'; pr: number; text: string }
   | { type: 'notify'; text: string }
 

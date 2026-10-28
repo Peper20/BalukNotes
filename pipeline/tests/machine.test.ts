@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { RETRY_MS } from '../hooks/model'
+import { INSTALL_RETRY_MS, MAX_INSTALL_RETRIES, RETRY_MS } from '../hooks/model'
 import { parseEnding } from '../hooks/prompts'
 import { Run } from './helpers'
 
@@ -634,5 +634,194 @@ describe('restart', () => {
     r.ready('x', 7, HEAD)
     const res = r.restart([])
     expect(res.actions.some(a => a.type === 'poll')).toBe(true)
+  })
+})
+
+describe('what the liaison sent after the start', () => {
+  test('every send that reaches the developer is kept in order and the reviewer reads it after the brief', async () => {
+    const r = new Run()
+    r.begin('x')
+    // Sent mid-turn: the turn end does not count and the message is sent again.
+    r.feed({ type: 'send', slug: 'x', text: '  Also cover the empty case.\n' })
+    r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Done.\nPIPELINE: pr=7' })
+    r.ready('x', 7, HEAD)
+    expect(r.task('x').stage).toBe('checking')
+    // The liaison sends again while the pull request waits for the check.
+    r.feed({ type: 'send', slug: 'x', text: 'Rename the helper.' })
+    r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Renamed.\nPIPELINE: pr=7' })
+    expect(r.task('x').addenda).toEqual(['Also cover the empty case.', 'Rename the helper.'])
+    const res = r.poll('x', HEAD, 'success')
+    const spawn = res.actions.find(a => a.type === 'spawn')
+    const prompt = spawn?.type === 'spawn' ? spawn.prompt : ''
+    expect(prompt).toContain('Messages of the liaison to the developer after the start (decisions and added work; they are part of the task):')
+    expect(prompt.indexOf('Brief of x.')).toBeLessThan(prompt.indexOf('Message 1:\nAlso cover the empty case.'))
+    expect(prompt.indexOf('Message 1:')).toBeLessThan(prompt.indexOf('Message 2:\nRename the helper.'))
+  })
+
+  test('a task with no message has no such section; an addendum to the brief of a task that has not started is the brief', async () => {
+    const r = new Run()
+    reviewing(r)
+    r.begin('w')
+    r.feed({ type: 'start', slug: 'later', developer: 'developer-1', brief: 'Later.', after: ['x'] })
+    r.feed({ type: 'send', slug: 'later', text: 'A note.' })
+    expect(r.task('later').addenda).toBeUndefined()
+    expect(r.task('later').brief).toContain('A note.')
+    const spawn = r.all.find(a => a.type === 'spawn' && a.role === 'reviewer')
+    expect(spawn?.type === 'spawn' && spawn.prompt).not.toContain('Messages of the liaison')
+  })
+
+  test('a message that resumes a blocked task or returns a pull request from the liaison stage is kept too', async () => {
+    const r = new Run()
+    r.begin('x')
+    r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Which way?\nPIPELINE: question' })
+    expect(r.task('x').stage).toBe('liaison')
+    r.feed({ type: 'send', slug: 'x', text: 'Take the first.' })
+    expect(r.task('x').addenda).toEqual(['Take the first.'])
+    r.feed({ type: 'stop', slug: 'x', reason: 'test' })
+    r.feed({ type: 'send', slug: 'x', text: 'Go on.' })
+    expect(r.task('x').addenda).toEqual(['Take the first.', 'Go on.'])
+  })
+})
+
+describe('an agent that waits for its own background work', () => {
+  test('its turn end is no missing PIPELINE line; the end after the wake is read as usual', async () => {
+    const r = new Run()
+    r.begin('x')
+    r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Measuring, waiting for the run.', waiting: true })
+    expect(r.actions('tell')).toHaveLength(0)
+    expect(r.actions('notify')).toHaveLength(0)
+    expect(r.task('x').nudged).toBe(false)
+    expect(r.task('x').agents[0]?.running).toBe(true)
+    expect(r.task('x').stage).toBe('developing')
+    // A second wait is no second ending either.
+    r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Still waiting.', waiting: true })
+    expect(r.task('x').nudged).toBe(false)
+    // It woke and ended without the line: asked once, as before.
+    r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Done, no line.' })
+    expect(r.actions('tell')).toHaveLength(1)
+    expect(r.task('x').nudged).toBe(true)
+    r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Done.\nPIPELINE: pr=7' })
+    expect(r.task('x').stage).toBe('checking')
+  })
+
+  test('a developer that ended with a PIPELINE line has finished, whatever it waits for', async () => {
+    const r = new Run()
+    r.begin('x')
+    r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Done; the server still runs.\nPIPELINE: pr=7', waiting: true })
+    expect(r.task('x').stage).toBe('checking')
+    expect(r.task('x').pr).toBe(7)
+    expect(r.actions('poll')).toHaveLength(1)
+    expect(r.task('x').agents[0]?.running).toBe(false)
+  })
+
+  test('a waiting reviewer end reads the review from the server; a stopped task is cleaned up only when its agent really ended', async () => {
+    const r = new Run()
+    reviewing(r)
+    r.feed({ type: 'turn-end', agentId: 'x-rev', reason: 'answer', text: 'Verdict given; a build still runs.', waiting: true })
+    expect(r.actions('read-review')).toHaveLength(1)
+
+    const s = new Run()
+    s.begin('y')
+    s.feed({ type: 'stop', slug: 'y', reason: 'test' })
+    s.feed({ type: 'turn-end', agentId: 'y-d1', reason: 'answer', text: 'Waiting.', waiting: true })
+    expect(s.actions('cleanup')).toHaveLength(0)
+    s.feed({ type: 'turn-end', agentId: 'y-d1', reason: 'answer', text: 'Stopped.' })
+    expect(s.actions('cleanup')).toHaveLength(1)
+  })
+})
+
+describe('an install that timed out', () => {
+  const merged = (r: Run, install: 'ok' | 'failed' | 'timeout' = 'timeout') => {
+    r.begin('a')
+    r.feed({ type: 'post-merge', slug: 'a', pull: 'ok', install, note: install === 'timeout' ? 'timed out' : '', leftovers: [], conflicted: [] })
+    return r.last
+  }
+
+  test('the merge notice says it is retried, not failed', async () => {
+    const r = new Run()
+    const text = merged(r).actions.find(a => a.type === 'notify')
+    expect(text?.type === 'notify' && text.text).toContain('install: retrying (timed out)')
+    expect(r.state.installRetry).toEqual({ slug: 'a', tries: 0, at: r.now + INSTALL_RETRY_MS })
+  })
+
+  test('a try every 15 minutes, a success is told, the failure of the last try is told', async () => {
+    const r = new Run()
+    merged(r)
+    const due = r.state.installRetry?.at ?? 0
+    r.now = due - 2_000
+    r.feed({ type: 'tick' })
+    expect(r.actions('install-retry')).toHaveLength(0)
+    r.now = due
+    r.feed({ type: 'tick' })
+    expect(r.actions('install-retry')).toEqual([{ type: 'install-retry', slug: 'a', n: 1 }])
+    // While a try runs, ticks start no other.
+    r.now += INSTALL_RETRY_MS
+    r.feed({ type: 'tick' })
+    expect(r.actions('install-retry')).toHaveLength(0)
+
+    // Another timeout: quiet, the next try is 15 minutes after the end of this one.
+    r.feed({ type: 'install-retried', slug: 'a', n: 1, ok: false, timedOut: true, note: 'timed out' })
+    expect(r.actions('notify')).toHaveLength(0)
+    expect(r.state.installRetry).toEqual({ slug: 'a', tries: 1, at: r.now + INSTALL_RETRY_MS })
+    for (let n = 2; n <= MAX_INSTALL_RETRIES; n++) {
+      r.now += INSTALL_RETRY_MS
+      r.feed({ type: 'tick' })
+      expect(r.actions('install-retry')).toEqual([{ type: 'install-retry', slug: 'a', n }])
+      r.feed({ type: 'install-retried', slug: 'a', n, ok: false, timedOut: true, note: 'timed out' })
+    }
+    const last = r.actions('notify')
+    expect(last).toHaveLength(1)
+    expect(last[0]?.type === 'notify' && last[0].text).toContain('install: timed out')
+    expect(r.state.installRetry).toBeUndefined()
+    r.now += INSTALL_RETRY_MS
+    r.feed({ type: 'tick' })
+    expect(r.actions('install-retry')).toHaveLength(0)
+  })
+
+  test('a retry that succeeds is told, one that fails for another reason ends the tries', async () => {
+    const r = new Run()
+    merged(r)
+    r.now = r.state.installRetry?.at ?? 0
+    r.feed({ type: 'tick' })
+    r.feed({ type: 'install-retried', slug: 'a', n: 1, ok: true, timedOut: false, note: '' })
+    const ok = r.actions('notify')[0]
+    expect(ok?.type === 'notify' && ok.text).toContain('install: ok on retry 1')
+    expect(r.state.installRetry).toBeUndefined()
+
+    const s = new Run()
+    merged(s)
+    s.now = s.state.installRetry?.at ?? 0
+    s.feed({ type: 'tick' })
+    s.feed({ type: 'install-retried', slug: 'a', n: 1, ok: false, timedOut: false, note: 'exit 2: boom' })
+    const failed = s.actions('notify')[0]
+    expect(failed?.type === 'notify' && failed.text).toContain('install: failed on retry 1')
+    expect(failed?.type === 'notify' && failed.text).toContain('exit 2: boom')
+    expect(s.state.installRetry).toBeUndefined()
+  })
+
+  test('a later install that succeeds ends the tries; the tries wait while the pipeline is paused', async () => {
+    const r = new Run()
+    merged(r)
+    r.feed({ type: 'start', slug: 'b', developer: 'developer-1', brief: 'B.', after: [] })
+    r.feed({ type: 'post-merge', slug: 'b', pull: 'ok', install: 'ok', note: '', leftovers: [], conflicted: [] })
+    expect(r.state.installRetry).toBeUndefined()
+
+    const s = new Run()
+    merged(s)
+    s.state.paused = true
+    s.now = (s.state.installRetry?.at ?? 0) + 1
+    s.feed({ type: 'tick' })
+    expect(s.actions('install-retry')).toHaveLength(0)
+  })
+
+  test('a restart forgets that a try was running: the next tick starts it again', async () => {
+    const r = new Run()
+    merged(r)
+    r.now = r.state.installRetry?.at ?? 0
+    r.feed({ type: 'tick' })
+    expect(r.state.installRetry?.running).toBe(true)
+    r.feed({ type: 'restore', agents: [], orphans: [], fresh: false })
+    r.feed({ type: 'tick' })
+    expect(r.actions('install-retry')).toEqual([{ type: 'install-retry', slug: 'a', n: 2 }])
   })
 })

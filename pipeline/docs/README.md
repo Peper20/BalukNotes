@@ -67,8 +67,10 @@ The user talks only to the `liaison`. Agents talk to each other in English.
    (twice per head) and, when the third try does not finish either, tells
    the `liaison`. No round is spent.
 6. **Review.** On a `success` status the mod starts a `reviewer`; it reads the
-   pull request in its own worktree, runs only what CI cannot show and gives
-   the verdict on the server. Blocking findings go back to the same developer
+   pull request in its own worktree against the brief and the messages the
+   `liaison` sent the developer after the start (`pipeline_send`, kept in order
+   in `addenda`: decisions and added work are part of the task), runs only
+   what CI cannot show and gives the verdict on the server. Blocking findings go back to the same developer
    as a round.
 7. **Merge.** An approval and a `success` status at the same head: the mod
    squashes the pull request into `main`, deletes the branch, removes the
@@ -291,12 +293,17 @@ on the server, counts rounds, merges, cleans up and reports to the liaison.
   denied with the skill to load and the project's rules to read. A loop has
   loaded a skill after a successful `Skill` call, or a `/<skill>` the person
   typed (main loop; seen at `command.run`), until its next compaction
-  (`session.compact`, the loop's own for a subagent). The sets are in `$.state`
+  (`session.compact`, the loop's own for a subagent) or, for the main loop, a
+  `/clear` (`session.end` with the reason `clear`: the process and the mod go
+  on with a fresh conversation). The sets are in `$.state`
   (`pipeline.skills`, per agent id or `main`) and survive a reload of the mod;
   a load by a subagent does not count for the main loop, nor the reverse. The
-  guard reads the key itself on the first call: it works with no task running
-  and when the pipeline failed to start, does nothing without the key, and a
-  failure of its own (logged once) never blocks an edit.
+  guard reads the key itself, on the first call and again whenever the
+  modification time of the file changes (`$.fs.stat`): it works with no task
+  running and when the pipeline failed to start, and does nothing without the
+  key. A file that cannot be read or parsed keeps the last good rules (none at
+  first), and each distinct error is logged once (`$.ui.log`); a failure of
+  its own never blocks an edit.
 - **Tools of the liaison** (`mcp__pipeline__<name>`): `pipeline_start { slug,
   developer, brief, after? }` (the developer gets the brief, the branch
   `task/<slug>`, the project and its pages to read first, and the contract:
@@ -318,8 +325,14 @@ on the server, counts rounds, merges, cleans up and reports to the liaison.
   that fails for any reason but a conflict or a moved head goes to the
   liaison, never retried by the mod. Then cleanup (the worktrees and branches
   of its agents, the local `task/<slug>` when it equals the merged head, the
-  check worktree) and the `afterMerge` command. The mod never pushes to `main`,
-  never forces a push, never deploys.
+  check worktree) and the `afterMerge` command. That command runs with its time
+  limit (`timeoutSeconds`) and may wait for the lock of heavy work while a
+  check holds it: when the limit cuts it, the merge notice says `install:
+  retrying (timed out)` and the mod runs it again from the tick every 15
+  minutes, at most 3 times (`installRetry` in the state). The liaison hears of
+  a retry only when one succeeds (`install: ok on retry <n>`), fails for
+  another reason, or is the last and times out too. The mod never pushes to
+  `main`, never forces a push, never deploys.
 - **A check that did not finish.** `forge.status()` tells a failure the check
   commented (`Full check failed at <full head sha>` as the first line of a
   comment) from one it did not: a `failure` or `error` without that comment
@@ -339,8 +352,10 @@ on the server, counts rounds, merges, cleans up and reports to the liaison.
   earlier one by itself: the user decides. `register.tsx` tells a session start
   from a reload of the module (both fire `session.start`) by a value of the
   engine: `$.state.get` of `pipeline.started`, which the engine keeps for the
-  session and over a hot reload; absent means a new session, and the mod then
-  sets it. (The session id is not used: a resumed session keeps its id.) At a
+  session and over a hot reload; absent means a new session. The mod sets it
+  only after its start succeeded: a start that fails on the project layer
+  leaves it absent, so the start after the fix, in that load or a reloaded one,
+  is still that of a new session and pauses. (The session id is not used: a resumed session keeps its id.) At a
   new session the mod sets `paused` in its state, whatever the store holds, and
   only reconciles, without an agent: it asks the engine for its agents
   (`$.agent.list()`) and marks every agent the store called running as not
@@ -389,6 +404,20 @@ on the server, counts rounds, merges, cleans up and reports to the liaison.
   developer read it, the end does not count (no stage change, no notice): the
   mod sends the message again in a new turn, marked as possibly already acted
   on. Any other delivery in a new turn clears it.
+- **An agent that waits for its own background work.** Claude Code ends the
+  turn of a subagent that waits for its background commands and wakes it
+  when they end. Such a turn end of a developer whose text has no `PIPELINE:`
+  line is not read as an ending (no nudge; the agent stays running). A text
+  with the line has finished, whatever the agent waits for, and a reviewer's
+  turn end always reads the review from the server. The mod takes a turn end
+  for a wait when the agent's status in `$.agent.list()` is `waiting` (work it
+  owns). When that status is `running` or `pending`, or the agent is not
+  listed, the second sign decides: the settings event `classic.SubagentStop`
+  of that agent listed background work in flight other than subagents
+  (`background_tasks`; the list is the session's, so the subagents in it are
+  the other agents). That SubagentStop comes before its `turn.complete` is
+  assumed, not confirmed. A status `idle` or an ended one means no wait. The
+  next `turn.start` of the agent forgets what SubagentStop said.
 - **One start.** `session.start` and a tool call after a config error share
   one start promise: one pipeline and one timer per load; an error clears it
   so that the next call reads the file anew.

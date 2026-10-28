@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import { createPipeline } from '../hooks/driver'
+import { INSTALL_RETRY_MS } from '../hooks/model'
 import { fakes, type Fakes } from './helpers'
 
 const HEAD = 'a'.repeat(40)
@@ -101,6 +102,51 @@ describe('a task from start to merge', () => {
       expect(f.server.calls).toContain('install')
       expect(f.notes[0]).toContain('install: ok')
     }
+  })
+
+  test('an install that timed out is tried again every 15 minutes; the liaison hears of a success, or of the last failure', async () => {
+    const merged = async (f: Fakes) => {
+      const p = await started(f)
+      f.server.pull = { pull: 'ok', note: '', changed: ['src/a.rs'] }
+      const { rev } = await toReview(f, p, 'feat', 7, HEAD)
+      f.server.review(7, HEAD, 'APPROVED')
+      await finish(p, rev)
+      return p
+    }
+    const wait = async (f: Fakes, p: P) => {
+      f.time.now += INSTALL_RETRY_MS
+      await p.tick()
+      await p.settle()
+    }
+
+    const f = fakes()
+    f.server.installTimeouts = 2
+    const p = await merged(f)
+    expect(f.notes).toHaveLength(1)
+    expect(f.notes[0]).toContain('install: retrying (timed out)')
+    expect(f.notes[0]).not.toContain('failed')
+    // Too early: nothing.
+    await p.tick()
+    await p.settle()
+    expect(f.server.calls.filter(c => c === 'install')).toHaveLength(1)
+    await wait(f, p)
+    await wait(f, p)
+    await wait(f, p)
+    expect(f.server.calls.filter(c => c === 'install')).toHaveLength(3)
+    expect(f.notes).toHaveLength(2)
+    expect(f.notes[1]).toContain('install: ok on retry 2')
+    // Nothing is tried after a success.
+    await wait(f, p)
+    expect(f.server.calls.filter(c => c === 'install')).toHaveLength(3)
+
+    const g = fakes()
+    g.server.installTimeouts = 10
+    const q = await merged(g)
+    for (let i = 0; i < 6; i++) await wait(g, q)
+    expect(g.server.calls.filter(c => c === 'install')).toHaveLength(4)
+    expect(g.notes).toHaveLength(2)
+    expect(g.notes[1]).toContain('install: timed out')
+    expect(g.notes[1]).toContain('by hand')
   })
 
   test('a config without afterMerge never runs a command', async () => {

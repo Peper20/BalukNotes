@@ -92,6 +92,24 @@ describe('a session start', () => {
     expect(resumed.actions.find(a => a.type === 'spawn')).toMatchObject({ slug: 'w', role: 'developer' })
   })
 
+  test('an old store without addenda or an install retry loads at a reload, takes a send, and reviews with the brief alone', () => {
+    const r = new Run()
+    const developer = { id: 'a-d1', role: 'developer' as const, tier: 'developer-1', running: false }
+    r.state = { tasks: [oldTask('a', 'developing', { agentId: 'a-d1', agents: [developer] }), oldTask('c', 'checking', { pr: 3, head: HEAD })] }
+    restore(r, ['a-d1'], { fresh: false })
+    expect(r.state.installRetry).toBeUndefined()
+    expect(r.feed({ type: 'tick' }).actions.some(a => a.type === 'install-retry')).toBe(false)
+
+    const sent = r.feed({ type: 'send', slug: 'a', text: 'Also the edge case.' })
+    expect(sent.reply).toContain('sent to developer-1')
+    expect(r.task('a').addenda).toEqual(['Also the edge case.'])
+
+    const res = r.poll('c', HEAD, 'success')
+    const spawn = res.actions.find(a => a.type === 'spawn')
+    expect(spawn?.type === 'spawn' && spawn.prompt).toContain('Brief of c.')
+    expect(spawn?.type === 'spawn' && spawn.prompt).not.toContain('Messages of the liaison')
+  })
+
   test('a reload of the module in the same session does not pause: it polls and tells nobody who is alive', () => {
     const r = twoTasks()
     const res = restore(r, ['x-d2', 'y-d1'], { fresh: false })

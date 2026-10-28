@@ -38,6 +38,9 @@ export type MergeOutcome = { ok: true } | { ok: false; kind: 'conflict' | 'moved
 
 export type SalvageOutcome = { patch?: string; note?: string }
 
+/** `timedOut`: the command ran past its time limit (it waited for the lock of heavy work behind a check) and was cut. */
+export type InstallOutcome = { ok: boolean; note: string; timedOut?: boolean }
+
 export type PullOutcome = { pull: 'ok' | 'failed' | 'skipped'; note: string; changed: string[] }
 
 export type Forge = {
@@ -63,7 +66,7 @@ export type Forge = {
   unreferenced(a: { agents: readonly string[]; prs: readonly number[] }): Promise<string[]>
   pullMain(): Promise<PullOutcome>
   /** The `afterMerge` command of the config, run in the main checkout. */
-  install(): Promise<{ ok: boolean; note: string }>
+  install(): Promise<InstallOutcome>
 }
 
 export type ForgeOptions = {
@@ -401,7 +404,7 @@ export function makeForge(run: Run, opts: ForgeOptions): Forge {
     return { pull: 'ok', note: '', changed: diff.stdout.split('\n').filter(l => l !== '') }
   }
 
-  async function install(): Promise<{ ok: boolean; note: string }> {
+  async function install(): Promise<InstallOutcome> {
     const { afterMerge } = opts
     if (afterMerge === undefined) return { ok: false, note: 'no afterMerge command in the config' }
     try {
@@ -410,6 +413,8 @@ export function makeForge(run: Run, opts: ForgeOptions): Forge {
       const tail = (r.stderr || r.stdout).trim().split('\n').slice(-3).join(' / ')
       return { ok: false, note: `exit ${r.exitCode}: ${tail}` }
     } catch (err) {
+      // `$.process.run` rejects both when the command cannot start and when the time limit cut it.
+      if (/time(d)?[ -]?out/i.test(String(err))) return { ok: false, note: 'timed out', timedOut: true }
       return { ok: false, note: `${String(err)} (run ${afterMerge.command.join(' ')} by hand)` }
     }
   }

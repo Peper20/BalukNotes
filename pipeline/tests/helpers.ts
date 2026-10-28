@@ -27,6 +27,8 @@ export class FakeServer {
   mergeThrows: string | undefined
   pull: PullOutcome = { pull: 'ok', note: '', changed: [] }
   installOk = true
+  /** The next installs run past their time limit (the lock of heavy work was held), this many. */
+  installTimeouts = 0
   /** Left over by the cleanup, per call kind. */
   leftovers: string[] = []
   /** The pull request becomes mergeable=false for these numbers. */
@@ -107,6 +109,10 @@ export class FakeServer {
       },
       install: async () => {
         calls.push('install')
+        if (this.installTimeouts > 0) {
+          this.installTimeouts--
+          return { ok: false, note: 'timed out', timedOut: true }
+        }
         return { ok: this.installOk, note: this.installOk ? '' : 'broken' }
       },
     }

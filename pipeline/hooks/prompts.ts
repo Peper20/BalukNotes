@@ -65,7 +65,19 @@ export function reviewerPrompt(t: Task, pr: number, head: string, cfg: Config): 
     'The full check of this head has passed. The brief of the task, with its acceptance criteria and design:',
     '',
     t.brief.trim(),
+    ...addendaText(t),
   ].join('\n')
+}
+
+/** What the liaison sent the developer after the start: decisions and added work, part of the task. */
+function addendaText(t: Task): string[] {
+  const texts = t.addenda ?? []
+  if (texts.length === 0) return []
+  return [
+    '',
+    'Messages of the liaison to the developer after the start (decisions and added work; they are part of the task):',
+    ...texts.flatMap((text, i) => ['', `Message ${i + 1}:`, text]),
+  ]
 }
 
 const round = (n: number): string => `round ${n} of ${MAX_ROUNDS} for this developer`

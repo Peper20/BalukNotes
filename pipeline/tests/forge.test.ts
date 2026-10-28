@@ -276,10 +276,18 @@ describe('git: main checkout', () => {
       const failed = await withConfig(async () => ({ exitCode: 3, stdout: '', stderr: 'a\nb\nc\nd\n' })).install()
       expect(failed).toEqual({ ok: false, note: 'exit 3: b / c / d' })
       const thrown = await withConfig(async () => {
-        throw new Error('timeout')
+        throw new Error('spawn scripts/after.sh ENOENT')
       }).install()
       expect(thrown.ok).toBe(false)
+      expect(thrown.timedOut).toBeUndefined()
       expect(thrown.note).toContain('run scripts/after.sh --quick by hand')
+    })
+
+    test('a command cut by its time limit is a timeout, not a failure', async () => {
+      const cut = await withConfig(async () => {
+        throw new Error('the process timed out after 90000 ms')
+      }).install()
+      expect(cut).toEqual({ ok: false, note: 'timed out', timedOut: true })
     })
 
     test('no command in the config: nothing runs', async () => {

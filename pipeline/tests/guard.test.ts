@@ -105,7 +105,10 @@ const MESSAGES = [{ role: 'user' as const, text: 'summary', toolUses: [] }]
 /** `skills` only: no forge, so the pipeline does not start, and the guard works all the same. */
 const SKILLS_ONLY = JSON.stringify({ skills: [RUST] })
 
-async function session($: Engine, on: On, file: string | null = SKILLS_ONLY) {
+/** The file the guard reads: `file` (null: it cannot be read) and its modification time. */
+type Source = { file: string | null; mtime: number }
+
+async function session($: Engine, on: On, file: string | null = SKILLS_ONLY, src: Source = { file, mtime: 1 }) {
   mock.clock(on)
   mock.store(on)
   mock.env(on, { HOME: '/home/u' })
@@ -114,8 +117,12 @@ async function session($: Engine, on: On, file: string | null = SKILLS_ONLY) {
   on('session.root', async () => ({ value: ROOT }))
   on('session.cwd', async () => ({ value: ROOT }))
   on('fs.read', async () => {
-    if (file === null) throw new Error('no such file')
-    return { value: file }
+    if (src.file === null) throw new Error('no such file')
+    return { value: src.file }
+  })
+  on('fs.stat', async () => {
+    if (src.file === null) throw new Error('no such file')
+    return { value: { kind: 'file', size: src.file.length, mtimeMs: src.mtime, isLink: false } }
   })
   on('tool.register', async (_$, e) => ({ value: { tool: `mcp__pipeline__${e.name}` } }))
   on('command.register', async () => ({ value: { command: 'pipeline' } }))
@@ -128,9 +135,10 @@ async function session($: Engine, on: On, file: string | null = SKILLS_ONLY) {
   on('prompt.submit', async (_$, e) => ({ text: e.text }))
   on('tool.call', async (_$, e) => (e.tool === 'Skill' && e.skill === 'nonsense' ? { deny: 'no such skill' } : { result: 'done' as never }))
   on('session.compact', async () => ({ messages: MESSAGES }))
+  on('session.end', async (_$, e) => ({ sessionId: e.sessionId }))
   on('command.run', async () => ({ text: '' }))
   await $.session.start({ cwd: ROOT, surface: 'terminal', isInteractive: true })
-  return { logs }
+  return { logs, src }
 }
 
 const edit = (agentId?: string, path = '/repo/crates/x/src/a.rs') => ({ tool: 'Edit', file_path: path, old_string: 'a', new_string: 'b', ...(agentId ? { agentId } : {}) }) as never
@@ -223,4 +231,81 @@ test('a bad rule is logged once and guards nothing until the file is fixed', asy
   expect((await $.tool.call(edit())).deny).toBeUndefined()
   expect(logs.filter(l => l.includes('skill guard'))).toHaveLength(1)
   expect(logs.join('\n')).toContain('not a valid regular expression')
+})
+
+test('/clear ends the session: the main loop forgets its skills, a subagent keeps its own', async ($, on) => {
+  await session($, on)
+  const ended = (reason: string) => ({ reason, sessionId: 's1', resume: { id: 's1' } }) as never
+  await $.tool.call(skill('rust'))
+  await $.tool.call(skill('rust', 'dev-1'))
+  expect((await $.tool.call(edit())).deny).toBeUndefined()
+
+  await $.session.end(ended('other'))
+  expect((await $.tool.call(edit())).deny).toBeUndefined()
+
+  await $.session.end(ended('clear'))
+  expect((await $.tool.call(edit())).deny).toContain('rust skill')
+  expect((await $.tool.call(edit('dev-1'))).deny).toBeUndefined()
+  await $.tool.call(skill('rust'))
+  expect((await $.tool.call(edit())).deny).toBeUndefined()
+})
+
+describe('the rules follow the file', () => {
+  const GUARDED = JSON.stringify({ skills: [RUST] })
+  const OTHER = JSON.stringify({ skills: [{ match: '\\.md$', skill: 'docs' }] })
+
+  test('an edit of the file is seen when its modification time changes, not before', async ($, on) => {
+    const { src } = await session($, on, JSON.stringify({ project: 'widgets' }))
+    expect((await $.tool.call(edit())).deny).toBeUndefined()
+
+    src.file = GUARDED
+    expect((await $.tool.call(edit())).deny).toBeUndefined()
+    src.mtime = 2
+    expect((await $.tool.call(edit())).deny).toContain('rust skill')
+
+    src.file = OTHER
+    src.mtime = 3
+    expect((await $.tool.call(edit())).deny).toBeUndefined()
+    expect((await $.tool.call(edit(undefined, '/repo/README.md'))).deny).toContain('docs skill')
+  })
+
+  test('a file that cannot be read keeps the last good rules and is logged once per error', async ($, on) => {
+    const { src, logs } = await session($, on, GUARDED)
+    expect((await $.tool.call(edit())).deny).toContain('rust skill')
+
+    src.file = null
+    expect((await $.tool.call(edit())).deny).toContain('rust skill')
+    expect((await $.tool.call(edit())).deny).toContain('rust skill')
+    expect(logs.filter(l => l.includes('skill guard') && l.includes('could not be read'))).toHaveLength(1)
+    expect(logs.join('\n')).toContain('the rules read before stay')
+
+    src.file = GUARDED
+    src.mtime = 2
+    expect((await $.tool.call(edit())).deny).toContain('rust skill')
+  })
+
+  test('a file that does not parse keeps the last good rules; the fix is read', async ($, on) => {
+    const { src, logs } = await session($, on, GUARDED)
+    expect((await $.tool.call(edit())).deny).toContain('rust skill')
+
+    src.file = JSON.stringify({ skills: [{ match: '(', skill: 'rust' }] })
+    src.mtime = 2
+    expect((await $.tool.call(edit())).deny).toContain('rust skill')
+    expect((await $.tool.call(edit())).deny).toContain('rust skill')
+    expect(logs.filter(l => l.includes('skill guard'))).toHaveLength(1)
+
+    src.file = OTHER
+    src.mtime = 3
+    expect((await $.tool.call(edit())).deny).toBeUndefined()
+  })
+
+  test('a file that is missing at first is read once it appears', async ($, on) => {
+    const { src, logs } = await session($, on, null)
+    expect((await $.tool.call(edit())).deny).toBeUndefined()
+    expect((await $.tool.call(edit())).deny).toBeUndefined()
+    expect(logs.filter(l => l.includes('skill guard') && l.includes('could not be read'))).toHaveLength(1)
+
+    src.file = GUARDED
+    expect((await $.tool.call(edit())).deny).toContain('rust skill')
+  })
 })
