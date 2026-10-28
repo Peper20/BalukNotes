@@ -240,6 +240,20 @@ it. The format and rules - `.claude/rules/docs.md`.
   shows in use - answer from memory and write in the background with the
   order kept, or a timeout on the client's queue.
 
+- **Renaming a vault by case only skips "name taken"** (`Vaults::rename`):
+  with `Work` and `work` both on a case-sensitive disk, renaming `Work` to
+  `work` goes straight to `rename(2)`, which replaces an empty `work` or
+  fails with a 500. Risk: a rare hand-made pair of folders. How to close:
+  check the target by exact name when the names differ only in case.
+- **Framework errors are plain text** (an invalid JSON body, a missing query
+  parameter): 400/415/422 with axum's text, not the `{error, errors}` JSON of
+  API-2 (`docs/specs/http-api.md`). Risk: the client shows a raw message. How
+  to close: a rejection handler that answers in the API's error format.
+- **A 500 of the local server carries the raw error**, which can name file
+  paths; the hub answers "internal error". Risk: paths leak to a signed-in
+  client over the TCP address. How to close: log the error, answer a generic
+  text, as the hub does.
+
 ## Sign-in and sync
 
 - **Accounts are files** (`users.json`, `sessions.json` in the data
@@ -291,6 +305,15 @@ it. The format and rules - `.claude/rules/docs.md`.
 - **`notes-server` pulls the HTTP client** (`ureq`, native TLS) through
   `notes-device`; the hub binary alone builds without it
   (`--no-default-features`).
+
+- **The login throttle counts an attempt before it is verified**: a double
+  submit of the right password gets a 429, and anyone who knows a login can
+  keep it slowed down for up to 60 s (the throttle is per login). How to
+  close: count only failed verifications, and throttle by address as well.
+- **The hub's `changes` never looks at the disk** (SYNC-14): a file edited by
+  hand on the VPS is noticed only after a restart or when its path is read,
+  written or deleted through the API. How to close: a rescan on start of a
+  long poll, or a watcher on the hub's vaults.
 
 ## Graph
 
@@ -487,6 +510,13 @@ it. The format and rules - `.claude/rules/docs.md`.
   little free space) `check.sh` cleans `target/` whole and the next check
   builds everything again (~8 min). How to close: remove old dependency
   variants (`cargo-sweep`) if full rebuilds get in the way.
+
+- **`NoteId` accepts names that file names refuse**: `a:b`, `x.`, `con`
+  are valid ids (a hand-made `a:b.typ` is a note on Linux and syncs) but
+  `file_name` and `VaultName` refuse them, and such a file cannot be written
+  on Windows; `a.TYP` is a valid id but not a source file. How to close: one
+  rule for ids and file names (`docs/specs/paths.md`), with a migration
+  message for existing files.
 
 ## Pipeline
 
