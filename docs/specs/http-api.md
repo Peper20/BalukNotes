@@ -87,8 +87,8 @@ Next id: API-45
   with their coordinates and groups, and the `center` note.
 - **API-21** `GET .../search?q=&limit=&note=` answers the sections that match,
   best first, at most `limit` (default 30, at most 200). With `note` only that
-  note or book is searched, every section in text order; an unknown note is
-  404.
+  note or book is searched, the sections in text order, still at most
+  `limit`; an unknown note is 404.
 - **API-22** `GET .../preview/{id}?anchor=` answers the title, the tags and the
   start of the text of the note, or of the section the anchor names (`heading`
   is null when it names none). An unknown note is 404.

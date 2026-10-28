@@ -51,8 +51,9 @@ Next id: SYNC-46
   most 1024 bytes with every segment at most 255 bytes, with no empty, `.` or
   `..` segment, no backslash and no control character. Not synced: anything in
   a `.git` or `.trash` folder (at any depth), a name ending in `.tmp`,
-  `.DS_Store`, `Thumbs.db`, and everything in `.baluk/` except
-  `.baluk/settings.json`. Names starting with `_` are synced (`_folder.toml`).
+  `.DS_Store`, `Thumbs.db`, and everything in the `.baluk/` folder at the
+  vault root except `.baluk/settings.json` (a `.baluk` folder deeper down is
+  synced). Names starting with `_` are synced (`_folder.toml`).
   The hub answers 400 to a read, write or delete of any other path; a device
   never lists or sends such a path, and ignores such an entry from the server.
 - **SYNC-10** A path cannot be a file and a folder at once: writing `dir` while
