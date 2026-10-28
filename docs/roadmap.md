@@ -315,7 +315,9 @@ is merged, one task at a time.
       days, a dropped one right after its cleanup; a blocked one stays and is
       marked stale after 14 days. A `pipeline_send` that comes just before
       the task reaches the liaison stage is kept, not lost
-- [ ] What makes the shared `target/` reach its 30 GB limit and writes
+- [x] (`split-debuginfo = "unpacked"`: 41% less written by a check,
+      `target/debug` 26% smaller - PR #45, `docs/research/target-writes.md`)
+      What makes the shared `target/` reach its 30 GB limit and writes
       gigabytes per check: test binaries are ~430 MB each (Typst linked in,
       full debug info); try less debug info for dependencies
 - [x] `pipeline/scripts/measure.sh` reads wall time wrong under a

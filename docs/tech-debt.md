@@ -232,14 +232,14 @@ it. The format and rules - `.claude/rules/docs.md`.
   last deleted note stays (empty - in the tree). How to close: a vault trash
   `.trash/`.
 - **A settings save waits for the disk** (`PUT /api/settings` writes
-  `settings.json` before it answers): while gigabytes are being written out
-  (a build; the cargo part of a check still writes ~3 GB,
+  `settings.json` before it answers): while gigabytes are being written out (a
+  build; the cargo part of a check still writes ~3 GB,
   `docs/research/target-writes.md`), any small write on an encrypted ext4
-  waits; measured up to 12 s instead of 1 ms (PR #32). The client sends settings changes one at a time,
-  so a slow or hanging save also holds back every later change. Risk: a
-  setting looks stuck for seconds during heavy disk work. How to close: if it
-  shows in use - answer from memory and write in the background with the
-  order kept, or a timeout on the client's queue.
+  waits; measured up to 12 s instead of 1 ms (PR #32). The client sends
+  settings changes one at a time, so a slow or hanging save also holds back
+  every later change. Risk: a setting looks stuck for seconds during heavy
+  disk work. How to close: if it shows in use - answer from memory and write
+  in the background with the order kept, or a timeout on the client's queue.
 
 - **Framework errors are plain text** (an invalid JSON body, a missing query
   parameter): 400/415/422 with axum's text, not the `{error, errors}` JSON of
@@ -517,7 +517,13 @@ it. The format and rules - `.claude/rules/docs.md`.
 
 ## Pipeline
 
-- **The CI workflow has a transitional run block.** `.forgejo/workflows/check.yml` falls back to `BALUK_MAIN` and to `tools/check-pr.sh`, so that the runner installed before the kit had `PIPELINE_MAIN` keeps working. Risk: none while it is there; the shim `tools/check-pr.sh` stays with it. How to close: run `pipeline/scripts/ci-runner.sh install` (the user's machine), then replace the run block with the kit template's and remove `tools/check-pr.sh`.
+- **The CI workflow has a transitional run block.**
+  `.forgejo/workflows/check.yml` falls back to `BALUK_MAIN` and to
+  `tools/check-pr.sh`, so that the runner installed before the kit had
+  `PIPELINE_MAIN` keeps working. Risk: none while it is there; the shim
+  `tools/check-pr.sh` stays with it. How to close: run
+  `pipeline/scripts/ci-runner.sh install` (the user's machine), then replace
+  the run block with the kit template's and remove `tools/check-pr.sh`.
 
 ## The `/baluk-note` skill
 
