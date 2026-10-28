@@ -106,16 +106,16 @@ impl Vaults {
         Ok(out)
     }
 
-    /// Renames a vault (its folder); an error if a vault with the new name
-    /// exists. Close an open vault first (`Notes::close` of the core).
+    /// Renames a vault (its folder); an error if another vault has the new name.
+    /// Close an open vault first (`Notes::close` of the core).
     pub fn rename(&self, from: &VaultName, to: &VaultName) -> Result<()> {
         let (old, new) = (self.path(from), self.path(to));
         if !old.is_dir() {
             return Err(Error::NotFound { name: from.to_string(), known: self.list()? });
         }
-        // A name in another case on a case-insensitive file system is the same
-        // folder: renaming is allowed.
-        if new.exists() && from.as_str().to_lowercase() != to.as_str().to_lowercase() {
+        // On a case-insensitive file system a name that differs only in case is
+        // the same folder: the rename goes through.
+        if is_other_entry(&old, &new).map_err(|e| Error::io(&new, e))? {
             return Err(Error::Exists(to.to_string()));
         }
         fs::rename(&old, &new).map_err(|e| Error::io(&old, e))
@@ -141,6 +141,31 @@ impl Vaults {
             Err(e) => Err(Error::io(&path, e)),
         }
     }
+}
+
+/// Whether `new` is an existing entry other than `old`. On a case-insensitive
+/// file system a name that differs only in case is `old` itself.
+fn is_other_entry(old: &Path, new: &Path) -> io::Result<bool> {
+    match fs::symlink_metadata(new) {
+        Ok(_) => Ok(!same_entry(old, new)?),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+/// Whether two existing paths are the same entry, by device and inode of the
+/// entries themselves: a link to a folder is an entry of its own.
+#[cfg(unix)]
+fn same_entry(a: &Path, b: &Path) -> io::Result<bool> {
+    use std::os::unix::fs::MetadataExt;
+    let (a, b) = (fs::symlink_metadata(a)?, fs::symlink_metadata(b)?);
+    Ok((a.dev(), a.ino()) == (b.dev(), b.ino()))
+}
+
+/// Elsewhere the canonical paths, which spell the name in its stored case.
+#[cfg(not(unix))]
+fn same_entry(a: &Path, b: &Path) -> io::Result<bool> {
+    Ok(fs::canonicalize(a)? == fs::canonicalize(b)?)
 }
 
 #[cfg(test)]
@@ -186,5 +211,51 @@ mod tests {
         assert_eq!(vaults.list().unwrap(), [name("Учёба 2026")]);
         assert!(bin.path().join("Работа").is_dir(), "the vault is in the trash and can be restored");
         assert!(matches!(vaults.trash(&name("Работа"), Some(bin.path())), Err(Error::NotFound { .. })));
+    }
+
+    #[test]
+    fn rename_onto_other_vault_by_case() {
+        // Two folders whose names differ only in case need a case-sensitive file system.
+        let data = tempfile::tempdir().unwrap();
+        let vaults = Vaults::new(data.path());
+        vaults.create(&name("Work")).unwrap();
+        vaults.create(&name("work")).unwrap();
+        fs::write(vaults.path(&name("Work")).join("a.typ"), "= A").unwrap();
+        assert!(matches!(vaults.rename(&name("Work"), &name("work")), Err(Error::Exists(_))));
+        assert!(vaults.path(&name("Work")).join("a.typ").is_file(), "the renamed vault is untouched");
+        assert!(vaults.path(&name("work")).is_dir(), "the other vault is not replaced");
+        assert_eq!(vaults.list().unwrap(), [name("Work"), name("work")]);
+    }
+
+    #[test]
+    fn rename_by_case_only() {
+        let data = tempfile::tempdir().unwrap();
+        let vaults = Vaults::new(data.path());
+        vaults.create(&name("Work")).unwrap();
+        fs::write(vaults.path(&name("Work")).join("a.typ"), "= A").unwrap();
+        vaults.rename(&name("Work"), &name("WORK")).unwrap();
+        assert_eq!(vaults.list().unwrap(), [name("WORK")]);
+        assert!(vaults.path(&name("WORK")).join("a.typ").is_file(), "notes moved with the folder");
+    }
+
+    #[test]
+    fn rename_to_own_name() {
+        let data = tempfile::tempdir().unwrap();
+        let vaults = Vaults::new(data.path());
+        vaults.create(&name("Work")).unwrap();
+        fs::write(vaults.path(&name("Work")).join("a.typ"), "= A").unwrap();
+        vaults.rename(&name("Work"), &name("Work")).unwrap();
+        assert!(vaults.path(&name("Work")).join("a.typ").is_file(), "the same folder is kept");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rename_onto_link_to_vault() {
+        let data = tempfile::tempdir().unwrap();
+        let vaults = Vaults::new(data.path());
+        vaults.create(&name("Work")).unwrap();
+        std::os::unix::fs::symlink(vaults.path(&name("Work")), vaults.root().join("link")).unwrap();
+        assert!(matches!(vaults.rename(&name("Work"), &name("link")), Err(Error::Exists(_))));
+        assert!(vaults.path(&name("Work")).is_dir(), "a link is another entry, the folder is untouched");
     }
 }

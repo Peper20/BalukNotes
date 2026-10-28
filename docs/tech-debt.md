@@ -240,11 +240,6 @@ it. The format and rules - `.claude/rules/docs.md`.
   shows in use - answer from memory and write in the background with the
   order kept, or a timeout on the client's queue.
 
-- **Renaming a vault by case only skips "name taken"** (`Vaults::rename`):
-  with `Work` and `work` both on a case-sensitive disk, renaming `Work` to
-  `work` goes straight to `rename(2)`, which replaces an empty `work` or
-  fails with a 500. Risk: a rare hand-made pair of folders. How to close:
-  check the target by exact name when the names differ only in case.
 - **Framework errors are plain text** (an invalid JSON body, a missing query
   parameter): 400/415/422 with axum's text, not the `{error, errors}` JSON of
   API-2 (`docs/specs/http-api.md`). Risk: the client shows a raw message. How

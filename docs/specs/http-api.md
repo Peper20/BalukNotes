@@ -40,7 +40,9 @@ Next id: API-45
 - **API-7** `PATCH /api/vaults/{vault}` with `{ "name" }` renames the vault and
   answers 200 with the list. The old name is 404 from then on, the notes and
   the vault's own settings are under the new name. An unknown vault is 404, an
-  invalid new name 400, a name of another vault 409.
+  invalid new name 400, a name of another vault 409, also when it differs from
+  the old name only in case (on a case-insensitive disk the same folder is
+  renamed).
 - **API-8** `DELETE /api/vaults/{vault}` moves the whole vault folder to the
   system trash and answers 200 with the list. A second delete is 404.
 - **API-9** A server started on one folder (`notes serve --vault <path>`) lists
