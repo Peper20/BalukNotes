@@ -329,8 +329,8 @@ is merged, one task at a time.
       transitional workflow block goes, tech debt); after `skill-guard` the
       rust hook leaves `.claude/settings.json`, then
       `.claude/hooks/require-rust-skill.py` is deleted
-- [ ] Kit: the check log says when the heavy lock is taken (a wait looked
-      like a hang)
+- [x] Kit: the check log says who holds the heavy lock and when it is
+      taken (PR #40); its tests' wait loops have no timeout yet
 - [ ] The targeted tests of `notes-server` in a worktree without `app/dist`
       always fail `client_and_fonts_are_served` (503): the developers read a
       false failure each time. Give the worktree the client build or make the
