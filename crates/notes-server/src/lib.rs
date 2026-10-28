@@ -9,54 +9,13 @@
 //! 0.28 MB brotli, 0.54 MB gzip; the default levels are faster than the "best"
 //! ones at almost the same size).
 //!
-//! | Path                         | What                                         |
-//! |------------------------------|----------------------------------------------|
-//! | `GET /`, `/v/{vault}/...` (`n/{*id}`, `f/{*path}`, `tags...`, `graph`) | the client (one page, routing in JS) |
-//! | `GET /assets/{*path}`        | client files (the `app/dist/assets` build)   |
-//! | `GET /api/vaults`            | the vaults and which one to open by default  |
-//! | `POST /api/vaults`           | create a vault `{ name }`                    |
-//! | `PATCH /api/vaults/{vault}`  | rename `{ name }`                            |
-//! | `DELETE /api/vaults/{vault}` | the whole vault to the system trash          |
-//! | `GET /api/settings`          | settings schema and values                   |
-//! | `PUT /api/settings`          | change settings (partially)                  |
-//! | `GET /api/themes`            | themes: name, title, whether dark            |
-//! | `GET /api/themes.css`        | CSS variables of the themes                  |
-//! | `GET /api/fonts.css`         | `@font-face` for the design fonts (in parts) |
-//! | `GET /fonts/{family}/{style}/{part}.woff2` | a font part (WOFF2, a character set) |
-//!
-//! A vault lives under `/api/vaults/{vault}` (`...` below):
-//!
-//! | Path                         | What                                         |
-//! |------------------------------|----------------------------------------------|
-//! | `GET .../notes`              | notes and books                              |
-//! | `GET .../folders`            | folders with titles (`_folder.toml`)         |
-//! | `GET .../notes/{*id}`        | a note: HTML, headings, links, errors        |
-//! | `...?chapter=N`, `...?anchor=` | a book as one chapter (the N-th or the one with the anchor) |
-//! | `DELETE .../notes/{*id}`     | a note (a book as a folder) to the trash     |
-//! | `GET .../version/{*id}`      | the note version: cheap, no compiling        |
-//! | `GET .../links/{*id}`        | links of the note and backlinks to it        |
-//! | `GET .../graph`              | the note graph: nodes and edges              |
-//! | `POST .../graph/layout`      | the graph by a filter, laid out (`notes_core::vault_graph`) |
-//! | `GET .../search?q=&limit=`   | search in the text of all notes              |
-//! | `GET .../preview/{*id}?anchor=` | preview of a note or section (no compiling) |
-//! | `GET .../pdf/{*id}?theme=`   | the note as PDF (the first theme by default) |
-//! | `POST .../warm`              | what to build ahead first (see `notes_core::warm`) |
-//! | `GET .../events?after=`      | file changes (long polling, see `events`)    |
-//! | `GET .../settings`           | vault settings: result, shared, own          |
-//! | `PUT .../settings`           | set own ones (`null` - back to shared)       |
-//!
-//! Vault sync of this device (`device_sync`, not per vault):
-//! `GET /api/device/sync` (status), `POST /api/device/sync/login` and `/logout`,
-//! `POST /api/device/sync/vaults/{vault}/link`, `/unlink`, `/now`.
+//! The routes and their behaviour: `docs/specs/http-api.md`.
 //!
 //! Modules by area: `vaults` (vaults opened by the server), `notes` (notes,
 //! PDF, warming, deletion), `graph`, `search`, `settings` (and themes),
-//! `assets` (the client), `fonts`, `events` (vault changes), `device_sync` (vault sync of this device); shared -
-//! [`AppState`] and `error`. With [`AppState::auth`] (`notes serve --auth`) the
-//! TCP address needs a sign-in (`auth`): `notes_hub::auth` adds `POST
-//! /api/login`, `POST /api/logout` and `GET /api/session`, and only the client
-//! page, its files, the themes and the fonts are open. The Unix socket never
-//! needs it. Without it `GET /api/session` answers 204.
+//! `assets` (the client), `fonts`, `events` (vault changes), `device_sync`
+//! (vault sync of this device), `auth` (the sign-in gate of the TCP address,
+//! the routes are `notes_hub::auth`); shared - [`AppState`] and `error`.
 
 pub mod api;
 #[cfg(not(target_family = "wasm"))]

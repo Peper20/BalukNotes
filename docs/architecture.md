@@ -159,8 +159,8 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   (`notes_store::storage`: `DirStorage`, `MemStorage` in tests): replacing it
   with a database touches one place.
 - **There are several vaults**, as in Obsidian: the name is the folder name
-  in `vaults/` (`notes_store::names::VaultName`: no `/`, characters forbidden
-  on Windows, or internal `_`/`.`). Each has its own notes, links, graph,
+  in `vaults/` (`notes_store::names::VaultName`; the rules -
+  `docs/specs/paths.md`, PATH-20). Each has its own notes, links, graph,
   cache, tabs and reading positions. **There is no default vault** (user's
   decision): even the first one is created and named by the user (in the app
   or `notes vaults new`); the program never creates or moves vaults itself.
@@ -206,9 +206,8 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   compiling (`graph::Snapshot::title`). A folder title is `_folder.toml` in it
   (`title = "..."`, `notes-core::folders`; an unknown key is a `notes check`
   error). `notes new --title` makes the file name from the title
-  (`new_note::file_name`: without characters forbidden on Windows, internal
-  `_`/`.` at the start, device names and `main`; a taken one, ignoring case,
-  gets a number). A `#see` without text takes the target title from
+  (`new_note::file_name`; the rules - `docs/specs/paths.md`, PATH-10 to
+  PATH-18). A `#see` without text takes the target title from
   `/_vault/title/<path>` (`graph::TitleData`), so the version of the linking
   note includes the target title.
 - **Links** - `#see("Сеть/SSH", anchor: "Туннели")`, in HTML
@@ -391,9 +390,8 @@ User's decision: the VPS is weak (1 core, 2 GB), Typst cannot build there.
   a batch after a 100 ms pause. While nothing changes, the link index does not
   walk the vault (but at least once in 10 minutes), `DirStorage` remembers the
   file list, the warm-up wakes up on a change, the client learns about a batch
-  by long polling (`/api/vaults/<vault>/events?after=<seq>`: an answer on a
-  change or an empty one after 25 s; a vault keeps a log of the last 64
-  batches, lost ones - "check everything"). There is no polling every N
+  by long polling (`/api/vaults/<vault>/events?after=<seq>`,
+  `docs/specs/http-api.md`, API-25 to API-28). There is no polling every N
   seconds (user's decision): the server does not watch or the mode is "by
   button only" - changes come by the "Обновить" button. In the browser core
   there is no file system to watch: the vault changes only through the core
@@ -444,15 +442,11 @@ How to put it on a VPS - `docs/server.md`.
   `notes_hub::auth`, the same module for the hub and for `notes serve
   --auth`): accounts are created on the machine (`notes users add <login>`,
   Argon2id hashes in `<data>/users.json`). `POST /api/login` -> a session: a
-  cookie (`HttpOnly`, `SameSite=Strict`, `Secure` behind HTTPS) for the
-  browser, the same token as `Authorization: Bearer` for a device core. A
-  token is never passed in an address. A session lives 30 days without
-  requests (`--session-days`), each request extends it; the server disk holds
-  only hashes of tokens (`<data>/sessions.json`). A wrong password slows the
-  next attempt for that login (1 s doubling to 60 s; many failures - for
-  everyone); a state-changing request with a foreign `Origin` is refused.
-  `POST /api/logout`, `GET /api/session`; changing a password or removing a
-  user ends their sessions.
+  cookie for the browser, the same token as `Authorization: Bearer` for a
+  device core (`docs/specs/sync.md`, SYNC-39 to SYNC-45: the cookie, the
+  lifetime of a session, the slowing of wrong passwords, the refusal of a
+  foreign `Origin`).
+  The server disk holds only hashes of tokens (`<data>/sessions.json`).
 - **Who needs to sign in**: the browser and sync. The app window talks to its
   core over a Unix socket only the user can open - no sign-in (user's
   decision). `notes serve` on a localhost address is open as before; on
@@ -470,35 +464,27 @@ How to put it on a VPS - `docs/server.md`.
   one); both sides differently: the device setting `device.sync_prefer`
   decides ("the computer writes first, the others receive": this device wins
   on a computer, the server wins on a phone). A local file that sync replaces
-  or removes is moved to `<data>/sync/removed/` (kept 30 days), never just
-  deleted.
+  or removes is moved aside, never just deleted (`docs/specs/sync.md`,
+  SYNC-19).
 - **The guard against mass deletion** (`notes_store::sync::guard`): a deletion
   is a change like any other, so a slip (`rm -rf` in the wrong folder, an
   unmounted disk) would wipe a vault everywhere. A round plans everything
-  before it executes anything; if the plan deletes more than 10 files and more
-  than 20 % of the vault - or the whole vault, when it has at least two files
-  - it stops with `DeletionsHeld` having uploaded, downloaded and deleted
-  nothing. Both directions are checked: files gone from the device (would be
-  deleted on the server) and files gone from the server (would be removed from
-  the device, into `sync/removed/`). The device keeps the held set (side,
-  count, a fingerprint of the paths) in `status/<vault>.json`. `confirm` runs
-  a round that lets exactly that set through: if more or other files are gone
-  by then, the round is held again. `restore` turns the device's deletions
-  into downloads; for the other direction the way back is to unlink and link
-  the vault again, which uploads the device's files. The worker shows the
-  state `held`, looks again every 30 s (a `confirm` from the console shows up
-  then) and has no backoff; while it waits, the server's changes are not
-  applied. `notes sync confirm | restore --vault`; the app settings show the
+  before it executes anything; if the plan deletes too much, it stops with
+  `DeletionsHeld` having changed nothing (`docs/specs/sync.md`, SYNC-24 to
+  SYNC-28: the threshold, both directions, `confirm`, `restore`, the worker's
+  state `held`). The device keeps the held set (side, count, a fingerprint of
+  the paths) in `status/<vault>.json`. For files gone from the server the way
+  back is to unlink and link the vault again, which uploads the device's
+  files. `notes sync confirm | restore --vault`; the app settings show the
   count and have the buttons.
 - **The device side** (`crates/notes-device`, without Typst: `notes-store` and
   the hub client; the core stays free of HTTP for WASM): `<data>/sync/` holds
   the account (server, login, session token), the state of every linked
   vault, the last result and a lock per vault. `notes sync login | link | now
   | status | confirm | restore | unlink | logout`; `notes serve` (so the
-  window's core too) runs a worker per linked vault: a round at start, 2 s
-  after a local change (the file watcher), on a server change (long polling
-  `changes?after=&wait=`), a retry with a growing pause when the server is
-  unreachable. Pulled files are ordinary file changes:
+  window's core too) runs a worker per linked vault (`docs/specs/sync.md`,
+  SYNC-35 and SYNC-36: when a round runs, the retry). Pulled files are
+  ordinary file changes:
   open notes refresh by themselves (§8). The client gets the state and the
   actions at `/api/device/sync...`.
 - **A vault from the server is untrusted**: note HTML is sanitized, the client
