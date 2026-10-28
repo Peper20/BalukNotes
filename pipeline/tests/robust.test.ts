@@ -5,7 +5,7 @@ import { describe, expect, test } from 'claude-code/testing'
 
 import { createPipeline } from '../hooks/driver'
 import { emptyState, step } from '../hooks/machine'
-import { CLOSED_POLL_MS, KEEP_MERGED_MS, type State, type Task } from '../hooks/model'
+import { CLOSED_POLL_MS, KEEP_MERGED_MS, RERUN_GRACE_MS, type State, type Task } from '../hooks/model'
 import { describeAll } from '../hooks/view'
 import { fakes, Run, TEST_CONFIG } from './helpers'
 
@@ -50,6 +50,7 @@ describe('a check that did not finish', () => {
     expect(r.task('x').rounds['developer-1']).toBe(0)
     expect(r.task('x').stage).toBe('checking')
     expect(r.task('x').reruns).toBe(1)
+    r.now += RERUN_GRACE_MS
     expect(r.poll('x', HEAD, 'error', 'cancelled', false).actions).toHaveLength(1)
     expect(r.task('x').reruns).toBe(2)
     // A new head starts the count again.
@@ -63,13 +64,57 @@ describe('a check that did not finish', () => {
     r.begin('x')
     r.ready('x', 7, HEAD)
     r.poll('x', HEAD, 'failure', 'job cancelled', false)
+    r.now += RERUN_GRACE_MS
     r.poll('x', HEAD, 'failure', 'job cancelled', false)
+    r.now += RERUN_GRACE_MS
     const res = r.poll('x', HEAD, 'failure', 'job cancelled', false)
     expect(r.task('x').stage).toBe('liaison')
     expect(r.task('x').rounds['developer-1']).toBe(0)
     expect(res.actions.filter(a => a.type === 'rerun')).toHaveLength(0)
     const notice = res.actions.find(a => a.type === 'notify')
     expect(notice?.type === 'notify' && notice.text).toContain(`the check of ${HEAD.slice(0, 7)} did not finish 3 times: job cancelled`)
+  })
+
+  test('the liaison resuming the task from the liaison stage starts the count again', async () => {
+    const r = new Run()
+    r.begin('x')
+    r.ready('x', 7, HEAD)
+    for (let i = 0; i < 3; i++) {
+      r.poll('x', HEAD, 'failure', 'job cancelled', false)
+      r.now += RERUN_GRACE_MS
+    }
+    expect(r.task('x').stage).toBe('liaison')
+    expect(r.task('x').reruns).toBe(2)
+    r.feed({ type: 'send', slug: 'x', text: 'Push an empty commit.' })
+    expect(r.task('x').reruns).toBe(0)
+    expect(r.task('x').rerunAt).toBeUndefined()
+    // The same head is polled again at once and is re-run.
+    r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'answer', text: 'Pushed.\nPIPELINE: pr=7' })
+    r.feed({ type: 'polled', slug: 'x', pr: 7, prState: 'open', head: HEAD, ci: 'failure', mergeable: true, detail: 'cancelled', finished: false })
+    expect(r.task('x').reruns).toBe(1)
+  })
+
+  test('a poll soon after a re-run that still sees the unfinished failure is pending and uses up no try', async () => {
+    const r = new Run()
+    r.begin('x')
+    r.ready('x', 7, HEAD)
+    r.poll('x', HEAD, 'failure', 'cancelled', false)
+    expect(r.task('x').rerunAt).toBe(r.now)
+    for (let i = 0; i < 2; i++) {
+      r.now += 60_000
+      const res = r.poll('x', HEAD, 'failure', 'cancelled', false)
+      expect(res.actions).toEqual([])
+      expect(r.task('x').reruns).toBe(1)
+      expect(r.task('x').ci).toBe('pending')
+      expect(r.task('x').stage).toBe('checking')
+    }
+    // The re-run's own run was cancelled too, after the wait: that is the next try.
+    r.now += 60_000
+    expect(r.poll('x', HEAD, 'failure', 'cancelled', false).actions).toEqual([{ type: 'rerun', slug: 'x', pr: 7, head: HEAD }])
+    expect(r.task('x').reruns).toBe(2)
+    // A new head forgets the time.
+    r.poll('x', HEAD2, 'pending')
+    expect(r.task('x').rerunAt).toBeUndefined()
   })
 
   test('a failure the check commented is a round as before', async () => {
@@ -105,6 +150,7 @@ describe('a check that did not finish', () => {
     expect(f.server.calls).toContain(`rerun ${HEAD}`)
     expect(p.state().tasks[0]?.rounds['developer-1']).toBe(0)
     f.server.rerunThrows = 'no actions run'
+    f.time.now += RERUN_GRACE_MS
     await p.tick()
     await p.settle()
     expect(p.state().tasks[0]?.lastEvent).toContain('no actions run')
@@ -115,7 +161,7 @@ describe('a dead developer', () => {
   test('restore: a running developer the engine does not list is salvaged, then replaced', async () => {
     const r = new Run()
     r.begin('x', 'developer-2', 'x-d2')
-    const res = r.feed({ type: 'restore', agents: [] })
+    const res = r.restart([])
     expect(res.actions.some(a => a.type === 'tell' || a.type === 'spawn')).toBe(false)
     expect(res.actions.find(a => a.type === 'salvage')).toMatchObject({ slug: 'x', agentId: 'x-d2' })
     expect(r.task('x').agentId).toBeUndefined()
@@ -128,13 +174,13 @@ describe('a dead developer', () => {
   test('no patch, no mention; a note about a worktree that stays is passed on', async () => {
     const r = new Run()
     r.begin('x')
-    r.feed({ type: 'restore', agents: [] })
+    r.restart([])
     const plain = r.feed({ type: 'salvaged', slug: 'x', agentId: 'x-d1', text: 'Restarted.' })
     const prompt = plain.actions.find(a => a.type === 'spawn')
     expect(prompt?.type === 'spawn' && prompt.prompt).not.toContain('unsaved')
     const q = new Run()
     q.begin('x')
-    q.feed({ type: 'restore', agents: [] })
+    q.restart([])
     const kept = q.feed({ type: 'salvaged', slug: 'x', agentId: 'x-d1', text: 'Restarted.', note: 'git diff failed' })
     const withNote = kept.actions.find(a => a.type === 'spawn')
     expect(withNote?.type === 'spawn' && withNote.prompt).toContain('git diff failed')
@@ -147,7 +193,7 @@ describe('a dead developer', () => {
     r.ready('y', 8, HEAD)
     r.poll('y', HEAD, 'success')
     r.feed({ type: 'spawned', slug: 'y', agentId: 'y-rev', role: 'reviewer', tier: 'reviewer' })
-    const res = r.feed({ type: 'restore', agents: ['x-d1'] })
+    const res = r.restart(['x-d1'])
     expect(res.actions.find(a => a.type === 'tell' && a.agentId === 'x-d1')).toMatchObject({ how: 'send' })
     expect(res.actions.some(a => a.type === 'salvage' && a.slug === 'x')).toBe(false)
     expect(res.actions.find(a => a.type === 'spawn')).toMatchObject({ slug: 'y', role: 'reviewer' })
@@ -157,7 +203,7 @@ describe('a dead developer', () => {
     const r = new Run()
     r.begin('x')
     r.feed({ type: 'turn-end', agentId: 'x-d1', reason: 'error', text: '' })
-    const res = r.feed({ type: 'restore', agents: [] })
+    const res = r.restart([])
     expect(res.actions.some(a => a.type === 'salvage')).toBe(false)
     expect(res.actions.find(a => a.type === 'tell')).toMatchObject({ agentId: 'x-d1', how: 'send' })
   })
@@ -174,6 +220,7 @@ describe('a dead developer', () => {
     f.server.orphans = ['/repo/.claude/worktrees/agent-zzz']
     const q = createPipeline(f.ports)
     await q.start()
+    await q.dispatch({ type: 'resume' })
     await q.settle()
     expect(f.server.calls).toContain(`salvage feat ${old}`)
     expect(f.spawned).toHaveLength(2)

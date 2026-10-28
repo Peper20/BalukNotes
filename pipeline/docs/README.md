@@ -284,7 +284,9 @@ on the server, counts rounds, merges, cleans up and reports to the liaison.
   all? }` (every task that is not merged, then the last 3 merged and the count
   of the older ones; `all: true` shows them too; a blocked task untouched for
   14 days is marked `stale`), `pipeline_send { slug, text }` (an answer to a
-  developer; resumes the task), `pipeline_stop { slug?, reason }`.
+  developer; resumes the task), `pipeline_stop { slug?, reason }`,
+  `pipeline_resume { slug? }` (continues a paused pipeline, "The start of a
+  session").
 - **Stages** of a task: waiting (for `after`), developing, liaison (waits for
   `pipeline_send`), checking (the status of the head, polled every 60 s),
   reviewing, merging, merged, blocked. Rounds, hand-over to `developer-3` and
@@ -305,21 +307,56 @@ on the server, counts rounds, merges, cleans up and reports to the liaison.
   re-runs it (`POST .../actions/runs/{run}/rerun`, `204`; works as `dev`; only
   for a finished run, otherwise the server answers with a JSON message, as
   `tea api` exits 0 on it too, so the answer is read, not the exit code).
-  At most 2 re-runs per head (`reruns`, cleared by a new head); the third
+  At most 2 re-runs per head (`reruns`, cleared by a new head or when the
+  liaison resumes the task from `liaison` with `pipeline_send`); the third
   unfinished status moves the task to `liaison` with a notice. A re-run that
-  fails is noted in the task and uses up the try.
-- **A restart.** At session start the mod asks the engine for its agents
-  (`$.agent.list()`). A developer or reviewer that the store says was running
-  and the engine does not know is dead: a dead reviewer is replaced; a dead
-  developer (also one a delivery found unreachable) is salvaged first: its
-  worktree `.claude/worktrees/agent-<id>` is written as a patch (`git diff HEAD
+  fails is noted in the task and uses up the try. The time of the re-run is
+  kept (`rerunAt`): a poll within 3 minutes after it that still sees the
+  unfinished failure is taken for the old status of the cancelled run, the
+  check counts as pending and no try is used.
+- **The start of a session.** A new session does not continue the work of the
+  earlier one by itself: the user decides. `register.tsx` tells a session start
+  from a reload of the module (both fire `session.start`) by a value of the
+  engine: `$.state.get` of `pipeline.started`, which the engine keeps for the
+  session and over a hot reload; absent means a new session, and the mod then
+  sets it. (The session id is not used: a resumed session keeps its id.) At a
+  new session the mod sets `paused` in its state, whatever the store holds, and
+  only reconciles, without an agent: it asks the engine for its agents
+  (`$.agent.list()`) and marks every agent the store called running as not
+  running; one the engine does not know is dead (`lost`). Nothing is spawned,
+  told, salvaged, polled or merged. When a task is unfinished (a live one, a
+  cleanup or a post-merge step left undone), it sends one notice to the
+  liaison: for each task its stage, pull request and what resuming would do,
+  the worktrees that no task references (`agent-*` and `check-pr-*`; listed,
+  not removed), and "Call pipeline_resume after the user agrees." With no
+  unfinished task there is no notice and the mod is not paused. A reload in
+  the same session does not pause and does not disturb the agents the engine
+  lists: they keep their state and get no message. Only the dead are handled,
+  as the resume below does, and `checking` tasks are polled and waiting tasks
+  started.
+- **While paused.** `tick` does nothing; `pipeline_start` records the task as
+  `waiting` and starts nothing; `pipeline_send` keeps the text (`heldSend`, a
+  `waiting` task still takes it into its brief) and answers that the pipeline
+  is paused; `pipeline_stop` works as always; a turn end of an agent that is
+  alive is kept (`deferred`) and handled on resume; `pipeline_status` starts
+  with `PAUSED - pipeline_resume continues.` and the status line with
+  `paused`.
+- **`pipeline_resume { slug? }`.** Without a slug it ends the pause and, for
+  every unfinished task, does what the mod does for a task of an earlier
+  session. A dead developer is salvaged first: its worktree
+  `.claude/worktrees/agent-<id>` is written as a patch (`git diff HEAD
   --binary` and the untracked files) to
-  `.claude/worktrees/salvage/<slug>-<id>.patch` and removed with `--force` (the only place the mod forces anything; its
-  branch stays, commits are never deleted), then a new developer starts with
-  the patch path in its prompt. No changes: no patch, no mention. A patch that
-  cannot be made keeps the worktree and says so in the prompt. Then the liaison
-  is told about worktrees `agent-*` and `check-pr-*` that no task in the store
-  references; they are listed, not removed.
+  `.claude/worktrees/salvage/<slug>-<id>.patch` and removed with `--force`
+  (the only place the mod forces anything; its branch stays, commits are never
+  deleted), then a new developer of the same tier starts with the patch path
+  in its prompt (no changes: no patch, no mention; a patch that cannot be made
+  keeps the worktree and says so in the prompt). A living developer is told to
+  continue, a dead or missing reviewer is replaced, `checking` is polled, a
+  merge that may have been cut is read again, a cleanup is finished, waiting
+  tasks start. The kept messages and turn ends are delivered with it. With a
+  slug only that task is resumed and the others stay held (a `held` flag on
+  each task instead of `paused` for all); `pipeline_status` and the status
+  line name them.
 - **Retention.** A merged task leaves the store 14 days after its merge
   (`mergedAt`); the last 200 removed slugs are kept (`mergedSlugs`) and still
   count as merged for `after`. A blocked task with a pull request is looked at
@@ -355,5 +392,5 @@ on the server, counts rounds, merges, cleans up and reports to the liaison.
   of the project must be allowed in advance (or the session runs in auto mode).
 - The mod lives in the liaison's session: with the session closed CI still
   checks pushes, but no reviewer starts and nothing merges until the session
-  is back (the mod reloads its tasks).
+  is back and the liaison resumes the pipeline (the mod reloads its tasks).
 - The mod's API is early access and may change with a Claude Code update.

@@ -8,10 +8,13 @@ import {
   type Developer,
   DEVELOPERS,
   type Event,
+  isLive,
+  needsResume,
   CLOSED_POLL_MS,
   KEEP_MERGED_MS,
   KEEP_SLUGS,
   MAX_RERUNS,
+  RERUN_GRACE_MS,
   MAX_ROUNDS,
   RETRY_MS,
   type Result,
@@ -26,7 +29,7 @@ const short = (sha?: string): string => (sha ?? '').slice(0, 7)
 const find = (s: State, slug: string): Task | undefined => s.tasks.find(t => t.slug === slug)
 const owner = (s: State, agentId: string): Task | undefined => s.tasks.find(t => t.agents.some(a => a.id === agentId))
 const agentOf = (t: Task, id: string): AgentRef | undefined => t.agents.find(a => a.id === id)
-const isLive = (t: Task): boolean => t.stage !== 'merged' && t.stage !== 'blocked'
+const isHeld = (s: State, t: Task): boolean => s.paused === true || t.held === true
 const note = (t: Task, now: number, text: string): void => {
   t.lastEvent = text
   t.lastAt = now
@@ -92,6 +95,9 @@ export function step(prev: State, ev: Event, cfg: Config): Result {
       break
     case 'restore':
       onRestore(state, ev, out, cfg)
+      break
+    case 'resume':
+      onResume(state, ev, out, cfg)
       break
   }
   return out
@@ -162,7 +168,7 @@ const ready = (s: State, t: Task): boolean => t.after.every(a => isMerged(s, a))
 function startWaiting(s: State, now: number, out: Result, cfg: Config): string[] {
   const started: string[] = []
   for (const t of s.tasks) {
-    if (t.stage === 'waiting' && ready(s, t)) {
+    if (t.stage === 'waiting' && !isHeld(s, t) && ready(s, t)) {
       begin(t, now, out, cfg)
       started.push(t.slug)
     }
@@ -279,7 +285,10 @@ function onStart(s: State, ev: Event_<'start'>, out: Result, cfg: Config): void 
     lastAt: ev.now,
   }
   s.tasks.push(t)
-  if (ready(s, t)) {
+  if (s.paused) {
+    note(t, ev.now, 'recorded while the pipeline is paused')
+    out.reply = `${t.slug}: recorded; the pipeline is paused, it starts after pipeline_resume`
+  } else if (ready(s, t)) {
     begin(t, ev.now, out, cfg)
     out.reply = `${t.slug}: ${t.developer} is starting on ${P.branchOf(t.slug)}`
   } else {
@@ -293,6 +302,12 @@ function onSend(s: State, ev: Event_<'send'>, out: Result, cfg: Config): void {
   const t = find(s, ev.slug)
   if (!t) {
     out.error = `no task "${ev.slug}"`
+    return
+  }
+  if (t.stage !== 'merged' && t.stage !== 'waiting' && isHeld(s, t)) {
+    t.heldSend = [t.heldSend, ev.text.trim()].filter(x => x !== undefined && x !== '').join('\n\n')
+    note(t, ev.now, 'the liaison sent a message while the pipeline is paused')
+    out.reply = `${t.slug}: the pipeline is paused; the message is kept and delivered by pipeline_resume`
     return
   }
   switch (t.stage) {
@@ -332,6 +347,10 @@ function onSend(s: State, ev: Event_<'send'>, out: Result, cfg: Config): void {
       return
     default:
       // liaison, checking, reviewing, merging: the pull request goes back to the developer.
+      if (t.stage === 'liaison') {
+        t.reruns = 0
+        t.rerunAt = undefined
+      }
       t.stage = 'developing'
       t.nudged = false
       t.retryAt = undefined
@@ -359,6 +378,8 @@ function onStop(s: State, ev: Event_<'stop'>, out: Result): void {
     t.cleanupPending = true
     t.retryAt = undefined
     t.pendingSend = undefined
+    t.heldSend = undefined
+    t.deferred = undefined
     note(t, ev.now, reason)
     if (t.pr !== undefined) out.actions.push({ type: 'comment', pr: t.pr, text: P.blockedComment(t, reason, '') })
     maybeCleanup(t, out)
@@ -419,6 +440,12 @@ function onTurnEnd(s: State, ev: Event_<'turn-end'>, out: Result): void {
 
   if (t.stage === 'blocked') {
     maybeCleanup(t, out)
+    return
+  }
+  if (isHeld(s, t)) {
+    // Nothing is spawned or told for a held task: the turn end is handled when it is resumed.
+    ;(t.deferred ??= []).push({ agentId: ev.agentId, reason: ev.reason, text: ev.text })
+    note(t, ev.now, `${a.tier} ended a turn while the pipeline is paused`)
     return
   }
   if (a.role === 'reviewer') {
@@ -511,7 +538,10 @@ function onPolled(s: State, ev: Event_<'polled'>, out: Result, cfg: Config): voi
   }
   if (t.head !== undefined && t.head !== ev.head) note(t, ev.now, `new head ${short(ev.head)}`)
   if (t.approvedHead !== ev.head) t.approvedHead = undefined
-  if (t.head !== ev.head) t.reruns = 0
+  if (t.head !== ev.head) {
+    t.reruns = 0
+    t.rerunAt = undefined
+  }
   t.head = ev.head
   t.ci = ev.ci
   t.unmergeable = ev.mergeable ? 0 : t.unmergeable + 1
@@ -545,6 +575,12 @@ function onPolled(s: State, ev: Event_<'polled'>, out: Result, cfg: Config): voi
 
 /** The check was cancelled or could not run: not a round of the developer. Re-run it, or tell the liaison. */
 function rerunCheck(t: Task, ev: Event_<'polled'>, out: Result): void {
+  if (t.rerunAt !== undefined && ev.now - t.rerunAt < RERUN_GRACE_MS) {
+    // The status of the cancelled run may still be the one the server shows: wait for the re-run's own.
+    t.ci = 'pending'
+    note(t, ev.now, `the check of ${short(ev.head)} was re-run just now: waiting for its status`)
+    return
+  }
   const used = t.reruns ?? 0
   if (used >= MAX_RERUNS) {
     t.stage = 'liaison'
@@ -553,6 +589,7 @@ function rerunCheck(t: Task, ev: Event_<'polled'>, out: Result): void {
     return
   }
   t.reruns = used + 1
+  t.rerunAt = ev.now
   t.ci = 'pending'
   note(t, ev.now, `the check of ${short(ev.head)} did not finish: re-run ${used + 1} of ${MAX_RERUNS}`)
   if (t.pr !== undefined) out.actions.push({ type: 'rerun', slug: t.slug, pr: t.pr, head: ev.head })
@@ -574,6 +611,7 @@ function onReviewed(s: State, ev: Event_<'reviewed'>, out: Result, cfg: Config):
     // A new head was pushed while the review ran: the review is stale, the check starts over.
     t.head = ev.head
     t.reruns = 0
+    t.rerunAt = undefined
     t.approvedHead = undefined
     t.stage = 'checking'
     t.ci = 'pending'
@@ -653,7 +691,7 @@ function onPostMerge(s: State, ev: Event_<'post-merge'>, out: Result, cfg: Confi
   const told: string[] = []
   for (const slug of ev.conflicted) {
     const c = find(s, slug)
-    if (!c || c === t || c.pr === undefined || (c.conflictHead !== undefined && c.conflictHead === c.head)) continue
+    if (!c || c === t || c.pr === undefined || isHeld(s, c) || (c.conflictHead !== undefined && c.conflictHead === c.head)) continue
     if (c.stage === 'checking' || c.stage === 'reviewing' || c.stage === 'developing') {
       sendToRebase(c, ev.now, out, cfg)
       told.push(slug)
@@ -702,8 +740,10 @@ function onClosedPolled(s: State, ev: Event_<'closed-polled'>, out: Result): voi
 }
 
 function onTick(s: State, ev: Event_<'tick'>, out: Result, cfg: Config): void {
+  if (s.paused) return
   pruneMerged(s, ev.now)
   for (const t of s.tasks) {
+    if (t.held) continue
     if (
       t.stage === 'blocked' &&
       t.pr !== undefined &&
@@ -725,44 +765,153 @@ function onTick(s: State, ev: Event_<'tick'>, out: Result, cfg: Config): void {
   startWaiting(s, ev.now, out, cfg)
 }
 
-/** The session started: wake what the store says is going; an agent the engine does not know is dead. */
+/** What `pipeline_resume` would do for the task, for the notice of the session start. */
+function resumeWould(s: State, t: Task): string {
+  const lost = (id?: string): boolean => id !== undefined && (t.lost ?? []).includes(id)
+  switch (t.stage) {
+    case 'waiting':
+      return ready(s, t) ? `${t.developer} starts` : `waits for ${t.after.filter(a => !isMerged(s, a)).join(', ')}`
+    case 'developing':
+      if (lost(t.agentId) || t.agentId === undefined) return `a new ${t.developer} continues`
+      return `${t.developer} is told to continue`
+    case 'liaison':
+      return 'waits for you'
+    case 'checking':
+      return 'CI is polled'
+    case 'reviewing':
+      return t.reviewerId === undefined || lost(t.reviewerId) ? 'the reviewer is started' : 'the reviewer is told to continue'
+    case 'merging':
+      return 'the review and the status are read again, then the merge is retried'
+    case 'merged':
+      return 'the cleanup and the report are finished'
+    case 'blocked':
+      return 'the cleanup is finished'
+  }
+}
+
+/**
+ * The module started. A new session pauses the pipeline when anything is unfinished and only tells the liaison;
+ * a reload of the module in the same session wakes what is not held, as `pipeline_resume` does.
+ */
 function onRestore(s: State, ev: Event_<'restore'>, out: Result, cfg: Config): void {
   for (const t of s.tasks) {
-    const dead = (id?: string): boolean => id !== undefined && agentOf(t, id)?.running === true && !ev.agents.includes(id)
-    const developerDead = dead(t.agentId)
-    const reviewerDead = dead(t.reviewerId)
-    for (const a of t.agents) a.running = false
-    switch (t.stage) {
-      case 'developing':
-        note(t, ev.now, 'the pipeline restarted')
-        if (developerDead && t.agentId !== undefined) replaceDeveloper(t, t.agentId, P.restartMessage(), out)
-        else toDeveloper(t, withPending(t, P.restartMessage()), out, cfg)
-        break
-      case 'reviewing':
-        if (t.reviewerId !== undefined && !reviewerDead) tell(t, t.reviewerId, P.restartMessage(), out, 'send')
-        else spawnReviewer(t, out, cfg)
-        break
-      case 'checking':
-        if (t.pr !== undefined) out.actions.push({ type: 'poll', slug: t.slug, pr: t.pr })
-        break
-      case 'merging':
-        // The merge may or may not have happened: read the review and the status again.
-        t.stage = 'reviewing'
-        if (t.pr !== undefined) out.actions.push({ type: 'read-review', slug: t.slug, pr: t.pr })
-        break
-      case 'merged':
-        // Merged, but the session ended before the cleanup and the report: do them.
-        if (t.lastEvent === 'merged; cleaning up' && t.pr !== undefined && t.head !== undefined) {
-          out.actions.push({ type: 'post-merge', slug: t.slug, pr: t.pr, head: t.head })
-        }
-        break
-      case 'blocked':
-        maybeCleanup(t, out)
-        break
-      default:
+    const lost = new Set(t.lost)
+    for (const a of t.agents) {
+      const listed = ev.agents.includes(a.id)
+      if (a.running && !listed) lost.add(a.id)
+      // At a reload an agent the engine lists is alive: it keeps its state and is left alone.
+      if (ev.fresh || !listed) a.running = false
     }
+    t.lost = lost.size === 0 ? undefined : [...lost]
   }
-  startWaiting(s, ev.now, out, cfg)
+  if (!ev.fresh) {
+    if (ev.orphans.length > 0) out.actions.push({ type: 'notify', text: P.orphanWorktrees(ev.orphans) })
+    wake(s, s.tasks.filter(t => !isHeld(s, t)), ev.now, out, cfg, true)
+    return
+  }
+  for (const t of s.tasks) t.held = undefined
+  const unfinished = s.tasks.filter(needsResume)
+  s.paused = unfinished.length > 0
+  if (unfinished.length > 0) {
+    const lines = unfinished.map(t => `${t.slug}: ${t.stage}, ${t.pr === undefined ? 'no PR' : `PR #${t.pr}`}, ${resumeWould(s, t)}`)
+    out.actions.push({ type: 'notify', text: P.sessionPaused(lines, ev.orphans) })
+  } else if (ev.orphans.length > 0) {
+    out.actions.push({ type: 'notify', text: P.orphanWorktrees(ev.orphans) })
+  }
+}
+
+/** The liaison continues the pipeline: all tasks, or one while the others stay held. */
+function onResume(s: State, ev: Event_<'resume'>, out: Result, cfg: Config): void {
+  if (ev.slug === undefined) {
+    if (!s.paused && !s.tasks.some(t => t.held)) {
+      out.reply = 'the pipeline is not paused; nothing to resume'
+      return
+    }
+    const targets = s.tasks.filter(t => (s.paused ? needsResume(t) : t.held === true))
+    s.paused = false
+    for (const t of s.tasks) t.held = undefined
+    wake(s, targets, ev.now, out, cfg)
+    out.reply = targets.length === 0 ? 'resumed; no task to continue' : `resumed: ${targets.map(t => t.slug).join(', ')}`
+    return
+  }
+  const t = find(s, ev.slug)
+  if (!t) {
+    out.error = `no task "${ev.slug}"`
+    return
+  }
+  if (!isHeld(s, t)) {
+    out.reply = `${t.slug}: not held; nothing to resume`
+    return
+  }
+  if (s.paused) {
+    // The global flag gives way to a flag per task.
+    s.paused = false
+    for (const x of s.tasks) if (x !== t && needsResume(x)) x.held = true
+  }
+  wake(s, [t], ev.now, out, cfg)
+  const rest = s.tasks.filter(x => x.held)
+  out.reply = `${t.slug} resumed${rest.length === 0 ? '' : `; still held: ${rest.map(x => x.slug).join(', ')}`}`
+}
+
+function wake(s: State, tasks: Task[], now: number, out: Result, cfg: Config, reload = false): void {
+  for (const t of tasks) wakeTask(s, t, now, out, cfg, reload)
+  startWaiting(s, now, out, cfg)
+}
+
+/** What the session start left undone for the task: the dead are replaced, the others told or polled again. */
+function wakeTask(s: State, t: Task, now: number, out: Result, cfg: Config, reload: boolean): void {
+  const lost = (id?: string): boolean => id !== undefined && (t.lost ?? []).includes(id)
+  const developerDead = lost(t.agentId)
+  const reviewerDead = lost(t.reviewerId)
+  const kept = t.heldSend
+  const turns = t.deferred ?? []
+  t.lost = undefined
+  t.held = undefined
+  t.heldSend = undefined
+  t.deferred = undefined
+
+  const scratch: Result = { state: s, actions: out.actions }
+  for (const e of turns) onTurnEnd(s, { type: 'turn-end', now, ...e }, scratch)
+  if (kept !== undefined && !(t.stage === 'developing' && turns.length === 0)) {
+    onSend(s, { type: 'send', slug: t.slug, text: kept, now }, scratch, cfg)
+    if (scratch.error !== undefined) notify(t, `the message kept while the pipeline was paused could not be delivered: ${scratch.error}`, out)
+    return
+  }
+  if (turns.length > 0) return
+
+  switch (t.stage) {
+    case 'developing': {
+      if (reload && !developerDead && t.agentId !== undefined) break
+      note(t, now, 'the pipeline restarted')
+      const text = kept === undefined ? P.restartMessage() : `${P.restartMessage()}\n\n${P.heldMessage(kept)}`
+      if (developerDead && t.agentId !== undefined) replaceDeveloper(t, t.agentId, text, out)
+      else toDeveloper(t, withPending(t, text), out, cfg)
+      break
+    }
+    case 'reviewing':
+      if (reload && t.reviewerId !== undefined && !reviewerDead) break
+      if (t.reviewerId !== undefined && !reviewerDead) tell(t, t.reviewerId, P.restartMessage(), out, 'send')
+      else spawnReviewer(t, out, cfg)
+      break
+    case 'checking':
+      if (t.pr !== undefined) out.actions.push({ type: 'poll', slug: t.slug, pr: t.pr })
+      break
+    case 'merging':
+      // The merge may or may not have happened: read the review and the status again.
+      t.stage = 'reviewing'
+      if (t.pr !== undefined) out.actions.push({ type: 'read-review', slug: t.slug, pr: t.pr })
+      break
+    case 'merged':
+      // Merged, but the session ended before the cleanup and the report: do them.
+      if (t.lastEvent === 'merged; cleaning up' && t.pr !== undefined && t.head !== undefined) {
+        out.actions.push({ type: 'post-merge', slug: t.slug, pr: t.pr, head: t.head })
+      }
+      break
+    case 'blocked':
+      maybeCleanup(t, out)
+      break
+    default:
+  }
 }
 
 /** The worktree of a dead developer is saved and freed; the replacement is told where the unsaved work is. */

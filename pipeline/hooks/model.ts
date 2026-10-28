@@ -12,6 +12,8 @@ export const RETRY_MS = 15 * 60 * 1000
 export const POLL_MS = 60 * 1000
 /** A check that did not finish is re-run this many times for one head; the next time the liaison is told. */
 export const MAX_RERUNS = 2
+/** A status that still shows the same unfinished failure this soon after a re-run is the old one: it costs no try. */
+export const RERUN_GRACE_MS = 3 * 60 * 1000
 const DAY_MS = 24 * 60 * 60 * 1000
 /** A merged task stays in the store (and in `pipeline_status { all: true }`) this long after its merge. */
 export const KEEP_MERGED_MS = 14 * DAY_MS
@@ -44,6 +46,8 @@ export type AgentRef = {
   /** A turn of it is going (or a message that starts one was sent). */
   running: boolean
 }
+
+export type DeferredTurn = { agentId: string; reason: 'answer' | 'aborted' | 'refusal' | 'error'; text: string }
 
 export type Task = {
   slug: string
@@ -78,6 +82,16 @@ export type Task = {
   conflictHead?: string
   /** Re-runs of the check of `head` that did not finish; cleared when the head changes. */
   reruns?: number
+  /** When the last re-run was asked for (epoch ms). */
+  rerunAt?: number
+  /** The task is held while the pipeline runs for others: `pipeline_resume { slug }` released the rest. */
+  held?: boolean
+  /** Agents the session start found dead (the store said running, the engine does not know them). */
+  lost?: string[]
+  /** Messages of the liaison sent while the task was held: delivered by `pipeline_resume`. */
+  heldSend?: string
+  /** Turn ends of agents that came while the task was held: handled by `pipeline_resume`. */
+  deferred?: DeferredTurn[]
   /** A message of the liaison appended to a running developer: sent again if the turn ends before it is read. */
   pendingSend?: string
   /** When the pull request was merged (epoch ms); `lastAt` for a task stored without it. */
@@ -95,9 +109,19 @@ export type Task = {
 
 export type State = {
   tasks: Task[]
+  /** Every task is held: the session started and the liaison has not resumed the pipeline. */
+  paused?: boolean
   /** The slugs of merged tasks removed from `tasks` (the last `KEEP_SLUGS`): they still count as merged in `after`. */
   mergedSlugs?: string[]
 }
+
+export const isLive = (t: Task): boolean => t.stage !== 'merged' && t.stage !== 'blocked'
+/** Something resuming would do for the task: a live task, an unfinished cleanup, a message kept while held. */
+export const needsResume = (t: Task): boolean =>
+  isLive(t) ||
+  t.heldSend !== undefined ||
+  (t.stage === 'blocked' && t.cleanupPending === true) ||
+  (t.stage === 'merged' && t.lastEvent === 'merged; cleaning up' && t.pr !== undefined && t.head !== undefined)
 
 export type Ending =
   | { kind: 'pr'; pr: number; liaison: boolean }
@@ -114,7 +138,7 @@ export type Event = Timed<
   | { type: 'spawned'; slug: string; agentId: string; role: 'developer' | 'reviewer'; tier: string }
   | { type: 'spawn-failed'; slug: string; role: 'developer' | 'reviewer'; reason: string }
   | { type: 'undelivered'; slug: string; agentId: string; text: string }
-  | { type: 'turn-end'; agentId: string; reason: 'answer' | 'aborted' | 'refusal' | 'error'; text: string }
+  | ({ type: 'turn-end' } & DeferredTurn)
   | {
       type: 'polled'
       slug: string
@@ -160,8 +184,13 @@ export type Event = Timed<
   | { type: 'handover-failed'; slug: string; reason: string }
   | { type: 'cleaned'; slug: string; leftovers: string[] }
   | { type: 'tick' }
-  /** The session started; `agents` are the ids `$.agent.list()` knows. */
-  | { type: 'restore'; agents: string[] }
+  /**
+   * The module started. `agents` are the ids `$.agent.list()` knows, `orphans` the worktrees no task
+   * references. `fresh`: a new session (the pipeline pauses); false: a reload of the module in the same one.
+   */
+  | { type: 'restore'; agents: string[]; orphans: string[]; fresh: boolean }
+  /** The liaison continues the held tasks: one, or all (and the pause ends). */
+  | { type: 'resume'; slug?: string }
 >
 
 export type Action =

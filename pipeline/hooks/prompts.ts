@@ -129,3 +129,17 @@ export const salvageNote = (note: string): string => `The previous developer's w
 
 export const orphanWorktrees = (paths: readonly string[]): string =>
   `[pipeline] worktrees that no task of the pipeline references (not removed; look at them and remove by hand what is not needed):\n- ${paths.join('\n- ')}`
+
+export const heldMessage = (text: string): string =>
+  `A message from the liaison, sent while the pipeline was paused:\n\n${text.trim()}`
+
+export function sessionPaused(unfinished: readonly string[], orphans: readonly string[]): string {
+  return [
+    '[pipeline] the session started; the pipeline is paused.',
+    `Unfinished:\n- ${unfinished.join('\n- ')}`,
+    orphans.length === 0 ? '' : `Unreferenced worktrees (not removed; look at them and remove by hand what is not needed):\n- ${orphans.join('\n- ')}`,
+    'Call pipeline_resume after the user agrees.',
+  ]
+    .filter(line => line !== '')
+    .join('\n')
+}

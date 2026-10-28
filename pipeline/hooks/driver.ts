@@ -5,7 +5,6 @@ import { type Config, needsAfterMerge } from './config'
 import type { Forge } from './forge'
 import { type Action, type Event, type Result, type State } from './model'
 import { emptyState, step } from './machine'
-import { orphanWorktrees } from './prompts'
 
 export type Ports = {
   /** The project layer, read at session start. */
@@ -37,8 +36,11 @@ export type Input = DistributiveOmit<Event, 'now'>
 export type Reply = { reply?: string; error?: string }
 
 export type Pipeline = {
-  /** Loads the store and wakes what was going. */
-  start(): Promise<void>
+  /**
+   * Loads the store. A new session (`fresh`, the default) pauses the pipeline when anything is unfinished and
+   * tells the liaison; a reload of the module in the same session wakes what was going.
+   */
+  start(opts?: { fresh?: boolean }): Promise<void>
   dispatch(ev: Input): Promise<Reply>
   tick(): Promise<void>
   state(): State
@@ -265,15 +267,15 @@ export function createPipeline(ports: Ports): Pipeline {
   }
 
   /** Worktrees of the pipeline that no task references: told to the liaison, not removed. */
-  async function reportOrphans(): Promise<void> {
+  async function unreferenced(): Promise<string[]> {
     try {
-      const found = await ports.forge.unreferenced({
+      return await ports.forge.unreferenced({
         agents: state.tasks.flatMap(t => t.agents.map(a => a.id)),
         prs: state.tasks.flatMap(t => (t.pr === undefined ? [] : [t.pr])),
       })
-      if (found.length > 0) ports.notify(orphanWorktrees(found))
     } catch (err) {
       ports.log(`worktree listing: ${String(err)}`)
+      return []
     }
   }
 
@@ -289,12 +291,11 @@ export function createPipeline(ports: Ports): Pipeline {
   }
 
   return {
-    async start() {
+    async start(opts) {
       const stored = await ports.load()
       if (stored) state = stored
       ports.show(state)
-      await dispatch({ type: 'restore', agents: await ports.agentIds() })
-      await reportOrphans()
+      await dispatch({ type: 'restore', agents: await ports.agentIds(), orphans: await unreferenced(), fresh: opts?.fresh ?? true })
     },
     dispatch,
     tick: async () => {

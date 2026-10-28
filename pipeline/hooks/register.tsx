@@ -14,6 +14,8 @@ const PANE = 'pipeline'
 const TOOL = (name: string): string => `mcp__pipeline__${name}`
 const STORE_KEY = 'tasks'
 const rows = { plugin: 'pipeline', key: 'tasks' } as const
+/** Held by the engine for the session and kept over a reload of the module: absent at a new session. */
+const started = { plugin: 'pipeline', key: 'started' } as const
 
 const TOOLS = [
   {
@@ -60,6 +62,15 @@ const TOOLS = [
       required: ['reason'],
     },
   },
+  {
+    name: 'pipeline_resume',
+    description:
+      'Continue the pipeline after a session start paused it: without "slug" every unfinished task (developers are told or replaced, reviewers started, checks polled, waiting tasks started, messages kept while paused delivered); with "slug" only that task, the others stay held. Call only after the user agreed to continue.',
+    inputSchema: {
+      type: 'object',
+      properties: { slug: { type: 'string', description: 'Omit to resume every task' } },
+    },
+  },
 ] as const
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -84,6 +95,8 @@ type Runtime = {
   /** The problem with the project layer that the last start found; the mod starts no task while it stands. */
   configError?: string
   reportedError?: string
+  /** A new session (the pipeline pauses), not a reload of the module; read once at `session.start`. */
+  fresh?: boolean
   /** The start in progress or done; cleared by a failed one so that the next call reads the file anew. */
   booting?: Promise<void>
 }
@@ -167,7 +180,7 @@ async function bootOnce($: EngineInterface, rt: Runtime): Promise<boolean> {
   }
   const p = createPipeline(ports)
   rt.pipeline = p
-  await p.start()
+  await p.start({ fresh: rt.fresh ?? true })
   $.clock.every(POLL_MS, () => {
     p.tick().catch(err => $.ui.log(`pipeline: tick failed: ${String(err)}`))
   })
@@ -179,6 +192,11 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     rt.root = await $.session.root()
+    if (rt.fresh === undefined) {
+      // `register` runs again and `session.start` fires again at a reload; the state of the engine survives it, a new session has none.
+      rt.fresh = (await $.state.get(started)).value === undefined
+      await $.state.set(started, true)
+    }
     for (const t of TOOLS) await $.tool.register({ ...t, isDeferred: false })
     await $.command.register({ name: 'pipeline', description: 'Show the tasks of the development pipeline' })
     await boot($, rt)
@@ -224,6 +242,8 @@ export const register: Register = on => {
   served('pipeline_stop', (p, _c, a) =>
     reply(p, { type: 'stop', slug: str(a.slug) || undefined, reason: str(a.reason) || 'no reason given' }),
   )
+
+  served('pipeline_resume', (p, _c, a) => reply(p, { type: 'resume', slug: str(a.slug) || undefined }))
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)

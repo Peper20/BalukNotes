@@ -30,7 +30,7 @@ describe('merges made elsewhere', () => {
     r.feed({ type: 'spawned', slug: 'x', agentId: 'x-rev', role: 'reviewer', tier: 'reviewer' })
     r.review('x', HEAD, 'APPROVED')
     r.feed({ type: 'merge-result', slug: 'x', ok: true, head: HEAD })
-    const res = r.feed({ type: 'restore', agents: [] })
+    const res = r.restart([])
     expect(res.actions).toEqual([{ type: 'post-merge', slug: 'x', pr: 7, head: HEAD }])
   })
 })

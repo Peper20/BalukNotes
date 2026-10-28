@@ -14,6 +14,6 @@ export type PipelineViewTask = {
 
 declare module 'claude-code' {
   interface PluginState {
-    pipeline: { tasks: PipelineViewTask[] }
+    pipeline: { tasks: PipelineViewTask[]; started: boolean }
   }
 }

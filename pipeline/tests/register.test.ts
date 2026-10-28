@@ -46,7 +46,7 @@ test('the tools are registered and pipeline_start starts a developer', async ($,
   })
 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  expect(registered).toEqual(['pipeline_start', 'pipeline_status', 'pipeline_send', 'pipeline_stop'])
+  expect(registered).toEqual(['pipeline_start', 'pipeline_status', 'pipeline_send', 'pipeline_stop', 'pipeline_resume'])
 
   const started = await $.tool.call({
     tool: TOOL,
@@ -72,7 +72,7 @@ test('the tools are registered and pipeline_start starts a developer', async ($,
   expect(refused.deny).toContain('exists')
 })
 
-test('a task from the store is woken, its turn end is read, the pane shows it', async ($, on) => {
+test('a task from the store waits for pipeline_resume, then is woken; its turn end is read, the pane shows it', async ($, on) => {
   mock.clock(on)
   const rounds = { 'developer-1': 0, 'developer-2': 0, 'developer-3': 0 }
   mock.store(on, {
@@ -99,12 +99,16 @@ test('a task from the store is woken, its turn end is read, the pane shows it', 
   })
   const sent: string[] = []
   const submitted: string[] = []
+  const statuses: (string | undefined)[] = []
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   on('session.root', async () => ({ value: '/repo' }))
   on('fs.read', async () => ({ value: CONFIG }))
   on('tool.register', async (_$, e) => ({ value: { tool: `mcp__pipeline__${e.name}` } }))
   on('command.register', async () => ({ value: { command: 'pipeline' } }))
-  on('ui.status', async () => ({ value: undefined }))
+  on('ui.status', async (_$, e) => {
+    statuses.push(e.text)
+    return { value: undefined }
+  })
   on('agent.list', async () => ({ value: [{ id: 'agent-1', description: 'feat', type: 'developer-2', status: 'running' }] }))
   on('session.send', async (_$, e) => {
     sent.push(e.text)
@@ -116,10 +120,23 @@ test('a task from the store is woken, its turn end is read, the pane shows it', 
     return { text: e.text }
   })
 
+  on('ui.log', async () => ({ value: undefined }))
+
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  // The agent of the earlier session is tried with send.
+  // A new session: nothing is woken, the liaison is told what is unfinished.
+  expect(sent).toHaveLength(0)
+  const status = String((await $.tool.call({ tool: 'mcp__pipeline__pipeline_status' } as never)).result)
+  expect(status.startsWith('PAUSED - pipeline_resume continues.')).toBe(true)
+  expect(submitted.join('|')).toContain('[pipeline] the session started; the pipeline is paused.')
+  expect(submitted.join('|')).toContain('feat: developing, no PR, developer-2 is told to continue')
+  expect(statuses[statuses.length - 1]).toBe('paused · 1 developing')
+
+  // pipeline_resume: the agent of the earlier session is tried with send.
+  const resumed = await $.tool.call({ tool: 'mcp__pipeline__pipeline_resume' } as never)
+  expect(String(resumed.text ?? resumed.result)).toContain('resumed: feat')
   expect(sent).toHaveLength(1)
   expect(sent[0]).toContain('restarted')
+  expect(statuses[statuses.length - 1]).toBe('1 developing')
 
   // Its turn ends with a question: the liaison is told, the task waits for it.
   await $.turn.complete({ answer: 'Which way?\nPIPELINE: question', durationMs: 1, isAborted: false, turnId: 't1', agentId: 'agent-1', reason: 'answer' })
@@ -257,4 +274,84 @@ test('pipeline_status: without all the merged tasks are cut to three, with all t
   const all = String((await $.tool.call({ tool: 'mcp__pipeline__pipeline_status', all: true } as never)).result)
   expect(all).toContain('m1:')
   expect(all).not.toContain('older merged')
+})
+
+/** A session over a stored task; `reload`: the engine already holds what an earlier load of the module wrote. */
+async function storedSession($: Engine, on: On, stage: 'developing' | 'merged', reload: boolean) {
+  mock.clock(on)
+  const rounds = { 'developer-1': 0, 'developer-2': 0, 'developer-3': 0 }
+  mock.store(on, {
+    tasks: {
+      tasks: [
+        {
+          slug: 'feat',
+          brief: 'B',
+          after: [],
+          stage,
+          starter: 'developer-2',
+          developer: 'developer-2',
+          agentId: 'agent-1',
+          agents: [{ id: 'agent-1', role: 'developer', tier: 'developer-2', running: true }],
+          ci: 'none',
+          rounds,
+          nudged: false,
+          unmergeable: 0,
+          lastEvent: 'started',
+          lastAt: 0,
+        },
+      ],
+      paused: false,
+    },
+  })
+  const sent: string[] = []
+  const submitted: string[] = []
+  on('session.start', async (_$, e) => ({ cwd: e.cwd }))
+  on('session.root', async () => ({ value: '/repo' }))
+  on('fs.read', async () => ({ value: CONFIG }))
+  on('tool.register', async (_$, e) => ({ value: { tool: `mcp__pipeline__${e.name}` } }))
+  on('command.register', async () => ({ value: { command: 'pipeline' } }))
+  on('ui.status', async () => ({ value: undefined }))
+  on('ui.log', async () => ({ value: undefined }))
+  on('agent.list', async () => ({ value: [{ id: 'agent-1', description: 'feat', type: 'developer-2', status: 'running' }] }))
+  on('process.run', async () => ({ value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  on('session.send', async (_$, e) => {
+    sent.push(e.text)
+    return { isDelivered: true }
+  })
+  on('prompt.submit', async (_$, e) => {
+    submitted.push(e.text)
+    return { text: e.text }
+  })
+  const marked: string[] = []
+  on('state.get', async (_$, e, next) => (e.key === 'started' && reload ? { value: { value: true, version: 1 } } : next(e)))
+  on('state.set', async (_$, e, next) => {
+    marked.push(e.key)
+    return next(e)
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await flush($)
+  return { sent, submitted, marked }
+}
+
+test('a new session pauses even a store that says it is not paused; the state marker is then set', async ($, on) => {
+  const { sent, submitted, marked } = await storedSession($, on, 'developing', false)
+  expect(sent).toEqual([])
+  expect(submitted.join('|')).toContain('the pipeline is paused')
+  expect(marked).toContain('started')
+})
+
+test('a reload of the module in the same session does not pause and sends a living developer nothing', async ($, on) => {
+  const { sent, submitted } = await storedSession($, on, 'developing', true)
+  expect(sent).toEqual([])
+  expect(submitted.join('|')).not.toContain('paused')
+  const status = String((await $.tool.call({ tool: 'mcp__pipeline__pipeline_status' } as never)).result)
+  expect(status).not.toContain('PAUSED')
+})
+
+test('a new session with no unfinished task is not paused and tells nothing', async ($, on) => {
+  const { sent, submitted } = await storedSession($, on, 'merged', false)
+  expect(sent).toEqual([])
+  expect(submitted).toEqual([])
+  const status = String((await $.tool.call({ tool: 'mcp__pipeline__pipeline_status' } as never)).result)
+  expect(status).not.toContain('PAUSED')
 })
