@@ -286,7 +286,7 @@ is merged, one task at a time.
       nice, step table and CI summary, a speed measurement script), the
       Forgejo part (workflow template, runner setup, agent accounts),
       templates and the cycle's docs. No project details in it
-- [ ] The project layer: `.claude/pipeline.json` (JSON: the mod reads it
+- [x] The project layer: `.claude/pipeline.json` (JSON: the mod reads it
       natively, shell with `jq`; full check steps, the map
       of paths to targeted tests, the forge address, what runs after a merge,
       where the documents are); the project's own steps stay in `tools/`, its
@@ -327,29 +327,11 @@ is merged, one task at a time.
 - [x] The runner has `PIPELINE_MAIN`, the workflow is the kit's template
       and the job summary holds only the check's table (PR #48); the rust
       hook is gone, the mod's guard replaces it (PR #44)
-- [~] In flight: `mod-fixes` (the open mod items below, the guard after
-      `/clear`, its rules re-read)
-- [x] Kit: the check log says who holds the heavy lock and when it is
-      taken (PR #40); its tests' wait loops have no timeout yet
-- [x] The targeted tests of `notes-server` in a worktree without `app/dist`
-      get a copy of the main checkout's client build (PR #46)
-- [ ] The mod nudges an agent whose turn ended while it waits for its own
-      background work ("ended without the PIPELINE line: asked to finish"):
-      Claude Code suspends such an agent and wakes it when the work ends, so
-      the nudge disturbs a measurement. Tell such a pause from a forgotten
-      PIPELINE line before nudging
-- [ ] The reviewer does not see the liaison's messages to the developer
-      (`pipeline_send` after the start): decisions and added work look out of
-      scope to it. The reviewer's prompt gets the brief with every later
-      message of the liaison
-- [ ] The install after a merge (`afterMerge`, 600 s) fails while a CI
-      check holds the lock of heavy work (after #42 it waited for the check of
-      #44): count the timeout from taking the lock, or retry it after the
-      check
-- [ ] The marker of a started session (`pipeline.started`) is written before
-      the boot succeeds: a new session with a broken config that hot-reloads
-      wakes live tasks without the user's word. Write it after a successful
-      start
+- [x] The mod after the first SDD tasks (PR #47): the reviewer reads the
+      liaison's messages, the session marker after a good start, the install
+      retried after a timeout, no nudge for an agent waiting on its own
+      background work, the skill guard after `/clear` and on a changed
+      config. In flight: `install-timeout-text` (the real timeout text)
 
 ## Later
 
