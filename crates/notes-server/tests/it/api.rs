@@ -113,6 +113,84 @@ async fn bad_paths_are_rejected() {
     assert_eq!(call(app, "GET", "/api/vaults/test/version/_baluk/lib", None).await.0, StatusCode::BAD_REQUEST);
 }
 
+/// A request with the given content type and body: the status, the answer's
+/// content type and its JSON.
+async fn raw_call(
+    app: axum::Router,
+    method: &str,
+    uri: &str,
+    content_type: Option<&str>,
+    body: &str,
+) -> (StatusCode, String, Value) {
+    let mut req = Request::builder().method(method).uri(uri);
+    if let Some(content_type) = content_type {
+        req = req.header("content-type", content_type);
+    }
+    let res = app.oneshot(req.body(Body::from(body.to_owned())).unwrap()).await.unwrap();
+    let status = res.status();
+    let content_type = res.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or_default().to_owned();
+    let bytes = res.into_body().collect().await.unwrap().to_bytes();
+    (status, content_type, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+}
+
+/// API-2: what the framework cannot read is answered with the JSON of API-1.
+#[tokio::test]
+async fn framework_rejections_are_json() {
+    let (app, _dir) = app();
+    let cases = [
+        ("PUT", "/api/settings", Some("text/plain"), "{}", StatusCode::UNSUPPORTED_MEDIA_TYPE),
+        ("PUT", "/api/settings", None, "{}", StatusCode::UNSUPPORTED_MEDIA_TYPE),
+        ("PUT", "/api/settings", Some("application/json"), "{not json", StatusCode::BAD_REQUEST),
+        (
+            "POST",
+            "/api/vaults/test/rename",
+            Some("application/json"),
+            r#"{"kind": "note"}"#,
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ),
+        ("GET", "/api/vaults/test/search", None, "", StatusCode::BAD_REQUEST),
+    ];
+    for (method, uri, content_type, body, expected) in cases {
+        let (status, got_type, json) = raw_call(app.clone(), method, uri, content_type, body).await;
+        assert_eq!(status, expected, "{method} {uri} {content_type:?}: {json}");
+        assert_eq!(got_type, "application/json", "{method} {uri}");
+        assert!(json["error"].as_str().is_some_and(|e| !e.is_empty()), "{method} {uri}: {json}");
+        assert_eq!(json["errors"], serde_json::json!([]), "{method} {uri}");
+    }
+}
+
+/// A route that lacks the method keeps its `Allow` header and gets JSON.
+#[tokio::test]
+async fn method_not_allowed_is_json() {
+    let (app, _dir) = app();
+    let res = app
+        .oneshot(Request::builder().method("DELETE").uri("/api/settings").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert!(res.headers().get("allow").is_some());
+    assert_eq!(res.headers()["content-type"], "application/json");
+}
+
+/// API-1: an error of ours is answered as "internal error", without the file
+/// path the error names.
+#[tokio::test]
+async fn internal_error_hides_details() {
+    let vault = tempfile::tempdir().unwrap();
+    std::fs::write(vault.path().join("Заметка.typ"), "z").unwrap();
+    // A trash folder that cannot be created: its parent is a file.
+    let blocker = vault.path().join("blocker");
+    std::fs::write(&blocker, "").unwrap();
+    let notes = Arc::new(Notes::open(&config(vault.path().to_owned(), Some(blocker.join("trash")))).unwrap());
+    let dir = tempfile::tempdir().unwrap();
+    let app = router(single(notes, &dir));
+
+    let (status, _, json) = raw_call(app, "DELETE", &uri("/api/vaults/test/notes/Заметка"), None, "").await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+    assert_eq!(json["error"], "internal error");
+    assert_eq!(json["errors"], serde_json::json!([]));
+}
+
 #[tokio::test]
 async fn settings_are_validated() {
     let (app, _dir) = app();

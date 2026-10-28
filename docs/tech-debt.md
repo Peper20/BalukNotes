@@ -241,15 +241,6 @@ it. The format and rules - `.claude/rules/docs.md`.
   disk work. How to close: if it shows in use - answer from memory and write
   in the background with the order kept, or a timeout on the client's queue.
 
-- **Framework errors are plain text** (an invalid JSON body, a missing query
-  parameter): 400/415/422 with axum's text, not the `{error, errors}` JSON of
-  API-2 (`docs/specs/http-api.md`). Risk: the client shows a raw message. How
-  to close: a rejection handler that answers in the API's error format.
-- **A 500 of the local server carries the raw error**, which can name file
-  paths; the hub answers "internal error". Risk: paths leak to a signed-in
-  client over the TCP address. How to close: log the error, answer a generic
-  text, as the hub does.
-
 ## Sign-in and sync
 
 - **Accounts are files** (`users.json`, `sessions.json` in the data

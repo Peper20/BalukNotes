@@ -131,8 +131,13 @@ pub fn router(state: AppState) -> Router {
         .merge(fonts::routes())
         .merge(events::routes());
     #[cfg(not(target_family = "wasm"))]
+    let app = app.merge(device_sync::routes());
+    // The API answers errors in JSON, also those of the framework; the client
+    // files below keep their own answers.
+    let app = app.layer(axum::middleware::map_response(error::json_rejections));
+    #[cfg(not(target_family = "wasm"))]
     let app = {
-        let app = app.merge(assets::routes()).merge(device_sync::routes());
+        let app = app.merge(assets::routes());
         match state.auth.clone() {
             Some(auth) => auth.protect(app, auth::is_public),
             None => app.merge(auth::no_auth_routes()),

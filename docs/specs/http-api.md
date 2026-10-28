@@ -12,15 +12,16 @@ Next id: API-45
 
 ## Conventions
 
-- **API-1** An error answered by a handler is JSON `{ "error": text, "errors":
-  [] }` with the status: 400 for an invalid note id, vault name, setting or
-  rename; 404 for an unknown vault, note or folder; 409 for a vault that
-  already exists; 500 for anything else (the text is the error message). The
-  `errors` list carries compile diagnostics only in the 422 of a PDF (API-23).
+- **API-1** An error is JSON `{ "error": text, "errors": [] }` with the
+  status: 400 for an invalid note id, vault name, setting or rename; 404 for an
+  unknown vault, note or folder; 409 for a vault that already exists; 500 for
+  anything else, with the text `internal error` (the server logs the error).
+  The `errors` list carries compile diagnostics only in the 422 of a PDF
+  (API-23).
 - **API-2** A request body or query string that the framework cannot read is
-  refused with a plain-text body, not the JSON of API-1: 415 for a body
-  without the JSON content type, 400 for broken JSON or a missing query
-  parameter, 422 for JSON of the wrong shape.
+  refused with the JSON of API-1: 415 for a body without the JSON content
+  type, 400 for broken JSON or a missing query parameter, 422 for JSON of the
+  wrong shape.
 - **API-3** A note id in a URL (`notes`, `version`, `links`, `preview`, `pdf`,
   the `note` parameter of `search`) follows the id rules (`docs/specs/paths.md`,
   PATH-2 to PATH-4): an invalid id is 400 (`..%2Fx`, `_baluk/lib`), a valid id

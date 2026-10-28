@@ -266,7 +266,7 @@ fn api_error(e: SyncError) -> ApiError {
         }
     };
     if code == StatusCode::INTERNAL_SERVER_ERROR {
-        tracing::error!("sync: {e}");
+        return ApiError::internal(&format_args!("sync: {e}"));
     }
     ApiError(code, e.to_string())
 }
@@ -282,7 +282,7 @@ async fn run<T: Send + 'static>(
         .ok_or_else(|| ApiError(StatusCode::NOT_FOUND, "this server runs without vault sync".into()))?;
     tokio::task::spawn_blocking(move || f(&sync))
         .await
-        .map_err(|e| ApiError(StatusCode::INTERNAL_SERVER_ERROR, format!("task failed: {e}")))?
+        .map_err(|e| ApiError::internal(&format_args!("task failed: {e}")))?
         .map_err(api_error)
 }
 
