@@ -2,11 +2,12 @@
 // subagents, the timer, the pane and the status line. Decisions are in
 // machine.ts, the carrying out of them in driver.ts, the server and git in
 // forge.ts.
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, On, Register } from 'claude-code'
 
-import { type Config, CONFIG_PATH, checkLogs, parseConfig } from './config'
+import { type Config, CONFIG_PATH, checkLogs, parseConfig, parseSkills, type SkillRule } from './config'
 import { createPipeline, type Input, type Pipeline, type Ports } from './driver'
 import { makeForge } from './forge'
+import { denyText, editedPaths, requiredSkills, skillName } from './guard'
 import { DEVELOPERS, type Developer, POLL_MS, type State } from './model'
 import { describeAll, summary, viewRows } from './view'
 
@@ -187,6 +188,118 @@ async function bootOnce($: EngineInterface, rt: Runtime): Promise<boolean> {
   return true
 }
 
+// The skills a loop has loaded are kept in `$.state` (key `skills`, one value per loop: its agent id, or
+// `main`) so that a reload of the mod keeps them. The references are written out where they are used:
+// the engine wants literal plugin and key at the call.
+const MAIN_LOOP = 'main'
+
+async function loadedSkills($: EngineInterface, agentId: string | undefined): Promise<string[]> {
+  return (await $.state.get({ plugin: 'pipeline', key: 'skills', id: agentId ?? MAIN_LOOP })).value ?? []
+}
+
+/** Adds the skill to the loop's set; a write that another beat is tried again on what stands. */
+async function remember($: EngineInterface, agentId: string | undefined, skill: string): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const ref = { plugin: 'pipeline', key: 'skills', id: agentId ?? MAIN_LOOP } as const
+    const { value = [], version } = await $.state.get(ref)
+    if (value.includes(skill) || (await $.state.set(ref, [...value, skill], { ifVersion: version })).isSet) return
+  }
+}
+
+/** What the guard keeps in memory: the rules once read, the last problem logged. */
+type GuardState = {
+  /** A file that cannot be read means no rules; a file with a bad key is read again on the next call. */
+  rules?: SkillRule[]
+  reported?: string
+}
+
+/** Logs a problem of the guard once. */
+function reportGuard($: EngineInterface, g: GuardState, what: string): void {
+  if (g.reported === what) return
+  g.reported = what
+  $.ui.log(`pipeline: skill guard: ${what}`)
+}
+
+async function readRules($: EngineInterface, g: GuardState): Promise<SkillRule[]> {
+  if (g.rules !== undefined) return g.rules
+  let text: string
+  try {
+    text = await $.fs.read(`${await $.session.root()}/${CONFIG_PATH}`)
+  } catch {
+    return (g.rules = [])
+  }
+  const parsed = parseSkills(text)
+  if (!parsed.ok) {
+    reportGuard($, g, `${parsed.error}; edits are not guarded until the file is fixed`)
+    return []
+  }
+  return (g.rules = parsed.skills)
+}
+
+/** The rule of a skill that the call writes a file for and its loop has not loaded. */
+async function missingSkill($: EngineInterface, g: GuardState, e: Record<string, unknown>): Promise<SkillRule | undefined> {
+  const wanted = await readRules($, g)
+  if (wanted.length === 0) return undefined
+  const [cwd, root, home] = await Promise.all([$.session.cwd(), $.session.root(), $.env.get('HOME')])
+  const needed = requiredSkills(editedPaths(str(e.tool), e, cwd, root, home), wanted)
+  if (needed.length === 0) return undefined
+  const loaded = await loadedSkills($, typeof e.agentId === 'string' ? e.agentId : undefined)
+  return needed.find(r => !loaded.includes(r.skill))
+}
+
+/** Runs the work of the guard; a failure is logged once and the answer is undefined, so the edit goes on. */
+async function guarded<T>($: EngineInterface, g: GuardState, what: string, work: () => Promise<T>): Promise<T | undefined> {
+  try {
+    return await work()
+  } catch (err) {
+    reportGuard($, g, `${what} failed: ${err instanceof Error ? err.message : String(err)}`)
+    return undefined
+  }
+}
+
+/**
+ * The code-skill guard (guard.ts, config.md "skills"): an edit of a file that
+ * a rule of the project names is denied until the loop has loaded the rule's
+ * skill. It reads the `skills` key itself, so it works with no task running and
+ * when the pipeline failed to start; a failure of its own never blocks an edit.
+ */
+function registerGuard(on: On): void {
+  const g: GuardState = {}
+
+  on('tool.call', { tool: /^(Edit|Write|MultiEdit|NotebookEdit|Bash)$/ }, async ($, e, next) => {
+    const missing = await guarded($, g, 'the check of an edit', () => missingSkill($, g, e as unknown as Record<string, unknown>))
+    return missing === undefined ? next(e) : { deny: denyText(missing) }
+  })
+
+  on('tool.call', { tool: /^Skill$/ }, async ($, e, next) => {
+    const done = await next(e)
+    const name = str((e as unknown as Record<string, unknown>).skill)
+    if (done.deny === undefined && done.isError !== true && name !== '') {
+      await guarded($, g, 'noting a loaded skill', () => remember($, e.agentId, skillName(name)))
+    }
+    return done
+  })
+
+  // `/<skill>` typed by the person loads the skill into the main loop as the Skill tool does.
+  on('command.run', async ($, e, next) => {
+    const done = await next(e)
+    await guarded($, g, 'noting a loaded skill', async () => {
+      const skill = skillName(e.command)
+      if ((await readRules($, g)).some(r => r.skill === skill)) await remember($, undefined, skill)
+    })
+    return done
+  })
+
+  // A compaction summarizes the skill text away: the loop loads it again. A `precompute` installs nothing.
+  on('session.compact', async ($, e, next) => {
+    const done = await next(e)
+    if (done.skip === undefined && e.trigger !== 'precompute') {
+      await guarded($, g, 'forgetting the skills at a compaction', () => $.state.set({ plugin: 'pipeline', key: 'skills', id: e.agentId ?? MAIN_LOOP }, []))
+    }
+    return done
+  })
+}
+
 export const register: Register = on => {
   const rt: Runtime = { root: '' }
 
@@ -283,4 +396,7 @@ export const register: Register = on => {
       </Box>
     )
   })
+
+  // Last: registered before the hooks above, a pass-through `tool.call` hook made `$.agent.spawn` lose the agent id.
+  registerGuard(on)
 }

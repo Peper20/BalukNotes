@@ -515,6 +515,14 @@ it. The format and rules - `.claude/rules/docs.md`.
   `tools/check-pr.sh` stays with it. How to close: run
   `pipeline/scripts/ci-runner.sh install` (the user's machine), then replace
   the run block with the kit template's and remove `tools/check-pr.sh`.
+- **`registerGuard` (`pipeline/hooks/register.tsx`) must be registered after
+  the other `tool.call` hooks.** Registered before them, a pass-through
+  `tool.call` hook made `$.agent.spawn` lose the agent id in
+  `pipeline/tests/register.test.ts`; the cause in the engine is unknown, so the
+  order is kept and commented. Risk: a new hook added after the guard could
+  break spawning silently; the register test catches it. How to close: find the
+  cause with a minimal mod and report it to the engine, or pin the order with a
+  test that names it.
 
 ## The `/baluk-note` skill
 

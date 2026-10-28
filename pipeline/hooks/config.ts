@@ -21,6 +21,15 @@ export type Check = {
   heavyLock?: string
 }
 
+/** A language's code skill: an edit of a file whose project-relative path matches `match` needs `skill` loaded. */
+export type SkillRule = {
+  /** A regular expression (JavaScript syntax) on the path against the project root. */
+  match: string
+  skill: string
+  /** The project's rules for the language: the deny text names it. */
+  rules?: string
+}
+
 export type Config = {
   /** The project's name, for texts. */
   project: string
@@ -31,6 +40,8 @@ export type Config = {
   forge: { url: string; repo: string }
   afterMerge?: AfterMerge
   check?: Check
+  /** The code skills the guard requires before an edit (guard.ts). */
+  skills?: SkillRule[]
   /** The hint on the targeted tests that the developer contract shows. */
   targetedTests?: string
 }
@@ -47,6 +58,50 @@ export const checkLogs = (c: Config): string => (c.check?.logs ?? DEFAULT_CHECK_
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === 'string' && x !== '')
+
+const SKILLS_FORM = '"skills" must be a list of { "match": "<regex on the path>", "skill": "<name>", "rules"?: "<path>" }'
+
+/** The `skills` key as rules; every problem found goes to `problems`. */
+function skillRules(raw: unknown, problems: string[]): SkillRule[] | undefined {
+  if (raw === undefined) return undefined
+  if (!Array.isArray(raw)) {
+    problems.push(SKILLS_FORM)
+    return undefined
+  }
+  const rules: SkillRule[] = []
+  raw.forEach((r: unknown, i) => {
+    const field = (key: string): string | undefined => (isRecord(r) && typeof r[key] === 'string' && r[key] !== '' ? r[key] : undefined)
+    const [match, skill, rulesPath] = [field('match'), field('skill'), field('rules')]
+    if (match === undefined || skill === undefined || (isRecord(r) && r.rules !== undefined && rulesPath === undefined)) {
+      problems.push(`"skills[${i}]" is wrong: ${SKILLS_FORM}`)
+      return
+    }
+    try {
+      new RegExp(match)
+    } catch (err) {
+      problems.push(`"skills[${i}].match" is not a valid regular expression: ${err instanceof Error ? err.message : String(err)}`)
+      return
+    }
+    rules.push(rulesPath === undefined ? { match, skill } : { match, skill, rules: rulesPath })
+  })
+  return rules
+}
+
+/**
+ * The `skills` key alone, for the guard: it works when the rest of the file is
+ * unusable (no forge, a bad `afterMerge`), so the other keys are not checked.
+ */
+export function parseSkills(text: string): { ok: true; skills: SkillRule[] } | { ok: false; error: string } {
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch (err) {
+    return { ok: false, error: `${CONFIG_PATH} is not valid JSON: ${err instanceof Error ? err.message : String(err)}` }
+  }
+  const problems: string[] = []
+  const skills = isRecord(raw) ? skillRules(raw.skills, problems) : undefined
+  return problems.length > 0 ? { ok: false, error: `${CONFIG_PATH}: ${problems.join('; ')}` } : { ok: true, skills: skills ?? [] }
+}
 
 /** `.claude/pipeline.json` as text to a config, or every problem found in it. */
 export function parseConfig(text: string): ConfigResult {
@@ -127,6 +182,8 @@ export function parseConfig(text: string): ConfigResult {
     }
   }
 
+  const skills = skillRules(raw.skills, problems)
+
   const guide = optionalString('guide')
   const map = optionalString('map')
   const targetedTests = optionalString('targetedTests')
@@ -134,7 +191,7 @@ export function parseConfig(text: string): ConfigResult {
   if (problems.length > 0 || forge === undefined) {
     return { ok: false, error: `${CONFIG_PATH}: ${problems.join('; ')}` }
   }
-  return { ok: true, config: { project, guide, map, forge, afterMerge, check, targetedTests } }
+  return { ok: true, config: { project, guide, map, forge, afterMerge, check, skills, targetedTests } }
 }
 
 /** The pull request page of the forge, without the number. */

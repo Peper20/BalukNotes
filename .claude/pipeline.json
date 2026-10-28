@@ -25,5 +25,6 @@
     { "match": "^(tools|pipeline/scripts)/", "run": "tools/test-libs.sh" },
     { "match": "^pipeline/(hooks|tests)/", "run": "claude plugin test pipeline" }
   ],
+  "skills": [{ "match": "\\.rs$", "skill": "rust", "rules": ".claude/rules/crates.md" }],
   "targetedTests": "pipeline/scripts/test.sh"
 }

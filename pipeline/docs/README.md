@@ -276,6 +276,24 @@ on the server, counts rounds, merges, cleans up and reports to the liaison.
   (`config.md`). A missing or invalid file is reported once to the liaison, and
   the mod starts no task: the tools refuse with the reason, and a call after
   the file is fixed reads it anew.
+- **The code-skill guard**: the `skills` key of the project layer
+  (`config.md`) names, per path pattern, a skill that a loop loads before it
+  edits such a file. On every `Edit`, `Write`, `MultiEdit`, `NotebookEdit` and
+  `Bash` call (of the liaison, developers and reviewers alike) the mod finds the
+  files the call writes: the file of an edit tool, or what a shell command
+  writes (a part of the command, between `;`, `&&`, `||`, `|` and a new line,
+  that both writes - `sed -i`, `perl -i`, `tee`, a write from python - and
+  names the file, or a redirect into it); a file outside the project is not
+  guarded. If a rule matches and the loop has not loaded its skill, the call is
+  denied with the skill to load and the project's rules to read. A loop has
+  loaded a skill after a successful `Skill` call, or a `/<skill>` the person
+  typed (main loop; seen at `command.run`), until its next compaction
+  (`session.compact`, the loop's own for a subagent). The sets are in `$.state`
+  (`pipeline.skills`, per agent id or `main`) and survive a reload of the mod;
+  a load by a subagent does not count for the main loop, nor the reverse. The
+  guard reads the key itself on the first call: it works with no task running
+  and when the pipeline failed to start, does nothing without the key, and a
+  failure of its own (logged once) never blocks an edit.
 - **Tools of the liaison** (`mcp__pipeline__<name>`): `pipeline_start { slug,
   developer, brief, after? }` (the developer gets the brief, the branch
   `task/<slug>`, the project and its pages to read first, and the contract:

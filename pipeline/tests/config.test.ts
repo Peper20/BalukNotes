@@ -1,7 +1,7 @@
 // config.ts: the project layer, `.claude/pipeline.json`, and the texts that use it.
 import { describe, expect, test } from 'claude-code/testing'
 
-import { type Config, DEFAULT_CHECK_LOGS, DEFAULT_PROJECT, DEFAULT_TIMEOUT_SECONDS, checkLogs, needsAfterMerge, parseConfig, pullsUrl } from '../hooks/config'
+import { type Config, DEFAULT_CHECK_LOGS, DEFAULT_PROJECT, DEFAULT_TIMEOUT_SECONDS, checkLogs, needsAfterMerge, parseConfig, parseSkills, pullsUrl } from '../hooks/config'
 import { continuePrompt, contract, developerPrompt, projectLine, reviewerPrompt } from '../hooks/prompts'
 import { emptyState, step } from '../hooks/machine'
 import { TEST_CONFIG } from './helpers'
@@ -30,6 +30,7 @@ describe('parsing', () => {
       afterMerge: { paths: ['src/'], command: ['scripts/after.sh', '-q'], timeoutSeconds: 30 },
       check: { steps: 'ci/steps.sh', env: 'ci/env.sh', logs: 'out/check', heavyLock: '~/.cache/widgets/heavy.lock' },
       tests: [{ match: '^src/', run: 'make test' }],
+      skills: [{ match: '\\.rs$', skill: 'rust', rules: 'docs/rust.md' }, { match: '\\.go$', skill: 'go' }],
       targetedTests: 'make test-one',
     })
     expect(c).toEqual({
@@ -39,8 +40,32 @@ describe('parsing', () => {
       forge: FORGE,
       afterMerge: { paths: ['src/'], command: ['scripts/after.sh', '-q'], timeoutSeconds: 30 },
       check: { steps: 'ci/steps.sh', env: 'ci/env.sh', logs: 'out/check', heavyLock: '~/.cache/widgets/heavy.lock' },
+      skills: [{ match: '\\.rs$', skill: 'rust', rules: 'docs/rust.md' }, { match: '\\.go$', skill: 'go' }],
       targetedTests: 'make test-one',
     })
+  })
+
+  test('skills: a list of rules; a bad shape or a bad regular expression is a config error', async () => {
+    expect(parsed({ forge: FORGE }).skills).toBeUndefined()
+    expect(parsed({ forge: FORGE, skills: [] }).skills).toEqual([])
+    expect(error({ forge: FORGE, skills: 'rust' })).toContain('"skills" must be a list')
+    expect(error({ forge: FORGE, skills: [{ match: '\\.rs$' }] })).toContain('"skills[0]"')
+    expect(error({ forge: FORGE, skills: [{ skill: 'rust', match: '' }] })).toContain('"skills[0]"')
+    expect(error({ forge: FORGE, skills: [{ match: '\\.rs$', skill: 'rust', rules: 3 }] })).toContain('"skills[0]"')
+    expect(error({ forge: FORGE, skills: [null] })).toContain('"skills[0]"')
+    const bad = error({ forge: FORGE, skills: [{ match: '\\.rs$', skill: 'rust' }, { match: '(', skill: 'go' }] })
+    expect(bad).toContain('"skills[1].match" is not a valid regular expression')
+    expect(bad).not.toContain('skills[0]')
+  })
+
+  test('parseSkills reads the key alone: the rest of the file may be unusable', async () => {
+    expect(parseSkills('{ "forge": 3, "skills": [{ "match": "x", "skill": "s" }] }')).toEqual({ ok: true, skills: [{ match: 'x', skill: 's' }] })
+    expect(parseSkills('{}')).toEqual({ ok: true, skills: [] })
+    expect(parseSkills('[1]')).toEqual({ ok: true, skills: [] })
+    const bad = parseSkills('{ "skills": [{ "match": "(", "skill": "s" }] }')
+    expect(bad.ok).toBe(false)
+    expect(bad.ok ? '' : bad.error).toContain('"skills[0].match"')
+    expect(parseSkills('nope').ok).toBe(false)
   })
 
   test('only the forge is required; the rest has defaults', async () => {

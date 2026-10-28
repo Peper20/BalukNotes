@@ -1,4 +1,5 @@
-// The values the pipeline mod keeps in `$.state`: the rows of its pane.
+// The values the pipeline mod keeps in `$.state`: the rows of its pane and the
+// skills each loop has loaded (the guard, hooks/guard.ts).
 export type PipelineViewTask = {
   slug: string
   stage: string
@@ -14,6 +15,11 @@ export type PipelineViewTask = {
 
 declare module 'claude-code' {
   interface PluginState {
-    pipeline: { tasks: PipelineViewTask[]; started: boolean }
+    pipeline: {
+      tasks: PipelineViewTask[]
+      started: boolean
+      /** Per loop (its agent id, or `main`): the names of the skills loaded since its last compaction. */
+      skills: StateFamily<string[]>
+    }
   }
 }

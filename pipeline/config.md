@@ -28,6 +28,7 @@ reads it anew).
 | `ci.tools` | string | none | Programs, space-separated, that the project's check calls: `ci-runner.sh install` warns about those missing from the PATH of the runner (it always checks `git`, `tea`, `python3`, `flock`) |
 | `ci.staleOutput` | string | none | Paths (against the checkout root), space-separated, that `check-pr.sh` removes from the check worktree when it moves to another head: build output that would be taken for the new head's |
 | `tests` | list of objects | none | The rules of `scripts/test.sh`: `{ "match": "<extended regex on a changed path>", "run": "<command>" }`; `$1`..`$9` in the command are the groups of the match |
+| `skills` | list of objects | none (nothing is guarded) | The code skills the guard requires before an edit (`docs/README.md`, "The mod"): `{ "match": "<regular expression on a path>", "skill": "<skill name>", "rules": "<path>" }`. `match` is a JavaScript regular expression tried on the path, against the project root, of every file an edit writes (a file in an agent's worktree, `.claude/worktrees/<name>/`, against that worktree, so a pattern means the same in every checkout); `skill` is the skill to load; `rules` (optional) is the project's rules for the language, named in the refusal. A bad regular expression is a config error. The guard reads this key itself, so it works when the rest of the file is unusable |
 | `targetedTests` | string | none | The hint on running the targeted tests that the developer contract shows, `(<hint>)` after "the targeted tests your change needs" |
 
 The pipeline page named by `guide` has a section "Project specifics for the
@@ -58,6 +59,9 @@ Example:
   "ci": { "runner": "widgets-host", "tools": "make node", "staleOutput": "web/dist" },
   "tests": [
     { "match": "^src/([^/]+)/", "run": "make test T=$1" }
+  ],
+  "skills": [
+    { "match": "\\.rs$", "skill": "rust", "rules": "docs/rust.md" }
   ],
   "targetedTests": "pipeline/scripts/test.sh"
 }
