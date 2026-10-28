@@ -331,7 +331,7 @@ is merged, one task at a time.
       liaison's messages, the session marker after a good start, the install
       retried after a timeout, no nudge for an agent waiting on its own
       background work, the skill guard after `/clear` and on a changed
-      config. In flight: `install-timeout-text` (the real timeout text)
+      config; the real timeout text of the install (PR #49)
 
 ## Later
 
