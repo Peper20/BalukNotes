@@ -104,7 +104,11 @@ of the same dir. `lib/build-env.sh` (sourced after the cap) sets
 `CARGO_PROFILE_DEV_DEBUG=line-tables-only` (not in `Cargo.toml`) when the file
 system of the build dir is under `SMALL_DISK_GB` (100) in total, or in a cloud
 session (`CLAUDE_CODE_REMOTE=true` or `BALUK_CLOUD=1`); a value set by hand is
-kept. It also answers whether WebKitGTK is installed (`has_webkit`).
+kept. It also answers whether WebKitGTK is installed (`has_webkit`). The
+debug info of a dev build stays in `.dwo` files next to the objects in `deps/`
+and `incremental/` (`split-debuginfo = "unpacked"` in `Cargo.toml`, not for
+`wasm32`), not in each test binary: a check of our crates writes ~3 GB instead
+of ~5, backtraces still name file and line (`docs/research/target-writes.md`).
 `tools/test-libs.sh`, the first step of `check.sh`, tests these libraries and
 `tools/cargo.sh` without a cargo build, with shims for `jq`, `df`, `python3`,
 `pkg-config` and `cargo`; then it runs the kit's

@@ -114,6 +114,12 @@ non_ascii_literal = "allow"
 unwrap_used = "warn"
 expect_used = "warn"
 
+[profile.dev]
+# The debug info stays in `.dwo` files next to the objects instead of being
+# copied into every test binary at link time (~300 MB of a 430 MB one): a check
+# writes 40% less, target/debug is 26% smaller (docs/research/target-writes.md).
+split-debuginfo = "unpacked"
+
 [profile.dev.package."*"]
 # Typst in a debug build compiles notes many times slower.
 opt-level = 2

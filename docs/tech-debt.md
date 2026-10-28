@@ -233,8 +233,9 @@ it. The format and rules - `.claude/rules/docs.md`.
   `.trash/`.
 - **A settings save waits for the disk** (`PUT /api/settings` writes
   `settings.json` before it answers): while gigabytes are being written out
-  (a build), any small write on an encrypted ext4 waits; measured up to 12 s
-  instead of 1 ms (PR #32). The client sends settings changes one at a time,
+  (a build; the cargo part of a check still writes ~3 GB,
+  `docs/research/target-writes.md`), any small write on an encrypted ext4
+  waits; measured up to 12 s instead of 1 ms (PR #32). The client sends settings changes one at a time,
   so a slow or hanging save also holds back every later change. Risk: a
   setting looks stuck for seconds during heavy disk work. How to close: if it
   shows in use - answer from memory and write in the background with the
