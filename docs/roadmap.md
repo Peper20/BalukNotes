@@ -329,19 +329,11 @@ is merged, one task at a time.
       `.claude/settings.json`, then `.claude/hooks/require-rust-skill.py`
       is deleted (the mod's guard replaces it, PR #44)
 - [~] In flight: `mod-fixes` (the open mod items below, the guard after
-      `/clear`, its rules re-read) and `worktree-dist` (the server's
-      targeted tests in a worktree)
-      Both stopped at the usage limit (blocked). `mod-fixes`: all six items
-      coded on `task/mod-fixes` (WIP, no PR), tests not run, README and
-      register tests left. `worktree-dist`: PR #46, the libs tests not run
-      to the end; decision for it: copy main's `app/dist` instead of a link
-      (a build in the worktree would empty main's build through the link)
+      `/clear`, its rules re-read)
 - [x] Kit: the check log says who holds the heavy lock and when it is
       taken (PR #40); its tests' wait loops have no timeout yet
-- [ ] The targeted tests of `notes-server` in a worktree without `app/dist`
-      always fail `client_and_fonts_are_served` (503): the developers read a
-      false failure each time. Give the worktree the client build or make the
-      test say why it cannot run
+- [x] The targeted tests of `notes-server` in a worktree without `app/dist`
+      get a copy of the main checkout's client build (PR #46)
 - [ ] The mod nudges an agent whose turn ended while it waits for its own
       background work ("ended without the PIPELINE line: asked to finish"):
       Claude Code suspends such an agent and wakes it when the work ends, so
