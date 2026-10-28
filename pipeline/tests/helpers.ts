@@ -2,7 +2,7 @@
 // forge.ts) and the ports of the driver. No test talks to the real server.
 import type { Config } from '../hooks/config'
 import type { Input, Ports } from '../hooks/driver'
-import type { Forge, MergeOutcome, PrInfo, PullOutcome, ReviewInfo, StatusInfo } from '../hooks/forge'
+import type { Forge, MergeOutcome, PrInfo, PullOutcome, ReviewInfo, SalvageOutcome, StatusInfo } from '../hooks/forge'
 import { emptyState, step } from '../hooks/machine'
 import type { Action, Event, Result, State, Task } from '../hooks/model'
 
@@ -31,12 +31,18 @@ export class FakeServer {
   leftovers: string[] = []
   /** The pull request becomes mergeable=false for these numbers. */
   conflicting = new Set<number>()
+  /** `rerun` throws this text. */
+  rerunThrows: string | undefined
+  /** What `salvage` answers, per agent id. */
+  salvaged = new Map<string, SalvageOutcome>()
+  /** What `unreferenced` answers. */
+  orphans: string[] = []
 
   open(n: number, head: string): void {
     this.prs.set(n, { state: 'open', head, mergeable: true })
   }
-  setStatus(sha: string, state: StatusInfo['state'], detail = ''): void {
-    this.statuses.set(sha, { state, detail })
+  setStatus(sha: string, state: StatusInfo['state'], detail = '', finished = true): void {
+    this.statuses.set(sha, { state, detail, finished })
   }
   review(n: number, head: string, verdict: 'APPROVED' | 'REQUEST_CHANGES', text = ''): void {
     this.reviews.set(n, [...(this.reviews.get(n) ?? []), { head, verdict, text }])
@@ -54,7 +60,18 @@ export class FakeServer {
         if (!p) throw new Error(`no pull request ${n}`)
         return { ...p, mergeable: p.mergeable && !this.conflicting.has(n) }
       },
-      status: async sha => this.statuses.get(sha) ?? { state: 'pending', detail: '' },
+      status: async sha => this.statuses.get(sha) ?? { state: 'pending', detail: '', finished: true },
+      rerun: async sha => {
+        calls.push(`rerun ${sha}`)
+        if (this.rerunThrows !== undefined) throw new Error(this.rerunThrows)
+      },
+      salvage: async a => {
+        calls.push(`salvage ${a.slug} ${a.agentId}`)
+        return this.salvaged.get(a.agentId) ?? {}
+      },
+      unreferenced: async a => {
+        return [...this.orphans]
+      },
       review: async (n, head): Promise<ReviewInfo> => {
         const mine = (this.reviews.get(n) ?? []).filter(r => r.head === head)
         const last = mine[mine.length - 1]
@@ -104,7 +121,7 @@ export type Fakes = {
   appended: { agentId: string; text: string }[]
   notes: string[]
   store: { value: State | undefined }
-  /** Agents that cannot be reached by `send` or `append`. */
+  /** Agents that cannot be reached by `send` or `append`, and that `$.agent.list()` does not name. */
   gone: Set<string>
   /** The next spawn is refused with this text. */
   denySpawn: { reason: string | undefined }
@@ -135,6 +152,7 @@ export function fakes(): Fakes {
     },
     show: () => undefined,
     forge: server.forge(),
+    agentIds: async () => f.spawned.map(s => s.agentId).filter(id => !f.gone.has(id)),
     agents: {
       spawn: async a => {
         if (f.denySpawn.reason !== undefined) return { deny: f.denySpawn.reason }
@@ -201,11 +219,11 @@ export class Run {
   ready(slug: string, pr: number, head: string): void {
     const t = this.task(slug)
     this.feed({ type: 'turn-end', agentId: t.agentId ?? '?', reason: 'answer', text: `Done.\nPIPELINE: pr=${pr}` })
-    this.feed({ type: 'polled', slug, pr, prState: 'open', head, ci: 'pending', mergeable: true, detail: '' })
+    this.feed({ type: 'polled', slug, pr, prState: 'open', head, ci: 'pending', mergeable: true, detail: '', finished: true })
   }
 
-  poll(slug: string, head: string, ci: 'pending' | 'success' | 'failure' | 'error', detail = ''): Result {
-    return this.feed({ type: 'polled', slug, pr: this.task(slug).pr ?? 0, prState: 'open', head, ci, mergeable: true, detail })
+  poll(slug: string, head: string, ci: 'pending' | 'success' | 'failure' | 'error', detail = '', finished = true): Result {
+    return this.feed({ type: 'polled', slug, pr: this.task(slug).pr ?? 0, prState: 'open', head, ci, mergeable: true, detail, finished })
   }
 
   /** The reviewer was spawned and ended its turn; its review is read. */

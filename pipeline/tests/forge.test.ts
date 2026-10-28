@@ -25,7 +25,8 @@ function script(rules: [string, RunResult | (() => RunResult)][]): { run: Run; l
   return { run, log }
 }
 
-const forgeOf = (run: Run) => makeForge(run, { root: ROOT, sleep: async () => undefined, mergeWaitMs: 0 })
+const write = async (): Promise<void> => undefined
+const forgeOf = (run: Run) => makeForge(run, { root: ROOT, sleep: async () => undefined, write, mergeWaitMs: 0 })
 const pr = (o: Record<string, unknown>): RunResult => ok(JSON.stringify({ state: 'open', merged: false, mergeable: true, head: { sha: HEAD }, ...o }))
 
 describe('reading the server', () => {
@@ -53,7 +54,7 @@ describe('reading the server', () => {
     expect(st.detail).toContain('ci: clippy failed http://x/1')
     expect(st.detail).toContain('/repo/.claude/worktrees/check-pr-7/.pipeline/check/')
     const custom = script([['/status', ok(JSON.stringify({ state: 'failure', statuses: [] }))], ['/comments', ok('[]')]])
-    const withLogs = makeForge(custom.run, { root: ROOT, sleep: async () => undefined, checkLogs: 'out/check' })
+    const withLogs = makeForge(custom.run, { root: ROOT, sleep: async () => undefined, write, checkLogs: 'out/check' })
     expect((await withLogs.status(HEAD, 7)).detail).toContain('/repo/.claude/worktrees/check-pr-7/out/check/')
     for (const [state, want] of [['success', 'success'], ['pending', 'pending'], ['', 'pending'], ['unknown', 'pending'], ['error', 'error'], ['warning', 'error']] as const) {
       const t = script([['/status', ok(JSON.stringify({ state, statuses: [] }))], ['/comments', ok('[]')]])
@@ -259,7 +260,7 @@ describe('git: main checkout', () => {
 
   describe('the after-merge command of the config', () => {
     const afterMerge: AfterMerge = { paths: ['src/'], command: ['scripts/after.sh', '--quick'], timeoutSeconds: 90 }
-    const withConfig = (run: Run) => makeForge(run, { root: ROOT, sleep: async () => undefined, afterMerge })
+    const withConfig = (run: Run) => makeForge(run, { root: ROOT, sleep: async () => undefined, write, afterMerge })
 
     test('it runs in the main checkout with the timeout of the config', async () => {
       const calls: { argv: readonly string[]; timeoutMs?: number }[] = []
@@ -286,5 +287,108 @@ describe('git: main checkout', () => {
       expect((await forgeOf(s.run).install()).ok).toBe(false)
       expect(s.log).toEqual([])
     })
+  })
+})
+
+describe('a check that did not finish', () => {
+  const failing = ['/status', ok(JSON.stringify({ state: 'failure', statuses: [] }))] as [string, RunResult]
+
+  test('a failure is finished only with the comment of the check for this head', async () => {
+    const commented = script([failing, ['/comments', ok(JSON.stringify([{ body: `Full check failed at ${HEAD}: clippy.\n\nlog` }]))]])
+    expect((await forgeOf(commented.run).status(HEAD, 7)).finished).toBe(true)
+    const other = script([failing, ['/comments', ok(JSON.stringify([{ body: `Full check failed at ${'b'.repeat(40)}: clippy.` }, { body: `Not the first line\nFull check failed at ${HEAD}` }]))]])
+    expect((await forgeOf(other.run).status(HEAD, 7)).finished).toBe(false)
+    const unreadable = script([failing, ['/comments', fail('boom')]])
+    expect((await forgeOf(unreadable.run).status(HEAD, 7)).finished).toBe(false)
+    const passed = script([['/status', ok(JSON.stringify({ state: 'success', statuses: [] }))]])
+    expect((await forgeOf(passed.run).status(HEAD, 7)).finished).toBe(true)
+  })
+
+  test('rerun: the newest actions run of the head is re-run', async () => {
+    const s = script([['head_sha=', ok(JSON.stringify({ workflow_runs: [{ id: 31 }, { id: 36 }, { id: 33 }] }))]])
+    await forgeOf(s.run).rerun(HEAD)
+    expect(s.log).toEqual([
+      `tea api --login dev /repos/{owner}/{repo}/actions/runs?head_sha=${HEAD}&limit=50`,
+      'tea api --login dev -X POST /repos/{owner}/{repo}/actions/runs/36/rerun',
+    ])
+  })
+
+  test('rerun: no run, or an error answer of a tea that exits 0, is an error', async () => {
+    const none = script([['head_sha=', ok(JSON.stringify({ workflow_runs: [] }))]])
+    await expect(forgeOf(none.run).rerun(HEAD)).rejects.toThrow('no actions run')
+    const running = script([
+      ['head_sha=', ok(JSON.stringify({ workflow_runs: [{ id: 5 }] }))],
+      ['/rerun', ok('{"message":"the run is not finished","url":"x"}')],
+    ])
+    await expect(forgeOf(running.run).rerun(HEAD)).rejects.toThrow('run 5: the run is not finished')
+  })
+})
+
+describe('a dead developer', () => {
+  const WT = `${ROOT}/.claude/worktrees/agent-abc123`
+  const porcelain = `worktree ${ROOT}\n\nworktree ${WT}\nHEAD z\nbranch refs/heads/task/feat\n`
+
+  /** Commands run in the worktree answer by `inWt`, the others by `rootRules` (a worktree list first). */
+  function salvaging(inWt: [string, RunResult][], rootRules: [string, RunResult][] = []) {
+    const log: string[] = []
+    const written: { path: string; text: string }[] = []
+    const run: Run = async (argv, init) => {
+      const line = argv.join(' ')
+      log.push(`${init?.cwd === WT ? 'wt' : 'root'}: ${line}`)
+      const rules = init?.cwd === WT ? inWt : [['worktree list', ok(porcelain)] as [string, RunResult], ...rootRules]
+      for (const [part, answer] of rules) if (line.includes(part)) return answer
+      return ok()
+    }
+    const forge = makeForge(run, { root: ROOT, sleep: async () => undefined, write: async (path, text) => void written.push({ path, text }) })
+    return { forge, log, written }
+  }
+
+  test('the changes and the untracked files go to a patch, then the worktree is removed with --force; the branch stays', async () => {
+    const s = salvaging([
+      ['diff HEAD --binary', ok('diff --git a/a b/a\n+x\n')],
+      ['ls-files', ok('new.txt\0dir/other.txt\0')],
+      ['--no-index --binary -- /dev/null new.txt', { exitCode: 1, stdout: 'diff --git a/new.txt b/new.txt\nnew file', stderr: '' }],
+      ['--no-index --binary -- /dev/null dir/other.txt', { exitCode: 1, stdout: 'diff --git a/dir/other.txt b/dir/other.txt\n', stderr: '' }],
+    ])
+    const out = await s.forge.salvage({ slug: 'feat', agentId: 'abc123' })
+    const path = `${ROOT}/.claude/worktrees/salvage/feat-abc123.patch`
+    expect(out).toEqual({ patch: path })
+    expect(s.written).toHaveLength(1)
+    expect(s.written[0]?.path).toBe(path)
+    expect(s.written[0]?.text).toBe('diff --git a/a b/a\n+x\ndiff --git a/new.txt b/new.txt\nnew file\ndiff --git a/dir/other.txt b/dir/other.txt\n')
+    expect(s.log).toContain(`root: git worktree remove --force ${WT}`)
+    expect(s.log.some(l => l.includes('branch -'))).toBe(false)
+    // The patch is written before the worktree goes.
+    expect(s.log.findIndex(l => l.includes('mkdir'))).toBeLessThan(s.log.findIndex(l => l.includes('remove --force')))
+  })
+
+  test('nothing to save: no patch, the worktree is still freed', async () => {
+    const s = salvaging([])
+    expect(await s.forge.salvage({ slug: 'feat', agentId: 'abc123' })).toEqual({})
+    expect(s.written).toEqual([])
+    expect(s.log).toContain(`root: git worktree remove --force ${WT}`)
+  })
+
+  test('a patch that cannot be made keeps the worktree', async () => {
+    const s = salvaging([['diff HEAD --binary', fail('fatal: bad index')]])
+    const out = await s.forge.salvage({ slug: 'feat', agentId: 'abc123' })
+    expect(out.patch).toBeUndefined()
+    expect(out.note).toContain('fatal: bad index')
+    expect(s.log.some(l => l.includes('worktree remove'))).toBe(false)
+  })
+
+  test('a worktree that is gone, or an id that is not plain, is nothing to save', async () => {
+    const gone = script([['worktree list', ok(`worktree ${ROOT}\n`)]])
+    expect(await forgeOf(gone.run).salvage({ slug: 'feat', agentId: 'abc123' })).toEqual({})
+    const bad = script([])
+    expect((await forgeOf(bad.run).salvage({ slug: 'feat', agentId: '../x' })).note).toContain('not a plain id')
+    expect(bad.log).toEqual([])
+  })
+
+  test('worktrees of agents and checks that nothing references are listed', async () => {
+    const wt = (n: string) => `worktree ${ROOT}/.claude/worktrees/${n}\nHEAD z\n\n`
+    const s = script([['worktree list', ok(`worktree ${ROOT}\n\n${wt('agent-live')}${wt('agent-lost')}${wt('check-pr-7')}${wt('check-pr-8')}${wt('other')}`)]])
+    const found = await forgeOf(s.run).unreferenced({ agents: ['live'], prs: [7] })
+    expect(found).toEqual([`${ROOT}/.claude/worktrees/agent-lost`, `${ROOT}/.claude/worktrees/check-pr-8`])
   })
 })

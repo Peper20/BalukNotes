@@ -114,3 +114,18 @@ export function blockedComment(t: Task, reason: string, findings: string): strin
     .filter(line => line !== '')
     .join('\n\n')
 }
+
+export const lateSendMessage = (text: string): string =>
+  `A message from the liaison that came while your last turn was ending (ignore it if you already acted on it):\n\n${text.trim()}`
+
+/** A message of the liaison that a developer which is gone may not have read. */
+export const lostMessage = (text: string): string =>
+  `A message from the liaison that the previous developer may not have read:\n\n${text.trim()}`
+
+export const salvagedPatch = (path: string): string =>
+  `The previous developer's unsaved changes are in ${path}: apply what is worth keeping.`
+
+export const salvageNote = (note: string): string => `The previous developer's worktree could not be freed (${note}); its unsaved changes may still be there.`
+
+export const orphanWorktrees = (paths: readonly string[]): string =>
+  `[pipeline] worktrees that no task of the pipeline references (not removed; look at them and remove by hand what is not needed):\n- ${paths.join('\n- ')}`

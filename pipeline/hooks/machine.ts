@@ -8,7 +8,10 @@ import {
   type Developer,
   DEVELOPERS,
   type Event,
-  KEEP_MERGED,
+  CLOSED_POLL_MS,
+  KEEP_MERGED_MS,
+  KEEP_SLUGS,
+  MAX_RERUNS,
   MAX_ROUNDS,
   RETRY_MS,
   type Result,
@@ -69,6 +72,15 @@ export function step(prev: State, ev: Event, cfg: Config): Result {
     case 'post-merge':
       onPostMerge(state, ev, out, cfg)
       break
+    case 'rerun-failed':
+      onRerunFailed(state, ev)
+      break
+    case 'salvaged':
+      onSalvaged(state, ev, out, cfg)
+      break
+    case 'closed-polled':
+      onClosedPolled(state, ev, out)
+      break
     case 'handover-failed':
       onHandoverFailed(state, ev, out)
       break
@@ -94,8 +106,24 @@ function notify(t: Task, why: string, out: Result): void {
 /** A message to the current developer; a running one is appended to, an ended one resumed. */
 function tell(t: Task, agentId: string, text: string, out: Result, how?: 'send' | 'append'): void {
   const a = agentOf(t, agentId)
-  out.actions.push({ type: 'tell', slug: t.slug, agentId, text, how: how ?? (a?.running ? 'append' : 'send') })
+  const resolved = how ?? (a?.running ? 'append' : 'send')
+  out.actions.push({ type: 'tell', slug: t.slug, agentId, text, how: resolved })
+  if (resolved === 'send') t.pendingSend = undefined
   if (a) a.running = true
+}
+
+/** `text` with the message of the liaison that may have been lost; the message is taken off the task. */
+function withPending(t: Task, text: string): string {
+  const pending = t.pendingSend
+  t.pendingSend = undefined
+  if (pending === undefined || text.includes(pending)) return text
+  return `${text.trim()}\n\n${P.lostMessage(pending)}`
+}
+
+/** The developer is gone: its unsaved work is saved, then a new one of the same tier continues (`onSalvaged`). */
+function replaceDeveloper(t: Task, agentId: string, text: string, out: Result): void {
+  t.agentId = undefined
+  out.actions.push({ type: 'salvage', slug: t.slug, agentId, text: withPending(t, text) })
 }
 
 function spawnDeveloper(t: Task, prompt: string, out: Result): void {
@@ -128,7 +156,8 @@ function begin(t: Task, now: number, out: Result, cfg: Config): void {
   spawnDeveloper(t, P.developerPrompt(t, cfg), out)
 }
 
-const ready = (s: State, t: Task): boolean => t.after.every(a => find(s, a)?.stage === 'merged')
+const isMerged = (s: State, slug: string): boolean => find(s, slug)?.stage === 'merged' || (s.mergedSlugs ?? []).includes(slug)
+const ready = (s: State, t: Task): boolean => t.after.every(a => isMerged(s, a))
 
 function startWaiting(s: State, now: number, out: Result, cfg: Config): string[] {
   const started: string[] = []
@@ -225,7 +254,11 @@ function onStart(s: State, ev: Event_<'start'>, out: Result, cfg: Config): void 
     out.error = `the developer must be one of ${DEVELOPERS.join(', ')}`
     return
   }
-  const unknown = ev.after.filter(a => !find(s, a))
+  if ((s.mergedSlugs ?? []).includes(ev.slug)) {
+    out.error = `the task "${ev.slug}" exists (merged)`
+    return
+  }
+  const unknown = ev.after.filter(a => !find(s, a) && !isMerged(s, a))
   if (unknown.length > 0) {
     out.error = `"after" names unknown tasks: ${unknown.join(', ')} (start them first)`
     return
@@ -250,7 +283,7 @@ function onStart(s: State, ev: Event_<'start'>, out: Result, cfg: Config): void 
     begin(t, ev.now, out, cfg)
     out.reply = `${t.slug}: ${t.developer} is starting on ${P.branchOf(t.slug)}`
   } else {
-    const missing = t.after.filter(a => find(s, a)?.stage !== 'merged')
+    const missing = t.after.filter(a => !isMerged(s, a))
     note(t, ev.now, `waits for ${missing.join(', ')}`)
     out.reply = `${t.slug}: waits until ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} merged`
   }
@@ -277,6 +310,7 @@ function onSend(s: State, ev: Event_<'send'>, out: Result, cfg: Config): void {
       t.rounds = { 'developer-1': 0, 'developer-2': 0, 'developer-3': 0 }
       t.stage = 'developing'
       t.blockedReason = undefined
+      t.pendingSend = undefined
       t.cleanupPending = false
       t.nudged = false
       t.retryAt = undefined
@@ -289,7 +323,10 @@ function onSend(s: State, ev: Event_<'send'>, out: Result, cfg: Config): void {
         out.error = `${t.slug}: the developer is starting, send again in a moment`
         return
       }
+      // A turn that is ending may not read it: kept to be sent again (onTurnEnd).
+      const midTurn = agentOf(t, t.agentId)?.running === true
       tell(t, t.agentId, ev.text, out)
+      if (midTurn) t.pendingSend = [t.pendingSend, ev.text.trim()].filter(x => x !== undefined && x !== '').join('\n\n')
       note(t, ev.now, 'the liaison sent a message')
       out.reply = `${t.slug}: sent to ${t.developer}`
       return
@@ -321,6 +358,7 @@ function onStop(s: State, ev: Event_<'stop'>, out: Result): void {
     t.blockedReason = reason
     t.cleanupPending = true
     t.retryAt = undefined
+    t.pendingSend = undefined
     note(t, ev.now, reason)
     if (t.pr !== undefined) out.actions.push({ type: 'comment', pr: t.pr, text: P.blockedComment(t, reason, '') })
     maybeCleanup(t, out)
@@ -366,7 +404,7 @@ function onUndelivered(s: State, ev: Event_<'undelivered'>, out: Result, cfg: Co
   }
   if (a.role === 'developer' && ev.agentId === t.agentId && isLive(t)) {
     note(t, ev.now, `${a.tier} is gone: a new one continues`)
-    spawnDeveloper(t, P.continuePrompt(t, ev.text, cfg), out)
+    replaceDeveloper(t, ev.agentId, ev.text, out)
   } else if (a.role === 'reviewer' && ev.agentId === t.reviewerId && t.stage === 'reviewing') {
     note(t, ev.now, 'the reviewer is gone: a new one reviews')
     spawnReviewer(t, out, cfg)
@@ -408,6 +446,12 @@ function onTurnEnd(s: State, ev: Event_<'turn-end'>, out: Result): void {
   }
   t.retryAt = undefined
   t.apiNotified = false
+  if (t.pendingSend !== undefined) {
+    // The liaison wrote while this turn was ending, so the turn may not have read it: the ending does not count.
+    note(t, ev.now, 'a message of the liaison came while the turn was ending: sent again')
+    tell(t, ev.agentId, P.lateSendMessage(t.pendingSend), out, 'send')
+    return
+  }
   const ending = P.parseEnding(ev.text)
   if (!ending) {
     if (!t.nudged) {
@@ -467,6 +511,7 @@ function onPolled(s: State, ev: Event_<'polled'>, out: Result, cfg: Config): voi
   }
   if (t.head !== undefined && t.head !== ev.head) note(t, ev.now, `new head ${short(ev.head)}`)
   if (t.approvedHead !== ev.head) t.approvedHead = undefined
+  if (t.head !== ev.head) t.reruns = 0
   t.head = ev.head
   t.ci = ev.ci
   t.unmergeable = ev.mergeable ? 0 : t.unmergeable + 1
@@ -490,11 +535,33 @@ function onPolled(s: State, ev: Event_<'polled'>, out: Result, cfg: Config): voi
       return
     case 'failure':
     case 'error':
-      giveBack(t, ev.now, 'check', ev.detail, out, cfg)
+      if (ev.finished) giveBack(t, ev.now, 'check', ev.detail, out, cfg)
+      else rerunCheck(t, ev, out)
       return
     default:
       note(t, ev.now, `check ${ev.ci} at ${short(ev.head)}`)
   }
+}
+
+/** The check was cancelled or could not run: not a round of the developer. Re-run it, or tell the liaison. */
+function rerunCheck(t: Task, ev: Event_<'polled'>, out: Result): void {
+  const used = t.reruns ?? 0
+  if (used >= MAX_RERUNS) {
+    t.stage = 'liaison'
+    note(t, ev.now, `the check of ${short(ev.head)} did not finish ${used + 1} times`)
+    notify(t, `the check of ${short(ev.head)} did not finish ${used + 1} times: ${ev.detail.trim()}`, out)
+    return
+  }
+  t.reruns = used + 1
+  t.ci = 'pending'
+  note(t, ev.now, `the check of ${short(ev.head)} did not finish: re-run ${used + 1} of ${MAX_RERUNS}`)
+  if (t.pr !== undefined) out.actions.push({ type: 'rerun', slug: t.slug, pr: t.pr, head: ev.head })
+}
+
+function onRerunFailed(s: State, ev: Event_<'rerun-failed'>): void {
+  const t = find(s, ev.slug)
+  if (!t || t.stage !== 'checking') return
+  note(t, ev.now, `the re-run of the check of ${short(ev.head)} failed: ${ev.reason}`)
 }
 
 function onReviewed(s: State, ev: Event_<'reviewed'>, out: Result, cfg: Config): void {
@@ -506,6 +573,7 @@ function onReviewed(s: State, ev: Event_<'reviewed'>, out: Result, cfg: Config):
   if (ev.head !== t.head) {
     // A new head was pushed while the review ran: the review is stale, the check starts over.
     t.head = ev.head
+    t.reruns = 0
     t.approvedHead = undefined
     t.stage = 'checking'
     t.ci = 'pending'
@@ -545,6 +613,7 @@ function mergedNow(t: Task, now: number, post: boolean, out: Result): void {
   if (t.stage === 'merged') return
   t.stage = 'merged'
   t.retryAt = undefined
+  t.mergedAt = now
   note(t, now, 'merged; cleaning up')
   if (post && t.pr !== undefined && t.head !== undefined) {
     out.actions.push({ type: 'post-merge', slug: t.slug, pr: t.pr, head: t.head })
@@ -591,12 +660,6 @@ function onPostMerge(s: State, ev: Event_<'post-merge'>, out: Result, cfg: Confi
     }
   }
   const started = startWaiting(s, ev.now, out, cfg)
-  // Keep the store small: the oldest merged tasks go.
-  const merged = s.tasks.filter(x => x.stage === 'merged')
-  if (merged.length > KEEP_MERGED) {
-    const drop = new Set(merged.slice(0, merged.length - KEEP_MERGED).map(x => x.slug))
-    s.tasks = s.tasks.filter(x => !drop.has(x.slug))
-  }
   const lines = [
     `[pipeline] ${t.slug} merged: ${pullsUrl(cfg)}${t.pr}`,
     `rounds: ${roundsText(t)}`,
@@ -621,31 +684,62 @@ function onCleaned(s: State, ev: Event_<'cleaned'>, out: Result): void {
   if (t.stage === 'blocked') notify(t, `cleanup left:\n- ${ev.leftovers.join('\n- ')}`, out)
 }
 
+/** Retention: a merged task goes 14 days after its merge, its slug is kept for `after`. */
+function pruneMerged(s: State, now: number): void {
+  const gone = s.tasks.filter(t => t.stage === 'merged' && now - (t.mergedAt ?? t.lastAt) > KEEP_MERGED_MS)
+  if (gone.length === 0) return
+  const drop = new Set(gone.map(t => t.slug))
+  s.tasks = s.tasks.filter(t => !drop.has(t.slug))
+  const kept = (s.mergedSlugs ?? []).filter(slug => !drop.has(slug))
+  s.mergedSlugs = [...kept, ...gone.map(t => t.slug)].slice(-KEEP_SLUGS)
+}
+
+function onClosedPolled(s: State, ev: Event_<'closed-polled'>, out: Result): void {
+  const t = find(s, ev.slug)
+  if (!t || t.stage !== 'blocked' || t.pr !== ev.pr || t.cleanupPending || ev.prState !== 'closed') return
+  s.tasks = s.tasks.filter(x => x !== t)
+  out.actions.push({ type: 'notify', text: `[pipeline] ${t.slug} removed: its pull request #${ev.pr} was closed unmerged` })
+}
+
 function onTick(s: State, ev: Event_<'tick'>, out: Result, cfg: Config): void {
+  pruneMerged(s, ev.now)
   for (const t of s.tasks) {
+    if (
+      t.stage === 'blocked' &&
+      t.pr !== undefined &&
+      !t.cleanupPending &&
+      (t.lastClosedPoll === undefined || ev.now - t.lastClosedPoll >= CLOSED_POLL_MS)
+    ) {
+      t.lastClosedPoll = ev.now
+      out.actions.push({ type: 'poll-closed', slug: t.slug, pr: t.pr })
+    }
     if (t.stage === 'checking' && t.pr !== undefined) {
       out.actions.push({ type: 'poll', slug: t.slug, pr: t.pr })
     }
     if (t.retryAt !== undefined && ev.now >= t.retryAt && t.retryAgent !== undefined && isLive(t)) {
       t.retryAt = undefined
       note(t, ev.now, 'resumed after an API error')
-      tell(t, t.retryAgent, P.retryMessage(), out, 'send')
+      tell(t, t.retryAgent, withPending(t, P.retryMessage()), out, 'send')
     }
   }
   startWaiting(s, ev.now, out, cfg)
 }
 
-/** The session started: wake what the store says is going. */
+/** The session started: wake what the store says is going; an agent the engine does not know is dead. */
 function onRestore(s: State, ev: Event_<'restore'>, out: Result, cfg: Config): void {
   for (const t of s.tasks) {
+    const dead = (id?: string): boolean => id !== undefined && agentOf(t, id)?.running === true && !ev.agents.includes(id)
+    const developerDead = dead(t.agentId)
+    const reviewerDead = dead(t.reviewerId)
     for (const a of t.agents) a.running = false
     switch (t.stage) {
       case 'developing':
         note(t, ev.now, 'the pipeline restarted')
-        toDeveloper(t, P.restartMessage(), out, cfg)
+        if (developerDead && t.agentId !== undefined) replaceDeveloper(t, t.agentId, P.restartMessage(), out)
+        else toDeveloper(t, withPending(t, P.restartMessage()), out, cfg)
         break
       case 'reviewing':
-        if (t.reviewerId !== undefined) tell(t, t.reviewerId, P.restartMessage(), out, 'send')
+        if (t.reviewerId !== undefined && !reviewerDead) tell(t, t.reviewerId, P.restartMessage(), out, 'send')
         else spawnReviewer(t, out, cfg)
         break
       case 'checking':
@@ -662,8 +756,21 @@ function onRestore(s: State, ev: Event_<'restore'>, out: Result, cfg: Config): v
           out.actions.push({ type: 'post-merge', slug: t.slug, pr: t.pr, head: t.head })
         }
         break
+      case 'blocked':
+        maybeCleanup(t, out)
+        break
       default:
     }
   }
   startWaiting(s, ev.now, out, cfg)
+}
+
+/** The worktree of a dead developer is saved and freed; the replacement is told where the unsaved work is. */
+function onSalvaged(s: State, ev: Event_<'salvaged'>, out: Result, cfg: Config): void {
+  const t = find(s, ev.slug)
+  if (!t || t.stage !== 'developing' || t.agentId !== undefined) return
+  const lines = [ev.text.trim()]
+  if (ev.patch !== undefined) lines.push(P.salvagedPatch(ev.patch))
+  if (ev.note !== undefined && ev.note !== '') lines.push(P.salvageNote(ev.note))
+  spawnDeveloper(t, P.continuePrompt(t, lines.join('\n\n'), cfg), out)
 }

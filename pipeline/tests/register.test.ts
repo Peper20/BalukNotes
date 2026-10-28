@@ -34,6 +34,7 @@ test('the tools are registered and pipeline_start starts a developer', async ($,
     spawned.push({ prompt: e.prompt })
     return { model: 'm', agentId: 'agent-1' }
   })
+  on('agent.list', async () => ({ value: [] }))
   on('process.run', async (_$, e) => {
     processes.push(e.argv.join(' '))
     return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
@@ -104,6 +105,7 @@ test('a task from the store is woken, its turn end is read, the pane shows it', 
   on('tool.register', async (_$, e) => ({ value: { tool: `mcp__pipeline__${e.name}` } }))
   on('command.register', async () => ({ value: { command: 'pipeline' } }))
   on('ui.status', async () => ({ value: undefined }))
+  on('agent.list', async () => ({ value: [{ id: 'agent-1', description: 'feat', type: 'developer-2', status: 'running' }] }))
   on('session.send', async (_$, e) => {
     sent.push(e.text)
     return { isDelivered: true }
@@ -135,14 +137,18 @@ test('a task from the store is woken, its turn end is read, the pane shows it', 
 })
 
 /** A session whose project layer is whatever `config.file` holds (undefined: the file cannot be read). */
-async function configSession($: Engine, on: On, config: { file?: string }) {
+async function configSession($: Engine, on: On, config: { file?: string; reads?: number }) {
   mock.clock(on)
   mock.store(on)
   const submitted: string[] = []
   const spawned: string[] = []
   on('session.start', async (_$, e) => ({ cwd: e.cwd }))
   on('session.root', async () => ({ value: '/repo' }))
-  if (config.file !== undefined) on('fs.read', async () => ({ value: config.file as string }))
+  on('fs.read', async () => {
+    config.reads = (config.reads ?? 0) + 1
+    if (config.file === undefined) throw new Error('no such file')
+    return { value: config.file }
+  })
   on('tool.register', async (_$, e) => ({ value: { tool: `mcp__pipeline__${e.name}` } }))
   on('command.register', async () => ({ value: { command: 'pipeline' } }))
   on('ui.status', async () => ({ value: undefined }))
@@ -151,6 +157,7 @@ async function configSession($: Engine, on: On, config: { file?: string }) {
     spawned.push(e.prompt)
     return { model: 'm', agentId: 'agent-1' }
   })
+  on('agent.list', async () => ({ value: [] }))
   on('process.run', async () => ({ value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
   on('turn.complete', async (_$, e) => ({ text: e.answer }))
   on('prompt.submit', async (_$, e) => {
@@ -194,4 +201,60 @@ test('an invalid config: reported once, no task starts; the fixed file is read o
   const started = await $.tool.call(START)
   expect(started.deny).toBeUndefined()
   expect(spawned).toHaveLength(1)
+})
+
+test('boot runs once: calls that come together share one start; a config error lets the next call read the file anew', async ($, on) => {
+  const config: { file?: string; reads?: number } = { file: '{ "forge": { "url": "nope" } }' }
+  const { spawned } = await configSession($, on, config)
+  expect(config.reads).toBe(1)
+  // Two calls at once re-read the file once between them.
+  await Promise.all([$.tool.call(START), $.tool.call(START)])
+  expect(config.reads).toBe(2)
+  config.file = CONFIG
+  const [a, b] = await Promise.all([$.tool.call(START), $.tool.call({ ...(START as object), slug: 'other' } as never)])
+  expect(config.reads).toBe(3)
+  expect(a.deny).toBeUndefined()
+  expect(b.deny).toBeUndefined()
+  expect(spawned).toHaveLength(2)
+  // Started: no more reads.
+  await $.tool.call({ tool: 'mcp__pipeline__pipeline_status' } as never)
+  expect(config.reads).toBe(3)
+})
+
+test('pipeline_status: without all the merged tasks are cut to three, with all they are shown', async ($, on) => {
+  mock.clock(on)
+  const rounds = { 'developer-1': 0, 'developer-2': 0, 'developer-3': 0 }
+  const merged = (slug: string, at: number) => ({
+    slug,
+    brief: 'B',
+    after: [],
+    stage: 'merged',
+    starter: 'developer-1',
+    developer: 'developer-1',
+    agents: [],
+    ci: 'none',
+    rounds,
+    nudged: false,
+    unmergeable: 0,
+    lastEvent: 'merged and cleaned up',
+    lastAt: at,
+    mergedAt: at,
+  })
+  mock.store(on, { tasks: { tasks: [1, 2, 3, 4, 5].map(i => merged(`m${i}`, i)) } })
+  on('session.start', async (_$, e) => ({ cwd: e.cwd }))
+  on('session.root', async () => ({ value: '/repo' }))
+  on('fs.read', async () => ({ value: CONFIG }))
+  on('tool.register', async (_$, e) => ({ value: { tool: `mcp__pipeline__${e.name}` } }))
+  on('command.register', async () => ({ value: { command: 'pipeline' } }))
+  on('ui.status', async () => ({ value: undefined }))
+  on('agent.list', async () => ({ value: [] }))
+  on('process.run', async () => ({ value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const short = String((await $.tool.call({ tool: 'mcp__pipeline__pipeline_status' } as never)).result)
+  expect(short).toContain('m5:')
+  expect(short).not.toContain('m1:')
+  expect(short).toContain('2 older merged tasks: pipeline_status { all: true }')
+  const all = String((await $.tool.call({ tool: 'mcp__pipeline__pipeline_status', all: true } as never)).result)
+  expect(all).toContain('m1:')
+  expect(all).not.toContain('older merged')
 })

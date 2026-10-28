@@ -33,8 +33,12 @@ const TOOLS = [
   },
   {
     name: 'pipeline_status',
-    description: 'Every task of the pipeline: stage, pull request, head, CI state, developer and agent id, rounds, last event.',
-    inputSchema: { type: 'object', properties: {} },
+    description:
+      'The tasks of the pipeline: stage, pull request, head, CI state, developer and agent id, rounds, last event. Without "all": every task that is not merged and the last 3 merged ones.',
+    inputSchema: {
+      type: 'object',
+      properties: { all: { type: 'boolean', description: 'Also every older merged task still kept (14 days after the merge)' } },
+    },
   },
   {
     name: 'pipeline_send',
@@ -80,10 +84,26 @@ type Runtime = {
   /** The problem with the project layer that the last start found; the mod starts no task while it stands. */
   configError?: string
   reportedError?: string
+  /** The start in progress or done; cleared by a failed one so that the next call reads the file anew. */
+  booting?: Promise<void>
 }
 
-/** Reads the project layer and starts the pipeline; on a bad file it reports once and starts nothing. */
-async function boot($: EngineInterface, rt: Runtime): Promise<void> {
+/** One start at a time: every caller gets the same promise. */
+function boot($: EngineInterface, rt: Runtime): Promise<void> {
+  rt.booting ??= bootOnce($, rt).then(
+    started => {
+      if (!started) rt.booting = undefined
+    },
+    err => {
+      rt.booting = undefined
+      throw err
+    },
+  )
+  return rt.booting
+}
+
+/** Reads the project layer and starts the pipeline; on a bad file it reports once, starts nothing and answers false. */
+async function bootOnce($: EngineInterface, rt: Runtime): Promise<boolean> {
   const loaded = await loadConfig($, rt.root)
   if ('error' in loaded) {
     rt.configError = loaded.error
@@ -94,7 +114,7 @@ async function boot($: EngineInterface, rt: Runtime): Promise<void> {
         .submit({ text: `[pipeline] ${loaded.error}. The pipeline starts no task until the file is fixed (see config.md of the kit); call a pipeline tool again to read it anew.` })
         .catch(() => undefined)
     }
-    return
+    return false
   }
   rt.configError = undefined
   rt.config = loaded.config
@@ -110,9 +130,11 @@ async function boot($: EngineInterface, rt: Runtime): Promise<void> {
       $.ui.status(summary(state))
       void $.state.set(rows, viewRows(state)).catch(() => undefined)
     },
+    agentIds: async () => (await $.agent.list()).map(a => a.id),
     forge: makeForge((argv, init) => $.process.run(argv, init), {
       root: rt.root,
       sleep: ms => $.clock.sleep(ms),
+      write: (path, text) => $.fs.write(path, text),
       afterMerge: loaded.config.afterMerge,
       checkLogs: checkLogs(loaded.config),
     }),
@@ -149,6 +171,7 @@ async function boot($: EngineInterface, rt: Runtime): Promise<void> {
   $.clock.every(POLL_MS, () => {
     p.tick().catch(err => $.ui.log(`pipeline: tick failed: ${String(err)}`))
   })
+  return true
 }
 
 export const register: Register = on => {
@@ -162,16 +185,19 @@ export const register: Register = on => {
     return next(e)
   })
 
-  const served = (name: string, handle: (p: Pipeline, c: Config, args: Record<string, unknown>) => Promise<string>): void => {
+  const served = (
+    name: string,
+    handle: (p: Pipeline, c: Config, args: Record<string, unknown>, now: number) => Promise<string>,
+  ): void => {
     on('tool.call', { tool: new RegExp(`^${TOOL(name)}$`) }, async ($, e) => {
       if (e.agentId !== undefined) return { deny: 'the pipeline tools are for the liaison, not for subagents' }
-      if (!rt.pipeline && rt.configError !== undefined) await boot($, rt)
+      if (rt.booting !== undefined || rt.configError !== undefined) await boot($, rt)
       const { pipeline, config } = rt
       if (!pipeline || !config) {
         return { deny: rt.configError === undefined ? 'the pipeline is not started yet' : `the pipeline is not started: ${rt.configError}` }
       }
       try {
-        return { result: await handle(pipeline, config, e as unknown as Record<string, unknown>) }
+        return { result: await handle(pipeline, config, e as unknown as Record<string, unknown>, await $.clock.now()) }
       } catch (err) {
         return { deny: String(err instanceof Error ? err.message : err) }
       }
@@ -193,7 +219,7 @@ export const register: Register = on => {
       after: Array.isArray(a.after) ? a.after.map(str).filter(s => s !== '') : [],
     }),
   )
-  served('pipeline_status', async (p, c) => describeAll(p.state(), c))
+  served('pipeline_status', async (p, c, a, now) => describeAll(p.state(), c, now, a.all === true))
   served('pipeline_send', (p, _c, a) => reply(p, { type: 'send', slug: str(a.slug), text: str(a.text) }))
   served('pipeline_stop', (p, _c, a) =>
     reply(p, { type: 'stop', slug: str(a.slug) || undefined, reason: str(a.reason) || 'no reason given' }),

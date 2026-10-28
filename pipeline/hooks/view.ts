@@ -1,16 +1,17 @@
 // What the liaison and the pane see of the tasks.
 import type { PipelineViewTask } from '../types'
 import { type Config, pullsUrl } from './config'
-import { DEVELOPERS, type Stage, type State, type Task } from './model'
+import { DEVELOPERS, SHOW_MERGED, STALE_MS, type Stage, type State, type Task } from './model'
 
 const STAGES: readonly Stage[] = ['waiting', 'developing', 'liaison', 'checking', 'reviewing', 'merging', 'blocked', 'merged']
 
 const roundsOf = (t: Task): string => DEVELOPERS.map(d => `${d.replace('developer-', 'd')}:${t.rounds[d]}`).join(' ')
 
-/** One task as the `pipeline_status` tool shows it. */
-export function describeTask(t: Task, cfg: Config): string {
+/** One task as the `pipeline_status` tool shows it; `now` marks a blocked task nobody touched for long as stale. */
+export function describeTask(t: Task, cfg: Config, now?: number): string {
+  const stale = now !== undefined && t.stage === 'blocked' && now - t.lastAt > STALE_MS
   const parts = [
-    `${t.slug}: ${t.stage}`,
+    `${t.slug}: ${t.stage}${stale ? ' stale' : ''}`,
     t.pr === undefined ? 'no PR' : `PR #${t.pr} (${pullsUrl(cfg)}${t.pr})`,
     `head ${t.head === undefined ? '-' : t.head.slice(0, 7)}`,
     `CI ${t.ci}`,
@@ -24,9 +25,17 @@ export function describeTask(t: Task, cfg: Config): string {
   return parts.join(' | ')
 }
 
-export function describeAll(s: State, cfg: Config): string {
+/** Every task that is not merged, then the last merged ones (all of them with `all`), and how many are left out. */
+export function describeAll(s: State, cfg: Config, now: number, all = false): string {
   if (s.tasks.length === 0) return 'No tasks.'
-  return s.tasks.map(t => describeTask(t, cfg)).join('\n')
+  const mergedAt = (t: Task): number => t.mergedAt ?? t.lastAt
+  const merged = s.tasks.filter(t => t.stage === 'merged').sort((a, b) => mergedAt(b) - mergedAt(a))
+  const shown = new Set(all ? merged : merged.slice(0, SHOW_MERGED))
+  const lines = s.tasks.filter(t => t.stage !== 'merged').map(t => describeTask(t, cfg, now))
+  lines.push(...merged.filter(t => shown.has(t)).reverse().map(t => describeTask(t, cfg, now)))
+  const older = merged.length - shown.size
+  if (older > 0) lines.push(`${older} older merged tasks: pipeline_status { all: true }`)
+  return lines.join('\n')
 }
 
 /** The status line: the counts of tasks by stage, merged ones left out. The engine puts the plugin's name before it. */

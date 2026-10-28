@@ -10,8 +10,19 @@ export const MAX_ROUNDS = 2
 export const RETRY_MS = 15 * 60 * 1000
 /** The poll of the commit status of the pull requests in `checking`. */
 export const POLL_MS = 60 * 1000
-/** How many merged tasks stay in the store (their slugs serve `after`). */
-export const KEEP_MERGED = 100
+/** A check that did not finish is re-run this many times for one head; the next time the liaison is told. */
+export const MAX_RERUNS = 2
+const DAY_MS = 24 * 60 * 60 * 1000
+/** A merged task stays in the store (and in `pipeline_status { all: true }`) this long after its merge. */
+export const KEEP_MERGED_MS = 14 * DAY_MS
+/** A blocked task not touched for this long is shown as stale. */
+export const STALE_MS = 14 * DAY_MS
+/** The pull request of a blocked task is looked at this often, to find it closed. */
+export const CLOSED_POLL_MS = 60 * 60 * 1000
+/** The slugs of removed merged tasks that are kept for `after`. */
+export const KEEP_SLUGS = 200
+/** `pipeline_status` shows this many merged tasks without `all`. */
+export const SHOW_MERGED = 3
 
 export type Stage =
   | 'waiting' // `after` is not merged yet
@@ -65,6 +76,14 @@ export type Task = {
   approvedHead?: string
   /** The head for which the developer was already sent to rebase. */
   conflictHead?: string
+  /** Re-runs of the check of `head` that did not finish; cleared when the head changes. */
+  reruns?: number
+  /** A message of the liaison appended to a running developer: sent again if the turn ends before it is read. */
+  pendingSend?: string
+  /** When the pull request was merged (epoch ms); `lastAt` for a task stored without it. */
+  mergedAt?: number
+  /** When the pull request of a blocked task was last looked at for being closed. */
+  lastClosedPoll?: number
   /** The open findings: they go to a developer that takes the task over. */
   findings?: string
   blockedReason?: string
@@ -74,7 +93,11 @@ export type Task = {
   lastAt: number
 }
 
-export type State = { tasks: Task[] }
+export type State = {
+  tasks: Task[]
+  /** The slugs of merged tasks removed from `tasks` (the last `KEEP_SLUGS`): they still count as merged in `after`. */
+  mergedSlugs?: string[]
+}
 
 export type Ending =
   | { kind: 'pr'; pr: number; liaison: boolean }
@@ -102,6 +125,8 @@ export type Event = Timed<
       mergeable: boolean
       /** What failed, for a `failure`/`error` status. */
       detail: string
+      /** The check ran to its end: `success`, or a failure it commented. False for a cancelled or killed job. */
+      finished: boolean
     }
   | {
       type: 'reviewed'
@@ -128,16 +153,27 @@ export type Event = Timed<
       leftovers: string[]
       conflicted: string[]
     }
+  | { type: 'rerun-failed'; slug: string; head: string; reason: string }
+  /** The dead developer's worktree is dealt with: `patch` holds its unsaved changes, `note` what went wrong. */
+  | { type: 'salvaged'; slug: string; agentId: string; text: string; patch?: string; note?: string }
+  | { type: 'closed-polled'; slug: string; pr: number; prState: 'open' | 'closed' | 'merged' }
   | { type: 'handover-failed'; slug: string; reason: string }
   | { type: 'cleaned'; slug: string; leftovers: string[] }
   | { type: 'tick' }
-  | { type: 'restore' }
+  /** The session started; `agents` are the ids `$.agent.list()` knows. */
+  | { type: 'restore'; agents: string[] }
 >
 
 export type Action =
   | { type: 'spawn'; slug: string; tier: string; prompt: string; description: string; role: 'developer' | 'reviewer' }
   | { type: 'tell'; slug: string; agentId: string; text: string; how: 'send' | 'append' }
   | { type: 'poll'; slug: string; pr: number }
+  /** Re-run the full check of this head (it did not finish). */
+  | { type: 'rerun'; slug: string; pr: number; head: string }
+  /** Save the unsaved work of a dead developer and free its worktree; `text` goes to the replacement. */
+  | { type: 'salvage'; slug: string; agentId: string; text: string }
+  /** Is the pull request of this blocked task closed? */
+  | { type: 'poll-closed'; slug: string; pr: number }
   | { type: 'read-review'; slug: string; pr: number }
   /** Merge the pull request at this head and do the steps after a merge, under one lock. */
   | { type: 'merge'; slug: string; pr: number; head: string }

@@ -5,6 +5,7 @@ import { type Config, needsAfterMerge } from './config'
 import type { Forge } from './forge'
 import { type Action, type Event, type Result, type State } from './model'
 import { emptyState, step } from './machine'
+import { orphanWorktrees } from './prompts'
 
 export type Ports = {
   /** The project layer, read at session start. */
@@ -15,6 +16,8 @@ export type Ports = {
   /** The state changed: redraw the status line and the pane. */
   show(state: State): void
   forge: Forge
+  /** The ids of the agents the engine knows now (`$.agent.list()`). */
+  agentIds(): Promise<string[]>
   agents: {
     spawn(a: { prompt: string; tier: string; description: string }): Promise<{ agentId?: string; deny?: string }>
     /** To an agent that ended its turn (or is gone): resumes it. */
@@ -106,7 +109,7 @@ export function createPipeline(ports: Ports): Pipeline {
         polling.add(key)
         try {
           const pr = await ports.forge.pr(a.pr)
-          const st = pr.state === 'open' ? await ports.forge.status(pr.head, a.pr) : { state: 'none' as const, detail: '' }
+          const st = pr.state === 'open' ? await ports.forge.status(pr.head, a.pr) : { state: 'none' as const, detail: '', finished: true }
           emit({
             type: 'polled',
             slug: a.slug,
@@ -116,10 +119,27 @@ export function createPipeline(ports: Ports): Pipeline {
             ci: st.state,
             mergeable: pr.mergeable,
             detail: st.detail,
+            finished: st.finished,
           })
         } finally {
           polling.delete(key)
         }
+        return
+      }
+      case 'rerun':
+        await ports.forge.rerun(a.head).catch(err => emit({ type: 'rerun-failed', slug: a.slug, head: a.head, reason: String(err) }))
+        return
+      case 'salvage': {
+        const out = await ports.forge.salvage({ slug: a.slug, agentId: a.agentId }).catch(err => ({ note: String(err) }))
+        emit({ type: 'salvaged', slug: a.slug, agentId: a.agentId, text: a.text, ...out })
+        return
+      }
+      case 'poll-closed': {
+        const pr = await ports.forge.pr(a.pr).catch(err => {
+          ports.log(`pull request ${a.pr} of ${a.slug}: ${String(err)}`)
+          return undefined
+        })
+        if (pr) emit({ type: 'closed-polled', slug: a.slug, pr: a.pr, prState: pr.state })
         return
       }
       case 'read-review': {
@@ -244,6 +264,19 @@ export function createPipeline(ports: Ports): Pipeline {
     return { type: 'post-merge', slug, pull: pulled.pull, install, note, leftovers, conflicted }
   }
 
+  /** Worktrees of the pipeline that no task references: told to the liaison, not removed. */
+  async function reportOrphans(): Promise<void> {
+    try {
+      const found = await ports.forge.unreferenced({
+        agents: state.tasks.flatMap(t => t.agents.map(a => a.id)),
+        prs: state.tasks.flatMap(t => (t.pr === undefined ? [] : [t.pr])),
+      })
+      if (found.length > 0) ports.notify(orphanWorktrees(found))
+    } catch (err) {
+      ports.log(`worktree listing: ${String(err)}`)
+    }
+  }
+
   async function settle(): Promise<void> {
     for (;;) {
       await chain
@@ -260,7 +293,8 @@ export function createPipeline(ports: Ports): Pipeline {
       const stored = await ports.load()
       if (stored) state = stored
       ports.show(state)
-      await dispatch({ type: 'restore' })
+      await dispatch({ type: 'restore', agents: await ports.agentIds() })
+      await reportOrphans()
     },
     dispatch,
     tick: async () => {

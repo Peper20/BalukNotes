@@ -60,7 +60,12 @@ The user talks only to the `liaison`. Agents talk to each other in English.
    `pipeline_send`.
 5. **CI.** The project's CI checks every push to a pull request: the full check
    at the head commit, as the commit status and a comment with the step table.
-   A failure goes back to the developer as a round.
+   A failure goes back to the developer as a round, but only a failure the
+   check itself reported: it comments `Full check failed at <sha>: <steps>.`
+   on every real failure. A job that was cancelled or killed (a machine
+   shutdown) or could not run leaves no such comment; the mod re-runs it
+   (twice per head) and, when the third try does not finish either, tells
+   the `liaison`. No round is spent.
 6. **Review.** On a `success` status the mod starts a `reviewer`; it reads the
    pull request in its own worktree, runs only what CI cannot show and gives
    the verdict on the server. Blocking findings go back to the same developer
@@ -79,7 +84,8 @@ Rounds and the end of a task:
   After `developer-3`'s two rounds the task is blocked.
 - A blocked task is still wanted but cannot be finished now: its pull request
   stays open and its branch stays on the server; the `liaison` brings it to
-  the user, and `pipeline_send` resumes it on a new `developer-3`.
+  the user, and `pipeline_send` resumes it on a new `developer-3`. If its pull
+  request is found closed without a merge, the task is removed from the mod.
 - A dropped task is discarded for good (its pull request closed, its branch
   deleted), only on the user's word.
 
@@ -272,9 +278,11 @@ on the server, counts rounds, merges, cleans up and reports to the liaison.
   developer, brief, after? }` (the developer gets the brief, the branch
   `task/<slug>`, the project and its pages to read first, and the contract:
   targeted tests only, push, open the pull request, end with `PIPELINE: pr=<n>`,
-  `PIPELINE: pr=<n> liaison` or `PIPELINE: question`), `pipeline_status`,
-  `pipeline_send { slug, text }` (an answer to a developer; resumes the task),
-  `pipeline_stop { slug?, reason }`.
+  `PIPELINE: pr=<n> liaison` or `PIPELINE: question`), `pipeline_status {
+  all? }` (every task that is not merged, then the last 3 merged and the count
+  of the older ones; `all: true` shows them too; a blocked task untouched for
+  14 days is marked `stale`), `pipeline_send { slug, text }` (an answer to a
+  developer; resumes the task), `pipeline_stop { slug?, reason }`.
 - **Stages** of a task: waiting (for `after`), developing, liaison (waits for
   `pipeline_send`), checking (the status of the head, polled every 60 s),
   reviewing, merging, merged, blocked. Rounds, hand-over to `developer-3` and
@@ -287,6 +295,43 @@ on the server, counts rounds, merges, cleans up and reports to the liaison.
   of its agents, the local `task/<slug>` when it equals the merged head, the
   check worktree) and the `afterMerge` command. The mod never pushes to `main`,
   never forces a push, never deploys.
+- **A check that did not finish.** `forge.status()` tells a failure the check
+  commented (`Full check failed at <full head sha>` as the first line of a
+  comment) from one it did not: a `failure` or `error` without that comment
+  costs no round. The mod re-runs the check: it finds the newest actions run
+  of the head (`GET /repos/{owner}/{repo}/actions/runs?head_sha=<sha>`) and
+  re-runs it (`POST .../actions/runs/{run}/rerun`, `204`; works as `dev`; only
+  for a finished run, otherwise the server answers with a JSON message, as
+  `tea api` exits 0 on it too, so the answer is read, not the exit code).
+  At most 2 re-runs per head (`reruns`, cleared by a new head); the third
+  unfinished status moves the task to `liaison` with a notice. A re-run that
+  fails is noted in the task and uses up the try.
+- **A restart.** At session start the mod asks the engine for its agents
+  (`$.agent.list()`). A developer or reviewer that the store says was running
+  and the engine does not know is dead: a dead reviewer is replaced; a dead
+  developer (also one a delivery found unreachable) is salvaged first: its
+  worktree `.claude/worktrees/agent-<id>` is written as a patch (`git diff HEAD
+  --binary` and the untracked files) to
+  `.claude/worktrees/salvage/<slug>-<id>.patch` and removed with `--force` (the only place the mod forces anything; its
+  branch stays, commits are never deleted), then a new developer starts with
+  the patch path in its prompt. No changes: no patch, no mention. A patch that
+  cannot be made keeps the worktree and says so in the prompt. Then the liaison
+  is told about worktrees `agent-*` and `check-pr-*` that no task in the store
+  references; they are listed, not removed.
+- **Retention.** A merged task leaves the store 14 days after its merge
+  (`mergedAt`); the last 200 removed slugs are kept (`mergedSlugs`) and still
+  count as merged for `after`. A blocked task with a pull request is looked at
+  once an hour (from the 60 s tick); one found closed without a merge, after
+  its cleanup, is removed with a one-line notice to the liaison. A store
+  written by an older mod, without these fields, is read with their defaults.
+- **A late send.** A `pipeline_send` to a developer whose turn is running is
+  appended to it and kept (`pendingSend`). If that turn ends before the
+  developer read it, the end does not count (no stage change, no notice): the
+  mod sends the message again in a new turn, marked as possibly already acted
+  on. Any other delivery in a new turn clears it.
+- **One start.** `session.start` and a tool call after a config error share
+  one start promise: one pipeline and one timer per load; an error clears it
+  so that the next call reads the file anew.
 - **View**: the pane `/pipeline` (a row per task: stage, pull request, status,
   developer, rounds, last event) and the status line under the prompt, the
   counts by stage (`1 developing · 2 checking`; the engine puts the plugin's

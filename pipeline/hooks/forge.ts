@@ -4,8 +4,9 @@
 //
 // Safety rules kept in this file: it merges only through `merge()` with the head
 // commit it was given (the server refuses a moved head), never pushes to `main`,
-// never force-pushes, never removes a worktree with `--force`, and touches only
-// worktrees under `.claude/worktrees/` of the main checkout.
+// never force-pushes, removes a worktree with `--force` only in `salvage`, after
+// the unsaved work in it is written to a patch, and touches only worktrees under
+// `.claude/worktrees/` of the main checkout.
 import { type AfterMerge, DEFAULT_CHECK_LOGS } from './config'
 import type { Ci } from './model'
 
@@ -19,7 +20,12 @@ export type PrInfo = {
   mergeable: boolean
 }
 
-export type StatusInfo = { state: Ci; detail: string }
+export type StatusInfo = {
+  state: Ci
+  detail: string
+  /** The check ran to its end: not a failure without the comment `check-pr.sh` posts, which a cancelled or killed job leaves. */
+  finished: boolean
+}
 
 export type ReviewInfo = {
   verdict: 'APPROVED' | 'REQUEST_CHANGES' | 'none'
@@ -30,12 +36,16 @@ export type ReviewInfo = {
 
 export type MergeOutcome = { ok: true } | { ok: false; kind: 'conflict' | 'moved' | 'other'; message: string }
 
+export type SalvageOutcome = { patch?: string; note?: string }
+
 export type PullOutcome = { pull: 'ok' | 'failed' | 'skipped'; note: string; changed: string[] }
 
 export type Forge = {
   pr(n: number): Promise<PrInfo>
   status(sha: string, pr: number): Promise<StatusInfo>
   review(n: number, head: string): Promise<ReviewInfo>
+  /** Run the full check of this head again (the actions run of the head); throws why not. */
+  rerun(sha: string): Promise<void>
   merge(n: number, head: string, branch: string): Promise<MergeOutcome>
   comment(n: number, text: string): Promise<void>
   /** Remove the worktrees of agents (with their `worktree-agent-*` branches); the leftovers. */
@@ -44,6 +54,13 @@ export type Forge = {
   cleanupMerged(a: { slug: string; pr: number; head: string }): Promise<string[]>
   /** A blocked task: the local task branch goes only when the server holds the same commit; the leftovers. */
   cleanupBlocked(a: { slug: string; pr?: number }): Promise<string[]>
+  /**
+   * A developer that is gone: its unsaved changes go to a patch under `.claude/worktrees/salvage/`,
+   * its worktree is removed (its branch stays). No patch for no changes; `note` says what went wrong.
+   */
+  salvage(a: { slug: string; agentId: string }): Promise<SalvageOutcome>
+  /** Worktrees `agent-*` and `check-pr-*` that are not the agents' and pull requests' given. */
+  unreferenced(a: { agents: readonly string[]; prs: readonly number[] }): Promise<string[]>
   pullMain(): Promise<PullOutcome>
   /** The `afterMerge` command of the config, run in the main checkout. */
   install(): Promise<{ ok: boolean; note: string }>
@@ -57,6 +74,8 @@ export type ForgeOptions = {
   mergeWaitMs?: number
   /** The command run in the main checkout after a merge that changed the paths it names. */
   afterMerge?: AfterMerge
+  /** Writes a text file (`$.fs.write`). */
+  write: (path: string, text: string) => Promise<void>
   /** The folder of the check logs in a checkout (`check.logs` of the config). */
   checkLogs?: string
 }
@@ -70,6 +89,14 @@ function json(r: RunResult, what: string): unknown {
     return JSON.parse(r.stdout)
   } catch {
     throw new Error(`${what}: the answer is not JSON`)
+  }
+}
+
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return undefined
   }
 }
 
@@ -125,7 +152,7 @@ export function makeForge(run: Run, opts: ForgeOptions): Forge {
   async function status(sha: string, n: number): Promise<StatusInfo> {
     const d = asRecord(json(await api('dev', `/repos/{owner}/{repo}/commits/${sha}/status`), `status of ${sha}`))
     const state = toCi(asString(d.state))
-    if (state !== 'failure' && state !== 'error') return { state, detail: '' }
+    if (state !== 'failure' && state !== 'error') return { state, detail: '', finished: true }
     const bad = asArray(d.statuses)
       .map(asRecord)
       .filter(s => asString(s.status) !== 'success' && asString(s.status) !== 'pending')
@@ -133,14 +160,25 @@ export function makeForge(run: Run, opts: ForgeOptions): Forge {
     let comment = ''
     try {
       const comments = await allPages(`/repos/{owner}/{repo}/issues/${n}/comments`, `comments of ${n}`)
-      const mine = comments.filter(c => asString(c.body).startsWith(`Full check failed at ${sha}`))
+      const mine = comments.filter(c => firstLine(asString(c.body)).startsWith(`Full check failed at ${sha}`))
       comment = asString(mine[mine.length - 1]?.body)
     } catch {
-      // The statuses are enough.
+      // The statuses are enough; without the comment the check counts as not finished.
     }
     const logs = `Step logs: ${worktrees}/check-pr-${n}/${checkLogs}/ (run.log is the whole output).`
     const parts = [comment, bad.length > 0 ? `Failed statuses:\n${bad.join('\n')}` : '', logs].filter(p => p !== '')
-    return { state, detail: parts.join('\n\n') }
+    return { state, detail: parts.join('\n\n'), finished: comment !== '' }
+  }
+
+  async function rerun(sha: string): Promise<void> {
+    const d = asRecord(json(await api('dev', `/repos/{owner}/{repo}/actions/runs?head_sha=${sha}&limit=50`), `runs of ${sha}`))
+    const ids = asArray(d.workflow_runs).map(r => Number(asRecord(r).id))
+    if (ids.length === 0) throw new Error(`no actions run for ${sha}`)
+    const id = Math.max(...ids)
+    // `tea api` exits 0 on an error answer: success is the empty 204, a failure has a JSON message.
+    const r = await api('dev', `/repos/{owner}/{repo}/actions/runs/${id}/rerun`, '-X', 'POST')
+    const message = asString(asRecord(safeParse(r.stdout)).message)
+    if (r.exitCode !== 0 || message !== '') throw new Error(`re-run of run ${id}: ${message || firstLine(r.stderr) || `exit ${r.exitCode}`}`)
   }
 
   async function login(): Promise<string> {
@@ -259,6 +297,55 @@ export function makeForge(run: Run, opts: ForgeOptions): Forge {
     return left
   }
 
+  /** A patch of everything the worktree holds that `HEAD` does not: tracked changes and untracked files. */
+  async function unsavedWork(wt: string): Promise<string> {
+    const inWt = (...argv: string[]): Promise<RunResult> => run(argv, { cwd: wt })
+    const diff = await inWt('git', 'diff', 'HEAD', '--binary')
+    if (diff.exitCode !== 0) throw new Error(`git diff in ${wt}: ${firstLine(diff.stderr) || `exit ${diff.exitCode}`}`)
+    const parts = [diff.stdout]
+    const listed = await inWt('git', 'ls-files', '--others', '--exclude-standard', '-z')
+    if (listed.exitCode !== 0) throw new Error(`git ls-files in ${wt}: ${firstLine(listed.stderr) || `exit ${listed.exitCode}`}`)
+    for (const file of listed.stdout.split('\0').filter(f => f !== '')) {
+      // Exit 1 is "differs", which a new file always does.
+      const added = await inWt('git', 'diff', '--no-index', '--binary', '--', '/dev/null', file)
+      if (added.exitCode > 1) throw new Error(`git diff of ${file} in ${wt}: ${firstLine(added.stderr) || `exit ${added.exitCode}`}`)
+      parts.push(added.stdout)
+    }
+    return parts.map(p => (p === '' || p.endsWith('\n') ? p : `${p}\n`)).join('')
+  }
+
+  async function salvage(a: { slug: string; agentId: string }): Promise<SalvageOutcome> {
+    if (!/^[\w-]+$/.test(a.agentId) || !/^[\w.-]+$/.test(a.slug)) return { note: `agent ${a.agentId}: not a plain id` }
+    const wt = `${worktrees}/agent-${a.agentId}`
+    if (!(await registered()).has(wt)) return {}
+    let patch: string | undefined
+    try {
+      const text = await unsavedWork(wt)
+      if (text.trim() !== '') {
+        patch = `${worktrees}/salvage/${a.slug}-${a.agentId}.patch`
+        await run(['mkdir', '-p', `${worktrees}/salvage`], { cwd: root })
+        await opts.write(patch, text)
+      }
+    } catch (err) {
+      return { note: `${err instanceof Error ? err.message : String(err)}; the worktree is kept` }
+    }
+    await git('worktree', 'unlock', wt)
+    const r = await git('worktree', 'remove', '--force', wt)
+    if (r.exitCode !== 0) return { patch, note: `worktree ${wt}: ${firstLine(r.stderr) || `exit ${r.exitCode}`}` }
+    return { patch }
+  }
+
+  async function unreferenced(a: { agents: readonly string[]; prs: readonly number[] }): Promise<string[]> {
+    const found: string[] = []
+    for (const path of [...(await registered())].filter(p => p.startsWith(`${worktrees}/`)).sort()) {
+      const name = path.slice(worktrees.length + 1)
+      if (name.startsWith('agent-') && !a.agents.includes(name.slice('agent-'.length))) found.push(path)
+      const pr = /^check-pr-(\d+)$/.exec(name)
+      if (pr && !a.prs.includes(Number(pr[1]))) found.push(path)
+    }
+    return found
+  }
+
   async function cleanupMerged(a: { slug: string; pr: number; head: string }): Promise<string[]> {
     const left: string[] = []
     const why = await removeWorktree(`${worktrees}/check-pr-${a.pr}`)
@@ -327,5 +414,5 @@ export function makeForge(run: Run, opts: ForgeOptions): Forge {
     }
   }
 
-  return { pr, status, review, merge, comment, removeAgents, cleanupMerged, cleanupBlocked, pullMain, install }
+  return { pr, status, review, rerun, merge, comment, removeAgents, salvage, unreferenced, cleanupMerged, cleanupBlocked, pullMain, install }
 }
