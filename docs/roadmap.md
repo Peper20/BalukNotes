@@ -298,16 +298,16 @@ is merged, one task at a time.
       request as the code, the reviewer checks against the ids; specs grow
       as areas are touched, plus a first task for sync, paths and the HTTP
       API. The brief itself is not kept. Own light Markdown format
-- [ ] The user approves tasks (or autonomous work) in the chat; the full
+- [x] The user approves tasks (or autonomous work) in the chat; the full
       descriptions are there to read at will
-- [~] Code skills: a language-neutral `code-quality` skill (comments must
+- [x] Code skills: a language-neutral `code-quality` skill (comments must
       prove they are needed; up to 1000-1500 tokens) preloaded in every
       developer and the reviewer; the Rust skill rewritten for agents,
       portable, no emoji (done, PR #34). Then one mechanism in the mod: an edit of a file
       whose language has a skill in `.claude/pipeline.json` needs that skill
       loaded (replaces `.claude/hooks/require-rust-skill.py`)
 - [ ] The main agent is renamed from `liaison` to `lead`
-- [ ] The mod: a cancelled check (a machine shutdown) is re-run and costs no
+- [x] The mod (PR #38, #43): a cancelled check (a machine shutdown) is re-run and costs no
       round; at start it reconciles dead agents, their unsaved work and their
       worktrees. It does not pile up tasks: `pipeline_status` shows the live
       tasks, the last 3 merged ones and a count of the rest (all with a
@@ -324,13 +324,13 @@ is merged, one task at a time.
       comma-decimal locale (`LC_NUMERIC=C`); with the next kit task
 - [x] A task that measures has a budget (a number of runs, or stop at the
       target); such tasks run one after another, not side by side
-- [ ] In flight (2026-10-28): PR #38 `mod-robust`; after it `skill-guard`
-      and `paused-start` (user's decision: at a session start the mod is
-      paused and resumes only on the user's word, `pipeline_resume`).
-      Waits for the user: `pipeline/scripts/ci-runner.sh install` (then the
-      transitional workflow block goes, tech debt); after `skill-guard` the
-      rust hook leaves `.claude/settings.json`, then
-      `.claude/hooks/require-rust-skill.py` is deleted
+- [ ] Waits for the user: `pipeline/scripts/ci-runner.sh install` (then the
+      transitional workflow block goes, tech debt); the rust hook leaves
+      `.claude/settings.json`, then `.claude/hooks/require-rust-skill.py`
+      is deleted (the mod's guard replaces it, PR #44)
+- [~] In flight: `mod-fixes` (the open mod items below, the guard after
+      `/clear`, its rules re-read) and `worktree-dist` (the server's
+      targeted tests in a worktree)
 - [x] Kit: the check log says who holds the heavy lock and when it is
       taken (PR #40); its tests' wait loops have no timeout yet
 - [ ] The targeted tests of `notes-server` in a worktree without `app/dist`
